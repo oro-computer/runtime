@@ -1,0 +1,227 @@
+.TH ORO-IPC 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:ipc \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:ipc'
+.fi
+.SH DESCRIPTION
+.PP
+This is a low\-level API that you don't need unless you are implementing a library on top of Oro Runtime. An Oro app has one or more processes.
+.PP
+When you need to send a message to another window or to the backend, you should use the `application` module to get a reference to the window and use the `send` method to send a message.
+.PP
+\- The `Render` process, is the UI where the HTML, CSS, and JS are run. \- The `Bridge` process, is the thin layer of code that manages everything. \- The `Main` process, is for apps that need to run heavier compute jobs. And unlike electron it's optional.
+.PP
+The Bridge process manages the Render and Main process, it may also broker data between them.
+.PP
+The Binding process uses standard input and output as a way to communicate. Data written to the write\-end of the pipe is buffered by the OS until it is read from the read\-end of the pipe.
+.PP
+The IPC protocol uses a simple URI\-like scheme. Data is passed as ArrayBuffers.
+.PP
+ipc://command?key1=value1&key2=value2...
+.PP
+Example usage: import { send } from 'oro:ipc'
+.SH REFERENCE
+.TP
+\fBmaybeMakeError(error, caller)\fR
+Converts a structured IPC error payload into an `Error` instance.
+.br
+Native responses sometimes serialize errors as plain objects. This helper rehydrates them into the closest matching runtime error type while preserving extra fields like `code`, `url`, and backend metadata.
+\fBParameters:\fR
+.br
+\fIerror\fR (Error \\| { type?: string, code?: string \\| number, message?: string, [key: string]: any } \\| null \\| undefined; required)
+.br
+\fIcaller\fR (Function; optional)
+\fBReturns:\fR
+.br
+\fIError \\| null\fR
+.TP
+\fBconstructor(params, nonce)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIparams\fR (object \\| any; required) Either a params object or a bare value which becomes `value`.
+.br
+\fInonce\fR (string \\| number \\| null; optional; default null) Optional nonce to include.
+.TP
+\fBemit(name, value, target, options)\fR
+Emit event to be dispatched on `window` object.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIvalue\fR (any; required)
+.br
+\fItarget\fR (EventTarget; optional; default window)
+.br
+\fIoptions\fR (Object; optional)
+.TP
+\fBsend(command, value, options)\fR
+Sends an async IPC command request with parameters.
+\fBParameters:\fR
+.br
+\fIcommand\fR (string; required)
+.br
+\fIvalue\fR (any; optional)
+.br
+\fIoptions\fR ({ cache?: boolean, bytes?: (Buffer \\| Uint8Array \\| ArrayBuffer \\| string \\| Array), useExtensionIPCIfAvailable?: boolean }; optional; default null)
+.br
+\fIoptions.cache\fR (boolean; optional; default false)
+.br
+\fIoptions.bytes\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| string \\| Array; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Result>\fR
+.TP
+\fBwrite(command, value, buffer, options)\fR
+Sends an async IPC command request with parameters and buffered bytes.
+\fBParameters:\fR
+.br
+\fIcommand\fR (string; required)
+.br
+\fIvalue\fR (any; optional)
+.br
+\fIbuffer\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| string \\| Array; optional)
+.br
+\fIoptions\fR ({ timeout?: number, responseType?: string, signal?: AbortSignal, useExtensionIPCIfAvailable?: boolean }; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Result>\fR
+.TP
+\fBrequest(command, value, options)\fR
+Sends an async IPC command request with parameters requesting a response with buffered bytes.
+\fBParameters:\fR
+.br
+\fIcommand\fR (string; required)
+.br
+\fIvalue\fR (any; optional)
+.br
+\fIoptions\fR ({ timeout?: number, responseType?: string, signal?: AbortSignal, cache?: boolean, useExtensionIPCIfAvailable?: boolean }; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Result>\fR
+.TP
+\fBinflateIPCMessageTransfers(object, types)\fR
+Rehydrates structured\-clone friendly IPC payloads back into richer runtime objects.
+.br
+This helper recursively reconstructs encoded `Buffer` instances, `IPCMessagePort` handles, and custom tagged values supplied in `types`.
+\fBParameters:\fR
+.br
+\fIobject\fR (any; required)
+.br
+\fItypes\fR (Map<string, Function>; optional)
+\fBReturns:\fR
+.br
+\fIany\fR
+.TP
+\fBfindIPCMessageTransfers(transfers, object)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fItransfers\fR (Set<any>; required)
+.br
+\fIobject\fR (any; required)
+\fBReturns:\fR
+.br
+\fIany\fR
+.TP
+\fBIPCMessagePort (extends MessagePort)\fR
+A message port abstraction implemented using BroadcastChannel under the hood. This mirrors the MessagePort surface where practical and enables structured clone + transfer of ArrayBuffers and nested IPCMessagePorts. Emitted when a message is received by this port. Emitted when an error occurs while processing a message.
+.TP
+\fBfrom(options)\fR
+Create or retrieve an IPCMessagePort from options.
+\fBParameters:\fR
+.br
+\fIoptions\fR ({ id?: string, rx?: string, tx?: string, transferred?: boolean }; optional; default null)
+\fBReturns:\fR
+.br
+\fIIPCMessagePort\fR
+.TP
+\fBtransfer(port)\fR
+Mark a port as transferred (used when passing through postMessage).
+\fBParameters:\fR
+.br
+\fIport\fR (IPCMessagePort; required)
+\fBReturns:\fR
+.br
+\fIIPCMessagePort\fR
+.TP
+\fBcreate(options)\fR
+Create a new IPCMessagePort instance from options.
+\fBParameters:\fR
+.br
+\fIoptions\fR ({ id?: string, rx?: string, tx?: string, transferred?: boolean }; optional; default null)
+\fBReturns:\fR
+.br
+\fIIPCMessagePort\fR
+.TP
+\fBstart()\fR
+Start the port; subsequent messages are delivered to listeners.
+.TP
+\fBclose()\fR
+Close the port and release references.
+.TP
+\fBpostMessage(message, optionsOrTransferList)\fR
+Post a message to the paired port.
+\fBParameters:\fR
+.br
+\fImessage\fR (any; required)
+.br
+\fIoptionsOrTransferList\fR ({ transfer?: any[] } \\| any[]; optional)
+.TP
+\fBIPCMessageChannel (extends MessageChannel)\fR
+A message channel abstraction that pairs two IPCMessagePorts together.
+.TP
+\fBconstructor(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR ({ id?: string, port1?: object, port2?: object }; optional; default null)
+.TP
+\fBIPCBroadcastChannel (extends EventTarget)\fR
+Emitted when a broadcast message is received. Emitted when an error occurs while posting or receiving a message.
+.TP
+\fBconstructor(name, options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIoptions\fR ({ origin?: string }; optional; default null)
+.TP
+\fBonmessage()\fR
+Documented method exposed by this module.
+.TP
+\fBonmessageerror()\fR
+Documented method exposed by this module.
+.TP
+\fBonerror()\fR
+Documented method exposed by this module.
+.TP
+\fBaddEventListener(type, callback, options, type, callback, options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fItype\fR (\&'message'; required)
+.br
+\fIcallback\fR (function(MessageEvent):any; required)
+.br
+\fIoptions\fR ({ once?: boolean }; optional)
+.br
+\fItype\fR (\&'messageerror'; required)
+.br
+\fIcallback\fR (function(ErrorEvent):any; required)
+.br
+\fIoptions\fR ({ once?: boolean }; optional)
+.TP
+\fBpostMessage(message, optionsOrTransferList)\fR
+Post a message to subscribers.
+\fBParameters:\fR
+.br
+\fImessage\fR (any; required)
+.br
+\fIoptionsOrTransferList\fR ({ origin?: string, transfer?: any[] } \\| any[]; optional)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR

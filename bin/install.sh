@@ -1,0 +1,3371 @@
+#!/usr/bin/env bash
+
+declare root=""
+
+root="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
+
+source "$root/bin/functions.sh"
+source "$root/bin/android-functions.sh"
+source "$root/bin/runtime-artifacts.sh"
+
+declare runtime_artifact_name="$ORO_RUNTIME_ARTIFACT_NAME"
+declare -a runtime_artifact_aliases=()
+if [[ -n "${ORO_RUNTIME_ARTIFACT_ALIASES+x}" ]]; then
+  runtime_artifact_aliases=("${ORO_RUNTIME_ARTIFACT_ALIASES[@]}")
+fi
+declare canonical_runtime_lib="lib${runtime_artifact_name}"
+declare runtime_link_flag="-l${runtime_artifact_name}"
+
+if [[ -z "$CPU_CORES" ]]; then
+  export CPU_CORES=$(set_cpu_cores)
+fi
+
+if [[ -n $VERBOSE ]]; then
+  echo "# using cores: $CPU_CORES"
+fi
+
+if [[ -n "$NO_ANDROID" ]]; then
+  unset BUILD_ANDROID
+fi
+
+if [[ -z "$NO_IOS" ]]; then
+  BUILD_IOS=1
+fi
+
+declare arch="$(host_arch)"
+declare args=()
+declare pids=()
+declare force=0
+declare pass_force=""
+# pass_ignore_header_mtimes is set during arg parsing above; avoid re-declaring
+declare host="$(host_os)"
+declare do_link=0
+
+LIPO=""
+declare CWD=$(pwd)
+declare PREFIX="${PREFIX:-"/usr/local"}"
+declare BUILD_DIR="$CWD/build"
+
+while (( $# > 0 )); do
+  declare arg="$1"; shift
+  if [[ "$arg" = "--arch" ]]; then
+    arch="$1"; shift; continue
+  fi
+
+  if [[ "$arg" = "--force" ]] || [[ "$arg" = "-f" ]]; then
+    pass_force="$arg"
+    force=1; continue
+  fi
+
+  if [[ "$arg" = "--yes-deps" ]] || [[ "$arg" = "-y" ]]; then
+    pass_yes_deps="$arg"; continue
+  fi
+
+  if [[ "$arg" == "--no-android-fte" ]]; then
+    no_android_fte=1; continue
+  fi
+
+  if [[ "$arg" == "--link" ]]; then
+    do_link=1; continue
+  fi
+
+  # Don't rebuild if header mtimes are newer than .o files - Be sure to manually delete affected assets as required
+  if [[ "$arg" == "--ignore-header-mtimes" ]]; then
+    pass_ignore_header_mtimes="$arg"
+    ignore_header_mtimes=1; continue
+  fi
+
+  args+=("$arg")
+done
+
+if [[ "$host" = "Linux" ]]; then
+  if [ -n "$WSL_DISTRO_NAME" ] || uname -r | grep 'Microsoft'; then
+    echo "not ok - WSL is not supported."
+    exit 1
+  fi
+fi
+
+declare default_runtime_home=""
+
+if [[ "$host" == "Win32" ]]; then
+  declare appdata_base="${LOCALAPPDATA:-"$HOME/AppData/Local"}"
+  default_runtime_home="$appdata_base/Programs/oro"
+else
+  declare data_home="${XDG_DATA_HOME:-"$HOME/.local/share"}"
+  default_runtime_home="$data_home/oro"
+fi
+
+declare runtime_home_source="${ORO_HOME:-$default_runtime_home}"
+
+if [[ -z "$runtime_home_source" ]]; then
+  runtime_home_source="$default_runtime_home"
+fi
+
+mkdir -p "$runtime_home_source"
+
+ORO_HOME="$runtime_home_source"
+export ORO_HOME
+
+if [[ "$host" == "Win32" ]] && [[ "$PREFIX" == "/usr/local" ]] && [[ ! -d "$PREFIX/bin" ]]; then
+  # User probably doesn't want to install to /usr/local on windows. Reset PREFIX so script doesn't terminate later.
+  PREFIX="$ORO_HOME"
+fi
+
+write_log "h" "Installing to '$PREFIX'"
+
+if [[ "$ORO_INSTALL_MODE" == "probe-env" ]]; then
+  echo "ORO_HOME=$ORO_HOME"
+  exit 0
+fi
+
+declare pass_ignore_header_mtimes=""
+
+declare d=""
+if [[ "$host" == "Win32" ]]; then
+  # We have to differentiate release and debug for Win32
+  # Problem:
+  # When building libuv and the runtime static library with debug enabled, our apps crash when
+  # using ifstream:
+  # `Debug Assertion Failed. Expression: (_osfile(fh) & fopen)`
+  # This build issue also prevents debugging in Visual Studio.
+
+  # This occurs because by default clang incorrectly links to the non
+  # threaded, production version of C runtime .lib (libcrt)
+  # After taking the nessary steps to manually link to the correct lib
+  # (Including adding preprocessor definitions for /MT[d]), see ldflags.sh under Win32
+  # the CLI and apps won't link, therefore:
+
+  # Solution:
+  # Splits debug and release build artifacts:
+  # d is set if $DEBUG and $host == Win32
+  # The file[d].lib suffix is commonly used within the Windows SDK to differentiate debug and non debug files
+  # In Visual Studio, Debug profiles usually have to be manually modified to include eg ole32d.lib instead ole32.lib.
+  # I have used this convention to separate debug objects and libs where possible
+  # *.o files are now named *$d.o
+  # Libs are copied to build/platform/lib$d (libuv.lib didn't support being renamed, this would require modification of the build chain)
+  # The runtime archive (liboro-runtime.a) now follows the same debug suffix convention.
+  # oroc build --prod defines whether or not the app is being built for debug
+  # and therefore links to the app being built to the correct liboro-runtime$d.a
+  if [[ -n "$DEBUG" ]]; then
+    d="d"
+  fi
+fi
+
+determine_cxx || exit $?
+read_env_data
+
+declare package_manager="$(determine_package_manager)"
+
+function advice {
+  local sudo="sudo ";
+  [[ "$package_manager" = "brew install" ]] && sudo=""
+  echo "$sudo""$package_manager $1"
+}
+
+if [[ "$host" != "Win32" ]]; then
+  if ! quiet command -v sudo; then
+    sudo () {
+      $@
+      return $?
+    }
+  fi
+fi
+
+if [[ "$(uname -s)" != *"_NT"* ]]; then
+  quiet command -v make
+  die $? "not ok - missing build tools, try \"$(advice "make")\""
+fi
+
+if [ "$host" == "Darwin" ]; then
+  quiet command -v automake
+  die $? "not ok - missing build tools, try \"$(advice "automake")\""
+  quiet command -v glibtoolize
+  die $? "not ok - missing build tools, try \"$(advice "libtool")\""
+  quiet command -v libtool
+  die $? "not ok - missing build tools, try \"$(advice "libtool")\""
+  quiet command -v curl
+  die $? "not ok - missing curl, try \"$(advice "curl")\""
+fi
+
+if [ "$host" == "Linux" ]; then
+  quiet command -v autoconf
+  die $? "not ok - missing build tools, try \"$(advice "autoconf")\""
+  quiet command -v pkg-config
+  die $? "not ok - missing pkg-config tool, \"$(advice 'pkg-config')\""
+  quiet command -v libtoolize
+  die $? "not ok - missing build tools, try \"$(advice "libtool")\""
+  quiet command -v curl
+  die $? "not ok - missing curl, \"$(advice 'curl')\""
+fi
+
+ 
+
+  if [[ -n "$BUILD_ANDROID" ]] && [[ "arm64" == "$(host_arch)" ]] && [[ "Linux" == "$host" ]]; then
+    echo "warn - Android not supported on "$host"-"$(uname -m)", will unset BUILD_ANDROID"
+    unset BUILD_ANDROID
+  fi
+
+  if [[ -n "$no_android_fte" ]] && [[ -z "$ANDROID_HOME" ]]; then
+    unset BUILD_ANDROID
+  fi
+
+if [[ -n "$BUILD_ANDROID" ]]; then
+  android_fte "$pass_yes_deps" && rc=$?
+  # android_fte will unset BUILD_ANDROID if user elects not to install
+fi
+
+if [[ -n "$BUILD_ANDROID" ]]; then
+  abis=($(android_supported_abis))
+  platform="android"
+  clang="$(android_clang "$ANDROID_HOME" "$NDK_VERSION" "$host" "$(host_arch)")"
+
+  if ! quiet "$clang" -v; then
+    echo "not ok - Android clang call failed. This could indicate an issue with ANDROID_HOME, missing ndk tools, or incorrectly determined host or target architectures."
+    exit 1
+  fi
+fi
+
+function _build_cli {
+  local arch="$(host_arch)"
+  local platform="desktop"
+  local src="$root/src"
+  local output_directory="$BUILD_DIR/$arch-$platform"
+
+  echo "# building cli for desktop ($arch)..."
+
+  # Expansion won't work under _NT
+  # uv found by -L
+  # referenced directly below
+  # local libs=(-luv -llama "$runtime_link_flag")
+  local -a libs=()
+
+  if [[ "$(uname -s)" != *"_NT"* ]]; then
+    #
+    # Add libuv and the runtime archive; on macOS we also link
+    # against llama via -llama. On Linux, the CLI already links
+    # libllama via the explicit static archive group below, so we
+    # avoid an extra -llama here to keep the linker happy in dev
+    # environments where pkg-config/lib paths may not be fully set.
+    #
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      libs=(-luv -llama "$runtime_link_flag")
+    else
+      libs=(-luv "$runtime_link_flag")
+    fi
+
+    # Add whisper only if it was successfully built
+    if [[ -f "$BUILD_DIR/$arch-$platform/lib/libwhisper.a" ]] || [[ -f "$BUILD_DIR/$arch-$platform/lib64/libwhisper.a" ]]; then
+      libs+=("-lwhisper")
+    fi
+  fi
+
+  if [[ -n "$VERBOSE" ]]; then
+    echo "# cli libs: ${libs[@]}, $(uname -s)"
+  fi
+
+  local ldflags=($("$root/bin/ldflags.sh" --arch "$arch" --platform $platform ${libs[@]}))
+  local cflags=($("$root/bin/cflags.sh"))
+
+  local test_headers=()
+  if [[ -z "$ignore_header_mtimes" ]]; then
+    test_headers+=("$(find "$src"/cli/*.hh 2>/dev/null)")
+  fi
+  test_headers+=("$src"/../VERSION.txt)
+  local newest_mtime=0
+  newest_mtime="$(latest_mtime ${test_headers[@]})"
+
+  local win_static_libs=()
+  local static_libs=()
+  local test_sources=($(find "$src"/cli/*.cc 2>/dev/null))
+  local sources=()
+  local outputs=()
+
+  mkdir -p "$BUILD_DIR/$arch-$platform/bin"
+  local build_cli=0
+
+  for source in "${test_sources[@]}"; do
+    local output="${source/$src/$output_directory}"
+    # For some reason cli causes issues when debug and release are in the same folder
+    output="${output/.cc/$d.o}"
+    output="${output/cli/cli$d}"
+    if (( force )) || ! test -f "$output" || (( newest_mtime > $(stat_mtime "$output") )) || (( newest_mtime > $(stat_mtime "$output") )) || (( $(stat_mtime "$source") > $(stat_mtime "$output") )); then
+      sources+=("$source")
+      outputs+=("$output")
+      build_cli=1
+    fi
+  done
+
+  for (( i = 0; i < ${#sources[@]}; i++ )); do
+    mkdir -p "$(dirname "${outputs[$i]}")"
+    quiet "$CXX" "${cflags[@]}"  \
+      -c "${sources[$i]}"      \
+      -o "${outputs[$i]}"
+    die $? "$CXX ${cflags[@]} -c \"${sources[$i]}\" -o \"${outputs[$i]}\""
+  done
+
+  local exe=""
+  local obj_files=($(find "$BUILD_DIR/$arch-$platform"/cli$d/*$d.o 2>/dev/null))
+  local libipfs_archive="$BUILD_DIR/$arch-$platform/lib/libipfs.a"
+
+  if [[ "$(uname -s)" == *"_NT"* ]]; then
+    declare d=""
+    if [[ -n "$DEBUG" ]]; then
+      d="d"
+    fi
+    exe=".exe"
+    win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/${canonical_runtime_lib}${d}.a")
+    win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/llama.lib")
+    win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/whisper.lib")
+    if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]]; then
+      local libipfs_win_archive="$BUILD_DIR/$arch-$platform/lib$d/libipfs${d}.lib"
+      local libipfs_win_archive_a="$BUILD_DIR/$arch-$platform/lib$d/libipfs${d}.a"
+      if [[ -f "$libipfs_win_archive" ]]; then
+        win_static_libs+=("$libipfs_win_archive")
+      elif [[ -f "$libipfs_win_archive_a" ]]; then
+        win_static_libs+=("$libipfs_win_archive_a")
+      elif [[ -f "$libipfs_archive" ]]; then
+        win_static_libs+=("$libipfs_archive")
+      fi
+    fi
+  elif [[ "$(uname -s)" == "Linux" ]]; then
+    # On Linux, ensure static archives participating in mutual references are
+    # resolved by the linker by grouping them. This avoids undefined references
+    # when symbols are spread across these archives.
+    static_libs+=("-Wl,--start-group")
+    static_libs+=("$BUILD_DIR/$arch-$platform/lib/libuv.a")
+    static_libs+=("$BUILD_DIR/$arch-$platform/lib/libusb-1.0.a")
+    if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]] && [[ -f "$libipfs_archive" ]]; then
+      static_libs+=("$libipfs_archive")
+    fi
+    if [[ -f "$BUILD_DIR/$arch-$platform/lib64/libllama.a" ]]; then
+      static_libs+=("$BUILD_DIR/$arch-$platform/lib64/libllama.a")
+    elif [[ -f "$BUILD_DIR/$arch-$platform/lib/libllama.a" ]]; then
+      static_libs+=("$BUILD_DIR/$arch-$platform/lib/libllama.a")
+    fi
+    if [[ -f "$BUILD_DIR/$arch-$platform/lib/libwhisper.a" ]]; then
+      static_libs+=("$BUILD_DIR/$arch-$platform/lib/libwhisper.a")
+    fi
+    static_libs+=("$BUILD_DIR/$arch-$platform/lib/libmbedtls.a")
+    static_libs+=("$BUILD_DIR/$arch-$platform/lib/libmbedx509.a")
+    static_libs+=("$BUILD_DIR/$arch-$platform/lib/libmbedcrypto.a")
+    static_libs+=("$BUILD_DIR/$arch-$platform/lib/${canonical_runtime_lib}.a")
+    static_libs+=("-Wl,--end-group")
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
+    cflags+=("-fopenmp")
+    if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]] && [[ -f "$libipfs_archive" ]]; then
+      static_libs+=("$libipfs_archive")
+    fi
+  fi
+
+  # Include built static libs in the mtime check so we relink when they change
+  libs=($(find "$root/build/$arch-$platform/lib$d" -maxdepth 1 -type f 2>/dev/null))
+  obj_files+=(${libs[@]})
+  local oroc_output="$BUILD_DIR/$arch-$platform/bin/oroc$exe"
+
+  for source in "${obj_files[@]}"; do
+    if (( force )) || (( build_cli )) || ! test -f "$oroc_output" || (( $(stat_mtime "$source") > $(stat_mtime "$oroc_output") )); then
+      build_cli=1
+      # break
+    fi
+  done
+
+  if (( build_cli )); then
+    #
+    # TODO "$static_libs" where it was doesn't work, if windows requires it to
+    # be where it was, there should be a separate branch for windows.
+    #
+    quiet "$CXX"                                 \
+      "${win_static_libs[@]}"                    \
+      "$BUILD_DIR/$arch-$platform"/cli$d/*$d.o   \
+      "${static_libs[@]}"                        \
+      "${cflags[@]}"                             \
+      "${ldflags[@]}"                            \
+      -o "$oroc_output"
+
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[@]} \"${ldflags[@]}\" -o \"$BUILD_DIR/$arch-$platform/bin/oroc\""
+    echo "ok - built the cli for desktop"
+  fi
+}
+
+function _build_runtime_library() {
+  local arch="$(host_arch)"
+  echo "# building runtime library"
+  local runtime_pids=()
+  "$root/bin/build-runtime-library.sh" --arch "$arch" --platform desktop $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
+
+  if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
+    "$root/bin/build-runtime-library.sh" --arch "$arch" --platform ios $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
+    "$root/bin/build-runtime-library.sh" --arch x86_64 --platform ios-simulator $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
+    if [[ "$arch" = "arm64" ]] && [[ -z "$NO_IOS" ]]; then
+      "$root/bin/build-runtime-library.sh" --arch "$arch" --platform ios-simulator $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
+    fi
+  fi
+
+  if [[ -n "$BUILD_ANDROID" ]]; then
+    for abi in $(android_supported_abis); do
+      "$root/bin/build-runtime-library.sh" --platform android --arch "$abi" $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
+    done
+  fi
+
+  for pid in "${runtime_pids[@]}"; do
+    wait "$pid" 2>/dev/null
+    die $? "not ok - unable to build runtime library"
+  done
+}
+
+function _get_web_view2() {
+  if [[ "$(uname -s)" != *"_NT"* ]] && [ -z "$FORCE_WEBVIEW2_DOWNLOAD" ]; then
+    return
+  fi
+
+  local arch="$(host_arch)"
+  local platform="desktop"
+
+  if [ -z "$FORCE_WEBVIEW2_DOWNLOAD" ] && test -f "$BUILD_DIR/$arch-$platform/lib$d/WebView2LoaderStatic.lib"; then
+    echo "$BUILD_DIR/$arch-$platform/lib$d/WebView2LoaderStatic.lib exists."
+    return
+  fi
+
+  local tmp=$(mktemp -d)
+  local pwd=$(pwd)
+
+  echo "# Downloading Webview2"
+
+  curl -L https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2592.51 --output "$tmp/webview2.zip"
+  cd "$tmp" || exit 1
+  unzip -q "$tmp/webview2.zip"
+  mkdir -p "$BUILD_DIR/include"
+  mkdir -p "$BUILD_DIR/$arch-$platform/lib$d"/
+
+  cp -pf build/native/include/WebView2.h "$BUILD_DIR/include/WebView2.h"
+  cp -pf build/native/include/WebView2EnvironmentOptions.h "$BUILD_DIR/include/WebView2EnvironmentOptions.h"
+  cp -pf build/native/x64/WebView2LoaderStatic.lib "$BUILD_DIR/$arch-$platform/lib$d/WebView2LoaderStatic.lib"
+
+  cd "$pwd"
+
+  rm -rf "$tmp"
+}
+
+function _prebuild_desktop_main () {
+  echo "# precompiling main program for desktop"
+  local arch="$(host_arch)"
+  local platform="desktop"
+
+  local src="$root/src"
+  local objects="$BUILD_DIR/$arch-$platform/objects"
+
+  local test_headers=()
+  if [[ -z "$ignore_header_mtimes" ]]; then
+    test_headers+=("$(find "$src" -name '*.hh' 2>/dev/null)")
+  fi
+  local newest_mtime=0
+  newest_mtime="$(latest_mtime ${test_headers[@]})"
+
+  local cflags=($("$root/bin/cflags.sh"))
+  local test_sources=($(find "$src"/desktop/*.{cc,mm} 2>/dev/null))
+  local sources=()
+  local outputs=()
+
+  mkdir -p "$objects"
+
+  for source in "${test_sources[@]}"; do
+    local output="${source/$src/$objects}"
+    output="${output/.cc/$d.o}"
+    output="${output/.mm/$d.o}"
+    if (( force )) || ! test -f "$output" || (( newest_mtime > $(stat_mtime "$output") )) || (( $(stat_mtime "$source") > $(stat_mtime "$output") )); then
+      sources+=("$source")
+      outputs+=("$output")
+    fi
+  done
+
+  for (( i = 0; i < ${#sources[@]}; i++ )); do
+    mkdir -p "$(dirname "${outputs[$i]}")"
+    quiet "$CXX" "${cflags[@]}" \
+      -c "${sources[$i]}"       \
+      -o "${outputs[$i]}"
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[@]} -c ${sources[$i]} -o ${outputs[$i]}"
+  done
+
+  echo "ok - precompiled main program for desktop"
+}
+
+function _prebuild_ios_main () {
+  echo "# precompiling main program for iOS"
+  local arch="arm64"
+  local platform="iPhoneOS"
+
+  local src="$root/src"
+  local objects="$BUILD_DIR/$arch-$platform/objects"
+
+  local clang="$(xcrun -sdk iphoneos -find clang++)"
+  local cflags=($(TARGET_OS_IPHONE=1 "$root/bin/cflags.sh"))
+  local test_sources=($(find "$src"/ios/*.mm 2>/dev/null))
+  local sources=()
+  local outputs=()
+
+  mkdir -p "$objects"
+
+  for source in "${test_sources[@]}"; do
+    local output="${source/$src/$objects}"
+    output="${output/.cc/$d.o}"
+    output="${output/.mm/$d.o}"
+    if (( force )) || ! test -f "$output" || (( $(stat_mtime "$source") > $(stat_mtime "$output") )); then
+      sources+=("$source")
+      outputs+=("$output")
+    fi
+  done
+
+  for (( i = 0; i < ${#sources[@]}; i++ )); do
+    mkdir -p "$(dirname "${outputs[$i]}")"
+    "$clang" "${cflags[@]}" \
+      -c "${sources[$i]}"   \
+      -o "${outputs[$i]}"
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[@]} -c ${sources[$i]} -o ${outputs[$i]}"
+  done
+  echo "ok - precompiled main program for iOS"
+}
+
+function _prebuild_ios_simulator_main () {
+  echo "# precompiling main program for iOS Simulator"
+  local arch="$1"
+  local platform="iPhoneSimulator"
+
+  local src="$root/src"
+  local objects="$BUILD_DIR/$arch-$platform/objects"
+
+  local clang="$(xcrun -sdk iphonesimulator -find clang++)"
+  local cflags=($(TARGET_IPHONE_SIMULATOR=1 ARCH="$arch" $root/bin/cflags.sh))
+  local test_sources=($(find "$src"/ios/*.mm 2>/dev/null))
+  local sources=()
+  local outputs=()
+
+  mkdir -p "$objects"
+
+  for source in "${test_sources[@]}"; do
+    local output="${source/$src/$objects}"
+    output="${output/.cc/$d.o}"
+    output="${output/.mm/$d.o}"
+    if (( force )) || ! test -f "$output" || (( $(stat_mtime "$source") > $(stat_mtime "$output") )); then
+      sources+=("$source")
+      outputs+=("$output")
+    fi
+  done
+
+  for (( i = 0; i < ${#sources[@]}; i++ )); do
+    mkdir -p "$(dirname "${outputs[$i]}")"
+    quiet "$clang" "${cflags[@]}" \
+      -c "${sources[$i]}"         \
+      -o "${outputs[$i]}"
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$clang ${cflags[@]} -c \"${sources[$i]}\" -o \"${outputs[$i]}\""
+  done
+  echo "ok - precompiled main program for iOS Simulator ($arch)"
+}
+
+function _prepare {
+  echo "# preparing directories..."
+  local arch="$(host_arch)"
+  rm -rf "$ORO_HOME"/{lib$d,src,bin,include,objects,api,pkgconfig}
+  rm -rf "$ORO_HOME"/share/man/{man1,man3,man7}
+  rm -rf "$ORO_HOME"/share/doc/oroc
+  rm -rf "$ORO_HOME"/{lib$d,objects}/"$arch-desktop"
+
+  mkdir -p "$ORO_HOME"/{lib$d,src,bin,include,objects,api,pkgconfig}
+  mkdir -p "$ORO_HOME/share/man/man1"
+  mkdir -p "$ORO_HOME/share/man/man3"
+  mkdir -p "$ORO_HOME/share/man/man7"
+  mkdir -p "$ORO_HOME/share/doc/oroc"
+  mkdir -p "$ORO_HOME"/{lib$d,objects}/"$arch-desktop"
+
+  if [[ "$host" = "Darwin" ]]; then
+    mkdir -p "$ORO_HOME"/{lib$d,objects}/{arm64-iPhoneOS,x86_64-iPhoneSimulator,arm64-iPhoneSimulator}
+  fi
+
+  if [[ -n $BUILD_ANDROID ]]; then
+    for abi in $(android_supported_abis); do
+      mkdir -p "$ORO_HOME"/{lib$d,objects}/"$abi-android"
+    done
+  fi
+
+  # Ensure build directory exists before populating third‑party sources
+  mkdir -p "$BUILD_DIR"
+
+  function _rewrite_github_submodule_urls {
+    local repo="$1"
+    local gitmodules="$repo/.gitmodules"
+
+    if [ ! -f "$gitmodules" ]; then
+      return 0
+    fi
+
+    local rc=0
+    local changed=0
+
+    while IFS= read -r line; do
+      local key="${line%% *}"
+      local url="${line#* }"
+      local normalized="$url"
+
+      if [[ "$url" =~ ^git@github\.com:(.+)$ ]]; then
+        normalized="https://github.com/${BASH_REMATCH[1]}"
+      elif [[ "$url" =~ ^ssh://git@github\.com/(.+)$ ]]; then
+        normalized="https://github.com/${BASH_REMATCH[1]}"
+      fi
+
+      if [[ "$normalized" != "$url" ]]; then
+        git -C "$repo" config -f .gitmodules "$key" "$normalized" > /dev/null 2>&1
+        rc=$?
+        if (( rc != 0 )); then
+          return $rc
+        fi
+        changed=1
+      fi
+    done < <(git -C "$repo" config -f .gitmodules --get-regexp '^submodule\..*\.url$')
+
+    if (( changed != 0 )); then
+      git -C "$repo" submodule sync --recursive > /dev/null 2>&1
+      rc=$?
+      if (( rc != 0 )); then
+        return $rc
+      fi
+    fi
+
+    return 0
+  }
+
+  if [ ! -f "$BUILD_DIR/sqlite/sqlite3.c" ]; then
+    if [[ -n "${SQLITE_SOURCE_DIR:-}" ]]; then
+      if [ -d "$SQLITE_SOURCE_DIR" ]; then
+        rm -rf "$BUILD_DIR/sqlite"
+        mkdir -p "$BUILD_DIR/sqlite"
+        cp -a "$SQLITE_SOURCE_DIR"/. "$BUILD_DIR/sqlite/"
+      else
+        die 1 "not ok - SQLITE_SOURCE_DIR '$SQLITE_SOURCE_DIR' not found"
+      fi
+    else
+      if ! "$root/bin/fetch-sqlite.sh"; then
+        local rc=$?
+        die ${rc:-1} "not ok - unable to obtain sqlite amalgamation (set SQLITE_SOURCE_DIR to a local directory or enable network)"
+      fi
+    fi
+
+    if [[ ! -f "$BUILD_DIR/sqlite/sqlite3.c" ]]; then
+      die 1 "not ok - sqlite amalgamation missing after preparation"
+    fi
+  fi
+
+  if [[ -f "$BUILD_DIR/sqlite/sqlite3.c" ]]; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      sed -i '' 's/^# *define SQLITE_OMIT_LOAD_EXTENSION.*$/\/\* SQLITE_OMIT_LOAD_EXTENSION disabled for Oro loadable extensions \*\//' "$BUILD_DIR/sqlite/sqlite3.c" 2>/dev/null || true
+      sed -i '' 's/^# *define SQLITE_OMIT_LOAD_EXTENSION.*$/\/\* SQLITE_OMIT_LOAD_EXTENSION disabled for Oro loadable extensions \*\//' "$BUILD_DIR/sqlite/sqlite3.h" 2>/dev/null || true
+    else
+      sed -i 's/^# *define SQLITE_OMIT_LOAD_EXTENSION.*$/\/\* SQLITE_OMIT_LOAD_EXTENSION disabled for Oro loadable extensions \*\//' "$BUILD_DIR/sqlite/sqlite3.c" 2>/dev/null || true
+      sed -i 's/^# *define SQLITE_OMIT_LOAD_EXTENSION.*$/\/\* SQLITE_OMIT_LOAD_EXTENSION disabled for Oro loadable extensions \*\//' "$BUILD_DIR/sqlite/sqlite3.h" 2>/dev/null || true
+    fi
+  fi
+
+  if [ ! -d "$BUILD_DIR/libsodium" ]; then
+    local rc=1
+    if [[ -n "$LIBSODIUM_SOURCE_DIR" ]] && [ -d "$LIBSODIUM_SOURCE_DIR" ]; then
+      cp -r "$LIBSODIUM_SOURCE_DIR" "$BUILD_DIR/libsodium" > /dev/null 2>&1
+      rc=$?
+    else
+      local LIBSODIUM_GIT_URL="${LIBSODIUM_GIT:-https://github.com/jedisct1/libsodium.git}"
+      local LIBSODIUM_GIT_TAG="${LIBSODIUM_GIT_TAG:-1.0.20-RELEASE}"
+      git clone --depth=1 "$LIBSODIUM_GIT_URL" --branch "$LIBSODIUM_GIT_TAG" "$BUILD_DIR/libsodium" > /dev/null 2>&1
+      rc=$?
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain libsodium sources (set LIBSODIUM_SOURCE_DIR to a local checkout or enable network)"
+  fi
+
+  if [ -d "$BUILD_DIR/libsodium/.git" ]; then
+    (cd "$BUILD_DIR/libsodium" && git checkout 1.0.20-RELEASE >/dev/null 2>&1) || die $? "not ok - unable to checkout libsodium tag 1.0.20-RELEASE"
+  fi
+
+  if [ ! -d "$BUILD_DIR/zlib" ]; then
+    local rc=1
+    if [[ -n "$ZLIB_SOURCE_DIR" ]] && [ -d "$ZLIB_SOURCE_DIR" ]; then
+      cp -r "$ZLIB_SOURCE_DIR" "$BUILD_DIR/zlib" > /dev/null 2>&1
+      rc=$?
+    elif [ -d "$root/zlib" ]; then
+      cp -r "$root/zlib" "$BUILD_DIR/zlib" > /dev/null 2>&1
+      rc=$?
+    else
+      local ZLIB_GIT_URL="${ZLIB_GIT:-https://github.com/madler/zlib.git}"
+      local ZLIB_GIT_TAG="${ZLIB_GIT_TAG:-v1.3.1}"
+      git clone --depth=1 --branch "$ZLIB_GIT_TAG" "$ZLIB_GIT_URL" "$BUILD_DIR/zlib" > /dev/null 2>&1
+      rc=$?
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain zlib sources (set ZLIB_SOURCE_DIR to a local checkout or enable network)"
+
+    if [ -d "$BUILD_DIR/zlib/.git" ]; then
+      rm -rf "$BUILD_DIR/zlib/.git" 2>/dev/null
+    fi
+  fi
+
+  if [ ! -d "$BUILD_DIR/uv" ]; then
+    local rc=1
+    local libuv_source_candidates=()
+    local libuv_source=""
+
+    if [[ -n "$LIBUV_SOURCE_DIR" ]]; then
+      libuv_source_candidates+=("$LIBUV_SOURCE_DIR")
+    fi
+
+    if [[ -n "$ORO_HOME" ]]; then
+      libuv_source_candidates+=("$ORO_HOME/uv")
+    fi
+
+    for candidate in "${libuv_source_candidates[@]}"; do
+      if [[ -z "$candidate" ]]; then
+        continue
+      fi
+
+      # Skip if the candidate isn't a usable libuv checkout
+      if [ ! -d "$candidate" ] || [ ! -f "$candidate/include/uv.h" ]; then
+        continue
+      fi
+
+      # Avoid copying from the destination we are about to create
+      if [[ "$candidate" == "$BUILD_DIR/uv" ]]; then
+        continue
+      fi
+
+      if cp -r "$candidate" "$BUILD_DIR/uv" > /dev/null 2>&1; then
+        libuv_source="$candidate"
+        rc=0
+        break
+      fi
+    done
+
+    if (( rc != 0 )); then
+      local LIBUV_GIT_URL="${LIBUV_GIT:-https://github.com/libuv/libuv.git}"
+      local LIBUV_GIT_TAG="${LIBUV_GIT_TAG:-v1.52.1}"
+      git clone --depth=1 --branch "$LIBUV_GIT_TAG" "$LIBUV_GIT_URL" "$BUILD_DIR/uv" > /dev/null 2>&1
+      rc=$?
+    else
+      if [[ -n "$VERBOSE" ]]; then
+        echo "# using cached libuv sources from $libuv_source"
+      fi
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain libuv sources (set LIBUV_SOURCE_DIR to a local checkout or enable network)"
+
+    rm -rf "$BUILD_DIR/uv/.git" 2>/dev/null
+    # Comment out compiler tests when supported by the source tree
+    if [[ -z "$ENABLE_LIBUV_C_COMPILER_CHECKS" ]] && [ -f "$BUILD_DIR/uv/CMakeLists.txt" ]; then
+      tempmkl=$(mktemp)
+      sed 's/check_c_compiler_flag/# check_c_compiler_flag/' "$BUILD_DIR/uv/CMakeLists.txt" > "$tempmkl" 2>/dev/null
+      mv "$tempmkl" "$BUILD_DIR/uv/CMakeLists.txt" 2>/dev/null
+    fi
+  fi
+
+  if [ ! -d "$BUILD_DIR/libusb" ]; then
+    local rc=1
+    if [[ -n "$LIBUSB_SOURCE_DIR" ]] && [ -d "$LIBUSB_SOURCE_DIR" ]; then
+      cp -r "$LIBUSB_SOURCE_DIR" "$BUILD_DIR/libusb" > /dev/null 2>&1
+      rc=$?
+    else
+      local LIBUSB_GIT_URL="${LIBUSB_GIT:-https://github.com/libusb/libusb.git}"
+      local LIBUSB_GIT_TAG="${LIBUSB_GIT_TAG:-v1.0.29}"
+      git clone --depth=1 "$LIBUSB_GIT_URL" --branch "$LIBUSB_GIT_TAG" "$BUILD_DIR/libusb" > /dev/null 2>&1
+      rc=$?
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain libusb sources (set LIBUSB_SOURCE_DIR to a local checkout or enable network)"
+
+    rm -rf "$BUILD_DIR/libusb/.git" 2>/dev/null
+  fi
+
+  if [ ! -d "$BUILD_DIR/asn1c" ]; then
+    local rc=1
+    if [[ -n "$ASN1C_SOURCE_DIR" ]] && [ -d "$ASN1C_SOURCE_DIR" ]; then
+      cp -r "$ASN1C_SOURCE_DIR" "$BUILD_DIR/asn1c" > /dev/null 2>&1
+      rc=$?
+    else
+      local ASN1C_GIT_URL="${ASN1C_GIT:-https://github.com/vlm/asn1c.git}"
+      local ASN1C_GIT_TAG="${ASN1C_GIT_TAG:-v0.9.28}"
+      git clone --depth=1 --branch "$ASN1C_GIT_TAG" "$ASN1C_GIT_URL" "$BUILD_DIR/asn1c" > /dev/null 2>&1
+      rc=$?
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain asn1c sources (set ASN1C_SOURCE_DIR to a local checkout or enable network)"
+
+    rm -rf "$BUILD_DIR/asn1c/.git" "$BUILD_DIR/asn1c/.github" 2>/dev/null
+
+    local required_asn1_dirs=(
+      "libasn1parser"
+      "libasn1fix"
+      "libasn1compiler"
+      "libasn1print"
+    )
+
+    for dir in "${required_asn1_dirs[@]}"; do
+      if [ ! -d "$BUILD_DIR/asn1c/$dir" ]; then
+        die 1 "not ok - asn1c checkout missing required directory '$dir' (check ASN1C_SOURCE_DIR or ASN1C_GIT_TAG)"
+      fi
+    done
+  fi
+
+  if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]]; then
+    if [ ! -d "$BUILD_DIR/libipfs" ]; then
+      local rc=1
+      if [[ -n "$LIBIPFS_SOURCE_DIR" ]] && [ -d "$LIBIPFS_SOURCE_DIR" ]; then
+        cp -r "$LIBIPFS_SOURCE_DIR" "$BUILD_DIR/libipfs" > /dev/null 2>&1
+        rc=$?
+      else
+        local LIBIPFS_GIT_URL="${LIBIPFS_GIT:-https://github.com/scala-network/libipfs.git}"
+        local LIBIPFS_GIT_BRANCH="${LIBIPFS_GIT_BRANCH:-v3.0.1}"
+        if [[ -n "$LIBIPFS_GIT_BRANCH" ]]; then
+          git clone --depth=1 --branch "$LIBIPFS_GIT_BRANCH" "$LIBIPFS_GIT_URL" "$BUILD_DIR/libipfs" > /dev/null 2>&1
+        else
+          git clone --depth=1 "$LIBIPFS_GIT_URL" "$BUILD_DIR/libipfs" > /dev/null 2>&1
+        fi
+        rc=$?
+      fi
+
+      die ${rc:-1} "not ok - unable to obtain libipfs sources (set LIBIPFS_SOURCE_DIR to a local checkout or enable network)"
+    fi
+
+    if [ -d "$BUILD_DIR/libipfs/.git" ]; then
+      rm -rf "$BUILD_DIR/libipfs/.git" 2>/dev/null
+    fi
+  fi
+
+  if [ ! -d "$BUILD_DIR/cr-sqlite" ]; then
+    local rc=1
+    if [[ -n "$CRSQLITE_SOURCE_DIR" ]] && [ -d "$CRSQLITE_SOURCE_DIR" ]; then
+      cp -r "$CRSQLITE_SOURCE_DIR" "$BUILD_DIR/cr-sqlite" > /dev/null 2>&1
+      rc=$?
+    else
+      local CRSQLITE_GIT_URL="${CRSQLITE_GIT:-https://github.com/superfly/cr-sqlite.git}"
+      local CRSQLITE_GIT_TAG="${CRSQLITE_GIT_TAG:-prebuild-test.main-8b0b67d6}"
+      git clone --depth=1 "$CRSQLITE_GIT_URL" --branch "$CRSQLITE_GIT_TAG" "$BUILD_DIR/cr-sqlite" > /dev/null 2>&1
+      rc=$?
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain cr-sqlite sources (set CRSQLITE_SOURCE_DIR to a local checkout or enable network)"
+
+    # Ensure cr-sqlite Rust submodules (including sqlite-rs-embedded) are
+    # available so that cargo can build the bundle crates.
+    if [ -d "$BUILD_DIR/cr-sqlite/.git" ] && [ -f "$BUILD_DIR/cr-sqlite/.gitmodules" ]; then
+      _rewrite_github_submodule_urls "$BUILD_DIR/cr-sqlite"
+      rc=$?
+      die ${rc:-1} "not ok - unable to normalize cr-sqlite submodule URLs (expected public GitHub HTTPS access)"
+
+      quiet git -C "$BUILD_DIR/cr-sqlite" submodule update --init --recursive
+      rc=$?
+      die ${rc:-1} "not ok - unable to obtain cr-sqlite submodules (sqlite-rs-embedded); set CRSQLITE_SOURCE_DIR to a local checkout with submodules or enable network"
+    fi
+  fi
+
+  if [[ "$host" == "Linux" ]]; then
+    if [ ! -d "$BUILD_DIR/mbedtls" ]; then
+      local rc=1
+      if [[ -n "$MBEDTLS_SOURCE_DIR" ]] && [ -d "$MBEDTLS_SOURCE_DIR" ]; then
+        cp -r "$MBEDTLS_SOURCE_DIR" "$BUILD_DIR/mbedtls" > /dev/null 2>&1
+        rc=$?
+      else
+        local MBEDTLS_GIT_URL="${MBEDTLS_GIT:-https://github.com/Mbed-TLS/mbedtls.git}"
+        local MBEDTLS_GIT_BRANCH="${MBEDTLS_GIT_BRANCH:-mbedtls-3.6.4}"
+        git clone --depth=1 "$MBEDTLS_GIT_URL" --branch "$MBEDTLS_GIT_BRANCH" "$BUILD_DIR/mbedtls" > /dev/null 2>&1
+        rc=$?
+      fi
+
+      if (( rc == 0 )) && [ -d "$BUILD_DIR/mbedtls/.git" ]; then
+        if [ -f "$BUILD_DIR/mbedtls/.gitmodules" ]; then
+          _rewrite_github_submodule_urls "$BUILD_DIR/mbedtls"
+          rc=$?
+        fi
+      fi
+
+      if (( rc == 0 )) && [ -d "$BUILD_DIR/mbedtls/.git" ]; then
+        quiet git -C "$BUILD_DIR/mbedtls" submodule update --init --recursive
+        (( rc = $? ))
+      fi
+
+      if (( rc == 0 )) && [ ! -f "$BUILD_DIR/mbedtls/framework/CMakeLists.txt" ]; then
+        die 1 "not ok - missing mbedtls framework sources (expected framework/CMakeLists.txt); ensure submodules are available"
+      fi
+
+      die ${rc:-1} "not ok - unable to obtain mbedtls sources (set MBEDTLS_SOURCE_DIR to a local checkout or enable network)"
+
+      rm -rf "$BUILD_DIR/mbedtls/.git" 2>/dev/null
+    fi
+  fi
+
+  if [ ! -d "$BUILD_DIR/llama" ]; then
+    local rc=1
+    if [[ -n "$LLAMA_SOURCE_DIR" ]] && [ -d "$LLAMA_SOURCE_DIR" ]; then
+      cp -r "$LLAMA_SOURCE_DIR" "$BUILD_DIR/llama" > /dev/null 2>&1
+      rc=$?
+    else
+      local LLAMA_GIT_URL="${LLAMA_GIT:-https://github.com/ggml-org/llama.cpp.git}"
+      local LLAMA_GIT_BRANCH="${LLAMA_GIT_BRANCH:-b7117}"
+      git clone --depth=1 "$LLAMA_GIT_URL" --branch "$LLAMA_GIT_BRANCH" "$BUILD_DIR/llama" > /dev/null 2>&1
+      rc=$?
+    fi
+    # rm -rf $BUILD_DIR/llama/.git
+
+    die ${rc:-1} "not ok - unable to obtain llama.cpp sources (set LLAMA_SOURCE_DIR to a local checkout or enable network)"
+  fi
+
+  if [ ! -d "$BUILD_DIR/whisper.cpp" ]; then
+    local rc=1
+    if [[ -n "$WHISPER_SOURCE_DIR" ]] && [ -d "$WHISPER_SOURCE_DIR" ]; then
+      cp -r "$WHISPER_SOURCE_DIR" "$BUILD_DIR/whisper.cpp" > /dev/null 2>&1
+      rc=$?
+    else
+      local WHISPER_GIT_URL="${WHISPER_GIT:-https://github.com/ggml-org/whisper.cpp.git}"
+      local WHISPER_GIT_TAG="${WHISPER_GIT_TAG:-v1.8.2}"
+      git clone --depth=1 "$WHISPER_GIT_URL" --branch "$WHISPER_GIT_TAG" "$BUILD_DIR/whisper.cpp" > /dev/null 2>&1
+      rc=$?
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain whisper.cpp sources (set WHISPER_SOURCE_DIR to a local checkout or enable network)"
+  fi
+
+  if [ ! -d "$BUILD_DIR/iroh" ]; then
+    local rc=1
+    if [[ -n "$IROH_SOURCE_DIR" ]] && [ -d "$IROH_SOURCE_DIR" ]]; then
+      cp -r "$IROH_SOURCE_DIR" "$BUILD_DIR/iroh" > /dev/null 2>&1
+      rc=$?
+    else
+      local IROH_GIT_URL="${IROH_GIT_URL:-https://github.com/n0-computer/iroh.git}"
+      local IROH_GIT_REF="${IROH_GIT_REF:-v0.93.2}"
+      git clone --depth=1 --branch "$IROH_GIT_REF" "$IROH_GIT_URL" "$BUILD_DIR/iroh" > /dev/null 2>&1
+      rc=$?
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain iroh sources (set IROH_SOURCE_DIR to a local checkout or enable network)"
+
+    rm -rf "$BUILD_DIR/iroh/.git" 2>/dev/null
+  fi
+
+  echo "ok - directories prepared"
+}
+
+function _install {
+  local arch="$1"
+  local platform="$2"
+
+  if [ "$platform" == "desktop" ]; then
+    echo "# copying sources to $ORO_HOME/src"
+    if (( do_link == 1 )); then
+      mkdir -p "$ORO_HOME/src"
+      ln -sf "$CWD"/src/* "$ORO_HOME/src"
+    else
+      cp -r "$CWD"/src/* "$ORO_HOME/src"
+    fi
+    if [[ "$arch" = "aarch64" ]]; then
+      arch="arm64"
+    fi
+  fi
+
+  # TODO: set lib types per platform once mobile CI coverage exists
+
+  if test -d "$BUILD_DIR/$arch-$platform/objects"; then
+    echo "# copying objects to $ORO_HOME/objects/$arch-$platform"
+    rm -rf "$ORO_HOME/objects/$arch-$platform"
+    mkdir -p "$ORO_HOME/objects/$arch-$platform"
+    if (( do_link == 1 )); then
+      ln -sf "$BUILD_DIR/$arch-$platform/objects"/* "$ORO_HOME/objects/$arch-$platform"
+    else
+      cp -rfp "$BUILD_DIR/$arch-$platform/objects"/* "$ORO_HOME/objects/$arch-$platform"
+    fi
+  fi
+
+  if test -d "$BUILD_DIR/lib$d"; then
+    echo "# copying libraries to $ORO_HOME/lib$d"
+    mkdir -p "$ORO_HOME/lib$d"
+    shopt -s nullglob
+    local lib_files=( "$BUILD_DIR/lib$d"/*.a )
+    if (( ${#lib_files[@]} > 0 )); then
+      if (( do_link == 1 )); then
+        for f in "${lib_files[@]}"; do ln -sf "$f" "$ORO_HOME/lib$d/"; done
+      else
+        cp -rfp "${lib_files[@]}" "$ORO_HOME/lib$d/"
+      fi
+    else
+      echo "warn - no static libs in $BUILD_DIR/lib$d"
+    fi
+    shopt -u nullglob
+  fi
+
+  _d=$d
+
+  if [[ "$platform" == "android" ]]; then
+    # Debug builds not currently supported for android
+    _d=""
+  fi
+
+  if test -d "$BUILD_DIR/$arch-$platform"/lib$_d; then
+    echo "# copying libraries to $ORO_HOME/lib$_d/$arch-$platform"
+    rm -rf "$ORO_HOME/lib$_d/$arch-$platform"
+    mkdir -p "$ORO_HOME/lib$_d/$arch-$platform"
+
+    if [[ "$platform" != "android" ]]; then
+      shopt -s nullglob
+      local arch_libs=( "$BUILD_DIR/$arch-$platform"/lib$_d/*.a )
+      if (( ${#arch_libs[@]} > 0 )); then
+        if (( do_link == 1 )); then
+          for f in "${arch_libs[@]}"; do ln -sf "$f" "$ORO_HOME/lib$_d/$arch-$platform"; done
+        else
+          cp -rfp "${arch_libs[@]}" "$ORO_HOME/lib$_d/$arch-$platform"
+        fi
+      else
+        echo "warn - no static libs in $BUILD_DIR/$arch-$platform/lib$_d"
+      fi
+      shopt -u nullglob
+
+      if [[ "$host" == "Darwin" ]]; then
+        if [[ "$platform" == "desktop" ]]; then
+          echo "# locating 'libomp.dylib...'"
+          local llvms=()
+          local libomp_path=""
+
+          llvms+=($(find /opt/homebrew/opt/llvm* 2>/dev/null))
+          llvms+=($(echo $LLVM_PATHS | tr ':' ' '))
+
+          for path in ${llvms[@]}; do
+            local libomp="$(find -L "$path" -path '*/lib/libomp.dylib' 2>/dev/null | head -n1)"
+            if [ -n "$libomp" ] && [ -f "$libomp" ]; then
+              libomp_path="$libomp"
+              echo "# found LLVM libomp at: '$libomp_path'"
+              break
+            fi
+          done
+
+          if [ -z "$libomp_path" ] || ! [ -f "$libomp_path" ]; then
+            # Fallback: try to locate a libomp from the standalone libomp package via Homebrew
+            local fallback_prefix=$(brew --prefix libomp 2>/dev/null || true)
+            if [ -n "$fallback_prefix" ] && [ -f "$fallback_prefix/lib/libomp.dylib" ]; then
+              libomp_path="$fallback_prefix/lib/libomp.dylib"
+              echo "# found standalone libomp at: '$libomp_path'"
+            else
+              die 1 "not ok - could not locate 'libomp.dylib'. Please install an LLVM package (preferred) or the libomp package: \"$(advice "libomp")\""
+            fi
+          fi
+
+          mkdir -p "$ORO_HOME/lib/$arch-desktop/codesign"
+          cp -f "$libomp_path" "$ORO_HOME/lib/$arch-desktop/codesign/$(basename "$libomp_path")"
+          echo "# copied '$libomp_path'"
+
+          echo "# modifying the install name of the copied 'libomp.dylib'"
+          quiet install_name_tool -id "@rpath/$(basename "$libomp_path")" "$ORO_HOME/lib/$arch-desktop/codesign/$(basename "$libomp_path")"
+          if (( $? != 0 )); then
+            sudo install_name_tool -id "@rpath/$(basename "$libomp_path")" "$ORO_HOME/lib/$arch-desktop/codesign/$(basename "$libomp_path")"
+            die $? "not ok - failed to modify the install name of copied 'libomp.dylib'"
+          fi
+        else
+          if (( do_link == 1 )); then
+            ln -sf "$BUILD_DIR/$arch-$platform"/lib/*.metallib "$ORO_HOME/lib/$arch-$platform"
+          else
+            cp -rfp "$BUILD_DIR/$arch-$platform"/lib/*.metallib "$ORO_HOME/lib/$arch-$platform"
+          fi
+        fi
+      fi
+    fi
+
+    if [[ "$host" == "Win32" ]] && [[ "$platform" == "desktop" ]]; then
+      shopt -s nullglob
+      local arch_libs_ms=( "$BUILD_DIR/$arch-$platform"/lib$_d/*.lib )
+      if (( ${#arch_libs_ms[@]} > 0 )); then
+        if (( do_link == 1 )); then
+          for f in "${arch_libs_ms[@]}"; do ln -sf "$f" "$ORO_HOME/lib$_d/$arch-$platform"; done
+        else
+          cp -rfp "${arch_libs_ms[@]}" "$ORO_HOME/lib$_d/$arch-$platform"
+        fi
+      else
+        echo "warn - no MSVC libs in $BUILD_DIR/$arch-$platform/lib$_d"
+      fi
+      shopt -u nullglob
+    fi
+
+    if [[ "$platform" == "android" ]] && [[ -d "$BUILD_DIR/$arch-$platform"/lib ]]; then
+      shopt -s nullglob
+      local and_libs=( "$BUILD_DIR/$arch-$platform"/lib/*.a )
+      if (( ${#and_libs[@]} > 0 )); then
+        if (( do_link == 1 )); then
+          for f in "${and_libs[@]}"; do ln -sf "$f" "$ORO_HOME/lib/$arch-$platform"; done
+        else
+          cp -fr "${and_libs[@]}" "$ORO_HOME/lib/$arch-$platform"
+        fi
+      else
+        echo "warn - no android libs in $BUILD_DIR/$arch-$platform/lib"
+      fi
+      shopt -u nullglob
+    fi
+
+    if [[ -d "$BUILD_DIR/$arch-$platform"/extensions ]]; then
+      local dest_ext_dir="$ORO_HOME/lib/$arch-$platform/extensions"
+      echo "# copying sqlite extensions to $dest_ext_dir"
+      rm -rf "$dest_ext_dir"
+      mkdir -p "$dest_ext_dir"
+
+      shopt -s nullglob
+      local ext_files=( "$BUILD_DIR/$arch-$platform"/extensions/* )
+      if (( ${#ext_files[@]} > 0 )); then
+        if (( do_link == 1 )); then
+          for f in "${ext_files[@]}"; do ln -sf "$f" "$dest_ext_dir/"; done
+        else
+          cp -rfp "${ext_files[@]}" "$dest_ext_dir/"
+        fi
+      else
+        echo "warn - no sqlite extensions in $BUILD_DIR/$arch-$platform/extensions"
+      fi
+      shopt -u nullglob
+    fi
+  else
+    echo >&2 "not ok - Missing $BUILD_DIR/$arch-$platform/lib"
+    exit 1
+  fi
+
+  if [ "$platform" == "desktop" ]; then
+    if [ "$host" == "Linux" ] || [ "$host" == "Darwin" ]; then
+      echo "# copying pkgconfig to $ORO_HOME/pkgconfig"
+      rm -rf "$ORO_HOME/pkgconfig"
+      mkdir -p "$ORO_HOME/pkgconfig"
+      if (( do_link == 1 )); then
+        ln -sf "$BUILD_DIR/$arch-desktop/pkgconfig"/* "$ORO_HOME/pkgconfig"
+      else
+        cp -rfp "$BUILD_DIR/$arch-desktop/pkgconfig"/* "$ORO_HOME/pkgconfig"
+      fi
+    fi
+
+    echo "# copying js api to $ORO_HOME/api"
+    mkdir -p "$ORO_HOME/api"
+
+    if (( do_link == 1 )); then
+      ln -sf "$root"/api/* "$ORO_HOME/api"
+    else
+      cp -frp "$root"/api/* "$ORO_HOME/api"
+    fi
+
+    mkdir -p "$ORO_HOME/assets"
+    if (( do_link == 1 )); then
+      ln -sf "$root"/assets/* "$ORO_HOME/assets"
+    else
+      cp -rf "$root"/assets/* "$ORO_HOME/assets"
+    fi
+
+    # only do this for desktop, no need to copy again for other platforms
+    mkdir -p "$ORO_HOME/include"
+    if (( do_link != 1 )); then
+      rm -rf "$ORO_HOME/include"
+    fi
+
+    if (( do_link == 1 )); then
+      ln -sf "$BUILD_DIR"/uv/include/* "$ORO_HOME/include"
+      ln -sf "$root"/include/* "$ORO_HOME/include"
+      ln -sf "$BUILD_DIR/$arch-desktop/include/sodium.h" "$ORO_HOME/include"
+      ln -sf "$BUILD_DIR/$arch-desktop/include/sodium" "$ORO_HOME/include"
+      ln -sf "$root"/build/whisper.cpp/include/* "$ORO_HOME/include"
+      if [[ "$host" = "Linux" && -d "$BUILD_DIR/include/mbedtls" ]]; then
+        rm -rf "$ORO_HOME/include/mbedtls"
+        ln -sf "$BUILD_DIR/include/mbedtls" "$ORO_HOME/include/mbedtls"
+      fi
+      if [[ "$host" = "Linux" && -d "$BUILD_DIR/include/psa" ]]; then
+        rm -rf "$ORO_HOME/include/psa"
+        ln -sf "$BUILD_DIR/include/psa" "$ORO_HOME/include/psa"
+      fi
+    else
+      mkdir -p $ORO_HOME/include
+      cp -rfp "$BUILD_DIR"/uv/include/* "$ORO_HOME/include"
+      cp -rfp "$root"/include/* "$ORO_HOME/include"
+      cp -fp "$BUILD_DIR/$arch-desktop/include/sodium.h" "$ORO_HOME/include"
+      cp -rfp "$BUILD_DIR/$arch-desktop/include/sodium" "$ORO_HOME/include"
+      cp -rfp "$root"/build/whisper.cpp/include/* "$ORO_HOME/include"
+      if [[ "$host" = "Linux" && -d "$BUILD_DIR/include/mbedtls" ]]; then
+        rm -rf "$ORO_HOME/include/mbedtls"
+        cp -rfp "$BUILD_DIR/include/mbedtls" "$ORO_HOME/include"
+      fi
+      if [[ "$host" = "Linux" && -d "$BUILD_DIR/include/psa" ]]; then
+        rm -rf "$ORO_HOME/include/psa"
+        cp -rfp "$BUILD_DIR/include/psa" "$ORO_HOME/include"
+      fi
+    fi
+
+    if (( do_link != 1 )); then
+      rm -f "$ORO_HOME/include/oro/_user-config-bytes.hh"
+    fi
+
+    mkdir -p "$ORO_HOME/include/llama"
+    for header in $(find "$root/build/llama" -name *.h); do
+      if [[ "$header" =~  examples/ ]]; then continue; fi
+      if [[ "$header" =~  tests/ ]]; then continue; fi
+
+      local llama_build_dir="$root/build/llama/"
+      local destination="$ORO_HOME/include/llama/${header/$llama_build_dir/}"
+
+      mkdir -p "$(dirname "$destination")"
+      if (( do_link == 1 )); then
+        ln -sf "$header" "$destination"
+      else
+        cp -f "$header" "$destination"
+      fi
+    done
+
+    if [[ -f "$root/$ORO_ENV_FILENAME" ]]; then
+      echo "# copying $ORO_ENV_FILENAME to $ORO_HOME"
+      cp -fp "$root/$ORO_ENV_FILENAME" "$ORO_HOME/$ORO_ENV_FILENAME"
+    fi
+  fi
+
+  if [ "$platform" == "desktop" ]; then
+    mkdir -p "$ORO_HOME/bin"
+    if (( do_link == 1 )); then
+      ln -sf "$root/bin/functions.sh" "$ORO_HOME/bin"
+      ln -sf "$root/bin/android-functions.sh" "$ORO_HOME/bin"
+    else
+      # Required for FTE setup
+      cp -ap "$root/bin/functions.sh" "$ORO_HOME/bin"
+      cp -ap "$root/bin/android-functions.sh" "$ORO_HOME/bin"
+    fi
+
+    if [[ "$(uname -s)" == *"_NT"* ]]; then
+      if (( do_link == 1 )); then
+        ln -sf "$root/bin/"*.ps1 "$ORO_HOME/bin"
+        ln -sf "$root/bin/".vs* "$ORO_HOME/bin"
+      else
+        cp -ap "$root/bin/"*.ps1 "$ORO_HOME/bin"
+        cp -ap "$root/bin/".vs* "$ORO_HOME/bin"
+      fi
+    fi
+
+    for man_section in man1 man3 man7; do
+      local section_ext="${man_section#man}"
+      local root_man_dir="$root/share/man/$man_section"
+      local home_man_dir="$ORO_HOME/share/man/$man_section"
+      if compgen -G "$root_man_dir/*.${section_ext}" > /dev/null; then
+        mkdir -p "$home_man_dir"
+        rm -f "$home_man_dir"/*.${section_ext}
+        if (( do_link == 1 )); then
+          ln -sf "$root_man_dir/"*.${section_ext} "$home_man_dir"
+        else
+          cp -fp "$root_man_dir/"*.${section_ext} "$home_man_dir"
+        fi
+      fi
+    done
+
+    local home_doc_dir="$ORO_HOME/share/doc/oroc"
+    mkdir -p "$home_doc_dir"
+    rm -f "$home_doc_dir"/*
+    local runtime_docs=(
+      "$root/README.md:README.md"
+      "$root/docs/LEGACY_LIMITATIONS.md:LEGACY_LIMITATIONS.md"
+      "$root/docs/MCP.md:MCP.md"
+      "$root/docs/llms.txt:llms.txt"
+    )
+    for doc_entry in "${runtime_docs[@]}"; do
+      local source_doc="${doc_entry%%:*}"
+      local dest_name="${doc_entry##*:}"
+      if [[ ! -f "$source_doc" ]]; then
+        continue
+      fi
+      if (( do_link == 1 )); then
+        ln -sf "$source_doc" "$home_doc_dir/$dest_name"
+      else
+        cp -fp "$source_doc" "$home_doc_dir/$dest_name"
+      fi
+    done
+  fi
+}
+
+function _install_cli {
+  local arch="$(host_arch)"
+
+  if [ -z "$TEST" ] && [ -z "$NO_INSTALL" ]; then
+    echo "# moving binary to '$ORO_HOME/bin' (prompting to copy file into directory)"
+
+    cp -f "$BUILD_DIR/$arch-desktop"/bin/* "$ORO_HOME/bin"
+    die $? "not ok - unable to move binary into '$ORO_HOME'"
+
+    if [[ "$ORO_HOME" != "$PREFIX" ]]; then
+      if [[ ! -d $PREFIX/bin ]]; then
+        echo "not ok - $PREFIX/bin is not a directory, unable to install."
+        exit 1
+      fi
+
+      for cli in oroc; do
+        local target="$ORO_HOME/bin/$cli"
+        local link="$PREFIX/bin/$cli"
+        if [[ ! -e "$target" && -e "${target}.exe" ]]; then
+          target="${target}.exe"
+          link="${link}.exe"
+        fi
+        if [[ ! -e "$target" ]]; then
+          continue
+        fi
+
+        echo "# linking binary to $link"
+        local status="$(ln -sf "$target" "$link" 2>&1)"
+        local rc=$?
+
+        if [[ " $status " =~ " Permission denied " ]]; then
+          echo "warn - Failed to link binary to '$link': Trying 'sudo'"
+          sudo rm -f "$link"
+          sudo ln -sf "$target" "$link"
+          die $? "not ok - unable to link binary into '$link'"
+        fi
+
+        die $rc "not ok - unable to link binary into '$link'"
+      done
+
+      if [[ "$host" != "Win32" ]]; then
+        for man_section in man1 man3 man7; do
+          local section_ext="${man_section#man}"
+          local source_pattern="$ORO_HOME/share/man/$man_section/*.${section_ext}"
+          if ! compgen -G "$source_pattern" > /dev/null; then
+            continue
+          fi
+
+          local man_dir="$PREFIX/share/man/$man_section"
+          if [[ ! -d "$man_dir" ]]; then
+            local status="$(mkdir -p "$man_dir" 2>&1)"
+            local rc=$?
+            if [[ " $status " =~ " Permission denied " ]]; then
+              echo "warn - Failed to create man directory '$man_dir': Trying 'sudo'"
+              sudo mkdir -p "$man_dir"
+              die $? "not ok - unable to create man directory '$man_dir'"
+            fi
+            die $rc "not ok - unable to create man directory '$man_dir'"
+          fi
+
+          for page in "$ORO_HOME"/share/man/"$man_section"/*.${section_ext}; do
+            local page_name="$(basename "$page")"
+            local link="$man_dir/$page_name"
+            echo "# linking man page to $link"
+            local status="$(ln -sf "$page" "$link" 2>&1)"
+            local rc=$?
+
+            if [[ " $status " =~ " Permission denied " ]]; then
+              echo "warn - Failed to link man page to '$link': Trying 'sudo'"
+              sudo rm -f "$link"
+              sudo ln -sf "$page" "$link"
+              die $? "not ok - unable to link man page into '$link'"
+            fi
+
+            die $rc "not ok - unable to link man page into '$link'"
+          done
+        done
+
+        local source_doc_dir="$ORO_HOME/share/doc/oroc"
+        if compgen -G "$source_doc_dir/*" > /dev/null; then
+          local doc_dir="$PREFIX/share/doc/oroc"
+          if [[ ! -d "$doc_dir" ]]; then
+            local status="$(mkdir -p "$doc_dir" 2>&1)"
+            local rc=$?
+            if [[ " $status " =~ " Permission denied " ]]; then
+              echo "warn - Failed to create documentation directory '$doc_dir': Trying 'sudo'"
+              sudo mkdir -p "$doc_dir"
+              die $? "not ok - unable to create documentation directory '$doc_dir'"
+            fi
+            die $rc "not ok - unable to create documentation directory '$doc_dir'"
+          fi
+
+          for doc in "$source_doc_dir"/*; do
+            local doc_name="$(basename "$doc")"
+            local link="$doc_dir/$doc_name"
+            echo "# linking documentation to $link"
+            local status="$(ln -sf "$doc" "$link" 2>&1)"
+            local rc=$?
+
+            if [[ " $status " =~ " Permission denied " ]]; then
+              echo "warn - Failed to link documentation to '$link': Trying 'sudo'"
+              sudo rm -f "$link"
+              sudo ln -sf "$doc" "$link"
+              die $? "not ok - unable to link documentation into '$link'"
+            fi
+
+            die $rc "not ok - unable to link documentation into '$link'"
+          done
+        fi
+      fi
+    fi
+
+    echo "ok - done. type 'oroc -h' for help"
+    if [[ "$host" != "Win32" ]] && \
+      { compgen -G "$ORO_HOME/share/man/man1/*.1" > /dev/null || compgen -G "$ORO_HOME/share/man/man3/*.3" > /dev/null || compgen -G "$ORO_HOME/share/man/man7/*.7" > /dev/null; }; then
+      echo "ok - man pages installed. try 'man oroc', 'man 3 oro-fs', or 'man 7 oro-ipc'"
+    fi
+  else
+    echo "ok - done."
+  fi
+}
+
+function _setSDKVersion {
+  sdks=$(ls "$PLATFORMPATH"/"$1".platform/Developer/SDKs)
+  arr=()
+  for sdk in $sdks
+  do
+    echo "ok - found SDK $sdk"
+    arr[${#arr[@]}]=$sdk
+  done
+
+  # Last item will be the current SDK, since it is alpha ordered
+  count=${#arr[@]}
+
+  if [ $count -gt 0 ]; then
+    sdk=${arr[$count-1]:${#1}}
+    num=$(expr ${#sdk}-4)
+    SDKVERSION=${sdk:0:$num}
+  else
+    SDKVERSION="8.0"
+  fi
+}
+
+function _compile_libuv_android {
+  local platform="android"
+  local arch=$1
+  local host_arch="$(host_arch)"
+  local clang="$(android_clang "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
+  local clang_target="$(android_clang_target "$arch")"
+  local ar="$(android_ar "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
+  local -a android_includes=()
+  android_includes=($(android_arch_includes "$arch"))
+
+  local cflags=("$clang_target" -std=gnu89 -g -pedantic -I"$root"/build/uv/include -I"$root"/build/uv/src -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -fPIC -Wall -Wextra -Wno-pedantic -Wno-sign-compare -Wno-unused-parameter -Wno-implicit-function-declaration)
+  cflags+=("${android_includes[@]}")
+  local objects=()
+  local sources=("unix/async.c" "unix/core.c" "unix/dl.c" "unix/fs.c" "unix/getaddrinfo.c" "unix/getnameinfo.c" "unix/linux.c" "unix/loop.c" "unix/loop-watcher.c" "unix/pipe.c" "unix/poll.c" "unix/process.c" "unix/proctitle.c" "unix/random-devurandom.c" "unix/random-getentropy.c" "unix/random-getrandom.c" "unix/random-sysctl-linux.c" "unix/signal.c" "unix/stream.c" "unix/tcp.c" "unix/thread.c" "unix/tty.c" "unix/udp.c" fs-poll.c idna.c inet.c random.c strscpy.c strtok.c threadpool.c timer.c uv-common.c uv-data-getter-setters.c version.c)
+
+  local output_directory="$root/build/$arch-$platform/uv$d"
+  mkdir -p "$output_directory"
+
+  local src_directory="$root/build/uv/src"
+
+  trap onsignal INT TERM
+  local i=0
+  local max_concurrency=$CPU_CORES
+  local build_static=0
+  local base_lib="libuv"
+  local static_library="$root/build/$arch-$platform/lib/$base_lib.a"
+
+  for source in "${sources[@]}"; do
+    if (( i++ > max_concurrency )); then
+      for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null
+      done
+      i=0
+    fi
+
+    declare object="${source/.c/.o}"
+    object="$(basename "$object")"
+    objects+=("$output_directory/$object")
+
+    {
+      if (( force )) || ! test -f "$output_directory/$object" || (( $(stat_mtime "$src_directory/$source") > $(stat_mtime "$output_directory/$object") )); then
+        mkdir -p "$(dirname "$object")"
+        echo "# compiling object ($arch-$platform) $(basename "$source")"
+        quiet $clang "${cflags[@]}" -c "$src_directory/$source" -o "$output_directory/$object" || onsignal
+        echo "ok - built $source -> $object ($arch-$platform)"
+        # Can't write back to variable in block, remove final library to force rebuild
+        rm "$static_library" 2>/dev/null
+      fi
+    } & pids+=($!)
+  done
+
+  for pid in "${pids[@]}"; do
+    wait "$pid" 2>/dev/null
+  done
+
+  if [ ! -f "$static_library" ]; then
+    build_static=1
+  fi
+  mkdir -p "$(dirname "$static_library")"
+
+  if (( build_static )); then
+    quiet $ar crs "$static_library" "${objects[@]}"
+    if [ -f "$static_library" ]; then
+      echo "ok - built $base_lib ($arch-$platform): $(basename "$static_library")"
+    else
+       echo >&2 "not ok - failed to build $static_library"
+      exit 1
+    fi
+
+  else
+    if [ -f "$static_library" ]; then
+      echo "ok - using cached static library ($arch-$platform): $(basename "$static_library")"
+    else
+      echo >&2 "not ok - static library doesn't exist after cache check passed: ($arch-$platform): $(basename "$static_library")"
+      exit 1
+    fi
+  fi
+
+  # This is a sanity check to confirm that the static_library is > 8 bytes
+  # If an empty ${objects[@]} is provided to ar, it will still spit out a header without an error code.
+  # therefore check the output size
+  # This error condition should only occur after a code change
+  local lib_size="$(stat_size "$static_library")"
+  if (( lib_size < $(android_min_expected_static_lib_size "$base_lib") )); then
+    echo >&2 "not ok - $static_library size looks wrong: $lib_size, renaming as .bad"
+    mv "$static_library" "$static_library.bad"
+    exit 1
+  fi
+}
+
+function _compile_llama_metal {
+  local target=$1
+  local hosttarget=$1
+  local platform=$2
+
+  if [ -z "$target" ]; then
+    target="$(host_arch)"
+    platform="desktop"
+  fi
+
+  echo "# building METAL for $platform ($target) on $host..."
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/llama"
+
+  if [ ! -d "$STAGING_DIR" ]; then
+    mkdir -p "$STAGING_DIR"
+    cp -r "$BUILD_DIR"/llama/* "$STAGING_DIR"
+    cd "$STAGING_DIR" || exit 1
+  else
+    cd "$STAGING_DIR" || exit 1
+  fi
+
+  local sdk="iphoneos"
+  [[ "$platform" == "iPhoneSimulator" ]] && sdk="iphonesimulator"
+
+  mkdir -p "$STAGING_DIR/build/"
+  mkdir -p ../lib
+
+  xcrun -sdk $sdk metal -O3 -c ggml/src/ggml-metal/ggml-metal.metal -o ggml-metal.air
+  xcrun -sdk $sdk metallib ggml-metal.air -o ../lib/default.metallib
+  rm *.air
+
+  echo "ok - metal built for $platform"
+}
+
+function _compile_llama {
+  local target=$1
+  local hosttarget=$1
+  local platform=$2
+
+  if [ -z "$target" ]; then
+    target="$(host_arch)"
+    platform="desktop"
+  fi
+
+  echo "# building llama.cpp for $platform ($target) on $host..."
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/llama"
+
+  if [ ! -d "$STAGING_DIR" ]; then
+    mkdir -p "$STAGING_DIR"
+    cp -r "$BUILD_DIR"/llama/* "$STAGING_DIR"
+    cd "$STAGING_DIR" || exit 1
+  else
+    cd "$STAGING_DIR" || exit 1
+  fi
+
+  local sdk="iphoneos"
+  [[ "$platform" == "iPhoneSimulator" ]] && sdk="iphonesimulator"
+
+  mkdir -p "$STAGING_DIR/build/"
+  mkdir -p ../bin
+
+  local cmake_args=(
+    -DLLAMA_BUILD_TESTS=OFF
+    -DLLAMA_BUILD_SERVER=OFF
+    -DLLAMA_BUILD_EXAMPLES=OFF
+    -DLLAMA_CURL=OFF
+    -DBUILD_SHARED_LIBS=OFF
+  )
+
+  if [ "$platform" == "desktop" ]; then
+    if [[ "$host" != "Win32" ]]; then
+      quiet command -v cmake
+      die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+      local cflags="-fPIC"
+      export CFLAGS="$cflags"
+      export CXXFLAGS="$cflags"
+
+      quiet cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" ${cmake_args[@]}
+      die $? "not ok - libllama.a (desktop)"
+
+      quiet cmake --build build &&
+      quiet cmake --build build -- -j"$CPU_CORES" &&
+      quiet cmake --install build
+      die $? "not ok - libllama.a (desktop)"
+    else
+      if ! test -f "$BUILD_DIR/$target-$platform/lib$d/llama.lib"; then
+        local config="Release"
+        if [[ -n "$DEBUG" ]]; then
+          config="Debug"
+        fi
+        cd "$STAGING_DIR/build/" || exit 1
+        quiet command -v cmake
+        die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+        quiet cmake -S .. -B . ${cmake_args[@]}
+        quiet cmake --build . --config $config
+        mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
+        quiet echo "cp -up $STAGING_DIR/build/$config/llama.lib "$BUILD_DIR/$target-$platform/lib$d/llama.lib""
+        cp -up "$STAGING_DIR/build/$config/llama.lib" "$BUILD_DIR/$target-$platform/lib$d/llama.lib"
+        if [[ -n "$DEBUG" ]]; then
+          cp -up "$STAGING_DIR"/build/$config/llama_a.pdb "$BUILD_DIR/$target-$platform/lib$d/llama_a.pdb"
+        fi;
+      fi
+    fi
+
+    rm -f "$root/build/$(host_arch)-desktop/lib$d"/*.{so,la,dylib}*
+    return
+  elif [ "$platform" == "iPhoneOS" ] || [ "$platform" == "iPhoneSimulator" ]; then
+    # https://github.com/ggerganov/llama.cpp/discussions/4508
+    local ar="$(xcrun -sdk $sdk -find ar)"
+
+    local cc="$(xcrun -sdk $sdk -find clang)"
+    local cxx="$(xcrun -sdk $sdk -find clang++)"
+    local cflags="--target=$target-apple-ios -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION -DLLAMA_METAL_EMBED_LIBRARY=ON -DUSE_NEON_DOTPROD "
+    if [ "$platform" == "iPhoneOS" ]; then
+      cflags+="-march=armv8.2-a+dotprod"
+    elif [ "$platform" == "iPhoneSimulator" ] && [ "$target" == "arm64" ]; then
+      cflags+="-march=armv8.2-a+dotprod"
+    elif [ "$platform" == "iPhoneSimulator" ] && [ "$target" == "x86_64" ]; then
+      cflags+="-march=x86-64 --target=x86-apple-ios-simulator"
+    fi
+
+    export AR="$ar"
+    export CFLAGS="$cflags"
+    export CXXFLAGS="$cflags"
+    export CXX="$cxx"
+    export CC="$cc"
+    export SDKROOT="$PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
+
+    cmake -S . -B build -DCMAKE_SYSTEM_NAME="iOS" -DCMAKE_OSX_ARCHITECTURES="$target" -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" -DLLAMA_NATIVE=OFF -DGGML_ARM_DOTPROD=ON ${cmake_args[@]} &&
+    cmake --build build &&
+    cmake --build build -- -j"$CPU_CORES" &&
+    cmake --install build
+
+    if (( $? != 0 )); then
+      die $? "not ok - Unable to compile libllama for '$platform'"
+    fi
+
+    return
+  elif [ "$platform" == "android" ]; then
+    local host_arch="$(host_arch)"
+    local cc="$(android_clang "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
+    local cxx="$(android_clang "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch" "++")"
+    local ar="$(android_ar "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
+    local cflags=""
+
+    local android_ndk="$ANDROID_HOME/ndk/$NDK_VERSION"
+
+    if [ "$target" == "arm64-v8a" ]; then
+      cflags+="-march=armv8.7a+dotprod"
+    elif [ "$target" == "x86_64" ]; then
+      cflags+="-march=x86-64"
+    fi
+
+    cmake -S . -B build \
+      -DCMAKE_TOOLCHAIN_FILE="$android_ndk/build/cmake/android.toolchain.cmake" \
+      -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" \
+      -DCMAKE_SYSTEM_NAME=Android \
+      -DCMAKE_CXX_COMPILER="$cxx" \
+      -DCMAKE_C_COMPILER="$cc" \
+      -DCMAKE_C_FLAGS="$cflags" \
+      -DCMAKE_CXX_FLAGS="$cflags" \
+      -DCMAKE_ANDROID_NDK="$android_ndk" \
+      -DCMAKE_ANDROID_ARCH_ABI="$target" \
+      -DANDROID_PLATFORM="android-$ANDROID_PLATFORM" \
+      -DANDROID_ABI="$target" \
+      -DGGML_ARM_DOTPROD=ON \
+      -DGGML_LLAMAFILE=OFF \
+      -DGGML_OPENMP=OFF \
+      ${cmake_args[*]} &&
+    cmake --build build --config Release -j"$CPU_CORES" &&
+    cmake --install build --config Release
+
+    if (( $? != 0 )); then
+      die $? "not ok - Unable to compile libllama for '$platform'"
+    fi
+
+    return
+  fi
+
+  if [[ "$host" != "Win32" ]]; then
+    cp libllama.a ../lib
+    die $? "not ok - Unable to compile libllama for '$platform'"
+  fi
+
+  cd "$BUILD_DIR" || exit 1
+  rm -f "$root/build/$target-$platform/lib$d"/*.{so,la,dylib}*
+  echo "ok - built libllama for $target-$platform"
+  return 0
+}
+
+function _compile_libuv {
+  local target=$1
+  local hosttarget=$1
+  local platform=$2
+
+  if [ -z "$target" ]; then
+    target="$(host_arch)"
+    platform="desktop"
+  fi
+
+  echo "# building libuv for $platform ($target) on $host..."
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/uv"
+
+  if [ ! -d "$STAGING_DIR" ]; then
+    mkdir -p "$STAGING_DIR"
+    cp -r "$BUILD_DIR"/uv/* "$STAGING_DIR"
+    cd "$STAGING_DIR" || exit 1
+    # Doesn't work in mingw
+    if [[ "$host" != "Win32" ]]; then
+      quiet sh autogen.sh
+    fi;
+  else
+    cd "$STAGING_DIR" || exit 1
+  fi
+
+  mkdir -p "$STAGING_DIR/build/"
+
+  if [ "$platform" == "desktop" ]; then
+    if [[ "$host" != "Win32" ]]; then
+      if ! test -f Makefile; then
+      if [[ "$host" == "Linux" ]]; then
+        CFLAGS="-fPIC" quiet ./configure --prefix="$BUILD_DIR/$target-$platform"
+        die $? "not ok - desktop configure"
+      else
+        quiet ./configure --prefix="$BUILD_DIR/$target-$platform"
+        die $? "not ok - desktop configure"
+      fi
+
+        quiet make
+        die $? "not ok - libuv desktop make"
+        quiet make "-j$CPU_CORES"
+        die $? "not ok - libuv desktop make -j$CPU_CORES"
+        quiet make install
+        die $? "not ok - libuv desktop make install"
+      fi
+    else
+      if ! test -f "$BUILD_DIR/$target-$platform/lib$d/libuv.lib"; then
+        local config="Release"
+        if [[ -n "$DEBUG" ]]; then
+          config="Debug"
+        fi
+        cd "$STAGING_DIR/build/" || exit 1
+        quiet command -v cmake
+        die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+        quiet cmake .. -DBUILD_TESTING=OFF -DLIBUV_BUILD_SHARED=OFF
+        die $? "not ok - libuv cmake configure (Win32)"
+        cd "$STAGING_DIR" || exit 1
+        quiet cmake --build "$STAGING_DIR/build/" --config $config
+        die $? "not ok - libuv cmake build (Win32)"
+        mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
+        quiet echo "cp -up $STAGING_DIR/build/$config/libuv.lib "$BUILD_DIR/$target-$platform/lib$d/libuv.lib""
+        cp -up "$STAGING_DIR/build/$config/libuv.lib" "$BUILD_DIR/$target-$platform/lib$d/libuv.lib"
+        if [[ -n "$DEBUG" ]]; then
+          cp -up "$STAGING_DIR"/build/$config/uv_a.pdb "$BUILD_DIR/$target-$platform/lib$d/uv_a.pdb"
+        fi;
+      fi
+    fi
+
+    rm -f "$root/build/$(host_arch)-desktop/lib$d"/*.{so,la,dylib}*
+    return
+  fi
+
+  if [ "$hosttarget" == "arm64" ]; then
+    hosttarget="arm"
+  fi
+
+  # Use correct sdk, fixes:
+  # ld: in /Users/ec2-user/app2/build/ios-simulator/lib/libuv.a(libuv_la-fs-poll.o), building for iOS Simulator, but linking in object file built for iOS, file '/Users/ec2-user/app2/build/ios-simulator/lib/libuv.a' for architecture arm64
+  local sdk="iphoneos"
+  [[ "$platform" == "iPhoneSimulator" ]] && sdk="iphonesimulator"
+
+  export PLATFORM=$platform
+  export CC="$(xcrun -sdk $sdk -find clang)"
+  export CXX="$(xcrun -sdk $sdk -find clang++)"
+  export STRIP="$(xcrun -sdk $sdk -find strip)"
+  export LD="$(xcrun -sdk $sdk -find ld)"
+  export CPP="$CC -E"
+  export CFLAGS="-fembed-bitcode -arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION"
+  export AR=$(xcrun -sdk $sdk -find ar)
+  export RANLIB=$(xcrun -sdk $sdk -find ranlib)
+  export CPPFLAGS="-fembed-bitcode -arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION"
+  export LDFLAGS="-Wc,-fembed-bitcode -arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
+
+  if ! test -f Makefile; then
+    quiet ./configure --prefix="$BUILD_DIR/$target-$platform" --host="$hosttarget-apple-darwin"
+  fi
+
+  if [ ! $? = 0 ]; then
+    echo "WARNING! - iOS will not be enabled. iPhone simulator not found, try \"sudo xcode-select --switch /Applications/Xcode.app\"."
+    return
+  fi
+
+  quiet make "-j$CPU_CORES"
+  quiet make install
+
+  cd "$BUILD_DIR" || exit 1
+  rm -f "$root/build/$target-$platform/lib$d"/*.{so,la,dylib}*
+  echo "ok - built libuv for $target"
+}
+
+function _compile_whisper {
+  local target=$1
+  local platform=$2
+
+  if [ -z "$target" ]; then
+    target="$(host_arch)"
+    platform="desktop"
+  fi
+
+  echo "# building whisper.cpp for $platform ($target) on $host..."
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/whisper"
+
+  if [ ! -d "$STAGING_DIR" ]; then
+    mkdir -p "$STAGING_DIR"
+    cp -r "$BUILD_DIR"/whisper.cpp/* "$STAGING_DIR"
+  fi
+
+  cd "$STAGING_DIR" || exit 1
+
+  local cmake_args=(
+    -DWHISPER_BUILD_TESTS=OFF
+    -DWHISPER_BUILD_EXAMPLES=OFF
+    -DWHISPER_BUILD_SERVER=OFF
+    -DBUILD_SHARED_LIBS=OFF
+    -DCMAKE_PREFIX_PATH="$BUILD_DIR/$target-$platform"
+    -DCMAKE_INCLUDE_PATH="$BUILD_DIR/$target-$platform/include"
+    -DCMAKE_LIBRARY_PATH="$BUILD_DIR/$target-$platform/lib:$BUILD_DIR/$target-$platform/lib64"
+  )
+
+  local ggml_dir="$BUILD_DIR/$target-$platform/lib/cmake/ggml"
+  if [[ -f "$ggml_dir/ggml-config.cmake" ]] || [[ -f "$ggml_dir/ggmlConfig.cmake" ]]; then
+    cmake_args+=(-DWHISPER_USE_SYSTEM_GGML=ON -Dggml_DIR="$ggml_dir")
+  else
+    cmake_args+=(-DWHISPER_USE_SYSTEM_GGML=OFF)
+    echo "warn - ggml cmake package not found for whisper ($ggml_dir); building with bundled ggml"
+  fi
+
+  quiet command -v cmake
+  die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+
+  if [ "$platform" == "desktop" ]; then
+    if [[ "$host" != "Win32" ]]; then
+      local cflags="-fPIC"
+      export CFLAGS="$cflags"
+      export CXXFLAGS="$cflags"
+
+      quiet cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}"
+      die $? "not ok - libwhisper.a (desktop) configure"
+
+      quiet cmake --build build --config Release -- -j"$CPU_CORES"
+      die $? "not ok - libwhisper.a (desktop) build"
+
+      quiet cmake --install build --config Release
+      die $? "not ok - libwhisper.a (desktop) install"
+    else
+      if ! test -f "$BUILD_DIR/$target-$platform/lib$d/whisper.lib"; then
+        local config="Release"
+        if [[ -n "$DEBUG" ]]; then
+          config="Debug"
+        fi
+
+        mkdir -p "$STAGING_DIR/build"
+        cd "$STAGING_DIR/build" || exit 1
+        quiet cmake -S .. -B . "${cmake_args[@]}"
+        die $? "not ok - libwhisper.lib (desktop) configure"
+
+        quiet cmake --build . --config $config
+        die $? "not ok - libwhisper.lib (desktop) build"
+
+        mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
+        cp -up "$STAGING_DIR/build/$config/whisper.lib" "$BUILD_DIR/$target-$platform/lib$d/whisper.lib"
+        if [[ -n "$DEBUG" ]]; then
+          if [ -f "$STAGING_DIR/build/$config/whisper.pdb" ]; then
+            cp -up "$STAGING_DIR/build/$config/whisper.pdb" "$BUILD_DIR/$target-$platform/lib$d/whisper.pdb"
+          fi
+        fi
+      fi
+      cd "$STAGING_DIR" || exit 1
+    fi
+
+    rm -f "$root/build/$target-$platform/lib$d"/*whisper*.{so,la,dylib}* 2>/dev/null || true
+    echo "ok - built libwhisper for $target-$platform"
+    return
+  fi
+
+  if [ "$platform" == "iPhoneOS" ] || [ "$platform" == "iPhoneSimulator" ]; then
+    local sdk="iphoneos"
+    [[ "$platform" == "iPhoneSimulator" ]] && sdk="iphonesimulator"
+
+    local cc="$(xcrun -sdk $sdk -find clang)"
+    local cxx="$(xcrun -sdk $sdk -find clang++)"
+    local ar="$(xcrun -sdk $sdk -find ar)"
+    local ranlib="$(xcrun -sdk $sdk -find ranlib)"
+    local sdkroot="$PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
+
+    export CC="$cc"
+    export CXX="$cxx"
+    export AR="$ar"
+    export RANLIB="$ranlib"
+
+    local cflags="--target=$target-apple-ios -isysroot $sdkroot -m$sdk-version-min=$SDKMINVERSION -fembed-bitcode"
+    if [ "$platform" == "iPhoneOS" ]; then
+      cflags+=" -march=armv8.2-a+dotprod"
+    elif [ "$target" == "arm64" ]; then
+      cflags+=" -march=armv8.2-a+dotprod"
+    elif [ "$target" == "x86_64" ]; then
+      cflags+=" -march=x86-64 --target=x86_64-apple-ios-simulator"
+    fi
+
+    export CFLAGS="$cflags"
+    export CXXFLAGS="$cflags"
+
+    quiet cmake -S . -B build \
+      -DCMAKE_SYSTEM_NAME="iOS" \
+      -DCMAKE_OSX_ARCHITECTURES="$target" \
+      -DCMAKE_OSX_SYSROOT="$sdkroot" \
+      -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" \
+      -DCMAKE_C_COMPILER="$cc" \
+      -DCMAKE_CXX_COMPILER="$cxx" \
+      -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+      "${cmake_args[@]}"
+    die $? "not ok - libwhisper.a ($platform) configure"
+
+    quiet cmake --build build --config Release -- -j"$CPU_CORES"
+    die $? "not ok - libwhisper.a ($platform) build"
+
+    quiet cmake --install build --config Release
+    die $? "not ok - libwhisper.a ($platform) install"
+
+    rm -f "$root/build/$target-$platform/lib"/*whisper*.{so,la,dylib}* 2>/dev/null || true
+    echo "ok - built libwhisper for $target-$platform"
+    return
+  fi
+
+  if [ "$platform" == "android" ]; then
+    local host_arch="$(host_arch)"
+    local cc="$(android_clang "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
+    local cxx="$(android_clang "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch" "++")"
+    local ar="$(android_ar "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
+
+    export AR="$ar"
+    export CC="$cc"
+    export CXX="$cxx"
+
+    local cflags=""
+    if [ "$target" == "arm64-v8a" ]; then
+      cflags+="-march=armv8.7a+dotprod"
+    elif [ "$target" == "x86_64" ]; then
+      cflags+="-march=x86-64"
+    fi
+
+    export CFLAGS="$cflags"
+    export CXXFLAGS="$cflags"
+
+    quiet cmake -S . -B build \
+      -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
+      -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" \
+      -DCMAKE_SYSTEM_NAME=Android \
+      -DCMAKE_ANDROID_ARCH_ABI="$target" \
+      -DCMAKE_ANDROID_NDK="$ANDROID_HOME/ndk/$NDK_VERSION" \
+      -DANDROID_PLATFORM="android-$ANDROID_PLATFORM" \
+      -DANDROID_ABI="$target" \
+      "${cmake_args[@]}"
+    die $? "not ok - libwhisper.a (android) configure"
+
+    quiet cmake --build build --config Release -- -j"$CPU_CORES"
+    die $? "not ok - libwhisper.a (android) build"
+
+    quiet cmake --install build --config Release
+    die $? "not ok - libwhisper.a (android) install"
+
+    rm -f "$root/build/$target-$platform/lib"/*whisper*.{so,la,dylib}* 2>/dev/null || true
+    echo "ok - built libwhisper for $target-$platform"
+    return
+  fi
+
+  echo "warn - whisper build for $platform not implemented; skipping"
+}
+
+function _compile_iroh_ffi {
+  local platform="${1:-desktop}"
+  local arch="$(host_arch)"
+
+  if [[ "${ORO_SKIP_IROH:-}" = "1" ]]; then
+    echo "warn - skipping oro-iroh build (ORO_SKIP_IROH=1)"
+    return 1
+  fi
+
+  if [[ "$platform" != "desktop" ]]; then
+    echo "warn - oro-iroh build for $platform not implemented; skipping"
+    return 1
+  fi
+
+  if ! quiet command -v cargo; then
+    echo "warn - cargo not found; skipping oro-iroh build"
+    return 1
+  fi
+
+  local crate_dir="$root/rust/oro-iroh"
+  if [[ ! -d "$crate_dir" ]]; then
+    echo "warn - oro-iroh crate not found; skipping build"
+    return 1
+  fi
+
+  if [[ ! -d "$BUILD_DIR/iroh" ]]; then
+    echo "warn - iroh sources not staged; skipping oro-iroh build"
+    return 1
+  fi
+
+  echo "# building oro-iroh bindings for $platform ($arch)..."
+  (cd "$crate_dir" && cargo build --release)
+  local rc=$?
+  if (( rc != 0 )); then
+    die $rc "not ok - oro-iroh cargo build ($platform)"
+  fi
+
+  local release_dir="$crate_dir/target/release"
+  mkdir -p "$BUILD_DIR/$arch-$platform/lib"
+  mkdir -p "$BUILD_DIR/include/iroh"
+  mkdir -p "$BUILD_DIR/pkgconfig"
+
+  local copied=0
+  local -a oro_libs=(liboro_iroh.a liboro_iroh.so liboro_iroh.dylib oro_iroh.dll oro_iroh.lib)
+  for oro_lib in "${oro_libs[@]}"; do
+    local source="$release_dir/$oro_lib"
+    if [[ -f "$source" ]]; then
+      cp -up "$source" "$BUILD_DIR/$arch-$platform/lib/$oro_lib"
+      copied=1
+    fi
+  done
+
+  if (( ! copied )); then
+    echo "warn - oro-iroh artifacts not found in $release_dir"
+    return 1
+  fi
+
+  for header in oro_iroh socket_iroh; do
+    if [[ -f "$root/include/iroh/$header.h" ]]; then
+      cp -up "$root/include/iroh/$header.h" "$BUILD_DIR/include/iroh/$header.h"
+    fi
+  done
+
+  return 0
+}
+
+function _compile_crsqlite_loadable {
+  local platform="${1:-desktop}"
+  local target="${2:-}"
+  local arch="$(host_arch)"
+
+  if [[ ! -d "$BUILD_DIR/cr-sqlite/core" ]]; then
+    die 1 "not ok - cr-sqlite sources not staged (expected at '$BUILD_DIR/cr-sqlite/core')"
+  fi
+
+  if ! quiet command -v cargo; then
+    die 1 "not ok - cargo not found; cr-sqlite build requires a Rust toolchain"
+  fi
+
+  case "$platform" in
+    desktop)
+      echo "# building cr-sqlite loadable extension for $platform ($arch)..."
+      (cd "$BUILD_DIR/cr-sqlite/core" && quiet make -j"$CPU_CORES" loadable)
+      local rc=$?
+      if (( rc != 0 )); then
+        die $rc "not ok - cr-sqlite loadable extension build ($platform)"
+      fi
+
+      local ext="so"
+      if [[ "$host" == "Darwin" ]]; then
+        ext="dylib"
+      elif [[ "$host" == "Win32" ]]; then
+        ext="dll"
+      fi
+
+      local built="$BUILD_DIR/cr-sqlite/core/dist/crsqlite.$ext"
+      if [[ ! -f "$built" ]]; then
+        die 1 "not ok - cr-sqlite loadable extension not found at '$built'"
+      fi
+
+      mkdir -p "$BUILD_DIR/$arch-$platform/extensions"
+      cp -up "$built" "$BUILD_DIR/$arch-$platform/extensions/"
+      echo "ok - built cr-sqlite loadable extension for $platform ($arch)"
+      ;;
+
+    ios)
+      if [[ "$host" != "Darwin" ]]; then
+        die 1 "not ok - cr-sqlite iOS build requested on non-Darwin host"
+      fi
+      echo "# building cr-sqlite iOS loadable variants..."
+      (cd "$BUILD_DIR/cr-sqlite/core" && ./all-ios-loadable.sh)
+      local rc=$?
+      die $rc "not ok - cr-sqlite iOS loadable build"
+
+      local core_dir="$BUILD_DIR/cr-sqlite/core"
+      local device_dylib="$core_dir/dist-ios/crsqlite-aarch64-apple-ios.dylib"
+      local sim_universal="$core_dir/dist-ios-sim/crsqlite-universal-ios-sim.dylib"
+
+      if [[ ! -f "$device_dylib" ]]; then
+        die 1 "not ok - missing cr-sqlite iOS device dylib at '$device_dylib'"
+      fi
+
+      if [[ ! -f "$sim_universal" ]]; then
+        die 1 "not ok - missing cr-sqlite iOS simulator dylib at '$sim_universal'"
+      fi
+
+      # Stage iOS device extension for arm64 iPhoneOS
+      mkdir -p "$BUILD_DIR/arm64-iPhoneOS/extensions"
+      cp -up "$device_dylib" "$BUILD_DIR/arm64-iPhoneOS/extensions/crsqlite.dylib"
+
+      # Stage iOS simulator extension for x86_64 and arm64 simulators
+      mkdir -p "$BUILD_DIR/x86_64-iPhoneSimulator/extensions"
+      mkdir -p "$BUILD_DIR/arm64-iPhoneSimulator/extensions"
+      cp -up "$sim_universal" "$BUILD_DIR/x86_64-iPhoneSimulator/extensions/crsqlite.dylib"
+      cp -up "$sim_universal" "$BUILD_DIR/arm64-iPhoneSimulator/extensions/crsqlite.dylib"
+
+      echo "ok - staged cr-sqlite iOS extensions for arm64 iPhoneOS and simulators"
+      ;;
+
+    android)
+      if [[ -z "$target" ]]; then
+        die 1 "not ok - cr-sqlite android build requested without ABI target"
+      fi
+
+      if [[ -z "$ANDROID_HOME" ]] || [[ -z "$NDK_VERSION" ]]; then
+        die 1 "not ok - Android toolchain not configured for cr-sqlite build"
+      fi
+
+      local android_triple=""
+      case "$target" in
+        arm64-v8a) android_triple="aarch64-linux-android" ;;
+        x86_64) android_triple="x86_64-linux-android" ;;
+        *)
+          die 1 "not ok - unsupported Android ABI for cr-sqlite: $target"
+          ;;
+      esac
+
+      local cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+      local rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+      local rustup_write_test="$rustup_home/downloads/.oro-write-test"
+
+      # Some build environments restrict writes outside the workspace (e.g. sandboxed CI),
+      # so fall back to per-build caches under build/ when needed.
+      if ! mkdir -p "$(dirname "$rustup_write_test")" 2>/dev/null || ! : > "$rustup_write_test" 2>/dev/null; then
+        cargo_home="$BUILD_DIR/.cargo"
+        rustup_home="$BUILD_DIR/.rustup"
+        export CARGO_HOME="$cargo_home"
+        export RUSTUP_HOME="$rustup_home"
+
+        rustup_write_test="$RUSTUP_HOME/downloads/.oro-write-test"
+        mkdir -p "$(dirname "$rustup_write_test")" "$CARGO_HOME/bin"
+        die $? "not ok - unable to initialize Rust toolchain caches at $RUSTUP_HOME"
+
+        : > "$rustup_write_test" 2>/dev/null
+        die $? "not ok - unable to write to Rust toolchain cache at $RUSTUP_HOME"
+      fi
+
+      rm -f "$rustup_write_test" 2>/dev/null || true
+      export PATH="$cargo_home/bin:$PATH"
+
+      if ! command -v rustup >/dev/null 2>&1; then
+        die 1 "not ok - rustup not found; required to install the pinned Rust toolchain for cr-sqlite"
+      fi
+
+      local rust_toolchain="nightly-2023-10-05"
+      local rust_toolchain_file="$BUILD_DIR/cr-sqlite/core/rs/bundle_static/rust-toolchain.toml"
+      if [[ -f "$rust_toolchain_file" ]]; then
+        local parsed_toolchain=""
+        parsed_toolchain="$(grep -E '^[[:space:]]*channel[[:space:]]*=' "$rust_toolchain_file" | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')"
+        if [[ -n "$parsed_toolchain" ]]; then
+          rust_toolchain="$parsed_toolchain"
+        fi
+      fi
+
+      echo "# ensuring Rust toolchain for cr-sqlite android builds ($rust_toolchain / $android_triple)..."
+      if ! rustup toolchain list | awk '{ print $1 }' | grep -q "^${rust_toolchain}"; then
+        rustup toolchain install "$rust_toolchain"
+        die $? "not ok - rustup toolchain install $rust_toolchain failed"
+      fi
+
+      if ! rustup component list --toolchain "$rust_toolchain" --installed | grep -q '^rust-src'; then
+        rustup component add rust-src --toolchain "$rust_toolchain"
+        die $? "not ok - rustup component add rust-src ($rust_toolchain) failed"
+      fi
+
+      if ! rustup target list --toolchain "$rust_toolchain" --installed | grep -qx "$android_triple"; then
+        rustup target add "$android_triple" --toolchain "$rust_toolchain"
+        die $? "not ok - rustup target add $android_triple ($rust_toolchain) failed"
+      fi
+
+      if ! command -v cargo-ndk >/dev/null 2>&1; then
+        echo "# installing cargo-ndk (required for cr-sqlite android build)..."
+        cargo install cargo-ndk --locked
+        die $? "not ok - cargo install cargo-ndk failed"
+
+        if ! command -v cargo-ndk >/dev/null 2>&1; then
+          die 1 "not ok - cargo-ndk installed but not found on PATH (expected in $cargo_home/bin)"
+        fi
+      fi
+
+      export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/${NDK_VERSION}"
+
+      echo "# building cr-sqlite loadable extension for android ($target / $android_triple)..."
+      (cd "$BUILD_DIR/cr-sqlite/core" && make clean && ANDROID_TARGET="$android_triple" make -j"$CPU_CORES" loadable)
+      local rc=$?
+      if (( rc != 0 )); then
+        die $rc "not ok - cr-sqlite android loadable extension build ($target)"
+      fi
+
+      local built_android="$BUILD_DIR/cr-sqlite/core/dist/crsqlite.so"
+      if [[ ! -f "$built_android" ]]; then
+        die 1 "not ok - cr-sqlite android loadable extension not found at '$built_android'"
+      fi
+
+      local dest_arch="$target"
+      local dest_platform="android"
+      mkdir -p "$BUILD_DIR/$dest_arch-$dest_platform/extensions"
+      cp -up "$built_android" "$BUILD_DIR/$dest_arch-$dest_platform/extensions/crsqlite.so"
+      echo "ok - built cr-sqlite loadable extension for android ($target)"
+      ;;
+
+    *)
+      die 1 "not ok - cr-sqlite build for platform '$platform' not implemented"
+      ;;
+  esac
+
+  return 0
+}
+
+function _compile_libusb {
+  local target=$1
+  local platform=$2
+
+  if [ -z "$target" ]; then
+    target="$(host_arch)"
+    platform="desktop"
+  fi
+
+  echo "# building libusb for $platform ($target) on $host..."
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/libusb"
+
+  if [ ! -d "$STAGING_DIR" ]; then
+    mkdir -p "$STAGING_DIR"
+    cp -r "$BUILD_DIR"/libusb/* "$STAGING_DIR"
+  fi
+
+  cd "$STAGING_DIR" || exit 1
+
+  if [ "$platform" == "desktop" ]; then
+    if [[ "$host" != "Win32" ]]; then
+      local use_autotools=1
+
+      if [ ! -f "$STAGING_DIR/configure" ]; then
+        local bootstrap_script=""
+        if [ -x "$STAGING_DIR/bootstrap.sh" ]; then
+          bootstrap_script="$STAGING_DIR/bootstrap.sh"
+        elif [ -x "$STAGING_DIR/autogen.sh" ]; then
+          bootstrap_script="$STAGING_DIR/autogen.sh"
+        fi
+
+        if [[ -n "$bootstrap_script" ]]; then
+          if ! quiet sh "$bootstrap_script"; then
+            echo "warn - libusb bootstrap failed, falling back to cmake"
+            use_autotools=0
+          fi
+        else
+          use_autotools=0
+        fi
+      fi
+
+      if (( use_autotools )) && [ ! -f "$STAGING_DIR/configure" ]; then
+        use_autotools=0
+        echo "warn - libusb configure script missing, falling back to cmake"
+      fi
+
+      if (( use_autotools )); then
+        if ! test -f Makefile; then
+          quiet ./configure --disable-shared --enable-shared=no --disable-udev --prefix="$BUILD_DIR/$target-$platform"
+          die $? "not ok - libusb desktop configure"
+        fi
+
+        quiet make "-j$CPU_CORES"
+        die $? "not ok - libusb desktop make"
+        quiet make install
+        die $? "not ok - libusb desktop install"
+
+        local libdir="$BUILD_DIR/$target-$platform/lib"
+        mkdir -p "$libdir"
+        if [ ! -f "$libdir/libusb-1.0.a" ] && [ -f "$STAGING_DIR/libusb/.libs/libusb-1.0.a" ]; then
+          cp -up "$STAGING_DIR/libusb/.libs/libusb-1.0.a" "$libdir/"
+        fi
+      else
+        quiet command -v cmake
+        die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+
+        local cmake_build_dir="$STAGING_DIR/build-cmake"
+        quiet cmake -S . -B "$cmake_build_dir" \
+          -DLIBUSB_BUILD_SHARED_LIBS=OFF \
+          -DBUILD_SHARED_LIBS=OFF \
+          -DLIBUSB_BUILD_TESTING=OFF \
+          -DLIBUSB_BUILD_EXAMPLES=OFF \
+          -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"
+        die $? "not ok - libusb cmake configure ($platform)"
+
+        quiet cmake --build "$cmake_build_dir" --config Release -- -j"$CPU_CORES"
+        die $? "not ok - libusb cmake build ($platform)"
+
+        quiet cmake --install "$cmake_build_dir" --config Release
+        die $? "not ok - libusb cmake install ($platform)"
+
+        local libdir="$BUILD_DIR/$target-$platform/lib"
+        if [ ! -d "$libdir" ] && [ -d "$BUILD_DIR/$target-$platform/lib64" ]; then
+          libdir="$BUILD_DIR/$target-$platform/lib64"
+        fi
+
+        if [ -f "$libdir/libusb-1.0.a" ]; then
+          mkdir -p "$BUILD_DIR/$target-$platform/lib"
+          cp -up "$libdir/libusb-1.0.a" "$BUILD_DIR/$target-$platform/lib/"
+        else
+          die 1 "not ok - libusb static archive not found after cmake install ($platform)"
+        fi
+      fi
+    else
+      local config="Release"
+      local suffix=""
+      if [[ -n "$DEBUG" ]]; then
+        config="Debug"
+        suffix="d"
+      fi
+
+      local output_lib="$BUILD_DIR/$target-$platform/lib$suffix/libusb-1.0.lib"
+      if ! test -f "$output_lib"; then
+        mkdir -p "$STAGING_DIR/build/"
+        cd "$STAGING_DIR/build/" || exit 1
+
+        quiet command -v cmake
+        die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+
+        quiet cmake -S .. -B . \
+          -DLIBUSB_BUILD_SHARED_LIBS=OFF \
+          -DBUILD_SHARED_LIBS=OFF \
+          -DLIBUSB_BUILD_TESTING=OFF \
+          -DLIBUSB_BUILD_EXAMPLES=OFF
+        die $? "not ok - libusb cmake configure (Win32)"
+
+        quiet cmake --build . --config $config
+        die $? "not ok - libusb cmake build (Win32)"
+
+        mkdir -p "$BUILD_DIR/$target-$platform/lib$suffix"
+
+        local staged_lib="$STAGING_DIR/build/$config/libusb-1.0.lib"
+        if [[ ! -f "$staged_lib" ]]; then
+          staged_lib="$STAGING_DIR/build/libusb-1.0.lib"
+        fi
+        if [[ -f "$staged_lib" ]]; then
+          cp -up "$staged_lib" "$output_lib"
+        else
+          die 1 "not ok - libusb lib not found after build (Win32)"
+        fi
+
+        if [[ -n "$DEBUG" ]]; then
+          local staged_pdb="$STAGING_DIR/build/$config/libusb-1.0.pdb"
+          if [[ -f "$staged_pdb" ]]; then
+            cp -up "$staged_pdb" "$BUILD_DIR/$target-$platform/lib$suffix/libusb-1.0.pdb"
+          fi
+        fi
+      fi
+
+      cd "$STAGING_DIR" || exit 1
+    fi
+
+    rm -f "$root/build/$target-$platform/lib$d"/*.{so,la,dylib}* 2>/dev/null || true
+    return
+  elif [ "$platform" == "iPhoneOS" ] || [ "$platform" == "iPhoneSimulator" ]; then
+    local sdk="iphoneos"
+    [[ "$platform" == "iPhoneSimulator" ]] && sdk="iphonesimulator"
+
+    quiet command -v cmake
+    die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+
+    local cc="$(xcrun -sdk $sdk -find clang)"
+    local cxx="$(xcrun -sdk $sdk -find clang++)"
+    local ar="$(xcrun -sdk $sdk -find ar)"
+    local ranlib="$(xcrun -sdk $sdk -find ranlib)"
+    local strip="$(xcrun -sdk $sdk -find strip)"
+    local sdk_path="$(xcrun --sdk $sdk --show-sdk-path)"
+
+    export CC="$cc"
+    export CXX="$cxx"
+    export AR="$ar"
+    export RANLIB="$ranlib"
+    export STRIP="$strip"
+    export SDKROOT="$sdk_path"
+
+    local cmake_args=(
+      -DLIBUSB_BUILD_SHARED_LIBS=OFF
+      -DBUILD_SHARED_LIBS=OFF
+      -DLIBUSB_BUILD_TESTING=OFF
+      -DLIBUSB_BUILD_EXAMPLES=OFF
+      -DCMAKE_SYSTEM_NAME=iOS
+      -DCMAKE_OSX_ARCHITECTURES="$target"
+      -DCMAKE_OSX_SYSROOT="$sdk_path"
+      -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"
+    )
+
+    quiet cmake -S . -B build "${cmake_args[@]}"
+    die $? "not ok - libusb cmake configure ($platform)"
+
+    quiet cmake --build build --config Release -j"$CPU_CORES"
+    die $? "not ok - libusb cmake build ($platform)"
+
+    quiet cmake --install build --config Release
+    die $? "not ok - libusb cmake install ($platform)"
+
+    rm -f "$root/build/$target-$platform/lib$d"/*.{so,la,dylib}* 2>/dev/null || true
+    return
+  fi
+
+  echo "warn - libusb build for $platform not implemented; skipping"
+}
+
+function _compile_libipfs {
+  local target="${1:-$(host_arch)}"
+  local platform="${2:-desktop}"
+
+  if [[ "${ORO_SKIP_LIBIPFS:-0}" = "1" ]]; then
+    echo "warn - skipping libipfs build (ORO_SKIP_LIBIPFS=1)"
+    return 0
+  fi
+
+  if [[ "$platform" != "desktop" ]]; then
+    echo "warn - libipfs build for $platform not implemented; skipping"
+    return 0
+  fi
+
+  local goos=""
+  case "$host" in
+    Linux) goos="linux" ;;
+    Darwin) goos="darwin" ;;
+    Win32) goos="windows" ;;
+    *) echo "warn - unsupported host $host for libipfs"; return 0 ;;
+  esac
+
+  local goarch=""
+  case "$target" in
+    x86_64|amd64) goarch="amd64" ;;
+    arm64) goarch="arm64" ;;
+    riscv64) goarch="riscv64" ;;
+    *) echo "warn - unsupported libipfs target arch $target"; return 0 ;;
+  esac
+
+  local source="$BUILD_DIR/libipfs"
+  if [ ! -d "$source" ]; then
+    echo "warn - libipfs sources not found at $source; skipping"
+    return 0
+  fi
+
+  if [ ! -f "$source/libipfs.go" ]; then
+    echo "warn - libipfs entrypoint libipfs.go missing; skipping"
+    return 0
+  fi
+
+  mkdir -p "$source/bin"
+  mkdir -p "$BUILD_DIR/libipfs/include"
+  mkdir -p "$BUILD_DIR/$target-$platform/lib"
+
+  local gocache="$source/.gocache/$goos-$goarch"
+  local gomodcache="$source/.gomodcache"
+  local output_base="libipfs-${goos}-${goarch}"
+  local archive_path="$source/bin/${output_base}.a"
+  local header_path="$source/bin/${output_base}.h"
+
+  local goflags=()
+  if [ -d "$source/vendor" ]; then
+    goflags+=("-mod=vendor")
+  fi
+
+  mkdir -p "$gocache" "$gomodcache"
+
+  echo "# building libipfs for $goos/$goarch..."
+  (
+    cd "$source" || exit 1
+    env \
+      CGO_ENABLED=1 \
+      GOOS="$goos" \
+      GOARCH="$goarch" \
+      GOCACHE="$gocache" \
+      GOMODCACHE="$gomodcache" \
+      go build \
+        -buildmode=c-archive \
+        -ldflags="-s -w" \
+        -trimpath \
+        -modcacherw \
+        "${goflags[@]}" \
+        -o "$archive_path" \
+        ./libipfs.go
+  )
+
+  local rc=$?
+  if (( rc != 0 )); then
+    die $rc "not ok - libipfs go build ($goos/$goarch). Ensure dependencies are vendored or set ORO_SKIP_LIBIPFS=1 to skip."
+  fi
+
+  if [ ! -f "$archive_path" ] || [ ! -f "$header_path" ]; then
+    die 1 "not ok - libipfs artifacts missing after build ($archive_path)"
+  fi
+
+  local libdir="$BUILD_DIR/$target-$platform/lib"
+  mkdir -p "$libdir"
+  cp -pf "$archive_path" "$libdir/libipfs.a"
+
+  if [[ "$host" == "Win32" ]]; then
+    local win_suffix=""
+    [[ -n "$DEBUG" ]] && win_suffix="d"
+    mkdir -p "$BUILD_DIR/$target-$platform/lib$win_suffix"
+    cp -pf "$archive_path" "$BUILD_DIR/$target-$platform/lib$win_suffix/libipfs${win_suffix}.a"
+    cp -pf "$archive_path" "$BUILD_DIR/$target-$platform/lib$win_suffix/libipfs${win_suffix}.lib"
+  fi
+
+  cp -pf "$header_path" "$BUILD_DIR/libipfs/include/$output_base.h"
+  cp -pf "$header_path" "$BUILD_DIR/libipfs/include/libipfs.h"
+  cp -pf "$header_path" "$BUILD_DIR/include/libipfs.h"
+
+  return 0
+}
+
+function _compile_zlib {
+  local target=$1
+  local platform=$2
+
+  if [ -z "$target" ]; then
+    target="$(host_arch)"
+    platform="desktop"
+  fi
+
+  local source_root="$BUILD_DIR/zlib"
+  if [[ ! -d "$source_root" ]]; then
+    echo "warn - zlib sources not staged (expected in $source_root); skipping"
+    return
+  fi
+
+  echo "# building zlib for $platform ($target) on $host..."
+
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/zlib"
+
+  if [[ ! -d "$STAGING_DIR" ]] || (( force )); then
+    rm -rf "$STAGING_DIR"
+    mkdir -p "$STAGING_DIR"
+    cp -r "$source_root"/* "$STAGING_DIR"
+  fi
+
+  cd "$STAGING_DIR" || exit 1
+
+  quiet command -v cmake
+  die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+  local cmake_args=(
+    -DBUILD_SHARED_LIBS=OFF
+    -DZLIB_BUILD_EXAMPLES=OFF
+    -DSKIP_INSTALL_LIBRARIES=OFF
+    -DSKIP_INSTALL_HEADERS=OFF
+    -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"
+    -DINSTALL_LIB_DIR="lib"
+    -DINSTALL_INC_DIR="include"
+  )
+
+  if [[ "$platform" == "desktop" ]]; then
+    if [[ "$host" != "Win32" ]]; then
+      quiet cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "${cmake_args[@]}"
+      die $? "not ok - zlib configure ($platform)"
+
+      quiet cmake --build build --config Release -- -j"$CPU_CORES"
+      die $? "not ok - zlib build ($platform)"
+
+      quiet cmake --install build --config Release
+      die $? "not ok - zlib install ($platform)"
+    else
+      local config="Release"
+      local suffix=""
+      if [[ -n "$DEBUG" ]]; then
+        config="Debug"
+        suffix="d"
+      fi
+
+      mkdir -p "$STAGING_DIR/build"
+      cd "$STAGING_DIR/build" || exit 1
+
+      quiet cmake -S .. -B . "${cmake_args[@]}"
+      die $? "not ok - zlib cmake configure (Win32)"
+
+      quiet cmake --build . --config "$config" -- -j"$CPU_CORES"
+      die $? "not ok - zlib cmake build (Win32)"
+
+      quiet cmake --install . --config "$config"
+      die $? "not ok - zlib cmake install (Win32)"
+
+      local output_libdir="$BUILD_DIR/$target-$platform/lib$suffix"
+      mkdir -p "$output_libdir"
+
+      local staged_lib=""
+      local staged_base="$STAGING_DIR/build/$config"
+      if [[ -d "$staged_base" ]]; then
+        for candidate in \
+          "$staged_base/zlibstatic.lib" \
+          "$staged_base/zlib.lib"       \
+          "$staged_base/z.lib"
+        do
+          if [[ -f "$candidate" ]]; then
+            staged_lib="$candidate"
+            break
+          fi
+        done
+      fi
+
+      if [[ -z "$staged_lib" ]]; then
+        for candidate in \
+          "$BUILD_DIR/$target-$platform/lib/zlibstatic.lib" \
+          "$BUILD_DIR/$target-$platform/lib/zlib.lib"       \
+          "$BUILD_DIR/$target-$platform/lib/z.lib"
+        do
+          if [[ -f "$candidate" ]]; then
+            staged_lib="$candidate"
+            break
+          fi
+        done
+      fi
+
+      if [[ -z "$staged_lib" ]]; then
+        die 1 "not ok - zlib lib not found after build (Win32)"
+      fi
+
+      cp -up "$staged_lib" "$output_libdir/z.lib"
+      cp -up "$staged_lib" "$output_libdir/zlib.lib"
+
+      # Also ensure a non-suffixed lib directory has a copy so feature
+      # detection in bin/cflags.sh can find the archive.
+      if [[ "$suffix" != "" ]]; then
+        mkdir -p "$BUILD_DIR/$target-$platform/lib"
+        cp -up "$staged_lib" "$BUILD_DIR/$target-$platform/lib/z.lib"
+        cp -up "$staged_lib" "$BUILD_DIR/$target-$platform/lib/zlib.lib"
+      fi
+
+      cd "$STAGING_DIR" || exit 1
+    fi
+  elif [[ "$platform" == "iPhoneOS" ]] || [[ "$platform" == "iPhoneSimulator" ]]; then
+    local sdk="iphoneos"
+    [[ "$platform" == "iPhoneSimulator" ]] && sdk="iphonesimulator"
+
+    local cc="$(xcrun -sdk "$sdk" -find clang)"
+    local cxx="$(xcrun -sdk "$sdk" -find clang++)"
+    local ar="$(xcrun -sdk "$sdk" -find ar)"
+    local ranlib="$(xcrun -sdk "$sdk" -find ranlib)"
+    local strip="$(xcrun -sdk "$sdk" -find strip)"
+    local sdk_path
+    sdk_path="$(xcrun --sdk "$sdk" --show-sdk-path)"
+
+    export CC="$cc"
+    export CXX="$cxx"
+    export AR="$ar"
+    export RANLIB="$ranlib"
+    export STRIP="$strip"
+    export SDKROOT="$sdk_path"
+
+    local ios_cmake_args=("${cmake_args[@]}")
+    ios_cmake_args+=(
+      -DCMAKE_SYSTEM_NAME=iOS
+      -DCMAKE_OSX_ARCHITECTURES="$target"
+      -DCMAKE_OSX_SYSROOT="$sdk_path"
+    )
+
+    quiet cmake -S . -B build "${ios_cmake_args[@]}"
+    die $? "not ok - zlib configure ($platform)"
+
+    quiet cmake --build build --config Release -j"$CPU_CORES"
+    die $? "not ok - zlib build ($platform)"
+
+    quiet cmake --install build --config Release
+    die $? "not ok - zlib install ($platform)"
+  elif [[ "$platform" == "android" ]]; then
+    if [ -z "$ANDROID_HOME" ]; then
+      echo "warn - ANDROID_HOME not set, skipping zlib for $target"
+      cd "$BUILD_DIR" || exit 1
+      return
+    fi
+
+    export ANDROID_NDK="$ANDROID_HOME/ndk/$NDK_VERSION"
+
+    local android_cmake_args=(
+      -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake"
+      -DCMAKE_SYSTEM_NAME=Android
+      -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"
+      -DANDROID_ABI="$target"
+      -DANDROID_PLATFORM="android-$ANDROID_PLATFORM"
+      -DBUILD_SHARED_LIBS=OFF
+      -DZLIB_BUILD_EXAMPLES=OFF
+      -DSKIP_INSTALL_LIBRARIES=OFF
+      -DSKIP_INSTALL_HEADERS=OFF
+    )
+
+    quiet cmake -S . -B build "${android_cmake_args[@]}"
+    die $? "not ok - zlib cmake configure (android $target)"
+
+    quiet cmake --build build --config Release -j"$CPU_CORES"
+    die $? "not ok - zlib cmake build (android $target)"
+
+    quiet cmake --install build --config Release
+    die $? "not ok - zlib cmake install (android $target)"
+  else
+    echo "warn - zlib build for $platform not implemented; skipping"
+    cd "$BUILD_DIR" || exit 1
+    return
+  fi
+
+  # Strip any shared libraries if they were installed despite BUILD_SHARED_LIBS=OFF
+  rm -f "$BUILD_DIR/$target-$platform/lib"/libz.so* 2>/dev/null || true
+  rm -f "$BUILD_DIR/$target-$platform/lib"/libz.dylib* 2>/dev/null || true
+  rm -f "$BUILD_DIR/$target-$platform/lib"/z.dll* 2>/dev/null || true
+
+  # Promote headers into the shared build/include prefix for convenience
+  if [[ -d "$BUILD_DIR/$target-$platform/include" ]]; then
+    mkdir -p "$BUILD_DIR/include"
+    cp -pf "$BUILD_DIR/$target-$platform/include/zlib.h" "$BUILD_DIR/include/zlib.h" 2>/dev/null || true
+    cp -pf "$BUILD_DIR/$target-$platform/include/zconf.h" "$BUILD_DIR/include/zconf.h" 2>/dev/null || true
+  fi
+
+  cd "$BUILD_DIR" || exit 1
+}
+
+function _compile_mbedtls {
+  local target=$1
+  local platform=$2
+
+  if [ -z "$target" ]; then
+    target="$(host_arch)"
+    platform="desktop"
+  fi
+
+  if [[ "$host" != "Linux" ]]; then
+    echo "warn - skipping mbedtls build for $platform on $host"
+    return
+  fi
+
+  if [[ "$platform" != "desktop" ]]; then
+    echo "warn - skipping mbedtls build for platform $platform"
+    return
+  fi
+
+  local source_root="$BUILD_DIR/mbedtls"
+  if [[ ! -d "$source_root" ]]; then
+    die 1 "not ok - mbedtls sources not staged (expected in $source_root)"
+  fi
+
+  echo "# building mbedtls for $platform ($target) on $host..."
+
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/mbedtls"
+
+  if [[ ! -d "$STAGING_DIR" ]] || (( force )); then
+    rm -rf "$STAGING_DIR"
+    mkdir -p "$STAGING_DIR"
+    cp -r "$source_root"/* "$STAGING_DIR"
+  fi
+
+  cd "$STAGING_DIR" || exit 1
+
+  local cmake_args=(
+    -DENABLE_PROGRAMS=OFF
+    -DENABLE_TESTING=OFF
+    -DMBEDTLS_FATAL_WARNINGS=OFF
+    -DUSE_SHARED_MBEDTLS_LIBRARY=OFF
+    -DUSE_STATIC_MBEDTLS_LIBRARY=ON
+    -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"
+    -DCMAKE_INSTALL_LIBDIR="lib"
+    -DCMAKE_INSTALL_INCLUDEDIR="include"
+  )
+
+  quiet command -v cmake
+  die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+
+  local pic_flags="-fPIC"
+  CFLAGS="$pic_flags" CXXFLAGS="$pic_flags" \
+    quiet cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "${cmake_args[@]}"
+  die $? "not ok - mbedtls configure (desktop)"
+
+  quiet cmake --build build --config Release -- -j"$CPU_CORES"
+  die $? "not ok - mbedtls build (desktop)"
+
+  quiet cmake --install build --config Release
+  die $? "not ok - mbedtls install (desktop)"
+
+  rm -f "$BUILD_DIR/$target-$platform/lib"/libmbedtls*.so* 2>/dev/null || true
+  rm -f "$BUILD_DIR/$target-$platform/lib"/libmbedx509*.so* 2>/dev/null || true
+  rm -f "$BUILD_DIR/$target-$platform/lib"/libmbedcrypto*.so* 2>/dev/null || true
+  rm -f "$BUILD_DIR/$target-$platform/lib"/libmbedtls*.dylib* 2>/dev/null || true
+  rm -f "$BUILD_DIR/$target-$platform/lib"/libmbedx509*.dylib* 2>/dev/null || true
+  rm -f "$BUILD_DIR/$target-$platform/lib"/libmbedcrypto*.dylib* 2>/dev/null || true
+  rm -f "$BUILD_DIR/$target-$platform/lib"/mbedtls*.dll* 2>/dev/null || true
+
+  if [[ -d "$BUILD_DIR/$target-$platform/include/mbedtls" ]]; then
+    mkdir -p "$BUILD_DIR/include"
+    cp -rf "$BUILD_DIR/$target-$platform/include/mbedtls" "$BUILD_DIR/include/" 2>/dev/null || true
+  fi
+  if [[ -d "$BUILD_DIR/$target-$platform/include/psa" ]]; then
+    mkdir -p "$BUILD_DIR/include"
+    cp -rf "$BUILD_DIR/$target-$platform/include/psa" "$BUILD_DIR/include/" 2>/dev/null || true
+  fi
+
+  unset CC CXX AR RANLIB STRIP CFLAGS CXXFLAGS
+
+  local libdir="$BUILD_DIR/$target-$platform/lib"
+  for lib in libmbedtls.a libmbedx509.a libmbedcrypto.a; do
+    if [[ ! -f "$libdir/$lib" ]]; then
+      die 1 "not ok - missing $lib in $libdir (mbedtls build failed)"
+    fi
+  done
+
+  cd "$BUILD_DIR" || exit 1
+}
+
+function _compile_libusb_android {
+  local target=$1
+
+  if [ -z "$target" ]; then
+    echo "warn - missing android target for libusb"
+    return
+  fi
+
+  local platform="android"
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/libusb"
+
+  if [ ! -d "$STAGING_DIR" ]; then
+    mkdir -p "$STAGING_DIR"
+    cp -r "$BUILD_DIR"/libusb/* "$STAGING_DIR"
+  fi
+
+  cd "$STAGING_DIR" || exit 1
+
+  if [ -z "$ANDROID_HOME" ]; then
+    echo "warn - ANDROID_HOME not set, skipping libusb for $target"
+    return
+  fi
+
+  # libusb doesn't ship a top-level CMakeLists.txt, so we rely on autotools.
+  local bootstrap_script=""
+  if [ -x "$STAGING_DIR/bootstrap.sh" ]; then
+    bootstrap_script="$STAGING_DIR/bootstrap.sh"
+  elif [ -x "$STAGING_DIR/autogen.sh" ]; then
+    bootstrap_script="$STAGING_DIR/autogen.sh"
+  fi
+
+  if [[ -n "$bootstrap_script" ]] && [[ ! -f "$STAGING_DIR/configure" ]]; then
+    quiet sh "$bootstrap_script"
+    die $? "not ok - libusb bootstrap (android $target)"
+  fi
+
+  if [[ ! -f "$STAGING_DIR/configure" ]]; then
+    die 1 "not ok - libusb configure script missing (android $target)"
+  fi
+
+  local host_arch="$(host_arch)"
+  local prebuilt="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/$(android_host_platform "$host")-$(android_host_arch_dir "$host_arch")"
+  local toolchain_bin="$prebuilt/bin"
+  local host_compiler="$(android_arch "$target")-linux-android$(android_eabi "$target")"
+  local api="$ANDROID_PLATFORM"
+  local cc="$toolchain_bin/${host_compiler}${api}-clang"
+  local ar="$toolchain_bin/llvm-ar"
+  local ranlib="$toolchain_bin/llvm-ranlib"
+
+  if [[ ! -x "$cc" ]]; then
+    die 1 "not ok - Android clang not found at $cc (check ANDROID_HOME/NDK_VERSION)"
+  fi
+
+  local cflags="-fPIC"
+
+  if ! test -f Makefile; then
+    env \
+      CC="$cc" \
+      AR="$ar" \
+      RANLIB="$ranlib" \
+      CFLAGS="$cflags" \
+      ./configure \
+        --host="$host_compiler" \
+        --disable-shared \
+        --enable-static \
+        --disable-udev \
+        --prefix="$BUILD_DIR/$target-$platform"
+    die $? "not ok - libusb configure (android $target)"
+  fi
+
+  quiet make "-j$CPU_CORES"
+  die $? "not ok - libusb make (android $target)"
+
+  quiet make install
+  die $? "not ok - libusb install (android $target)"
+
+  local libdir="$BUILD_DIR/$target-$platform/lib"
+  mkdir -p "$libdir"
+  if [ ! -f "$libdir/libusb-1.0.a" ] && [ -f "$STAGING_DIR/libusb/.libs/libusb-1.0.a" ]; then
+    cp -up "$STAGING_DIR/libusb/.libs/libusb-1.0.a" "$libdir/"
+  fi
+
+  rm -f "$root/build/$target-$platform/lib"/*.{so,la,dylib}* 2>/dev/null || true
+  return
+}
+
+function _compile_libsodium {
+  local target=$1
+  local platform=$2
+
+  if [ -z "$target" ]; then
+    target="$(host_arch)"
+    platform="desktop"
+  fi
+
+  echo "# building libsodium for $platform ($target) on $host..."
+
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/libsodium"
+
+  if [ ! -d "$STAGING_DIR" ]; then
+    mkdir -p "$STAGING_DIR"
+    cp -r "$BUILD_DIR"/libsodium/* "$STAGING_DIR"
+  fi
+
+  cd "$STAGING_DIR" || exit 1
+
+  if [ ! -f "$STAGING_DIR/configure" ]; then
+    quiet sh ./autogen.sh -s
+    die $? "not ok - libsodium autogen ($platform)"
+  fi
+
+  if [ "$platform" == "desktop" ]; then
+    if [[ "$host" == "Win32" ]]; then
+      echo "warn - libsodium build for Win32 not implemented; skipping"
+      return
+    fi
+
+    export CFLAGS="-O2 -fPIC"
+    export CXXFLAGS="$CFLAGS"
+
+    if ! [ -f Makefile ]; then
+      quiet ./configure --enable-static --disable-shared --prefix="$BUILD_DIR/$target-$platform"
+      die $? "not ok - libsodium configure ($platform)"
+    fi
+
+    quiet make "-j$CPU_CORES"
+    die $? "not ok - libsodium make ($platform)"
+
+    quiet make install
+    die $? "not ok - libsodium install ($platform)"
+
+    rm -f "$BUILD_DIR/$target-$platform/lib"/*.{so,dylib,la}* 2>/dev/null || true
+
+    return
+  fi
+
+  if [ "$platform" == "iPhoneOS" ] || [ "$platform" == "iPhoneSimulator" ]; then
+    if [[ "$host" != "Darwin" ]]; then
+      echo "warn - libsodium $platform build requires macOS; skipping"
+      return
+    fi
+
+    quiet command -v xcrun
+    die $? "not ok - missing xcrun for libsodium ($platform)"
+
+    local sdk="iphoneos"
+    if [ "$platform" == "iPhoneSimulator" ]; then
+      sdk="iphonesimulator"
+    fi
+
+    local sdk_path="$(xcrun --sdk "$sdk" --show-sdk-path)"
+    local cc="$(xcrun -sdk "$sdk" -find clang)"
+    local cxx="$(xcrun -sdk "$sdk" -find clang++)"
+    local ar="$(xcrun -sdk "$sdk" -find ar)"
+    local ranlib="$(xcrun -sdk "$sdk" -find ranlib)"
+
+    export CC="$cc"
+    export CXX="$cxx"
+    export AR="$ar"
+    export RANLIB="$ranlib"
+
+    local min_flag="-miphoneos-version-min=$SDKMINVERSION"
+    if [ "$platform" == "iPhoneSimulator" ]; then
+      min_flag="-mios-simulator-version-min=$SDKMINVERSION"
+    fi
+
+    export CFLAGS="-O2 -fembed-bitcode -arch $target -isysroot $sdk_path $min_flag"
+    export CXXFLAGS="$CFLAGS"
+    export LDFLAGS="-arch $target -isysroot $sdk_path $min_flag"
+    export CPPFLAGS="$CFLAGS"
+
+    if ![ -f Makefile ]; then
+      local host_triple="aarch64-apple-darwin"
+      if [ "$target" == "x86_64" ]; then
+        host_triple="x86_64-apple-darwin"
+      fi
+
+      quiet ./configure --enable-static --disable-shared --host="$host_triple" --prefix="$BUILD_DIR/$target-$platform"
+      die $? "not ok - libsodium configure ($platform $target)"
+    fi
+
+    quiet make "-j$CPU_CORES"
+    die $? "not ok - libsodium make ($platform $target)"
+
+    quiet make install
+    die $? "not ok - libsodium install ($platform $target)"
+
+    rm -f "$BUILD_DIR/$target-$platform/lib"/*.{so,dylib,la}* 2>/dev/null || true
+    return
+  fi
+
+  echo "warn - libsodium build for $platform not implemented; skipping"
+}
+
+function _compile_libsodium_android {
+  local target=$1
+
+  if [ -z "$target" ]; then
+    echo "warn - missing android target for libsodium"
+    return
+  fi
+
+  if [ -z "$ANDROID_HOME" ]; then
+    echo "warn - ANDROID_HOME not set, skipping libsodium for $target"
+    return
+  fi
+
+  local platform="android"
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/libsodium"
+
+  if [ ! -d "$STAGING_DIR" ]; then
+    mkdir -p "$STAGING_DIR"
+    cp -r "$BUILD_DIR"/libsodium/* "$STAGING_DIR"
+  fi
+
+  cd "$STAGING_DIR" || exit 1
+
+  if [ ! -f "$STAGING_DIR/configure" ]; then
+    quiet sh ./autogen.sh -s
+    die $? "not ok - libsodium autogen (android $target)"
+  fi
+
+  export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+  if [ ! -d "$ANDROID_NDK_HOME" ]; then
+    echo "warn - ANDROID_NDK_HOME not found at $ANDROID_NDK_HOME, skipping libsodium for $target"
+    return
+  fi
+
+  export NDK_PLATFORM="android-$ANDROID_PLATFORM"
+  export NDK_PLATFORM_COMPAT="$NDK_PLATFORM"
+
+  local script=""
+  local suffix=""
+  case "$target" in
+    arm64-v8a)
+      script="android-armv8-a.sh"
+      suffix="armv8-a+crypto"
+      ;;
+    x86_64)
+      script="android-x86_64.sh"
+      suffix="x86_64"
+      ;;
+    *)
+      echo "warn - unsupported android target for libsodium: $target"
+      return
+      ;;
+  esac
+
+  rm -rf "$STAGING_DIR"/libsodium-android-*
+
+  local rc=0
+  (
+    # libsodium dist-build scripts only set CC if it is unset; avoid
+    # leaking the host/toolchain compiler into Android builds.
+    unset CC CXX AR RANLIB
+    quiet sh "dist-build/$script"
+  ) || rc=$?
+  die $rc "not ok - libsodium android build ($target)"
+
+  local prefix_dir=""
+  for candidate in "$STAGING_DIR"/libsodium-android-*; do
+    if [[ -f "$candidate/lib/libsodium.a" ]]; then
+      prefix_dir="$candidate"
+      break
+    fi
+  done
+
+  if [[ -z "$prefix_dir" ]]; then
+    echo "warn - libsodium output not found after build in: $STAGING_DIR"
+    return
+  fi
+
+  local output_lib="$prefix_dir/lib/libsodium.a"
+  if [ ! -f "$output_lib" ]; then
+    echo "warn - libsodium static archive missing for $target"
+    return
+  fi
+
+  local dest_lib_dir="$BUILD_DIR/$target-$platform/lib"
+  local dest_include_dir="$BUILD_DIR/$target-$platform/include"
+
+  mkdir -p "$dest_lib_dir"
+  rm -f "$dest_lib_dir/libsodium.a"
+  rm -rf "$dest_include_dir"
+  mkdir -p "$dest_include_dir"
+
+  cp -up "$output_lib" "$dest_lib_dir/"
+  die $? "not ok - libsodium android archive copy ($target)"
+
+  cp -rfp "$prefix_dir/include/"* "$dest_include_dir/"
+  die $? "not ok - libsodium android headers copy ($target)"
+}
+
+function _check_compiler_features {
+  if [[ -n "$DEBUG" ]]; then
+    return
+  fi
+
+  if [[ "$host" == "Win32" ]]; then
+    # Compiler test not working on windows, 9 unresolved externals
+    return;
+  fi
+
+  echo "# checking compiler features"
+  local cflags=($("$root/bin/cflags.sh"))
+  local ldflags=($("$root/bin/ldflags.sh"))
+
+  if [[ "$host" == "Darwin" ]]; then
+    cflags+=(-x objective-c++)
+  else
+    cflags+=(-x c++)
+  fi
+
+  cflags+=("-I$root")
+
+  $CXX "${cflags[@]}" "${ldflags[@]}" - -o /dev/null >/dev/null << EOF_CC
+    #include "src/runtime.hh"
+    int main () { return 0; }
+EOF_CC
+
+  die $? "not ok - $CXX ($("$CXX" -dumpversion)) failed in feature check required for building Oro Runtime"
+}
+
+function onsignal () {
+  local status=${1:-$?}
+  for pid in "${pids[@]}"; do
+    kill TERM $pid >/dev/null 2>&1
+    kill -9 "$pid" >/dev/null 2>&1
+    wait "$pid" 2>/dev/null
+  done
+  exit "$status"
+}
+
+_prepare
+cd "$BUILD_DIR" || exit 1
+
+trap onsignal INT TERM
+
+if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
+  quiet xcode-select -p
+  die $? "not ok - xcode needs to be installed from the mac app store: https://apps.apple.com/us/app/xcode/id497799835"
+
+  _compile_llama_metal arm64 iPhoneOS
+  _compile_llama_metal arm64 iPhoneSimulator
+  _compile_llama_metal x86_64 iPhoneSimulator
+fi
+
+_compile_llama
+echo "ok - built libllama for desktop ($(host_arch))"
+
+if [[ "${ORO_SKIP_IROH:-0}" != "1" ]]; then
+  if _compile_iroh_ffi; then
+    echo "ok - built oro-iroh for desktop ($(host_arch))"
+  else
+    echo "warn - oro-iroh build skipped or incomplete for desktop ($(host_arch))"
+  fi
+else
+  echo "warn - skipping oro-iroh build (ORO_SKIP_IROH=1)"
+fi
+
+_compile_crsqlite_loadable
+
+{
+  _compile_whisper
+  echo "ok - built libwhisper for desktop ($(host_arch))"
+} & _compile_whisper_pid=$!
+
+# Although we're passing -j$CPU_CORES on non Win32, we still don't get max utiliztion on macos. Start this before fat libs.
+{
+  _compile_libuv
+  echo "ok - built libuv for desktop ($(host_arch))"
+} & _compile_libuv_pid=$!
+
+{
+  _compile_libusb
+  echo "ok - built libusb for desktop ($(host_arch))"
+} & _compile_libusb_pid=$!
+
+  if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]]; then
+  {
+    _compile_libipfs
+    echo "ok - built libipfs for desktop ($(host_arch))"
+  } & _compile_libipfs_pid=$!
+else
+  _compile_libipfs_pid=""
+  echo "warn - skipping libipfs build (ORO_SKIP_LIBIPFS=1)"
+fi
+
+{
+  _compile_libsodium
+  echo "ok - built libsodium for desktop ($(host_arch))"
+} & _compile_libsodium_pid=$!
+
+if [[ "$host" = "Linux" ]]; then
+  {
+    _compile_mbedtls
+    echo "ok - built mbedtls for desktop ($(host_arch))"
+  } & _compile_mbedtls_pid=$!
+else
+  _compile_mbedtls_pid=""
+fi
+
+# Build vendored zlib for desktop; mobile platforms are wired up below.
+{
+  _compile_zlib
+  echo "ok - built zlib for desktop ($(host_arch))"
+} & _compile_zlib_pid=$!
+
+if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
+  quiet xcode-select -p
+  die $? "not ok - xcode needs to be installed from the mac app store: https://apps.apple.com/us/app/xcode/id497799835"
+
+  SDKMINVERSION="13.0"
+  export IPHONEOS_DEPLOYMENT_TARGET="13.0"
+
+  LIPO=$(xcrun -sdk iphoneos -find lipo)
+  PLATFORMPATH="/Applications/Xcode.app/Contents/Developer/Platforms"
+
+  _setSDKVersion iPhoneOS
+
+  _compile_libuv arm64 iPhoneOS & pids+=($!)
+  _compile_libusb arm64 iPhoneOS & pids+=($!)
+  _compile_libsodium arm64 iPhoneOS & pids+=($!)
+  _compile_zlib arm64 iPhoneOS & pids+=($!)
+  _compile_llama arm64 iPhoneOS
+  _compile_whisper arm64 iPhoneOS & pids+=($!)
+  _compile_crsqlite_loadable ios
+
+  _compile_libuv x86_64 iPhoneSimulator & pids+=($!)
+  _compile_libusb x86_64 iPhoneSimulator & pids+=($!)
+  _compile_libsodium x86_64 iPhoneSimulator & pids+=($!)
+  _compile_zlib x86_64 iPhoneSimulator & pids+=($!)
+  _compile_llama x86_64 iPhoneSimulator
+  _compile_whisper x86_64 iPhoneSimulator & pids+=($!)
+
+  if [[ "$arch" = "arm64" ]]; then
+    _compile_libuv arm64 iPhoneSimulator & pids+=($!)
+    _compile_libusb arm64 iPhoneSimulator & pids+=($!)
+    _compile_libsodium arm64 iPhoneSimulator & pids+=($!)
+    _compile_zlib arm64 iPhoneSimulator & pids+=($!)
+    _compile_llama arm64 iPhoneSimulator
+    _compile_whisper arm64 iPhoneSimulator & pids+=($!)
+  fi
+
+  for pid in "${pids[@]}"; do wait "$pid"; done
+
+  die $? "not ok - unable to combine build artifacts"
+  echo "ok - created fat library"
+
+  unset PLATFORM CC STRIP LD CPP CFLAGS AR RANLIB \
+    CPPFLAGS LDFLAGS IPHONEOS_DEPLOYMENT_TARGET
+
+  die $? "not ok - could not copy fat library"
+  echo "ok - copied fat library"
+fi
+
+# Wait for background builds to finish before packaging assets.
+wait $_compile_whisper_pid
+wait $_compile_libuv_pid
+wait $_compile_libusb_pid
+if [[ -n "${_compile_libipfs_pid:-}" ]]; then
+  wait $_compile_libipfs_pid
+fi
+wait $_compile_libsodium_pid
+if [[ -n "${_compile_mbedtls_pid:-}" ]]; then
+  wait $_compile_mbedtls_pid
+fi
+if [[ -n "${_compile_zlib_pid:-}" ]]; then
+  wait $_compile_zlib_pid
+fi
+
+if [[ -n "$BUILD_ANDROID" ]]; then
+  for abi in $(android_supported_abis); do
+    _compile_libuv_android "$abi" & pids+=($!)
+    _compile_libusb_android "$abi" & pids+=($!)
+    _compile_libsodium_android "$abi" & pids+=($!)
+    _compile_zlib "$abi" android & pids+=($!)
+    _compile_llama "$abi" android
+    _compile_whisper "$abi" android & pids+=($!)
+    _compile_crsqlite_loadable android "$abi"
+  done
+fi
+
+# Runtime compilation expects headers from the Android dependency builds (notably
+# libsodium) to be staged in build/<abi>-android/include.
+for pid in "${pids[@]}"; do
+  wait "$pid" 2>/dev/null
+  die $? "not ok - android dependency build failed"
+done
+pids=()
+
+mkdir -p  "$ORO_HOME"/uv/{src/unix,include}
+cp -fr "$BUILD_DIR"/uv/LICENSE "$ORO_HOME"/uv/LICENSE
+cp -fr "$BUILD_DIR"/uv/src/*.{c,h} "$ORO_HOME"/uv/src
+cp -fr "$BUILD_DIR"/uv/src/unix/*.{c,h} "$ORO_HOME"/uv/src/unix
+die $? "not ok - could not copy headers"
+echo "ok - copied headers"
+cd "$CWD" || exit 1
+
+cd "$BUILD_DIR" || exit 1
+
+_get_web_view2
+
+_check_compiler_features
+_build_runtime_library
+_build_cli & pids+=($!)
+
+_prebuild_desktop_main & pids+=($!)
+
+echo "arch: $arch"
+
+if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
+  if test -d "$(xcrun -sdk iphoneos -show-sdk-path 2>/dev/null)"; then
+    _prebuild_ios_main & pids+=($!)
+    _prebuild_ios_simulator_main "x86_64" & pids+=($!)
+    if [[ "$arch" = "arm64" ]]; then
+      _prebuild_ios_simulator_main "arm64" iPhoneSimulator & pids+=($!)
+    fi
+  fi
+fi
+
+for pid in "${pids[@]}"; do
+  wait "$pid" 2>/dev/null
+  die $? "not ok - unable to build. See trouble shooting guide in the README.md file"
+done
+
+_install "$(host_arch)" desktop
+
+if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
+  _install arm64 iPhoneOS
+  _install x86_64 iPhoneSimulator
+
+  if [[ "$arch" = "arm64" ]]; then
+    _install arm64 iPhoneSimulator
+  fi
+fi
+
+if [[ -n "$BUILD_ANDROID" ]]; then
+  for abi in $(android_supported_abis); do
+    _install "$abi" android & pids+=($!)
+  done
+  wait
+fi
+
+_install_cli
+
+exit $?

@@ -1,0 +1,2954 @@
+.TH ORO-IPC-ROUTES 7 "" "Oro Runtime" "Oro Runtime Guides"
+.SH NAME
+oro\-ipc\-routes \- generated catalog of resolved IPC routes
+.SH DESCRIPTION
+.PP
+This guide indexes 375 resolved IPC routes across 43 top\-level domains.
+.PP
+Each route entry lists the transport families used from JavaScript, the public oro:* APIs that expose it, and the source locations that define or consume it.
+.SH HOW TO READ THIS CATALOG
+.IP \(bu 2
+Transports show which oro:ipc primitive is used at the call site.
+.IP \(bu 2
+Modules list the oro:* entry points that surface the route.
+.IP \(bu 2
+Exposed by points at the nearest documented API function or method plus the source line where the route is invoked.
+.IP \(bu 2
+Binary semantics flags routes that carry raw request or response bytes rather than plain JSON\-like payloads.
+.SH ROUTES
+.PP
+This catalog is generated from JavaScript calls to ipc.request(), ipc.send(), ipc.sendSync(), ipc.write(), and thin wrappers around those primitives. It inventories 375 resolved routes across 43 top\-level domains.
+.PP
+1 IPC call sites still use route expressions that could not be reduced to static strings. Review those locations before treating this catalog as complete for private dynamic dispatch.
+.IP \(bu 2
+send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L572)
+.PP
+Domains: ai, application, asn1, bluetooth, cdp, child_process, cookies, dbus, diagnostics, dns, extension, fs, geolocation, hci, hid, internal, ipfs, iroh, mcp, mime, notification, os, otp, permissions, platform, process, protocol, queuedResponse, secureStorage, semver, serviceWorker, sqlite, stderr, stdout, tar, tcp, timers, tls, udp, usb, window, xpc, zlib
+.SS ai
+.TP
+\fBai.ann.model.accuracy\fR
+Transports: send
+.br
+Modules: oro:ai/ann
+.br
+Exposed by: oro:ai/ann Network.accuracy() (api/ai/ann.js#L553)
+.br
+Notes: Compute classification accuracy for labeled samples.
+.TP
+\fBai.ann.model.create\fR
+Transports: request
+.br
+Modules: oro:ai/ann
+.br
+Exposed by: oro:ai/ann Network.create() (api/ai/ann.js#L625)
+.br
+Notes: Create a new ANN model inside the runtime. name?: string, inputSize: number, outputSize: number, outputActivation?: string, hiddenLayers?: Array<{size:number, activation?:string}> }} options
+.TP
+\fBai.ann.model.list\fR
+Transports: request
+.br
+Modules: oro:ai/ann
+.br
+Exposed by: oro:ai/ann Network.list() (api/ai/ann.js#L657)
+.br
+Notes: List registered ANN models.
+.TP
+\fBai.ann.model.load\fR
+Transports: request
+.br
+Modules: oro:ai/ann
+.br
+Exposed by: oro:ai/ann Network.load() (api/ai/ann.js#L642)
+.br
+Notes: Load an ANN model from disk and register it with the runtime.
+.TP
+\fBai.ann.model.predict\fR
+Transports: send
+.br
+Modules: oro:ai/ann
+.br
+Exposed by: oro:ai/ann Network.predict() (api/ai/ann.js#L454)
+.br
+Notes: Run inference on the network.
+.TP
+\fBai.ann.model.remove\fR
+Transports: request
+.br
+Modules: oro:ai/ann
+.br
+Exposed by: oro:ai/ann remove() (api/ai/ann.js#L717)
+.TP
+\fBai.ann.model.save\fR
+Transports: request
+.br
+Modules: oro:ai/ann
+.br
+Exposed by: oro:ai/ann Network.save() (api/ai/ann.js#L289)
+.br
+Notes: Persist the model state to disk.
+.TP
+\fBai.ann.model.train\fR
+Transports: send
+.br
+Modules: oro:ai/ann
+.br
+Exposed by: oro:ai/ann Network.train() (api/ai/ann.js#L376)
+.br
+Notes: Train the network with labeled data. loss?: string, batchSize?: number, learningRate?: number, searchTime?: number, regularizationStrength?: number, momentumFactor?: number, maxEpochs?: number, shuffle?: boolean, verbose?: boolean, featureColumns?: number, featureRows?: number, labelColumns?: number, labelRows?: number }} [options]
+.TP
+\fBai.chat.session.generate\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:ai/chat
+.br
+Exposed by: oro:ai/chat Session.generate() (api/ai/chat.js#L280)
+.TP
+\fBai.chat.session.message\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:ai/chat
+.br
+Exposed by: oro:ai/chat Session.message() (api/ai/chat.js#L312)
+.TP
+\fBai.llm.context.create\fR
+Transports: request
+.br
+Modules: oro:ai/llm
+.br
+Exposed by: oro:ai/llm Context.load() (api/ai/llm.js#L440)
+.TP
+\fBai.llm.context.destroy\fR
+Transports: request
+.br
+Modules: oro:ai/chat
+.br
+Exposed by: oro:ai/chat (api/ai/chat.js#L355)
+.TP
+\fBai.llm.context.stats\fR
+Transports: request
+.br
+Modules: oro:ai/llm
+.br
+Exposed by: oro:ai/llm Context.stats() (api/ai/llm.js#L465)
+.TP
+\fBai.llm.lora.attach\fR
+Transports: request
+.br
+Modules: oro:ai/llm
+.br
+Exposed by: oro:ai/llm LoRA.attach() (api/ai/llm.js#L200)
+.br
+Notes: Attach a LoRA to a context.
+.TP
+\fBai.llm.lora.detach\fR
+Transports: request
+.br
+Modules: oro:ai/llm
+.br
+Exposed by: oro:ai/llm LoRA.detach() (api/ai/llm.js#L222)
+.TP
+\fBai.llm.lora.load\fR
+Transports: request
+.br
+Modules: oro:ai/llm
+.br
+Exposed by: oro:ai/llm LoRA.load() (api/ai/llm.js#L177)
+.br
+Notes: Load this adapter. Pass `options.id` to reference an already\-loaded LoRA without providing `name`/`model` metadata.
+.TP
+\fBai.llm.model.load\fR
+Transports: request
+.br
+Modules: oro:ai/llm
+.br
+Exposed by: oro:ai/llm Model.load() (api/ai/llm.js#L69)
+.br
+Notes: Loads the model it not already loaded.
+.TP
+\fBai.whisper.model.list\fR
+Transports: request
+.br
+Modules: oro:ai/whisper
+.br
+Exposed by: oro:ai/whisper listModels() (api/ai/whisper.js#L359)
+.TP
+\fBai.whisper.model.load\fR
+Transports: request
+.br
+Modules: oro:ai/whisper
+.br
+Exposed by: oro:ai/whisper WhisperModel.load() (api/ai/whisper.js#L146)
+.br
+Notes: Loads the whisper model into memory (if not already loaded).
+.TP
+\fBai.whisper.model.unload\fR
+Transports: request
+.br
+Modules: oro:ai/whisper
+.br
+Exposed by: oro:ai/whisper unloadModel() (api/ai/whisper.js#L374); oro:ai/whisper WhisperModel.unload() (api/ai/whisper.js#L173)
+.br
+Notes: Unload the model from memory.
+.TP
+\fBai.whisper.transcribe\fR
+Transports: send
+.br
+Modules: oro:ai/whisper
+.br
+Exposed by: oro:ai/whisper WhisperModel.transcribe() (api/ai/whisper.js#L339)
+.br
+Notes: Transcribe PCM audio to text.
+.SS application
+.TP
+\fBapplication.exit\fR
+Transports: request
+.br
+Modules: oro:application
+.br
+Exposed by: oro:application exit() (api/application.js#L634)
+.TP
+\fBapplication.getScreenSize\fR
+Transports: request
+.br
+Modules: oro:application
+.br
+Exposed by: oro:application getScreenSize() (api/application.js#L519)
+.TP
+\fBapplication.getWebviewTlsPins\fR
+Transports: request
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls getWebViewTlsPins() (api/tls.js#L1313)
+.TP
+\fBapplication.getWindows\fR
+Transports: request
+.br
+Modules: oro:application
+.br
+Exposed by: oro:application getWindows() (api/application.js#L577)
+.TP
+\fBapplication.setSystemMenu\fR
+Transports: send
+.br
+Modules: oro:application/menu
+.br
+Exposed by: oro:application/menu setMenu() (api/application/menu.js#L557)
+.TP
+\fBapplication.setSystemMenuItemEnabled\fR
+Transports: request
+.br
+Modules: oro:application
+.br
+Exposed by: oro:application setSystemMenuItemEnabled() (api/application.js#L747)
+.TP
+\fBapplication.setTrayMenu\fR
+Transports: send
+.br
+Modules: oro:application/menu
+.br
+Exposed by: oro:application/menu setMenu() (api/application/menu.js#L557)
+.TP
+\fBapplication.setWebviewTlsPins\fR
+Transports: request, write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls setWebViewTlsPins() (api/tls.js#L1293); oro:tls setWebViewTlsPins() (api/tls.js#L1294)
+.TP
+\fBapplication.update.check\fR
+Transports: send
+.br
+Modules: oro:application/update
+.br
+Exposed by: oro:application/update checkForUpdatesNative() (api/application/update.js#L991)
+.br
+Notes: High\-level helper: delegates update checks to the native update service when available. The service performs manifest fetch, signature verification, and update selection in the runtime.
+.TP
+\fBapplication.update.download\fR
+Transports: request
+.br
+Binary semantics: binary response body
+.br
+Modules: oro:application/update
+.br
+Exposed by: oro:application/update downloadUpdateNative() (api/application/update.js#L628)
+.br
+Notes: Downloads an artifact via the native update service, which performs hash verification and size checks in the runtime.
+.SS asn1
+.TP
+\fBasn1.parse\fR
+Transports: request
+.br
+Modules: oro:asn1
+.br
+Exposed by: oro:asn1 parse() (api/asn1.js#L149)
+.TP
+\fBasn1.parseFile\fR
+Transports: request
+.br
+Modules: oro:asn1
+.br
+Exposed by: oro:asn1 parseFile() (api/asn1.js#L167)
+.SS bluetooth
+.TP
+\fBbluetooth.cancelRequest\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web handleCancel() (api/internal/bluetooth\-web.js#L902)
+.TP
+\fBbluetooth.characteristic.readValue\fR
+Transports: request
+.br
+Binary semantics: binary response body
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTCharacteristic.readValue() (api/internal/bluetooth\-web.js#L222)
+.TP
+\fBbluetooth.characteristic.startNotifications\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTCharacteristic.startNotifications() (api/internal/bluetooth\-web.js#L291)
+.TP
+\fBbluetooth.characteristic.stopNotifications\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTCharacteristic.stopNotifications() (api/internal/bluetooth\-web.js#L309)
+.TP
+\fBbluetooth.characteristic.writeValue\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTCharacteristic.writeValue() (api/internal/bluetooth\-web.js#L250); oro:internal/bluetooth\-web BluetoothRemoteGATTCharacteristic.writeValueWithoutResponse() (api/internal/bluetooth\-web.js#L272)
+.TP
+\fBbluetooth.chooseDevice\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web renderChooserRow() (api/internal/bluetooth\-web.js#L1064)
+.TP
+\fBbluetooth.device.forget\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothDevice.forget() (api/internal/bluetooth\-web.js#L493)
+.TP
+\fBbluetooth.device.watchAdvertisements\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothDevice.watchAdvertisements() (api/internal/bluetooth\-web.js#L480)
+.TP
+\fBbluetooth.gatt.connect\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTServer.connect() (api/internal/bluetooth\-web.js#L415)
+.TP
+\fBbluetooth.gatt.disconnect\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTServer.disconnect() (api/internal/bluetooth\-web.js#L426)
+.TP
+\fBbluetooth.gatt.getPrimaryService\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTServer.getPrimaryService() (api/internal/bluetooth\-web.js#L433)
+.TP
+\fBbluetooth.gatt.getPrimaryServices\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTServer.getPrimaryServices() (api/internal/bluetooth\-web.js#L447)
+.TP
+\fBbluetooth.getAvailability\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web Bluetooth.getAvailability() (api/internal/bluetooth\-web.js#L599)
+.TP
+\fBbluetooth.getDevices\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web Bluetooth.getDevices() (api/internal/bluetooth\-web.js#L571)
+.TP
+\fBbluetooth.requestDevice\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web Bluetooth.requestDevice() (api/internal/bluetooth\-web.js#L561)
+.TP
+\fBbluetooth.restartDiscovery\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web triggerDiscoveryRefresh() (api/internal/bluetooth\-web.js#L829)
+.TP
+\fBbluetooth.service.getCharacteristic\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTService.getCharacteristic() (api/internal/bluetooth\-web.js#L336)
+.TP
+\fBbluetooth.service.getCharacteristics\fR
+Transports: request
+.br
+Modules: oro:internal/bluetooth\-web
+.br
+Exposed by: oro:internal/bluetooth\-web BluetoothRemoteGATTService.getCharacteristics() (api/internal/bluetooth\-web.js#L368)
+.SS cdp
+.TP
+\fBcdp.close\fR
+Transports: request
+.br
+Modules: oro:cdp
+.br
+Exposed by: oro:cdp close() (api/cdp.js#L47)
+.TP
+\fBcdp.listen\fR
+Transports: request
+.br
+Modules: oro:cdp
+.br
+Exposed by: oro:cdp listen() (api/cdp.js#L37)
+.TP
+\fBcdp.status\fR
+Transports: request
+.br
+Modules: oro:cdp
+.br
+Exposed by: oro:cdp status() (api/cdp.js#L56)
+.SS child_process
+.TP
+\fBchild_process.exec\fR
+Transports: sendSync
+.br
+Modules: oro:child_process
+.br
+Exposed by: oro:child_process execSync() (api/child_process.js#L667)
+.TP
+\fBchild_process.kill\fR
+Transports: send
+.br
+Modules: oro:child_process, oro:child_process/worker
+.br
+Exposed by: oro:child_process (api/child_process.js#L493); oro:child_process/worker (api/child_process/worker.js#L136)
+.TP
+\fBchild_process.spawn\fR
+Transports: send, write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:child_process/worker
+.br
+Exposed by: oro:child_process/worker (api/child_process/worker.js#L40); oro:child_process/worker (api/child_process/worker.js#L71)
+.SS cookies
+.TP
+\fBcookies.clear\fR
+Transports: request
+.br
+Modules: oro:cookies
+.br
+Exposed by: oro:cookies clear() (api/cookies.js#L90)
+.TP
+\fBcookies.get\fR
+Transports: request
+.br
+Modules: oro:cookies
+.br
+Exposed by: oro:cookies get() (api/cookies.js#L19)
+.TP
+\fBcookies.remove\fR
+Transports: request
+.br
+Modules: oro:cookies
+.br
+Exposed by: oro:cookies remove() (api/cookies.js#L73)
+.TP
+\fBcookies.set\fR
+Transports: request
+.br
+Modules: oro:cookies
+.br
+Exposed by: oro:cookies set() (api/cookies.js#L46)
+.SS dbus
+.TP
+\fBdbus.addMatch\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.addMatch() (api/dbus.js#L497)
+.br
+Notes: Adds a match rule for DBus signals.
+.TP
+\fBdbus.availability\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus availability() (api/dbus.js#L887)
+.TP
+\fBdbus.call\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.call() (api/dbus.js#L584)
+.br
+Notes: Invokes a DBus method on the remote peer.
+.TP
+\fBdbus.connect\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus connect() (api/dbus.js#L927)
+.TP
+\fBdbus.disconnect\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.close() (api/dbus.js#L435)
+.br
+Notes: Terminates the connection and removes all local bookkeeping.
+.TP
+\fBdbus.exportObject\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.exportObject() (api/dbus.js#L700)
+.br
+Notes: Exports an object path so native method calls are forwarded to JS listeners.
+.TP
+\fBdbus.releaseName\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.releaseName() (api/dbus.js#L477)
+.br
+Notes: Releases a previously requested bus name.
+.TP
+\fBdbus.removeMatch\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.removeMatch() (api/dbus.js#L522)
+.br
+Notes: Removes a previously installed match rule.
+.TP
+\fBdbus.requestName\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.requestName() (api/dbus.js#L458)
+.br
+Notes: Requests the provided bus name on the connection.
+.TP
+\fBdbus.respond\fR
+Transports: send
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.respond() (api/dbus.js#L800)
+.br
+Notes: Replies to a pending method call originating from the runtime.
+.TP
+\fBdbus.signal\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.emitSignal() (api/dbus.js#L645)
+.br
+Notes: Emits a custom signal to the bus.
+.TP
+\fBdbus.unexportObject\fR
+Transports: request
+.br
+Modules: oro:dbus
+.br
+Exposed by: oro:dbus Connection.unexportObject() (api/dbus.js#L730)
+.br
+Notes: Removes a previously exported object path.
+.SS diagnostics
+.TP
+\fBdiagnostics.query\fR
+Transports: request
+.br
+Modules: oro:diagnostics/runtime
+.br
+Exposed by: oro:diagnostics/runtime query() (api/diagnostics/runtime.js#L196); oro:diagnostics/runtime query() (api/diagnostics/runtime.js#L205)
+.SS dns
+.TP
+\fBdns.lookup\fR
+Transports: send
+.br
+Modules: oro:dns, oro:dns/promises
+.br
+Exposed by: oro:dns lookup() (api/dns/index.js#L109); oro:dns/promises lookup() (api/dns/promises.js#L64)
+.SS extension
+.TP
+\fBextension.load\fR
+Transports: request
+.br
+Modules: oro:extension
+.br
+Exposed by: oro:extension Extension.load() (api/extension.js#L7513)
+.br
+Notes: Load an extension by name.
+.TP
+\fBextension.stats\fR
+Transports: request
+.br
+Modules: oro:extension
+.br
+Exposed by: oro:extension Extension.stats() (api/extension.js#L7548)
+.br
+Notes: Provides current stats about the loaded extensions or one by name.
+.TP
+\fBextension.type\fR
+Transports: request
+.br
+Modules: oro:extension
+.br
+Exposed by: oro:extension Extension.type() (api/extension.js#L7533)
+.br
+Notes: Query type of extension by name.
+.TP
+\fBextension.unload\fR
+Transports: request
+.br
+Modules: oro:extension
+.br
+Exposed by: oro:extension Extension.unload() (api/extension.js#L7652)
+.br
+Notes: Unloads the loaded extension.
+.SS fs
+.TP
+\fBfs.access\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs accessSync() (api/fs/index.js#L268); oro:fs/handle FileHandle.access() (api/fs/handle.js#L150)
+.br
+Notes: Determines if access to `path` for `mode` is possible.
+.TP
+\fBfs.chmod\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/handle, oro:fs/promises
+.br
+Exposed by: oro:fs chmod() (api/fs/index.js#L346); oro:fs chmodSync() (api/fs/index.js#L376); oro:fs/handle FileHandle.chmod() (api/fs/handle.js#L345); oro:fs/promises chmod() (api/fs/promises.js#L138)
+.br
+Notes: Change permissions of file handle.
+.TP
+\fBfs.chown\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/handle, oro:fs/promises
+.br
+Exposed by: oro:fs chown() (api/fs/index.js#L415); oro:fs chownSync() (api/fs/index.js#L447); oro:fs/handle FileHandle.chown() (api/fs/handle.js#L374); oro:fs/promises chown() (api/fs/promises.js#L167)
+.br
+Notes: Change ownership of file handle.
+.TP
+\fBfs.close\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs closeSync() (api/fs/index.js#L481); oro:fs readFileSync() (api/fs/index.js#L1450); oro:fs writeFileSync() (api/fs/index.js#L2044); oro:fs/handle (api/fs/handle.js#L285); oro:fs/handle FileHandle.close() (api/fs/handle.js#L403)
+.br
+Notes: Close underlying file handle
+.TP
+\fBfs.closedir\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs/dir, oro:fs/handle
+.br
+Exposed by: oro:fs/dir Dir.closeSync() (api/fs/dir.js#L116); oro:fs/handle (api/fs/handle.js#L1282); oro:fs/handle DirectoryHandle.close() (api/fs/handle.js#L1361)
+.br
+Notes: Close underlying directory handle Closes container and underlying handle synchronously.
+.TP
+\fBfs.closeOpenDescriptor\fR
+Transports: send
+.br
+Modules: oro:fs/fds
+.br
+Exposed by: oro:fs/fds release() (api/fs/fds.js#L107)
+.TP
+\fBfs.closeOpenDescriptors\fR
+Transports: send
+.br
+Modules: oro:fs/fds
+.br
+Exposed by: oro:fs/fds release() (api/fs/fds.js#L79)
+.TP
+\fBfs.constants\fR
+Transports: request
+.br
+Modules: oro:internal/init
+.br
+Exposed by: oro:internal/init (api/internal/init.js#L1055)
+.TP
+\fBfs.copyFile\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs copyFile() (api/fs/index.js#L527); oro:fs copyFileSync() (api/fs/index.js#L562); oro:fs/promises copyFile() (api/fs/promises.js#L197)
+.TP
+\fBfs.fdatasync\fR
+Transports: request
+.br
+Modules: oro:fs/handle
+.br
+Exposed by: oro:fs/handle FileHandle.datasync() (api/fs/handle.js#L511)
+.TP
+\fBfs.fstat\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs fstatSync() (api/fs/index.js#L1684); oro:fs/handle FileHandle.stat() (api/fs/handle.js#L822)
+.br
+Notes: Returns the stats of the underlying file.
+.TP
+\fBfs.fsync\fR
+Transports: request
+.br
+Modules: oro:fs/handle
+.br
+Exposed by: oro:fs/handle FileHandle.sync() (api/fs/handle.js#L885)
+.br
+Notes: Synchronize a file's in\-core state with storage device
+.TP
+\fBfs.ftruncate\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs truncateSync() (api/fs/index.js#L2083); oro:fs/handle FileHandle.truncate() (api/fs/handle.js#L907)
+.TP
+\fBfs.futimes\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs futimes() (api/fs/index.js#L2546); oro:fs futimesSync() (api/fs/index.js#L2565); oro:fs/promises futimes() (api/fs/promises.js#L601)
+.TP
+\fBfs.getOpenDescriptors\fR
+Transports: sendSync
+.br
+Modules: oro:fs/fds
+.br
+Exposed by: oro:fs/fds syncOpenDescriptors() (api/fs/fds.js#L37)
+.TP
+\fBfs.lchmod\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs lchmod() (api/fs/index.js#L801); oro:fs lchmodSync() (api/fs/index.js#L829); oro:fs/promises lchmod() (api/fs/promises.js#L250)
+.TP
+\fBfs.lchown\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs lchown() (api/fs/index.js#L772); oro:fs lchownSync() (api/fs/index.js#L1960); oro:fs/promises lchown() (api/fs/promises.js#L226)
+.TP
+\fBfs.link\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs link() (api/fs/index.js#L855); oro:fs linkSync() (api/fs/index.js#L881); oro:fs/promises link() (api/fs/promises.js#L272)
+.TP
+\fBfs.lstat\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs lstatSync() (api/fs/index.js#L1817); oro:fs/handle FileHandle.lstat() (api/fs/handle.js#L853)
+.br
+Notes: Returns the stats of the underlying symbolic link.
+.TP
+\fBfs.lutimes\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs lutimes() (api/fs/index.js#L2503); oro:fs lutimesSync() (api/fs/index.js#L2520); oro:fs/promises lutimes() (api/fs/promises.js#L617)
+.TP
+\fBfs.mkdir\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs mkdir() (api/fs/index.js#L911); oro:fs mkdirSync() (api/fs/index.js#L936); oro:fs/promises mkdir() (api/fs/promises.js#L302)
+.TP
+\fBfs.mkdtemp\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs mkdtemp() (api/fs/index.js#L960); oro:fs mkdtempSync() (api/fs/index.js#L975); oro:fs/promises mkdtemp() (api/fs/promises.js#L313)
+.TP
+\fBfs.open\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs openSync() (api/fs/index.js#L1066); oro:fs readFileSync() (api/fs/index.js#L1419); oro:fs writeFileSync() (api/fs/index.js#L2023); oro:fs/handle FileHandle.open() (api/fs/handle.js#L547)
+.br
+Notes: Opens the underlying descriptor for the file handle.
+.TP
+\fBfs.opendir\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs opendirSync() (api/fs/index.js#L1131); oro:fs/handle DirectoryHandle.open() (api/fs/handle.js#L1312)
+.br
+Notes: Opens the underlying handle for a directory.
+.TP
+\fBfs.read\fR
+Transports: request, sendSync
+.br
+Binary semantics: binary response body
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs readFileSync() (api/fs/index.js#L1434); oro:fs/handle FileHandle.read() (api/fs/handle.js#L685)
+.br
+Notes: Reads `length` bytes starting from `position` into `buffer` at `offset`.
+.TP
+\fBfs.readdir\fR
+Transports: request, sendSync
+.br
+Modules: oro:fs/dir, oro:fs/handle
+.br
+Exposed by: oro:fs/dir Dir.readSync() (api/fs/dir.js#L197); oro:fs/handle DirectoryHandle.read() (api/fs/handle.js#L1433)
+.br
+Notes: Reads and returns directory entry synchronously. Reads directory entries
+.TP
+\fBfs.readlink\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs readlink() (api/fs/index.js#L1485); oro:fs readlinkSync() (api/fs/index.js#L1508); oro:fs/promises readlink() (api/fs/promises.js#L420)
+.TP
+\fBfs.realpath\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs realpath() (api/fs/index.js#L1530); oro:fs realpathSync() (api/fs/index.js#L1552); oro:fs/promises realpath() (api/fs/promises.js#L443)
+.TP
+\fBfs.rename\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs rename() (api/fs/index.js#L1583); oro:fs renameSync() (api/fs/index.js#L1609); oro:fs/promises rename() (api/fs/promises.js#L470)
+.TP
+\fBfs.retainOpenDescriptor\fR
+Transports: send
+.br
+Modules: oro:fs/fds
+.br
+Exposed by: oro:fs/fds retain() (api/fs/fds.js#L116)
+.TP
+\fBfs.rmdir\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs rmdir() (api/fs/index.js#L1632); oro:fs rmdirSync() (api/fs/index.js#L1652); oro:fs/promises rmdir() (api/fs/promises.js#L489)
+.TP
+\fBfs.stat\fR
+Transports: sendSync
+.br
+Modules: oro:fs
+.br
+Exposed by: oro:fs statSync() (api/fs/index.js#L1668)
+.TP
+\fBfs.stopWatch\fR
+Transports: request
+.br
+Modules: oro:fs/watcher
+.br
+Exposed by: oro:fs/watcher (api/fs/watcher.js#L256); oro:fs/watcher Watcher.close() (api/fs/watcher.js#L233)
+.br
+Notes: Closes watcher and stops listening for changes.
+.TP
+\fBfs.symlink\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs symlink() (api/fs/index.js#L1861); oro:fs symlinkSync() (api/fs/index.js#L1893); oro:fs/promises symlink() (api/fs/promises.js#L570)
+.TP
+\fBfs.unlink\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs unlink() (api/fs/index.js#L1913); oro:fs unlinkSync() (api/fs/index.js#L1936); oro:fs/promises unlink() (api/fs/promises.js#L633)
+.TP
+\fBfs.utimes\fR
+Transports: request, send, sendSync
+.br
+Modules: oro:fs, oro:fs/promises
+.br
+Exposed by: oro:fs utimes() (api/fs/index.js#L2481); oro:fs utimesSync() (api/fs/index.js#L2531); oro:fs/promises utimes() (api/fs/promises.js#L587)
+.TP
+\fBfs.watch\fR
+Transports: request
+.br
+Modules: oro:fs/watcher
+.br
+Exposed by: oro:fs/watcher start() (api/fs/watcher.js#L44)
+.br
+Notes: Starts the `fs.Watcher`
+.TP
+\fBfs.write\fR
+Transports: sendSync, write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:fs, oro:fs/handle
+.br
+Exposed by: oro:fs writeFileSync() (api/fs/index.js#L2038); oro:fs/handle FileHandle.write() (api/fs/handle.js#L994)
+.br
+Notes: Writes `length` bytes at `offset` in `buffer` to the underlying file at `position`.
+.SS geolocation
+.TP
+\fBgeolocation.clearWatch\fR
+Transports: request
+.br
+Modules: oro:internal/geolocation
+.br
+Exposed by: oro:internal/geolocation clearWatch() (api/internal/geolocation.js#L343)
+.TP
+\fBgeolocation.getCurrentPosition\fR
+Transports: request
+.br
+Modules: oro:internal/geolocation
+.br
+Exposed by: oro:internal/geolocation getCurrentPosition() (api/internal/geolocation.js#L215)
+.TP
+\fBgeolocation.watchPosition\fR
+Transports: request
+.br
+Modules: oro:internal/geolocation
+.br
+Exposed by: oro:internal/geolocation watchPosition() (api/internal/geolocation.js#L300)
+.SS hci
+.TP
+\fBhci.close\fR
+Transports: sendSync
+.br
+Modules: oro:hci
+.br
+Exposed by: oro:hci HCISocket.close() (api/hci.js#L201); oro:hci HCISocket.constructor() (api/hci.js#L161)
+.br
+Notes: Stop receiving data and close the underlying socket.
+.TP
+\fBhci.getAdapterInfo\fR
+Transports: sendSync
+.br
+Modules: oro:hci
+.br
+Exposed by: oro:hci getAdapter() (api/hci.js#L104)
+.TP
+\fBhci.listAdapters\fR
+Transports: sendSync
+.br
+Modules: oro:hci
+.br
+Exposed by: oro:hci listAdapters() (api/hci.js#L90)
+.TP
+\fBhci.open\fR
+Transports: sendSync
+.br
+Modules: oro:hci
+.br
+Exposed by: oro:hci HCISocket.constructor() (api/hci.js#L146)
+.TP
+\fBhci.readStart\fR
+Transports: sendSync
+.br
+Modules: oro:hci
+.br
+Exposed by: oro:hci HCISocket.constructor() (api/hci.js#L157)
+.TP
+\fBhci.readStop\fR
+Transports: sendSync
+.br
+Modules: oro:hci
+.br
+Exposed by: oro:hci HCISocket.close() (api/hci.js#L196)
+.br
+Notes: Stop receiving data and close the underlying socket.
+.TP
+\fBhci.setAdapterState\fR
+Transports: sendSync
+.br
+Modules: oro:hci
+.br
+Exposed by: oro:hci setAdapterState() (api/hci.js#L119)
+.TP
+\fBhci.write\fR
+Transports: sendSync
+.br
+Modules: oro:hci
+.br
+Exposed by: oro:hci HCISocket.write() (api/hci.js#L185)
+.br
+Notes: Write an HCI packet to the controller.
+.SS hid
+.TP
+\fBhid.cancelRequest\fR
+Transports: request
+.br
+Modules: oro:internal/hid\-web
+.br
+Exposed by: oro:internal/hid\-web (api/internal/hid\-web.js#L455); oro:internal/hid\-web NavigatorHID.cancelRequest() (api/internal/hid\-web.js#L386)
+.TP
+\fBhid.chooseDevice\fR
+Transports: request
+.br
+Modules: oro:internal/hid\-web
+.br
+Exposed by: oro:internal/hid\-web (api/internal/hid\-web.js#L439)
+.TP
+\fBhid.device.close\fR
+Transports: request
+.br
+Modules: oro:internal/hid\-web
+.br
+Exposed by: oro:internal/hid\-web HIDDevice.close() (api/internal/hid\-web.js#L201)
+.TP
+\fBhid.device.open\fR
+Transports: request
+.br
+Modules: oro:internal/hid\-web
+.br
+Exposed by: oro:internal/hid\-web HIDDevice.open() (api/internal/hid\-web.js#L190)
+.TP
+\fBhid.device.receiveFeatureReport\fR
+Transports: request
+.br
+Modules: oro:internal/hid\-web
+.br
+Exposed by: oro:internal/hid\-web HIDDevice.receiveFeatureReport() (api/internal/hid\-web.js#L248)
+.TP
+\fBhid.forgetDevice\fR
+Transports: request
+.br
+Modules: oro:internal/hid\-web
+.br
+Exposed by: oro:internal/hid\-web HIDDevice.forget() (api/internal/hid\-web.js#L211)
+.TP
+\fBhid.getDevices\fR
+Transports: request
+.br
+Modules: oro:internal/hid\-web
+.br
+Exposed by: oro:internal/hid\-web NavigatorHID.getDevices() (api/internal/hid\-web.js#L342)
+.TP
+\fBhid.requestDevice\fR
+Transports: request
+.br
+Modules: oro:internal/hid\-web
+.br
+Exposed by: oro:internal/hid\-web NavigatorHID.requestDevice() (api/internal/hid\-web.js#L355)
+.SS internal
+.TP
+\fBinternal.conduit.getSharedKey\fR
+Transports: request
+.br
+Modules: oro:conduit
+.br
+Exposed by: oro:conduit Conduit.getSharedKey() (api/conduit.js#L197)
+.br
+Notes: Gets the current conduit shared key.
+.TP
+\fBinternal.conduit.setSharedKey\fR
+Transports: request
+.br
+Modules: oro:conduit
+.br
+Exposed by: oro:conduit Conduit.setSharedKey() (api/conduit.js#L212)
+.br
+Notes: Sets the conduit shared key.
+.TP
+\fBinternal.conduit.start\fR
+Transports: request
+.br
+Modules: oro:conduit
+.br
+Exposed by: oro:conduit (api/conduit.js#L78); oro:conduit Conduit.connect() (api/conduit.js#L415)
+.br
+Notes: Connects the underlying conduit `WebSocket`.
+.TP
+\fBinternal.conduit.status\fR
+Transports: request
+.br
+Modules: oro:conduit
+.br
+Exposed by: oro:conduit Conduit.status() (api/conduit.js#L160)
+.br
+Notes: Returns the current Conduit server status
+.TP
+\fBinternal.conduit.stop\fR
+Transports: request
+.br
+Modules: oro:conduit
+.br
+Exposed by: oro:conduit (api/conduit.js#L71); oro:conduit (api/conduit.js#L100)
+.SS ipfs
+.TP
+\fBipfs.add\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs add() (api/ipfs.js#L194)
+.TP
+\fBipfs.addPeer\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs addPeer() (api/ipfs.js#L278)
+.TP
+\fBipfs.gc\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs garbageCollect() (api/ipfs.js#L254)
+.TP
+\fBipfs.get\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs get() (api/ipfs.js#L219)
+.TP
+\fBipfs.peerId\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs peerId() (api/ipfs.js#L264)
+.TP
+\fBipfs.pin\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs pin() (api/ipfs.js#L232)
+.TP
+\fBipfs.removePeer\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs removePeer() (api/ipfs.js#L291)
+.TP
+\fBipfs.start\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs start() (api/ipfs.js#L146)
+.TP
+\fBipfs.status\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs status() (api/ipfs.js#L165)
+.TP
+\fBipfs.stop\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs stop() (api/ipfs.js#L155)
+.TP
+\fBipfs.unpin\fR
+Transports: send
+.br
+Modules: oro:ipfs
+.br
+Exposed by: oro:ipfs unpin() (api/ipfs.js#L245)
+.SS iroh
+.TP
+\fBiroh.connection.accept\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Endpoint.accept() (api/iroh.js#L347)
+.TP
+\fBiroh.connection.acceptAny\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Endpoint.acceptAny() (api/iroh.js#L361)
+.TP
+\fBiroh.connection.acceptBi\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.acceptBidirectionalStream() (api/iroh.js#L459)
+.TP
+\fBiroh.connection.acceptUni\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.acceptUnidirectionalStream() (api/iroh.js#L472)
+.TP
+\fBiroh.connection.close\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.close() (api/iroh.js#L389)
+.TP
+\fBiroh.connection.connect\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Endpoint.connect() (api/iroh.js#L330)
+.TP
+\fBiroh.connection.datagram.read\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.readDatagram() (api/iroh.js#L421)
+.TP
+\fBiroh.connection.datagram.write\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.writeDatagram() (api/iroh.js#L415)
+.TP
+\fBiroh.connection.openBi\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.openBidirectionalStream() (api/iroh.js#L432)
+.TP
+\fBiroh.connection.openUni\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.openUnidirectionalStream() (api/iroh.js#L445)
+.TP
+\fBiroh.connection.stats\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.stats() (api/iroh.js#L400)
+.TP
+\fBiroh.connection.waitClosed\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.waitClosed() (api/iroh.js#L395)
+.TP
+\fBiroh.connectionType.watch\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Connection.watchConnectionType() (api/iroh.js#L529); oro:iroh Connection.watchConnectionType() (api/iroh.js#L537)
+.TP
+\fBiroh.endpoint.bind\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Endpoint.bind() (api/iroh.js#L299)
+.TP
+\fBiroh.endpoint.close\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Endpoint.close() (api/iroh.js#L374)
+.TP
+\fBiroh.endpoint.create\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Endpoint.create() (api/iroh.js#L290)
+.TP
+\fBiroh.endpoint.homeRelay\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Endpoint.homeRelay() (api/iroh.js#L304)
+.TP
+\fBiroh.endpoint.nodeAddr\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh Endpoint.nodeAddr() (api/iroh.js#L310)
+.TP
+\fBiroh.init\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh init() (api/iroh.js#L180)
+.TP
+\fBiroh.keyToPath\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh keyToPath() (api/iroh.js#L259)
+.TP
+\fBiroh.pathToKey\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh pathToKey() (api/iroh.js#L237)
+.TP
+\fBiroh.setLogLevel\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh setLogLevel() (api/iroh.js#L211)
+.TP
+\fBiroh.shutdown\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh shutdown() (api/iroh.js#L185)
+.TP
+\fBiroh.status\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh status() (api/iroh.js#L190)
+.TP
+\fBiroh.stream.finish\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh SendStream.finish() (api/iroh.js#L568)
+.TP
+\fBiroh.stream.read\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh RecvStream.read() (api/iroh.js#L588)
+.TP
+\fBiroh.stream.readToEnd\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh RecvStream.readToEnd() (api/iroh.js#L598)
+.TP
+\fBiroh.stream.write\fR
+Transports: send
+.br
+Modules: oro:iroh
+.br
+Exposed by: oro:iroh SendStream.write() (api/iroh.js#L563)
+.SS mcp
+.TP
+\fBmcp.server.clearAuthHandler\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp setAuthorizationHandler() (api/mcp/index.js#L1254)
+.TP
+\fBmcp.server.invokeTool\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp invokeTool() (api/mcp/index.js#L1180)
+.TP
+\fBmcp.server.listResources\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp listResources() (api/mcp/index.js#L1145)
+.TP
+\fBmcp.server.listTools\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp listTools() (api/mcp/index.js#L1070)
+.TP
+\fBmcp.server.publishResource\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp publishResource() (api/mcp/index.js#L1222)
+.TP
+\fBmcp.server.registerResource\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp registerResource() (api/mcp/index.js#L1100)
+.TP
+\fBmcp.server.registerTool\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp registerTool() (api/mcp/index.js#L1041)
+.TP
+\fBmcp.server.rejectInvocation\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp handleToolInvocation() (api/mcp/index.js#L588); oro:mcp handleToolInvocation() (api/mcp/index.js#L600); oro:mcp handleToolInvocation() (api/mcp/index.js#L622); oro:mcp handleToolInvocation() (api/mcp/index.js#L634)
+.TP
+\fBmcp.server.rejectResource\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp handleResourceRead() (api/mcp/index.js#L652); oro:mcp handleResourceRead() (api/mcp/index.js#L688)
+.TP
+\fBmcp.server.resolveAuthorization\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp handleAuthorizationRequest() (api/mcp/index.js#L834); oro:mcp handleAuthorizationRequest() (api/mcp/index.js#L863); oro:mcp handleAuthorizationRequest() (api/mcp/index.js#L866)
+.TP
+\fBmcp.server.resolveInvocation\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp handleToolInvocation() (api/mcp/index.js#L628)
+.TP
+\fBmcp.server.resolveResource\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp handleResourceRead() (api/mcp/index.js#L682)
+.TP
+\fBmcp.server.setAuthHandler\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp setAuthorizationHandler() (api/mcp/index.js#L1251)
+.TP
+\fBmcp.server.start\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp startServer() (api/mcp/index.js#L1297)
+.TP
+\fBmcp.server.status\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp serverStatus() (api/mcp/index.js#L1346)
+.TP
+\fBmcp.server.stop\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp stopServer() (api/mcp/index.js#L1340)
+.TP
+\fBmcp.server.unregisterResource\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp unregisterResource() (api/mcp/index.js#L1134)
+.TP
+\fBmcp.server.unregisterTool\fR
+Transports: request
+.br
+Modules: oro:mcp
+.br
+Exposed by: oro:mcp unregisterTool() (api/mcp/index.js#L1059)
+.SS mime
+.TP
+\fBmime.lookup\fR
+Transports: request, sendSync
+.br
+Modules: oro:mime
+.br
+Exposed by: oro:mime lookup() (api/mime/index.js#L294); oro:mime lookupSync() (api/mime/index.js#L320)
+.SS notification
+.TP
+\fBnotification.close\fR
+Transports: request
+.br
+Modules: oro:notification
+.br
+Exposed by: oro:notification Notification.close() (api/notification.js#L1299)
+.br
+Notes: Closes the notification programmatically.
+.TP
+\fBnotification.show\fR
+Transports: request
+.br
+Modules: oro:notification
+.br
+Exposed by: oro:notification Notification.constructor() (api/notification.js#L856)
+.br
+Notes: `Notification` class constructor.
+.SS os
+.TP
+\fBos.availableMemory\fR
+Transports: sendSync
+.br
+Modules: oro:os
+.br
+Exposed by: oro:os availableMemory() (api/os.js#L370)
+.TP
+\fBos.bufferSize\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram getRecvBufferSize() (api/dgram.js#L256); oro:dgram getSendBufferSize() (api/dgram.js#L283); oro:dgram Socket.setRecvBufferSize() (api/dgram.js#L1366); oro:dgram Socket.setSendBufferSize() (api/dgram.js#L1387)
+.br
+Notes: Sets the SO_RCVBUF socket option. Sets the maximum socket receive buffer in bytes. Sets the SO_SNDBUF socket option. Sets the maximum socket send buffer in bytes.
+.TP
+\fBos.constants\fR
+Transports: request
+.br
+Modules: oro:internal/init
+.br
+Exposed by: oro:internal/init (api/internal/init.js#L1056)
+.TP
+\fBos.cpus\fR
+Transports: sendSync
+.br
+Modules: oro:os
+.br
+Exposed by: oro:os cpus() (api/os.js#L80)
+.TP
+\fBos.hrtime\fR
+Transports: sendSync
+.br
+Modules: oro:os
+.br
+Exposed by: oro:os hrtime() (api/os.js#L353)
+.TP
+\fBos.networkInterfaces\fR
+Transports: sendSync
+.br
+Modules: oro:os
+.br
+Exposed by: oro:os networkInterfaces() (api/os.js#L111)
+.TP
+\fBos.paths\fR
+Transports: sendSync
+.br
+Modules: oro:path/well\-known
+.br
+Exposed by: oro:path/well\-known (api/path/well\-known.js#L3)
+.TP
+\fBos.rusage\fR
+Transports: sendSync
+.br
+Modules: oro:os
+.br
+Exposed by: oro:os rusage() (api/os.js#L318)
+.TP
+\fBos.uname\fR
+Transports: sendSync
+.br
+Modules: oro:os
+.br
+Exposed by: oro:os uname() (api/os.js#L340)
+.TP
+\fBos.uptime\fR
+Transports: sendSync
+.br
+Modules: oro:os
+.br
+Exposed by: oro:os uptime() (api/os.js#L328)
+.SS otp
+.TP
+\fBotp.credentials.get\fR
+Transports: request
+.br
+Modules: oro:internal/credentials
+.br
+Exposed by: oro:internal/credentials get() (api/internal/credentials.js#L137)
+.SS permissions
+.TP
+\fBpermissions.query\fR
+Transports: request
+.br
+Modules: oro:internal/permissions
+.br
+Exposed by: oro:internal/permissions query() (api/internal/permissions.js#L281)
+.TP
+\fBpermissions.request\fR
+Transports: request, sendSync
+.br
+Modules: oro:internal/geolocation, oro:internal/permissions
+.br
+Exposed by: oro:internal/geolocation getCurrentPosition() (api/internal/geolocation.js#L165); oro:internal/geolocation watchPosition() (api/internal/geolocation.js#L251); oro:internal/permissions request() (api/internal/permissions.js#L402)
+.SS platform
+.TP
+\fBplatform.event\fR
+Transports: send, sendSync
+.br
+Modules: oro:internal/init
+.br
+Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L835); oro:internal/init (api/internal/init.js#L1182)
+.TP
+\fBplatform.openExternal\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.openExternal() (api/window.js#L780)
+.br
+Notes: Opens an URL in the default application associated with the URL protocol, such as 'https:' for the default web browser.
+.TP
+\fBplatform.revealFile\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.revealFile() (api/window.js#L797)
+.br
+Notes: Opens a file in the default file explorer.
+.SS process
+.TP
+\fBprocess.kill\fR
+Transports: send
+.br
+Modules: oro:application
+.br
+Exposed by: oro:application (api/application.js#L795)
+.TP
+\fBprocess.open\fR
+Transports: send
+.br
+Modules: oro:application
+.br
+Exposed by: oro:application (api/application.js#L788)
+.TP
+\fBprocess.write\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.send() (api/window.js#L737)
+.br
+Notes: This is a high\-level API that you should use instead of `ipc.request` when you want to send a message to another window or to the backend.
+.SS protocol
+.TP
+\fBprotocol.getData\fR
+Transports: request
+.br
+Modules: oro:service\-worker/worker
+.br
+Exposed by: oro:service\-worker/worker onMessage() (api/service\-worker/worker.js#L449)
+.TP
+\fBprotocol.getServiceWorkerRegistration\fR
+Transports: request
+.br
+Modules: oro:protocol\-handlers
+.br
+Exposed by: oro:protocol\-handlers getServiceWorker() (api/protocol\-handlers.js#L11)
+.SS queuedResponse
+.TP
+\fBqueuedResponse\fR
+Transports: request
+.br
+Binary semantics: binary response body
+.br
+Modules: oro:internal/init
+.br
+Exposed by: oro:internal/init RuntimeQueuedResponses.dispatch() (api/internal/init.js#L920)
+.SS secureStorage
+.TP
+\fBsecureStorage.clear\fR
+Transports: send
+.br
+Modules: oro:secure\-storage
+.br
+Exposed by: oro:secure\-storage clear() (api/secure\-storage.js#L169)
+.TP
+\fBsecureStorage.get\fR
+Transports: send
+.br
+Modules: oro:secure\-storage
+.br
+Exposed by: oro:secure\-storage getItem() (api/secure\-storage.js#L125)
+.TP
+\fBsecureStorage.keys\fR
+Transports: send
+.br
+Modules: oro:secure\-storage
+.br
+Exposed by: oro:secure\-storage keys() (api/secure\-storage.js#L183)
+.TP
+\fBsecureStorage.remove\fR
+Transports: send
+.br
+Modules: oro:secure\-storage
+.br
+Exposed by: oro:secure\-storage removeItem() (api/secure\-storage.js#L155)
+.TP
+\fBsecureStorage.set\fR
+Transports: send
+.br
+Modules: oro:secure\-storage
+.br
+Exposed by: oro:secure\-storage setItem() (api/secure\-storage.js#L91)
+.SS semver
+.TP
+\fBsemver.compare\fR
+Transports: sendSync
+.br
+Modules: oro:semver
+.br
+Exposed by: oro:semver compare() (api/semver.js#L282)
+.TP
+\fBsemver.inc\fR
+Transports: sendSync
+.br
+Modules: oro:semver
+.br
+Exposed by: oro:semver inc() (api/semver.js#L401)
+.TP
+\fBsemver.parse\fR
+Transports: sendSync
+.br
+Modules: oro:semver
+.br
+Exposed by: oro:semver parse() (api/semver.js#L247)
+.TP
+\fBsemver.satisfies\fR
+Transports: sendSync
+.br
+Modules: oro:semver
+.br
+Exposed by: oro:semver satisfies() (api/semver.js#L369)
+.SS serviceWorker
+.TP
+\fBserviceWorker.fetch.request.body\fR
+Transports: request
+.br
+Binary semantics: binary response body
+.br
+Modules: oro:service\-worker/worker
+.br
+Exposed by: oro:service\-worker/worker onMessage() (api/service\-worker/worker.js#L399)
+.TP
+\fBserviceWorker.fetch.response\fR
+Transports: request, write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:service\-worker/events, oro:service\-worker/init
+.br
+Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L262); oro:service\-worker/init onFetch() (api/service\-worker/init.js#L264)
+.br
+Notes: The `respondWith()` method of `FetchEvent` prevents the webview's default fetch handling, and allows you to provide a promise for a `Response` yourself.
+.TP
+\fBserviceWorker.fetch.response.finish\fR
+Transports: request
+.br
+Modules: oro:service\-worker/events
+.br
+Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L374)
+.br
+Notes: The `respondWith()` method of `FetchEvent` prevents the webview's default fetch handling, and allows you to provide a promise for a `Response` yourself.
+.TP
+\fBserviceWorker.fetch.response.write\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:service\-worker/events
+.br
+Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L347); oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L361)
+.br
+Notes: The `respondWith()` method of `FetchEvent` prevents the webview's default fetch handling, and allows you to provide a promise for a `Response` yourself.
+.TP
+\fBserviceWorker.getRegistration\fR
+Transports: request
+.br
+Modules: oro:service\-worker/container
+.br
+Exposed by: oro:service\-worker/container ServiceWorkerContainer.getRegistration() (api/service\-worker/container.js#L370)
+.TP
+\fBserviceWorker.getRegistrations\fR
+Transports: request
+.br
+Modules: oro:service\-worker/container, oro:service\-worker/init, oro:service\-worker/instance
+.br
+Exposed by: oro:service\-worker/container ServiceWorkerContainer.getRegistrations() (api/service\-worker/container.js#L413); oro:service\-worker/init (api/service\-worker/init.js#L431); oro:service\-worker/instance createServiceWorker() (api/service\-worker/instance.js#L194)
+.TP
+\fBserviceWorker.register\fR
+Transports: request
+.br
+Modules: oro:service\-worker/container
+.br
+Exposed by: oro:service\-worker/container ServiceWorkerContainer.register() (api/service\-worker/container.js#L466)
+.TP
+\fBserviceWorker.skipWaiting\fR
+Transports: request
+.br
+Modules: oro:service\-worker/global
+.br
+Exposed by: oro:service\-worker/global ServiceWorkerGlobalScope.skipWaiting() (api/service\-worker/global.js#L124)
+.TP
+\fBserviceWorker.storage\fR
+Transports: request
+.br
+Modules: oro:service\-worker/storage
+.br
+Exposed by: oro:service\-worker/storage SessionStorageProvider.load() (api/service\-worker/storage.js#L608)
+.br
+Notes: Loads the internal index with keys and values.
+.TP
+\fBserviceWorker.storage.clear\fR
+Transports: sendSync
+.br
+Modules: oro:service\-worker/storage
+.br
+Exposed by: oro:service\-worker/storage SessionStorageProvider.clear() (api/service\-worker/storage.js#L592)
+.br
+Notes: Clear all keys and values.
+.TP
+\fBserviceWorker.storage.get\fR
+Transports: sendSync
+.br
+Modules: oro:service\-worker/storage
+.br
+Exposed by: oro:service\-worker/storage SessionStorageProvider.get() (api/service\-worker/storage.js#L505)
+.br
+Notes: Get a value by `key`.
+.TP
+\fBserviceWorker.storage.remove\fR
+Transports: sendSync
+.br
+Modules: oro:service\-worker/storage
+.br
+Exposed by: oro:service\-worker/storage SessionStorageProvider.remove() (api/service\-worker/storage.js#L566)
+.br
+Notes: Remove a value by `key`.
+.TP
+\fBserviceWorker.storage.set\fR
+Transports: send
+.br
+Modules: oro:service\-worker/storage
+.br
+Exposed by: oro:service\-worker/storage SessionStorageProvider.set() (api/service\-worker/storage.js#L543)
+.br
+Notes: Sets a `value` by `key`
+.TP
+\fBserviceWorker.unregister\fR
+Transports: request
+.br
+Modules: oro:service\-worker/registration
+.br
+Exposed by: oro:service\-worker/registration ServiceWorkerRegistration.unregister() (api/service\-worker/registration.js#L111)
+.TP
+\fBserviceWorker.updateState\fR
+Transports: request
+.br
+Modules: oro:service\-worker/state
+.br
+Exposed by: oro:service\-worker/state (api/service\-worker/state.js#L38)
+.SS sqlite
+.TP
+\fBsqlite.close\fR
+Transports: sendSync
+.br
+Modules: oro:sqlite
+.br
+Exposed by: oro:sqlite Database.close() (api/sqlite.js#L633); oro:sqlite Database.kFinalize() (api/sqlite.js#L756)
+.TP
+\fBsqlite.exec\fR
+Transports: send, sendSync
+.br
+Modules: oro:sqlite
+.br
+Exposed by: oro:sqlite Database.exec() (api/sqlite.js#L658); oro:sqlite Database.execAsync() (api/sqlite.js#L682)
+.TP
+\fBsqlite.open\fR
+Transports: sendSync
+.br
+Modules: oro:sqlite
+.br
+Exposed by: oro:sqlite (api/sqlite.js#L621)
+.TP
+\fBsqlite.prepare\fR
+Transports: sendSync
+.br
+Modules: oro:sqlite
+.br
+Exposed by: oro:sqlite Database.prepare() (api/sqlite.js#L704)
+.TP
+\fBsqlite.statement.bind\fR
+Transports: sendSync
+.br
+Modules: oro:sqlite
+.br
+Exposed by: oro:sqlite Statement.bind() (api/sqlite.js#L375)
+.TP
+\fBsqlite.statement.finalize\fR
+Transports: sendSync
+.br
+Modules: oro:sqlite
+.br
+Exposed by: oro:sqlite (api/sqlite.js#L529); oro:sqlite Statement.kFinalize() (api/sqlite.js#L557)
+.TP
+\fBsqlite.statement.reset\fR
+Transports: sendSync
+.br
+Modules: oro:sqlite
+.br
+Exposed by: oro:sqlite Statement.reset() (api/sqlite.js#L411)
+.TP
+\fBsqlite.statement.step\fR
+Transports: sendSync
+.br
+Modules: oro:sqlite
+.br
+Exposed by: oro:sqlite Statement.step() (api/sqlite.js#L399)
+.SS stderr
+.TP
+\fBstderr\fR
+Transports: send
+.br
+Modules: oro:tty
+.br
+Exposed by: oro:tty WriteStream() (api/tty.js#L22)
+.SS stdout
+.TP
+\fBstdout\fR
+Transports: send
+.br
+Modules: oro:tty
+.br
+Exposed by: oro:tty WriteStream() (api/tty.js#L20)
+.SS tar
+.TP
+\fBtar.buffer\fR
+Transports: request
+.br
+Binary semantics: binary response body
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.toBuffer() (api/tar.js#L1537)
+.br
+Notes: Finalizes the archive if necessary and returns the underlying tar archive bytes as a Buffer. For in\-memory writable archives this contains the composed archive; for read\-only archives created via fromBuffer it returns the original buffer.
+.TP
+\fBtar.close\fR
+Transports: send
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.close() (api/tar.js#L651)
+.br
+Notes: Closes the underlying archive descriptor. Further operations on this instance will throw.
+.TP
+\fBtar.createBuffer\fR
+Transports: send
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar createInMemory() (api/tar.js#L1721)
+.TP
+\fBtar.finalize\fR
+Transports: send
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.finalize() (api/tar.js#L1515)
+.br
+Notes: Finalizes the archive, writing terminating blocks and flushing the sink. After calling this, the archive is still considered open but no further writes should be performed.
+.TP
+\fBtar.list\fR
+Transports: send
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.entries() (api/tar.js#L667)
+.br
+Notes: Lists all entries in the archive.
+.TP
+\fBtar.open\fR
+Transports: send
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.open() (api/tar.js#L554)
+.br
+Notes: Opens an existing tar archive.
+.TP
+\fBtar.openBuffer\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.fromBuffer() (api/tar.js#L602)
+.br
+Notes: Opens a tar archive from an in\-memory buffer (read\-only).
+.TP
+\fBtar.read\fR
+Transports: request
+.br
+Binary semantics: binary response body
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar extractSparseFile() (api/tar.js#L473); oro:tar iterator() (api/tar.js#L1086); oro:tar TarArchive.read() (api/tar.js#L1016)
+.br
+Notes: Reads a slice of an entry as a Buffer.
+.TP
+\fBtar.stat\fR
+Transports: send
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.stat() (api/tar.js#L945)
+.br
+Notes: Returns metadata for a single entry path.
+.TP
+\fBtar.write.begin\fR
+Transports: send
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.append() (api/tar.js#L1423)
+.br
+Notes: Appends a single entry to the archive. The entry body can be a Buffer, ArrayBuffer, Uint8Array, or an async iterable of Buffers.
+.TP
+\fBtar.write.data\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:tar
+.br
+Exposed by: oro:tar TarArchive.append() (api/tar.js#L1438); oro:tar TarArchive.append() (api/tar.js#L1462); oro:tar TarArchive.append() (api/tar.js#L1478); oro:tar TarArchive.append() (api/tar.js#L1487)
+.br
+Notes: Appends a single entry to the archive. The entry body can be a Buffer, ArrayBuffer, Uint8Array, or an async iterable of Buffers.
+.SS tcp
+.TP
+\fBtcp.accept\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net ondata() (api/net.js#L394)
+.TP
+\fBtcp.bind\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPServer.listen() (api/net.js#L365)
+.TP
+\fBtcp.close\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPServer.close() (api/net.js#L451); oro:net TCPSocket.destroy() (api/net.js#L336)
+.TP
+\fBtcp.connect\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPSocket.connect() (api/net.js#L80)
+.TP
+\fBtcp.create\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPServer.constructor() (api/net.js#L361); oro:net TCPSocket.constructor() (api/net.js#L37)
+.TP
+\fBtcp.getPeerName\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPSocket.remoteAddressInfo() (api/net.js#L213)
+.TP
+\fBtcp.getSockName\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPServer.address() (api/net.js#L474); oro:net TCPSocket.address() (api/net.js#L204)
+.TP
+\fBtcp.listen\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPServer.listen() (api/net.js#L371)
+.TP
+\fBtcp.readStart\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPSocket._startRead() (api/net.js#L146)
+.TP
+\fBtcp.readStop\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPSocket.destroy() (api/net.js#L335)
+.TP
+\fBtcp.setKeepAlive\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPSocket.setKeepAlive() (api/net.js#L238)
+.TP
+\fBtcp.setNoDelay\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPSocket.setNoDelay() (api/net.js#L232)
+.TP
+\fBtcp.shutdown\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPSocket.end() (api/net.js#L251)
+.TP
+\fBtcp.write\fR
+Transports: sendSync
+.br
+Modules: oro:net
+.br
+Exposed by: oro:net TCPSocket._flushQueue() (api/net.js#L182)
+.SS timers
+.TP
+\fBtimers.clock_nanosleep\fR
+Transports: sendSync
+.br
+Modules: oro:extension
+.br
+Exposed by: oro:extension createWebAssemblyExtensionImports() (api/extension.js#L6113)
+.TP
+\fBtimers.nanosleep\fR
+Transports: sendSync
+.br
+Modules: oro:extension
+.br
+Exposed by: oro:extension createWebAssemblyExtensionImports() (api/extension.js#L5888)
+.TP
+\fBtimers.setTimeout\fR
+Transports: sendSync
+.br
+Modules: oro:timers
+.br
+Exposed by: oro:timers (api/timers/index.js#L59)
+.SS tls
+.TP
+\fBtls.close\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls TLSSocket.destroy() (api/tls.js#L166); oro:tls TLSSocket.end() (api/tls.js#L152)
+.TP
+\fBtls.connect\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls connect() (api/tls.js#L642)
+.TP
+\fBtls.getPins\fR
+Transports: request
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls getTlsPins() (api/tls.js#L720)
+.TP
+\fBtls.getProvider\fR
+Transports: request
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls getTlsProvider() (api/tls.js#L737)
+.TP
+\fBtls.readStart\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls ondata() (api/tls.js#L263); oro:tls ondata() (api/tls.js#L594)
+.TP
+\fBtls.readStop\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls onread() (api/tls.js#L251); oro:tls onread() (api/tls.js#L557); oro:tls TLSSocket.destroy() (api/tls.js#L163)
+.TP
+\fBtls.server.accept\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls ondata() (api/tls.js#L232)
+.TP
+\fBtls.server.bind\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls TLSServer.listen() (api/tls.js#L208)
+.TP
+\fBtls.server.close\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls TLSServer.close() (api/tls.js#L312)
+.TP
+\fBtls.server.create\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls TLSServer.constructor() (api/tls.js#L188)
+.TP
+\fBtls.server.listen\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls TLSServer.listen() (api/tls.js#L218)
+.TP
+\fBtls.setPins\fR
+Transports: request, write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls setTlsPins() (api/tls.js#L700); oro:tls setTlsPins() (api/tls.js#L701)
+.TP
+\fBtls.shutdown\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls TLSSocket.end() (api/tls.js#L149)
+.TP
+\fBtls.write\fR
+Transports: sendSync
+.br
+Modules: oro:tls
+.br
+Exposed by: oro:tls TLSSocket.write() (api/tls.js#L127)
+.SS udp
+.TP
+\fBudp.addMembership\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.addMembership() (api/dgram.js#L1478)
+.br
+Notes: Join a multicast group.
+.TP
+\fBudp.addSourceSpecificMembership\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.addSourceSpecificMembership() (api/dgram.js#L1507)
+.br
+Notes: Add source\-specific multicast membership (if supported).
+.TP
+\fBudp.bind\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram bind() (api/dgram.js#L330)
+.TP
+\fBudp.capabilities\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram getCapabilities() (api/dgram.js#L1554)
+.TP
+\fBudp.close\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram (api/dgram.js#L870); oro:dgram close() (api/dgram.js#L674)
+.TP
+\fBudp.connect\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram connect() (api/dgram.js#L423)
+.TP
+\fBudp.disconnect\fR
+Transports: sendSync
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram disconnect() (api/dgram.js#L480)
+.TP
+\fBudp.dropMembership\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.dropMembership() (api/dgram.js#L1492)
+.br
+Notes: Leave a multicast group.
+.TP
+\fBudp.dropSourceSpecificMembership\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.dropSourceSpecificMembership() (api/dgram.js#L1523)
+.br
+Notes: Drop source\-specific multicast membership (if supported).
+.TP
+\fBudp.getPeerName\fR
+Transports: sendSync
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram getPeerName() (api/dgram.js#L700)
+.TP
+\fBudp.getSockName\fR
+Transports: sendSync
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram getSockName() (api/dgram.js#L721)
+.TP
+\fBudp.getState\fR
+Transports: sendSync
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram getSocketState() (api/dgram.js#L157)
+.TP
+\fBudp.readStart\fR
+Transports: send
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram startReading() (api/dgram.js#L205)
+.TP
+\fBudp.readStop\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram stopReading() (api/dgram.js#L231)
+.TP
+\fBudp.send\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram send() (api/dgram.js#L624)
+.TP
+\fBudp.setBroadcast\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.setBroadcast() (api/dgram.js#L1426)
+.br
+Notes: Enable or disable SO_BROADCAST on the socket.
+.TP
+\fBudp.setIPv6Only\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.setIPv6Only() (api/dgram.js#L1537)
+.br
+Notes: Configure the socket as IPv6\-only.
+.TP
+\fBudp.setMulticastInterface\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.setMulticastInterface() (api/dgram.js#L1465)
+.br
+Notes: Set the default network interface for multicast.
+.TP
+\fBudp.setMulticastLoopback\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.setMulticastLoopback() (api/dgram.js#L1453)
+.br
+Notes: Enable or disable multicast loopback.
+.TP
+\fBudp.setMulticastTTL\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.setMulticastTTL() (api/dgram.js#L1444)
+.br
+Notes: Set multicast TTL for outgoing multicast packets.
+.TP
+\fBudp.setTTL\fR
+Transports: request
+.br
+Modules: oro:dgram
+.br
+Exposed by: oro:dgram Socket.setTTL() (api/dgram.js#L1435)
+.br
+Notes: Set unicast TTL for outgoing packets.
+.SS usb
+.TP
+\fBusb.cancelRequest\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web (api/internal/usb\-web.js#L623); oro:internal/usb\-web NavigatorUSB.cancelRequest() (api/internal/usb\-web.js#L537)
+.TP
+\fBusb.chooseDevice\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web (api/internal/usb\-web.js#L597)
+.TP
+\fBusb.device.claimInterface\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.claimInterface() (api/internal/usb\-web.js#L304)
+.TP
+\fBusb.device.close\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.close() (api/internal/usb\-web.js#L277)
+.TP
+\fBusb.device.open\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.open() (api/internal/usb\-web.js#L268)
+.TP
+\fBusb.device.releaseInterface\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.releaseInterface() (api/internal/usb\-web.js#L314)
+.TP
+\fBusb.device.reset\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.reset() (api/internal/usb\-web.js#L431)
+.TP
+\fBusb.device.selectAlternateInterface\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.selectAlternateInterface() (api/internal/usb\-web.js#L324)
+.TP
+\fBusb.device.selectConfiguration\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.selectConfiguration() (api/internal/usb\-web.js#L294)
+.TP
+\fBusb.forgetDevice\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.forget() (api/internal/usb\-web.js#L285)
+.TP
+\fBusb.getDevices\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web NavigatorUSB.getDevices() (api/internal/usb\-web.js#L496)
+.TP
+\fBusb.requestDevice\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web NavigatorUSB.requestDevice() (api/internal/usb\-web.js#L509)
+.TP
+\fBusb.transfer.clearHalt\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.clearHalt() (api/internal/usb\-web.js#L422)
+.TP
+\fBusb.transfer.controlIn\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.controlTransferIn() (api/internal/usb\-web.js#L344)
+.TP
+\fBusb.transfer.in\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.transferIn() (api/internal/usb\-web.js#L386)
+.SS window
+.TP
+\fBwindow\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.update() (api/window.js#L809)
+.br
+Notes: Updates window state
+.TP
+\fBwindow.blur\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.blur() (api/window.js#L325)
+.br
+Notes: Removes focus from the window (desktop: sends to back; mobile: hides).
+.TP
+\fBwindow.close\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.close() (api/window.js#L274)
+.br
+Notes: Close the window
+.TP
+\fBwindow.create\fR
+Transports: request
+.br
+Modules: oro:application
+.br
+Exposed by: oro:application createWindow() (api/application.js#L496)
+.TP
+\fBwindow.focus\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.focus() (api/window.js#L313)
+.br
+Notes: Brings the window to the foreground and focuses it.
+.TP
+\fBwindow.getAlwaysOnTop\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.isAlwaysOnTop() (api/window.js#L600)
+.br
+Notes: Checks if the window is set to always be on top (desktop only).
+.TP
+\fBwindow.getBackgroundColor\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.getBackgroundColor() (api/window.js#L554)
+.br
+Notes: Gets the background color of the window
+.TP
+\fBwindow.hide\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.hide() (api/window.js#L301)
+.br
+Notes: Hides the window
+.TP
+\fBwindow.hotkey.bind\fR
+Transports: request
+.br
+Modules: oro:window/hotkey
+.br
+Exposed by: oro:window/hotkey bind() (api/window/hotkey.js#L544)
+.TP
+\fBwindow.hotkey.bindings\fR
+Transports: request
+.br
+Modules: oro:window/hotkey
+.br
+Exposed by: oro:window/hotkey getBindings() (api/window/hotkey.js#L611)
+.TP
+\fBwindow.hotkey.mappings\fR
+Transports: request
+.br
+Modules: oro:window/hotkey
+.br
+Exposed by: oro:window/hotkey getMappings() (api/window/hotkey.js#L637)
+.TP
+\fBwindow.hotkey.unbind\fR
+Transports: request
+.br
+Modules: oro:window/hotkey
+.br
+Exposed by: oro:window/hotkey unbind() (api/window/hotkey.js#L582)
+.TP
+\fBwindow.maximize\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.maximize() (api/window.js#L337)
+.br
+Notes: Maximize the window
+.TP
+\fBwindow.minimize\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.minimize() (api/window.js#L349)
+.br
+Notes: Minimize the window
+.TP
+\fBwindow.navigate\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.navigate() (api/window.js#L508)
+.br
+Notes: Navigate the window to a given path
+.TP
+\fBwindow.restore\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.restore() (api/window.js#L361)
+.br
+Notes: Restore the window
+.TP
+\fBwindow.send\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.postMessage() (api/window.js#L762); oro:window ApplicationWindow.send() (api/window.js#L744)
+.br
+Notes: Post a message to a window TODO(@jwerle): research using `BroadcastChannel` instead This is a high\-level API that you should use instead of `ipc.request` when you want to send a message to another window or to the backend.
+.TP
+\fBwindow.setAlwaysOnTop\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.setAlwaysOnTop() (api/window.js#L584)
+.br
+Notes: Sets whether the window should stay always on top (desktop only).
+.TP
+\fBwindow.setBackgroundColor\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.setBackgroundColor() (api/window.js#L541)
+.br
+Notes: Sets the background color of the window
+.TP
+\fBwindow.setContextMenu\fR
+Transports: send
+.br
+Modules: oro:application/menu
+.br
+Exposed by: oro:application/menu setContextMenu() (api/application/menu.js#L601)
+.TP
+\fBwindow.setPosition\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.setPosition() (api/window.js#L498)
+.br
+Notes: Sets the position of the window
+.TP
+\fBwindow.setSize\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.setSize() (api/window.js#L439)
+.br
+Notes: Sets the size of the window
+.TP
+\fBwindow.setTitle\fR
+Transports: request
+.br
+Modules: oro:internal/primitives, oro:window
+.br
+Exposed by: oro:internal/primitives init() (api/internal/primitives.js#L480); oro:internal/primitives init() (api/internal/primitives.js#L496); oro:window ApplicationWindow.setTitle() (api/window.js#L374)
+.br
+Notes: Sets the title of the window
+.TP
+\fBwindow.share\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.share() (api/window.js#L694)
+.br
+Notes: Opens the platform share sheet for the current window.
+.TP
+\fBwindow.show\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.show() (api/window.js#L289)
+.br
+Notes: Shows the window
+.TP
+\fBwindow.showFileSystemPicker\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.showDirectoryFilePicker() (api/window.js#L656); oro:window ApplicationWindow.showOpenFilePicker() (api/window.js#L616); oro:window ApplicationWindow.showSaveFilePicker() (api/window.js#L636)
+.br
+Notes: Shows a native directory dialog. Shows a native open file dialog.
+.TP
+\fBwindow.showInspector\fR
+Transports: request
+.br
+Modules: oro:window
+.br
+Exposed by: oro:window ApplicationWindow.showInspector() (api/window.js#L521)
+.br
+Notes: Opens the Web Inspector for the window (desktop only).
+.SS xpc
+.TP
+\fBxpc.availability\fR
+Transports: request
+.br
+Modules: oro:xpc
+.br
+Exposed by: oro:xpc availability() (api/xpc.js#L712)
+.TP
+\fBxpc.connect\fR
+Transports: request
+.br
+Modules: oro:xpc
+.br
+Exposed by: oro:xpc connect() (api/xpc.js#L749)
+.TP
+\fBxpc.disconnect\fR
+Transports: request
+.br
+Modules: oro:xpc
+.br
+Exposed by: oro:xpc XPCConnection.close() (api/xpc.js#L594)
+.TP
+\fBxpc.respond\fR
+Transports: request
+.br
+Modules: oro:xpc
+.br
+Exposed by: oro:xpc respond() (api/xpc.js#L637)
+.TP
+\fBxpc.respondError\fR
+Transports: request
+.br
+Modules: oro:xpc
+.br
+Exposed by: oro:xpc respond() (api/xpc.js#L637)
+.TP
+\fBxpc.resume\fR
+Transports: request
+.br
+Modules: oro:xpc
+.br
+Exposed by: oro:xpc XPCConnection.resume() (api/xpc.js#L574)
+.TP
+\fBxpc.send\fR
+Transports: request
+.br
+Modules: oro:xpc
+.br
+Exposed by: oro:xpc XPCConnection.send() (api/xpc.js#L532)
+.TP
+\fBxpc.suspend\fR
+Transports: request
+.br
+Modules: oro:xpc
+.br
+Exposed by: oro:xpc XPCConnection.suspend() (api/xpc.js#L566)
+.SS zlib
+.TP
+\fBzlib.capabilities\fR
+Transports: send
+.br
+Modules: oro:zlib
+.br
+Exposed by: oro:zlib isAvailable() (api/zlib.js#L112)
+.TP
+\fBzlib.deflate\fR
+Transports: write
+.br
+Binary semantics: binary request body, binary response body
+.br
+Modules: oro:zlib
+.br
+Exposed by: oro:zlib deflate() (api/zlib.js#L156)
+.TP
+\fBzlib.inflate\fR
+Transports: write
+.br
+Binary semantics: binary request body, binary response body
+.br
+Modules: oro:zlib
+.br
+Exposed by: oro:zlib inflate() (api/zlib.js#L171)
+.TP
+\fBzlib.stream.open\fR
+Transports: send
+.br
+Modules: oro:zlib
+.br
+Exposed by: oro:zlib ZlibStream.create() (api/zlib.js#L218)
+.br
+Notes: Opens a new zlib stream.
+.TP
+\fBzlib.stream.write\fR
+Transports: write
+.br
+Binary semantics: binary request body, binary response body
+.br
+Modules: oro:zlib
+.br
+Exposed by: oro:zlib ZlibStream.write() (api/zlib.js#L268)
+.br
+Notes: Writes a chunk into the stream and returns the processed output chunk.
+.SH SEE ALSO
+oro\-ipc(7), oro\-agent\-workflows(7), oro\-ipc(3), oro\-application(3), oro\-window(3)

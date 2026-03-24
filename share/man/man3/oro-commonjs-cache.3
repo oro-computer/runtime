@@ -1,0 +1,228 @@
+.TH ORO-COMMONJS-CACHE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:commonjs/cache \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:commonjs/cache'
+.fi
+.SH DESCRIPTION
+.PP
+oro:commonjs/cache is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBCACHE_CHANNEL_MESSAGE_ID\fR
+This is an exported `VariableDeclaration` named `CACHE_CHANNEL_MESSAGE_ID`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBCACHE_CHANNEL_MESSAGE_REPLICATE\fR
+This is an exported `VariableDeclaration` named `CACHE_CHANNEL_MESSAGE_REPLICATE`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBStorage (extends EventTarget)\fR
+An storage context object with persistence and durability for service worker storages.
+.TP
+\fBopen(options)\fR
+Opens an storage for a particular name.
+\fBParameters:\fR
+.br
+\fIoptions\fR (StorageOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<Storage>\fR
+.TP
+\fBdatabase()\fR
+A reference to the currently opened storage database.
+.TP
+\fBopened()\fR
+`true` if the storage is opened, otherwise `false`.
+.TP
+\fBopening()\fR
+`true` if the storage is opening, otherwise `false`.
+.TP
+\fBcontext()\fR
+A proxied object for reading and writing storage state. Values written to this object must be cloneable with respect to the structured clone algorithm.
+.TP
+\fBname()\fR
+The current storage name. This value is also used as the internal database name.
+.TP
+\fBready()\fR
+A promise that resolves when the storage is opened.
+.TP
+\fBreset()\fR
+Resets the current storage to an empty state.
+.TP
+\fBsync()\fR
+Synchronizes database entries into the storage context.
+.TP
+\fBSnapshotData\fR
+A container for `Snapshot` data storage.
+.TP
+\fBconstructor(data)\fR
+`SnapshotData` class constructor.
+\fBParameters:\fR
+.br
+\fIdata\fR (object; optional; default null)
+.TP
+\fBSnapshot\fR
+A container for storing a snapshot of the cache data.
+.TP
+\fBconstructor()\fR
+`Snapshot` class constructor.
+.TP
+\fBdata()\fR
+A reference to the snapshot data.
+.TP
+\fBCacheCollection\fR
+An interface for managing and performing operations on a collection of `Cache` objects.
+.TP
+\fBadd(name, cache, (Position 2))\fR
+Adds a `Cache` instance to the collection.
+\fBParameters:\fR
+.br
+\fIname\fR (string \\| Cache; required)
+.br
+\fIcache\fR (Cache; optional; default null)
+.br
+\fI(Position 2)\fR (boolean; required)
+.TP
+\fBcall(method, args)\fR
+Calls a method on each `Cache` object in the collection.
+\fBParameters:\fR
+.br
+\fImethod\fR (string; required)
+.br
+\fIargs\fR (\&...any; required)
+\fBReturns:\fR
+.br
+\fIPromise<Record<string,any>>\fR
+.TP
+\fBCache\fR
+A container for a shared cache that lives for the life time of application execution. Updates to this storage are replicated to other instances in the application context, including windows and workers.
+.TP
+\fBsnapshot()\fR
+Creates a snapshot of the current cache which can be serialized and stored in persistent storage.
+\fBReturns:\fR
+.br
+\fISnapshot\fR
+.TP
+\fBrestore(names)\fR
+Restore caches from persistent storage.
+\fBParameters:\fR
+.br
+\fInames\fR (string[]; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBconstructor(name, options)\fR
+`Cache` class constructor.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIoptions\fR (CacheOptions; optional)
+.TP
+\fBid()\fR
+The unique ID for this cache.
+.TP
+\fBloader()\fR
+The loader associated with this cache.
+.TP
+\fBstorage()\fR
+A reference to the persisted storage.
+.TP
+\fBname()\fR
+The cache name
+.TP
+\fBdata()\fR
+The underlying cache data map.
+.TP
+\fBchannel()\fR
+The broadcast channel associated with this cach.
+.TP
+\fBsize()\fR
+The size of the cache.
+.TP
+\fBtypes()\fR
+Documented method exposed by this module.
+.TP
+\fBreset()\fR
+Resets the cache map and persisted storage.
+.TP
+\fBrestore()\fR
+Restores cache data from storage.
+.TP
+\fBsnapshot()\fR
+Creates a snapshot of the current cache which can be serialized and stored in persistent storage.
+\fBReturns:\fR
+.br
+\fISnapshot.Data\fR
+.TP
+\fBget(key)\fR
+Get a value at `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIobject \\| undefined\fR
+.TP
+\fBset(key, value)\fR
+Set `value` at `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (object; required)
+\fBReturns:\fR
+.br
+\fICache\fR
+.TP
+\fBhas((Position 0))\fR
+Returns `true` if `key` is in cache, otherwise `false`.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBdelete(key)\fR
+Delete a value at `key`. This does not replicate to shared caches.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBkeys()\fR
+Returns an iterator for all cache keys.
+\fBReturns:\fR
+.br
+\fIobject\fR
+.TP
+\fBvalues()\fR
+Returns an iterator for all cache values.
+\fBReturns:\fR
+.br
+\fIobject\fR
+.TP
+\fBentries()\fR
+Returns an iterator for all cache entries.
+\fBReturns:\fR
+.br
+\fIobject\fR
+.TP
+\fBclear()\fR
+Clears all entries in the cache. This does not replicate to shared caches.
+.TP
+\fBforEach(callback)\fR
+Enumerates entries in map calling `callback(value, key
+\fBParameters:\fR
+.br
+\fIcallback\fR (function(object, string, Cache): any; required)
+.TP
+\fBreplicate()\fR
+Broadcasts a replication to other shared caches.
+.TP
+\fBdestroy()\fR
+Destroys the cache. This function stops the broadcast channel and removes and listeners

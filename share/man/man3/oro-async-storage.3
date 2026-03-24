@@ -1,0 +1,63 @@
+.TH ORO-ASYNC-STORAGE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:async/storage \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:async/storage'
+.fi
+.SH DESCRIPTION
+.PP
+Primitives for creating user defined async storage contexts.
+.SH REFERENCE
+.TP
+\fBAsyncLocalStorage\fR
+A container for storing values that remain present during asynchronous operations.
+.TP
+\fBbind(fn)\fR
+Binds function `fn` to run in the execution context of an anonymous `AsyncResource`.
+\fBParameters:\fR
+.br
+\fIfn\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBsnapshot()\fR
+Captures the current async context and returns a function that runs a function in that execution context.
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBenabled()\fR
+Documented method exposed by this module.
+.TP
+\fBdisable()\fR
+Disables the `AsyncLocalStorage` instance. When disabled, `getStore()` will always return `undefined`.
+.TP
+\fBenable()\fR
+Enables the `AsyncLocalStorage` instance.
+.TP
+\fBenterWith(store)\fR
+Enables and sets the `AsyncLocalStorage` instance default store value.
+\fBParameters:\fR
+.br
+\fIstore\fR (any; required)
+.TP
+\fBrun(store, fn, args)\fR
+Runs function `fn` in the current asynchronous execution context with a given `store` value and arguments given to `fn`.
+\fBParameters:\fR
+.br
+\fIstore\fR (any; required)
+.br
+\fIfn\fR (function; required)
+.br
+\fIargs\fR (\&...any; required)
+\fBReturns:\fR
+.br
+\fIany\fR
+.TP
+\fBgetStore()\fR
+If the `AsyncLocalStorage` instance is enabled, it returns the current store value for this asynchronous execution context.
+\fBReturns:\fR
+.br
+\fIany \\| undefined\fR

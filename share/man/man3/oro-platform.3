@@ -1,0 +1,183 @@
+.TH ORO-PLATFORM 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro\-platform \- compile\-time platform and architecture feature macros
+.SH SYNOPSIS
+.nf
+#include <oro/platform.h>
+.fi
+.SH DESCRIPTION
+.PP
+The oro/platform.h header defines the compile\-time platform, operating system, and architecture macros used by the public runtime and extension APIs.
+.PP
+Use these macros to gate source compatibility for desktop, mobile, Apple, Windows, Unix, and cross\-compiled targets without duplicating platform detection logic.
+.SH MACROS
+.TP
+\fBORO_RUNTIME_PLATFORM\fR
+.nf
+#define ORO_RUNTIME_PLATFORM 1
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_WASM\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_WASM 0
+.fi
+.PP
+when this header is included, this is always `0`
+.TP
+\fBORO_RUNTIME_PLATFORM_MOBILE\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_MOBILE 1
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_DESKTOP\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_DESKTOP 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_MOBILE\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_MOBILE 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_DESKTOP\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_DESKTOP 1
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_SANDBOXED\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_SANDBOXED 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_ANDROID\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_ANDROID 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_APPLE\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_APPLE 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_BSD\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_BSD 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_FREEBSD\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_FREEBSD 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_OPENBSD\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_OPENBSD 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_IOS\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_IOS 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_IOS_SIMULATOR\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_IOS_SIMULATOR 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_LINUX\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_LINUX 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_MACOS\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_MACOS 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_WINDOWS\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_WINDOWS 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_UNIX\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_UNIX 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_NAME\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_NAME "unknown"
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_OS\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_OS "unknown"
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_POSIX\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_POSIX ORO_RUNTIME_PLATFORM_UNIX
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_DARWIN\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_DARWIN ORO_RUNTIME_PLATFORM_APPLE
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_IS\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_IS(name) (ORO_RUNTIME_PLATFORM_##name)
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.TP
+\fBORO_RUNTIME_PLATFORM_WANTS_MINGW\fR
+.nf
+#define ORO_RUNTIME_PLATFORM_WANTS_MINGW 0
+.fi
+.PP
+Public macro declared in oro/platform.h.
+.SH HEADER
+include/oro/platform.h

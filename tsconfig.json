@@ -1,0 +1,22 @@
+{
+  "include": ["api/*.js", "api/**/*.js", "api/**/**/*.js"],
+  "exclude": ["api/index.d.ts", "api/index.tmp.d.ts"],
+  "compilerOptions": {
+    "baseUrl": "oro:",
+    "target": "ES2022",
+    "types": [],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    "strictNullChecks": false,
+    "declarationMap": false,
+    "alwaysStrict": true,
+    "declaration": true,
+    "sourceMap": false,
+    "checkJs": false,
+    "allowJs": true,
+    "paths": {
+      "npm:*": ["node_modules/*"],
+      "oro:*": ["api/*"]
+    }
+  }
+}

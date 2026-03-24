@@ -1,0 +1,34 @@
+.TH ORO-CDP 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:cdp \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:cdp'
+.fi
+.SH DESCRIPTION
+.PP
+Starts/stops Oro's CDP (Chrome DevTools Protocol) server for automation and debugging workflows.
+.SH REFERENCE
+.TP
+\fBlisten(options)\fR
+Starts the runtime CDP (Chrome DevTools Protocol) server.
+.br
+This exposes Chromium\-style endpoints such as: \- `GET /json/version` \- `ws://<hostname>:<port>/devtools/browser/<browserId>`
+\fBParameters:\fR
+.br
+\fIoptions\fR (CDPListenOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<CDPStatus>\fR
+.TP
+\fBclose()\fR
+Stops the runtime CDP server.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBstatus()\fR
+Gets the current CDP server status.
+\fBReturns:\fR
+.br
+\fIPromise<CDPStatus>\fR

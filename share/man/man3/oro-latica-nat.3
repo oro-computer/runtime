@@ -1,0 +1,94 @@
+.TH ORO-LATICA-NAT 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:latica/nat \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:latica/nat'
+.fi
+.SH DESCRIPTION
+.PP
+oro:latica/nat is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBMAPPING_ENDPOINT_INDEPENDENT\fR
+The NAT type is encoded using 5 bits:
+.br
+0b00001 : the lsb indicates if endpoint dependence information is included 0b00010 : the second bit indicates the endpoint dependence value
+.br
+0b00100 : the third bit indicates if firewall information is included 0b01000 : the fourth bit describes which requests can pass the firewall, only known IPs (0) or any IP (1) 0b10000 : the fifth bit describes which requests can pass the firewall, only known ports (0) or any port (1) Every remote will see the same IP:PORT mapping for this peer.
+.br
+:3333 ┌──────┐ :1111 ┌───▶ │ R1 │ ┌──────┐ ┌───────┐ │ └──────┘ │ P1 ├───▶│ NAT ├──┤ └──────┘ └───────┘ │ ┌──────┐ └───▶ │ R2 │ :3333 └──────┘
+.TP
+\fBMAPPING_ENDPOINT_DEPENDENT\fR
+Every remote will see a different IP:PORT mapping for this peer.
+.br
+:4444 ┌──────┐ :1111 ┌───▶ │ R1 │ ┌──────┐ ┌───────┐ │ └──────┘ │ P1 ├───▶│ NAT ├──┤ └──────┘ └───────┘ │ ┌──────┐ └───▶ │ R2 │ :5555 └──────┘
+.TP
+\fBFIREWALL_ALLOW_ANY\fR
+The firewall allows the port mapping to be accessed by: \- Any IP:PORT combination (FIREWALL_ALLOW_ANY) \- Any PORT on a previously connected IP (FIREWALL_ALLOW_KNOWN_IP) \- Only from previously connected IP:PORT combinations (FIREWALL_ALLOW_KNOWN_IP_AND_PORT)
+.TP
+\fBFIREWALL_ALLOW_KNOWN_IP\fR
+This is an exported `VariableDeclaration` named `FIREWALL_ALLOW_KNOWN_IP`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFIREWALL_ALLOW_KNOWN_IP_AND_PORT\fR
+This is an exported `VariableDeclaration` named `FIREWALL_ALLOW_KNOWN_IP_AND_PORT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBUNKNOWN\fR
+The initial state of the nat is unknown and its value is 0
+.TP
+\fBUNRESTRICTED\fR
+Full\-cone NAT, also known as one\-to\-one NAT
+.br
+Any external host can send packets to iAddr:iPort by sending packets to eAddr:ePort.
+.TP
+\fBADDR_RESTRICTED\fR
+(Address)\-restricted\-cone NAT
+.br
+An external host (hAddr:any) can send packets to iAddr:iPort by sending packets to eAddr:ePort only if iAddr:iPort has previously sent a packet to hAddr:any. "Any" means the port number doesn't matter.
+.TP
+\fBPORT_RESTRICTED\fR
+Port\-restricted cone NAT
+.br
+An external host (hAddr:hPort) can send packets to iAddr:iPort by sending packets to eAddr:ePort only if iAddr:iPort has previously sent a packet to hAddr:hPort.
+.br
+has previously messaged you from this *specific* port.
+.TP
+\fBENDPOINT_RESTRICTED\fR
+Symmetric NAT
+.br
+Only an external host that receives a packet from an internal host can send a packet back.
+.br
+by itself, the mapping it created is only valid for you.
+.TP
+\fBisEndpointDependenceDefined\fR
+Returns true iff a valid MAPPING_ENDPOINT_* flag has been added (indicated by the lsb).
+.TP
+\fBisFirewallDefined\fR
+Returns true iff a valid FIREWALL_ALLOW_* flag has been added (indicated by the third bit).
+.TP
+\fBisValid\fR
+Returns true iff both FIREWALL_ALLOW_* and MAPPING_ENDPOINT_* flags have been added.
+.TP
+\fBtoString\fR
+toString returns a human\-readable label for the NAT enum
+.TP
+\fBtoStringStrategy\fR
+toStringStrategy returns a human\-readable label for the STRATEGY enum
+.TP
+\fBSTRATEGY_DEFER\fR
+This is an exported `VariableDeclaration` named `STRATEGY_DEFER`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSTRATEGY_DIRECT_CONNECT\fR
+This is an exported `VariableDeclaration` named `STRATEGY_DIRECT_CONNECT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSTRATEGY_TRAVERSAL_OPEN\fR
+This is an exported `VariableDeclaration` named `STRATEGY_TRAVERSAL_OPEN`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSTRATEGY_TRAVERSAL_CONNECT\fR
+This is an exported `VariableDeclaration` named `STRATEGY_TRAVERSAL_CONNECT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSTRATEGY_PROXY\fR
+This is an exported `VariableDeclaration` named `STRATEGY_PROXY`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconnectionStrategy\fR
+ConnectionStrategy returns the best strategy to use when attempting to connect from a\->b.

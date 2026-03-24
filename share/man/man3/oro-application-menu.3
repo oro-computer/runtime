@@ -1,0 +1,78 @@
+.TH ORO-APPLICATION-MENU 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:application/menu \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:application/menu'
+.fi
+.SH DESCRIPTION
+.PP
+oro:application/menu is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBMenu (extends EventTarget)\fR
+A `Menu` is base class for a `ContextMenu`, `SystemMenu`, or `TrayMenu`.
+.TP
+\fBtype()\fR
+The `Menu` instance type.
+.TP
+\fBonerror()\fR
+Level 1 'error'` event listener.
+.TP
+\fBonmenuitem()\fR
+Level 1 'menuitem'` event listener.
+.TP
+\fBset(layoutOrOptions, options)\fR
+Set the menu layout for this `Menu` instance.
+\fBParameters:\fR
+.br
+\fIlayoutOrOptions\fR (string \\| object; required)
+.br
+\fIoptions\fR (object; optional; default null)
+.TP
+\fBMenuContainer (extends EventTarget)\fR
+A container for various `Menu` instances.
+.TP
+\fBconstructor(sourceEventTarget, options)\fR
+`MenuContainer` class constructor.
+\fBParameters:\fR
+.br
+\fIsourceEventTarget\fR (EventTarget; optional)
+.br
+\fIoptions\fR (object; optional; default null)
+.TP
+\fBonerror()\fR
+Level 1 'error'` event listener.
+.TP
+\fBonmenuitem()\fR
+Level 1 'menuitem'` event listener.
+.TP
+\fBtray()\fR
+The `TrayMenu` instance for the application.
+.TP
+\fBsystem()\fR
+The `SystemMenu` instance for the application.
+.TP
+\fBcontext()\fR
+The `ContextMenu` instance for the application.
+.TP
+\fBContextMenu (extends Menu)\fR
+A `Menu` instance that represents a context menu.
+.TP
+\fBSystemMenu (extends Menu)\fR
+A `Menu` instance that represents the system menu.
+.TP
+\fBTrayMenu (extends Menu)\fR
+A `Menu` instance that represents the tray menu.
+.TP
+\fBtray\fR
+The application tray menu.
+.TP
+\fBsystem\fR
+The application system menu.
+.TP
+\fBcontext\fR
+The application context menu.
+.TP
+\fBcontainer\fR
+The application menus container.

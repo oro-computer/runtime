@@ -1,0 +1,90 @@
+.TH ORO-WORKER_THREADS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:worker_threads \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:worker_threads'
+.fi
+.SH DESCRIPTION
+.PP
+oro:worker_threads is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBworkers\fR
+A pool of known worker threads.
+.TP
+\fBisMainThread\fR
+`true` if this is the "main" thread, otherwise `false` The "main" thread is the top level webview window.
+.TP
+\fBmainPort\fR
+The main thread `MessagePort` which is `null` when the current context is not the "main thread".
+.TP
+\fBBroadcastChannel (extends undefined)\fR
+A worker thread `BroadcastChannel` class.
+.TP
+\fBMessageChannel (extends undefined)\fR
+A worker thread `MessageChannel` class.
+.TP
+\fBMessagePort (extends undefined)\fR
+A worker thread `MessagePort` class.
+.TP
+\fBthreadId\fR
+The current unique thread ID.
+.TP
+\fBparentPort\fR
+The parent `MessagePort` instance
+.TP
+\fBworkerData\fR
+Transferred "worker data" when creating a new `Worker` instance.
+.TP
+\fBsetEnvironmentData(key, value)\fR
+Set shared worker environment data.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (any; required)
+.TP
+\fBgetEnvironmentData(key)\fR
+Get shared worker environment data.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIany\fR
+.TP
+\fBPipe (extends AsyncResource)\fR
+This is an exported `ClassDeclaration` named ``Pipe` (extends `AsyncResource`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBreading()\fR
+`true` if the pipe is still reading, otherwise `false`.
+.TP
+\fBdestroy()\fR
+Destroys the pipe
+.TP
+\fBWorker (extends EventEmitter)\fR
+This is an exported `ClassDeclaration` named ``Worker` (extends `EventEmitter`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(filename, options)\fR
+`Worker` class constructor.
+\fBParameters:\fR
+.br
+\fIfilename\fR (string; required)
+.br
+\fIoptions\fR (WorkerOptions; optional; default null)
+.TP
+\fBid()\fR
+The unique ID for this `Worker` thread instance.
+.TP
+\fBstdin()\fR
+A `Writable` standard input stream if `{ stdin: true }` was set when creating this `Worker` instance.
+.TP
+\fBstdout()\fR
+A `Readable` standard output stream if `{ stdout: true }` was set when creating this `Worker` instance.
+.TP
+\fBstderr()\fR
+A `Readable` standard error stream if `{ stderr: true }` was set when creating this `Worker` instance.
+.TP
+\fBterminate()\fR
+Terminates the `Worker` instance

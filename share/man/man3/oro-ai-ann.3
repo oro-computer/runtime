@@ -1,0 +1,161 @@
+.TH ORO-AI-ANN 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:ai/ann \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:ai/ann'
+.fi
+.SH DESCRIPTION
+.PP
+High\-level interface for interacting with the native artificial neural network (ANN) runtime backed by the embedded Cranium library. Provides helpers to create, train, evaluate, and persist feed\-forward neural networks directly from JavaScript.
+.SH REFERENCE
+.TP
+\fBLossFunction\fR
+Supported loss function identifiers.
+.TP
+\fBNetwork\fR
+Represents a managed ANN model within the runtime.
+.TP
+\fBid()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fInumber \\| null\fR Unique model identifier assigned by the runtime.
+.TP
+\fBname()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIstring\fR Model name assigned during creation (optional).
+.TP
+\fBinputSize()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fInumber\fR Number of input features per example.
+.TP
+\fBoutputSize()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fInumber\fR Number of output units per example.
+.TP
+\fBoutputActivation()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIstring\fR Activation function applied on the output layer.
+.TP
+\fBhiddenLayers()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIArray<{size:number, activation:string}>\fR Hidden layer definitions.
+.TP
+\fBsave(path)\fR
+Persist the model state to disk.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required) Absolute path where the model should be stored.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBtrain(features, labels)\fR
+Train the network with labeled data. loss?: string, batchSize?: number, learningRate?: number, searchTime?: number, regularizationStrength?: number, momentumFactor?: number, maxEpochs?: number, shuffle?: boolean, verbose?: boolean, featureColumns?: number, featureRows?: number, labelColumns?: number, labelRows?: number }} [options]
+\fBParameters:\fR
+.br
+\fIfeatures\fR (ArrayLike<number> \\| Array<ArrayLike<number>> \\| Float32Array \\| {data:Float32Array,rows:number,columns:number}; required)
+.br
+\fIlabels\fR (ArrayLike<number> \\| Array<ArrayLike<number>> \\| Float32Array \\| {data:Float32Array,rows:number,columns:number}; required)
+\fBReturns:\fR
+.br
+\fIPromise<{loss:number,accuracy:number,epochs:number,durationMs:number}>\fR
+.TP
+\fBpredict(input, options)\fR
+Run inference on the network.
+\fBParameters:\fR
+.br
+\fIinput\fR (ArrayLike<number> \\| Array<ArrayLike<number>> \\| Float32Array \\| {data:Float32Array,rows:number,columns:number}; required)
+.br
+\fIoptions\fR ({rows?:number, columns?:number}; optional)
+\fBReturns:\fR
+.br
+\fIPromise<{rows:number,columns:number,logits:Float32Array,classes:Int32Array}>\fR
+.TP
+\fBaccuracy(features, labels, options)\fR
+Compute classification accuracy for labeled samples.
+\fBParameters:\fR
+.br
+\fIfeatures\fR (ArrayLike<number> \\| Array<ArrayLike<number>> \\| Float32Array \\| {data:Float32Array,rows:number,columns:number}; required)
+.br
+\fIlabels\fR (ArrayLike<number> \\| Array<ArrayLike<number>> \\| Float32Array \\| {data:Float32Array,rows:number,columns:number}; required)
+.br
+\fIoptions\fR ({featureColumns?:number,featureRows?:number,labelColumns?:number,labelRows?:number}; optional)
+\fBReturns:\fR
+.br
+\fIPromise<number>\fR
+.TP
+\fBremove()\fR
+Destroy the network within the runtime.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBcreate()\fR
+Create a new ANN model inside the runtime. name?: string, inputSize: number, outputSize: number, outputActivation?: string, hiddenLayers?: Array<{size:number, activation?:string}> }} options
+\fBReturns:\fR
+.br
+\fIPromise<Network>\fR
+.TP
+\fBload(path, options)\fR
+Load an ANN model from disk and register it with the runtime.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required) Absolute path to a serialized model file.
+.br
+\fIoptions\fR ({name?:string}; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Network>\fR
+.TP
+\fBlist()\fR
+List registered ANN models.
+\fBReturns:\fR
+.br
+\fIPromise<Array<object>>\fR
+.TP
+\fBcreate(options)\fR
+Create a new ANN model.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ConstructorParameters<typeof Network>[0]; required)
+\fBReturns:\fR
+.br
+\fIPromise<Network>\fR
+.TP
+\fBload(path, options)\fR
+Load a model from disk.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIoptions\fR ({name?:string}; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Network>\fR
+.TP
+\fBlist()\fR
+Retrieve metadata for registered ANN models.
+\fBReturns:\fR
+.br
+\fIPromise<Array<object>>\fR
+.TP
+\fBremove(target)\fR
+Remove a model by instance, id, or name.
+\fBParameters:\fR
+.br
+\fItarget\fR (Network \\| number \\| string; required)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR

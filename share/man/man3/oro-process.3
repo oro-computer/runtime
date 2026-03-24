@@ -1,0 +1,67 @@
+.TH ORO-PROCESS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:process \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:process'
+.fi
+.SH DESCRIPTION
+.PP
+Example usage: import process from 'oro:process'
+.SH REFERENCE
+.TP
+\fBProcessEnvironmentEvent (extends Event)\fR
+Event emitted by `env` when an environment variable is set, deleted, or otherwise changed.
+.TP
+\fBconstructor(type, key, value)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIkey\fR (string \\| symbol; required)
+.br
+\fIvalue\fR (ProcessEnvironmentValue; optional)
+.TP
+\fBProcessEnvironment (extends EventTarget)\fR
+Observable environment store backing `process.env`.
+.br
+Listen on this object to receive `set`, `delete`, and `change` events while reading environment values through `process.env` or `env.proxy`.
+.TP
+\fBenv\fR
+Emitted when an environment variable is set. Emitted when an environment variable is deleted. Emitted when an environment variable is changed (set or delete). Observable process\-environment state.
+.br
+`process.env` returns `env.proxy`, which behaves like a mutable object of string keys to string values. The exported `env` object itself is the `EventTarget` you can subscribe to for environment change events.
+.TP
+\fBversions()\fR
+Reports the frozen legacy `process.versions.socket` identifier plus current Oro Runtime and native library versions.
+\fBReturns:\fR
+.br
+\fIProcessVersionsMap\fR
+.TP
+\fBnextTick(callback, ...args)\fR
+Adds callback to the 'nextTick' queue.
+\fBParameters:\fR
+.br
+\fIcallback\fR (Function; required)
+.TP
+\fBhrtime(time)\fR
+Computed high resolution time as a `BigInt`.
+\fBParameters:\fR
+.br
+\fItime\fR (Array<number>?; optional)
+\fBReturns:\fR
+.br
+\fIbigint\fR
+.TP
+\fBexit(code)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIcode\fR (number; optional; default 0) The exit code. Default: 0.
+.TP
+\fBmemoryUsage()\fR
+Returns an object describing the memory usage of the Node.js process measured in bytes.
+\fBReturns:\fR
+.br
+\fIObject\fR

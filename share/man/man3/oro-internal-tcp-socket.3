@@ -1,0 +1,30 @@
+.TH ORO-INTERNAL-TCP-SOCKET 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/tcp\-socket \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/tcp\-socket'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/tcp\-socket is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBTCPSocket\fR
+This is an exported `ClassDeclaration` named `TCPSocket`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(remoteAddress, remotePort, options)\fR
+Notes \- Gating: if disabled by policy, `opened` rejects immediately and no underlying socket is created. \- 'opened' resolution: deferred until native emits 'connect'; errors before that reject `opened`. \- Readable semantics: enqueues Uint8Array; closes on 'end'. \- Writable semantics: resolves per\-write callback; backpressure is handled by the underlying socket and surfaced via the callback.
+\fBParameters:\fR
+.br
+\fIremoteAddress\fR (string; required) Hostname or IP.
+.br
+\fIremotePort\fR (number; required) Destination port (0..65535).
+.br
+\fIoptions\fR (TCPSocketOptions; optional)
+.TP
+\fBopened()\fR
+Documented method exposed by this module.
+.TP
+\fBclosed()\fR
+Documented method exposed by this module.

@@ -1,0 +1,130 @@
+.TH ORO-CHILD_PROCESS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:child_process \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:child_process'
+.fi
+.SH DESCRIPTION
+.PP
+oro:child_process is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBPipe (extends AsyncResource)\fR
+This is an exported `ClassDeclaration` named ``Pipe` (extends `AsyncResource`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBreading()\fR
+`true` if the pipe is still reading, otherwise `false`.
+.TP
+\fBprocess()\fR
+Documented method exposed by this module.
+.TP
+\fBdestroy()\fR
+Destroys the pipe
+.TP
+\fBChildProcess (extends EventEmitter)\fR
+This is an exported `ClassDeclaration` named ``ChildProcess` (extends `EventEmitter`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor()\fR
+`ChildProcess` class constructor. env?: object, stdin?: boolean, stdout?: boolean, stderr?: boolean, signal?: AbortSignal, }=} [options]
+.TP
+\fBkilled()\fR
+`true` if the child process was killed with kill()`, otherwise `false`.
+.TP
+\fBpid()\fR
+The process identifier for the child process. This value is `> 0` if the process was spawned successfully, otherwise `0`.
+.TP
+\fBspawnfile()\fR
+The executable file name of the child process that is launched. This value is `null` until the child process has successfully been spawned.
+.TP
+\fBspawnargs()\fR
+The full list of command\-line arguments the child process was spawned with. This value is an empty array until the child process has successfully been spawned.
+.TP
+\fBconnected()\fR
+Always `false` as the IPC messaging is not supported.
+.TP
+\fBexitCode()\fR
+The child process exit code. This value is `null` if the child process is still running, otherwise it is a positive integer.
+.TP
+\fBstdin()\fR
+If available, the underlying `stdin` writable stream for the child process.
+.TP
+\fBstdout()\fR
+If available, the underlying `stdout` readable stream for the child process.
+.TP
+\fBstderr()\fR
+If available, the underlying `stderr` readable stream for the child process.
+.TP
+\fBdisconnect()\fR
+This function does nothing, but is present for nodejs compat.
+.TP
+\fBsend()\fR
+This function does nothing, but is present for nodejs compat.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBref()\fR
+This function does nothing, but is present for nodejs compat.
+.TP
+\fBunref()\fR
+This function does nothing, but is present for nodejs compat.
+.TP
+\fBkill(signal)\fR
+Kills the child process. This function throws an error if the child process has not been spawned or is already killed.
+\fBParameters:\fR
+.br
+\fIsignal\fR (number \\| string; required)
+.TP
+\fBspawn(command, args)\fR
+Spawns the child process. This function will throw an error if the process is already spawned.
+\fBParameters:\fR
+.br
+\fIcommand\fR (string; required)
+.br
+\fIargs\fR (string[]; optional)
+\fBReturns:\fR
+.br
+\fIChildProcess\fR
+.TP
+\fBaddEventListener(event, callback, options)\fR
+`EventTarget` based `addEventListener` method.
+\fBParameters:\fR
+.br
+\fIevent\fR (string; required)
+.br
+\fIcallback\fR (function(Event); required)
+.br
+\fIoptions\fR ({ once?: false }; optional; default null)
+.TP
+\fBremoveEventListener(event, callback, options)\fR
+`EventTarget` based `removeEventListener` method.
+\fBParameters:\fR
+.br
+\fIevent\fR (string; required)
+.br
+\fIcallback\fR (function(Event); required)
+.br
+\fIoptions\fR ({ once?: false }; optional)
+.TP
+\fBspawn(command, args, options)\fR
+Spawns a child process exeucting `command` with `args`
+\fBParameters:\fR
+.br
+\fIcommand\fR (string; required)
+.br
+\fIargs\fR (string[] \\| object; optional)
+.br
+\fIoptions\fR (object; optional; default null)
+\fBReturns:\fR
+.br
+\fIChildProcess\fR
+.TP
+\fBexec(command, options, callback)\fR
+This is an exported `FunctionDeclaration` named `exec`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBexecSync(command, options)\fR
+This is an exported `FunctionDeclaration` named `execSync`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBexecFile\fR
+This is an exported `VariableDeclaration` named `execFile`, but it does not yet have a dedicated description in the generated reference.

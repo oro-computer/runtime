@@ -1,0 +1,88 @@
+.TH ORO-TEST-HARNESS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:test/harness \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:test/harness'
+.fi
+.SH DESCRIPTION
+.PP
+oro:test/harness is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBwrapHarness(tapzero, harnessClass)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fItapzero\fR (import('./index.js'); required)
+.br
+\fIharnessClass\fR (new (options: object) => T; required)
+\fBReturns:\fR
+.br
+\fITapeTestFn<T>\fR
+.TP
+\fBTapeHarness\fR
+Documented class exposed by this module.
+.TP
+\fBconstructor(tapzero, harnessClass)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fItapzero\fR (import('./index.js'); required)
+.br
+\fIharnessClass\fR (new (options: object) => T; required)
+.TP
+\fBtest(testName, options, fn)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fItestName\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIfn\fR (harness: T, test: Test) => (void \\| Promise<void>; optional)
+.TP
+\fBonly(testName, options, fn)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fItestName\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIfn\fR (harness: T, test: Test) => (void \\| Promise<void>; optional)
+.TP
+\fBskip(testName, options, fn)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fItestName\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIfn\fR (harness: T, test: Test) => (void \\| Promise<void>; optional)
+.TP
+\fB_test(tapzeroFn, testName, options, fn)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fItapzeroFn\fR ((str: string, fn?: TestCase) => void; required)
+.br
+\fItestName\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIfn\fR (harness: T, test: Test) => (void \\| Promise<void>; optional)
+.TP
+\fB_onAssert(assert, options, fn)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIassert\fR (Test; required)
+.br
+\fIoptions\fR (object; required)
+.br
+\fIfn\fR (harness: T, test: Test) => (void \\| Promise<void>; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR

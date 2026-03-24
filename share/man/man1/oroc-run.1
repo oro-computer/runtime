@@ -1,0 +1,83 @@
+.TH OROC-RUN 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-run \- Run application.
+.SH SYNOPSIS
+.nf
+oroc run [options] [<project\-or\-source>]
+.fi
+.SH DESCRIPTION
+.PP
+Run application. Provide a project directory, HTML file, or JavaScript module. When no oro.toml is found, oroc infers a minimal configuration automatically.
+.SH OPTIONS
+.TP
+\fB\-\-headless\fR
+run application in headless mode (without frame or window)
+.TP
+\fB\-\-platform=<platform>\fR
+platform target to run application on (defaults to host):
+.br
+\(bu android
+.br
+\(bu android\-emulator
+.br
+\(bu ios
+.br
+\(bu ios\-simulator
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml/oro.ini file
+.TP
+\fB\-\-port=<port>\fR
+load "index.html" from a specific port (if host is not specified, defaults to localhost)
+.TP
+\fB\-\-host=<host>\fR
+load "index.html" from a specific host (if port is not specified, defaults to 80)
+.TP
+\fB\-\-prod\fR
+build for production (disables debugging info, inspector, etc.)
+.TP
+\fB\-\-test[=path]\fR
+indicate test mode, optionally importing a test file relative to resource files
+.TP
+\fB\-D, \-\-debug\fR
+enable debug mode
+.TP
+\fB\-q, \-\-quiet\fR
+hint for less log output
+.TP
+\fB\-E, \-\-env\fR
+add environment variables
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output
+.TP
+\fB\-\-allow\-exec\fR
+allow external command execution (gates ndk\-build/gradle/git/build scripts)
+.TP
+\fB\-\-tls\-keylog=<path>\fR
+write NSS TLS key log lines to <path> (OpenSSL provider)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH ENVIRONMENT
+.TP
+\fBORO_DEBUG\fR
+enable debug mode (like \-D)
+.TP
+\fBORO_VERBOSE\fR
+enable verbose logs (like \-V)
+.SH COMMON ERRORS
+.PP
+For CI/Linux headless, install `xvfb\-run` or set a custom headless runner in your config. Use `\-\-test=path` to run tests bundled with your app.
+.SH EXAMPLES
+.TP
+\fBoroc run .\fR
+build and launch the current project on the host platform
+.TP
+\fBoroc run \-\-platform=android\-emulator .\fR
+build and launch the current project on the Android emulator target
+.TP
+\fBoroc run \-\-headless \-\-test=tests/smoke.js .\fR
+execute a bundled test entrypoint in headless mode
+.SH SEE ALSO
+oroc(1)

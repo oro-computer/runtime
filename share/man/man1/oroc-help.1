@@ -1,0 +1,36 @@
+.TH OROC-HELP 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-help \- Discover commands, options, and workflow entry points from the CLI help index.
+.SH SYNOPSIS
+.nf
+oroc help [query...]
+oroc help [query...] [\-\-json]
+.fi
+.SH DESCRIPTION
+.PP
+Discover commands, options, and workflow entry points from the CLI help index.
+.SH OPTIONS
+.TP
+\fB\-\-json\fR
+emit structured search results for automation and editor tooling
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+With no query, this subcommand prints the top\-level CLI help. Exact command matches print the full subcommand page (for example, 'oroc help build' or 'oroc help update validate'). Free\-form queries search command names, descriptions, options, notes, and examples, then rank the closest matches. Use this for discovery topics such as 'oroc help tls', 'oroc help ios signing', 'oroc help json logs', or 'oroc help agent tooling'. 'oroc help \-\-json <query>' returns a machine\-readable result list with ranked matches and exact\-help payloads.
+.SH EXAMPLES
+.TP
+\fBoroc help build\fR
+print the full help page for the build command
+.TP
+\fBoroc help update validate\fR
+print the full help page for the nested update validate command
+.TP
+\fBoroc help ios signing\fR
+search for commands and notes related to iOS signing and provisioning
+.TP
+\fBoroc help json \-\-json\fR
+return ranked JSON results for the query "json"
+.SH SEE ALSO
+oroc(1)

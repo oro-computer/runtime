@@ -1,0 +1,38 @@
+.TH ORO-APPLICATION-CLIENT 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:application/client \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:application/client'
+.fi
+.SH DESCRIPTION
+.PP
+oro:application/client is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBClient\fR
+This is an exported `ClassDeclaration` named `Client`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBid()\fR
+The unique ID of the client.
+.TP
+\fBframeType()\fR
+The frame type of the client.
+.TP
+\fBtype()\fR
+The type of the client.
+.TP
+\fBparent()\fR
+The parent client of the client.
+.TP
+\fBtop()\fR
+The top client of the client.
+.TP
+\fBlocation()\fR
+A readonly `URL` of the current location of this client.
+.TP
+\fBtoJSON()\fR
+Converts this `Client` instance to JSON.
+\fBReturns:\fR
+.br
+\fIobject\fR

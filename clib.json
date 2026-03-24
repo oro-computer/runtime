@@ -1,0 +1,7 @@
+{
+  "name": "oro-runtime",
+  "repo": "oro-computer/legacy-runtime",
+  "version": "0.1.0",
+  "description": "Oro Runtime — build and package lean, fast, native desktop and mobile applications using the web technologies you already know.",
+  "install": "install.sh"
+}

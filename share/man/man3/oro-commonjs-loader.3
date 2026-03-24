@@ -1,0 +1,229 @@
+.TH ORO-COMMONJS-LOADER 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:commonjs/loader \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:commonjs/loader'
+.fi
+.SH DESCRIPTION
+.PP
+oro:commonjs/loader is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBRequestStatus\fR
+A container for the status of a CommonJS resource. A `RequestStatus` object represents meta data for a `Request` that comes from a preflight HTTP HEAD request.
+.TP
+\fBfrom(json)\fR
+Creates a `RequestStatus` from JSON input.
+\fBParameters:\fR
+.br
+\fIjson\fR (object; required)
+\fBReturns:\fR
+.br
+\fIRequestStatus\fR
+.TP
+\fBconstructor(request, options)\fR
+`RequestStatus` class constructor.
+\fBParameters:\fR
+.br
+\fIrequest\fR (Request; required)
+.br
+\fIoptions\fR (RequestStatusOptions; optional; default null)
+.TP
+\fBrequest()\fR
+The `Request` object associated with this `RequestStatus` object.
+.TP
+\fBid()\fR
+The unique ID of this `RequestStatus`, which is the absolute URL as a string.
+.TP
+\fBorigin()\fR
+The origin for this `RequestStatus` object.
+.TP
+\fBstatus()\fR
+A HTTP status code for this `RequestStatus` object.
+.TP
+\fBvalue()\fR
+An alias for `status`.
+.TP
+\fBheaders()\fR
+The HTTP headers for this `RequestStatus` object.
+.TP
+\fBlocation()\fR
+The resource location for this `RequestStatus` object. This value is determined from the 'Content\-Location' header, if available, otherwise it is derived from the request URL pathname (including the query string).
+.TP
+\fBok()\fR
+`true` if the response status is considered OK, otherwise `false`.
+.TP
+\fBload(options)\fR
+Loads the internal state for this `RequestStatus` object.
+\fBParameters:\fR
+.br
+\fIoptions\fR (RequestLoadOptions \\| boolean; optional; default null)
+\fBReturns:\fR
+.br
+\fIRequestStatus\fR
+.TP
+\fBRequest\fR
+A container for a synchronous CommonJS request to local resource or over the network.
+.TP
+\fBfrom(json, options)\fR
+Creates a `Request` instance from JSON input
+\fBParameters:\fR
+.br
+\fIjson\fR (object; required)
+.br
+\fIoptions\fR (RequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIRequest\fR
+.TP
+\fBconstructor(url, origin, options)\fR
+`Request` class constructor.
+\fBParameters:\fR
+.br
+\fIurl\fR (URL \\| string; required)
+.br
+\fIorigin\fR (URL \\| string; optional)
+.br
+\fIoptions\fR (RequestOptions; optional; default null)
+.TP
+\fBid()\fR
+The unique ID of this `Request`, which is the absolute URL as a string.
+.TP
+\fBurl()\fR
+The absolute `URL` of this `Request` object.
+.TP
+\fBorigin()\fR
+The origin for this `Request`.
+.TP
+\fBloader()\fR
+The `Loader` for this `Request` object.
+.TP
+\fBstatus()\fR
+The `RequestStatus` for this `Request`
+.TP
+\fBload(options)\fR
+Loads the CommonJS source file, optionally checking the `Loader` cache first, unless ignored when `options.cache` is `false`.
+\fBParameters:\fR
+.br
+\fIoptions\fR (RequestLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIResponse\fR
+.TP
+\fBResponse\fR
+A container for a synchronous CommonJS request response for a local resource or over the network.
+.TP
+\fBfrom(json, options)\fR
+Creates a `Response` from JSON input
+\fBParameters:\fR
+.br
+\fIjson\fR (obejct; required)
+.br
+\fIoptions\fR (ResponseOptions; optional)
+\fBReturns:\fR
+.br
+\fIResponse\fR
+.TP
+\fBconstructor(request, options)\fR
+`Response` class constructor.
+\fBParameters:\fR
+.br
+\fIrequest\fR (Request \\| ResponseOptions; required)
+.br
+\fIoptions\fR (ResponseOptions; optional; default null)
+.TP
+\fBid()\fR
+The unique ID of this `Response`, which is the absolute URL of the request as a string.
+.TP
+\fBrequest()\fR
+The `Request` object associated with this `Response` object.
+.TP
+\fBheaders()\fR
+The response headers from the associated request.
+.TP
+\fBloader()\fR
+The `Loader` associated with this `Response` object.
+.TP
+\fBstatus()\fR
+The `Response` status code from the associated `Request` object.
+.TP
+\fBtext()\fR
+The `Response` string from the associated `Request`
+.TP
+\fBbuffer()\fR
+The `Response` array buffer from the associated `Request`
+.TP
+\fBok()\fR
+`true` if the response is considered OK, otherwise `false`.
+.TP
+\fBLoader\fR
+A container for loading CommonJS module sources
+.TP
+\fBresolve(url, origin)\fR
+Resolves a given module URL to an absolute URL with an optional `origin`.
+\fBParameters:\fR
+.br
+\fIurl\fR (URL \\| string; required)
+.br
+\fIorigin\fR (URL \\| string; optional; default null)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBconstructor(origin, options)\fR
+`Loader` class constructor.
+\fBParameters:\fR
+.br
+\fIorigin\fR (string \\| URL \\| LoaderOptions; required)
+.br
+\fIoptions\fR (LoaderOptions; optional; default null)
+.TP
+\fBcache()\fR
+The internal caches for this `Loader` object.
+.TP
+\fBheaders()\fR
+Headers used in too loader requests.
+.TP
+\fBextensions()\fR
+A set of supported `Loader` extensions.
+.TP
+\fBorigin()\fR
+The origin of this `Loader` object.
+.TP
+\fBload(url, origin, options)\fR
+Loads a CommonJS module source file at `url` with an optional `origin`, which defaults to the application origin.
+\fBParameters:\fR
+.br
+\fIurl\fR (URL \\| string; required)
+.br
+\fIorigin\fR (URL \\| string \\| object; optional)
+.br
+\fIoptions\fR (RequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIResponse\fR
+.TP
+\fBstatus(url, origin, options)\fR
+Queries the status of a CommonJS module source file at `url` with an optional `origin`, which defaults to the application origin.
+\fBParameters:\fR
+.br
+\fIurl\fR (URL \\| string; required)
+.br
+\fIorigin\fR (URL \\| string \\| object; optional)
+.br
+\fIoptions\fR (RequestOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIRequestStatus\fR
+.TP
+\fBresolve(url, origin)\fR
+Resolves a given module URL to an absolute URL based on the loader origin.
+\fBParameters:\fR
+.br
+\fIurl\fR (URL \\| string; required)
+.br
+\fIorigin\fR (URL \\| string; optional)
+\fBReturns:\fR
+.br
+\fIstring\fR

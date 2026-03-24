@@ -1,0 +1,36 @@
+.TH ORO-URL 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:url \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:url'
+.fi
+.SH DESCRIPTION
+.PP
+oro:url is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBprotocols\fR
+Documented variable exposed by this module.
+.TP
+\fBparse(input, options)\fR
+Parse a URL\-like input into a structured object. \- When `options === true`, includes a Node\-compatible `query` object. \- When `options?.strict === true`, returns `null` if input cannot be parsed.
+.br
+Example: parse('https://user:pass@example.com:8080/a/b?x=1#h') // => { // protocol: 'https:', hostname: 'example.com', origin: 'https://example.com:8080', // username: 'user', password: 'pass', port: '8080', pathname: '/a/b', // search: '?x=1', hash: '#h', path: '/a/b', href: 'https://user:pass@example.com:8080/a/b?x=1#h', // auth: 'user:pass', searchParams: URLSearchParams, query: 'x=1' // }
+.TP
+\fBresolve(from, to)\fR
+Resolve a target URL/path `to` against a base `from`. Mirrors Node's legacy `url.resolve()` semantics.
+.br
+Example: resolve('http://example.com/a/b', '../c') // => 'http://example.com/c' resolve('/a/b', 'c') // => '/a/b/c'
+.TP
+\fBformat(input)\fR
+Format a URL from either a string or a partial object containing URL fields. Returns an empty string if the input is invalid or insufficient.
+.br
+Example (object): format({ protocol: 'https:', hostname: 'example.com', pathname: '/a/b' }) // => 'https://example.com/a/b'
+.br
+Example (string): format('https://example.com/a/b') // => 'https://example.com/a/b'
+.br
+Notes \- When specifying `hostname` with an IPv6 literal, brackets are added automatically. Alternatively, you can pass `host` directly as `[2001:db8::1]:8080`.
+.TP
+\fBfileURLToPath(url)\fR
+This is an exported `FunctionDeclaration` named `fileURLToPath`, but it does not yet have a dedicated description in the generated reference.

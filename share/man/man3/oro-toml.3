@@ -1,0 +1,88 @@
+.TH ORO-TOML 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:toml \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:toml'
+.fi
+.SH DESCRIPTION
+.PP
+A compliant TOML 1.0 parser implemented in pure JavaScript.
+.PP
+import { parse } from 'oro:toml' const config = parse(await fs.readFile('config.toml', 'utf8'))
+.SH REFERENCE
+.TP
+\fBTomlLocalDate\fR
+Represents a TOML local date.
+.TP
+\fBconstructor(year, month, day)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIyear\fR (number; required)
+.br
+\fImonth\fR (number; required)
+.br
+\fIday\fR (number; required)
+.TP
+\fBTomlLocalTime\fR
+Represents a TOML local time.
+.TP
+\fBconstructor(hour, minute, second, nanosecond)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIhour\fR (number; required)
+.br
+\fIminute\fR (number; required)
+.br
+\fIsecond\fR (number; required)
+.br
+\fInanosecond\fR (number; required)
+.TP
+\fBTomlLocalDateTime\fR
+Represents a TOML local date\-time.
+.TP
+\fBconstructor(date, time)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIdate\fR (TomlLocalDate; required)
+.br
+\fItime\fR (TomlLocalTime; required)
+.TP
+\fBconstructor(source)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.TP
+\fBconstructor(source, reviver)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.br
+\fIreviver\fR ((key: string, value: any) => any; optional)
+.TP
+\fBparse(source, options)\fR
+Parse a TOML document and return a JavaScript representation.
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.br
+\fIoptions\fR ({ reviver?: (key: string, value: unknown) => unknown }; optional)
+\fBReturns:\fR
+.br
+\fIany\fR
+.TP
+\fBstringify(table, options)\fR
+Serialize a JavaScript object into a TOML document.
+\fBParameters:\fR
+.br
+\fItable\fR (Record<string, any>; required)
+.br
+\fIoptions\fR ({}; optional)
+\fBReturns:\fR
+.br
+\fIstring\fR

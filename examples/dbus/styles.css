@@ -1,0 +1,72 @@
+.dbus-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dbus-actions button {
+  min-width: 160px;
+}
+
+.dbus-log {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.86rem;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  background: rgba(2, 6, 23, 0.78);
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  padding: 18px;
+  min-height: 220px;
+  max-height: 360px;
+  color: #d8eafe;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.dbus-log::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dbus-log::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.dbus-log-line + .dbus-log-line {
+  margin-top: 6px;
+}
+
+.dbus-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dbus-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dbus-status-label {
+  font-size: 0.82rem;
+  color: var(--ui-foreground-faint);
+}
+
+.dbus-status-value {
+  font-weight: 600;
+  color: var(--ui-foreground);
+}
+
+.dbus-identifiers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.92rem;
+}
+
+.dbus-identifiers strong {
+  font-weight: 600;
+  margin-right: 6px;
+  color: var(--ui-foreground);
+}

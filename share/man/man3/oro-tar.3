@@ -1,0 +1,195 @@
+.TH ORO-TAR 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:tar \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:tar'
+.fi
+.SH DESCRIPTION
+.PP
+High\-level helpers for reading and writing tar archives.
+.PP
+This module is designed for very large archives and supports: \- Streaming decode via range reads on individual entries \- Streaming encode via chunked entry writes \- Optional `mmap`\-backed indexing on supported native platforms \- Random access to entries by path
+.PP
+Example: import * as tar from 'oro:tar'
+.PP
+const archive = await tar.open('./assets.tar') const entries = await archive.entries() const buf = await archive.read('images/logo.png')
+.SH REFERENCE
+.TP
+\fBTarArchive\fR
+Represents an open tar archive on disk.
+.TP
+\fBopen(path, options)\fR
+Opens an existing tar archive.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| URL; required)
+.br
+\fIoptions\fR (TarOpenOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<TarArchive>\fR
+.TP
+\fBcreate(path, options)\fR
+Creates a new tar archive for writing. If the archive already exists it will be truncated.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| URL; required)
+.br
+\fIoptions\fR (TarOpenOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<TarArchive>\fR
+.TP
+\fBfromBuffer(buffer)\fR
+Opens a tar archive from an in\-memory buffer (read\-only).
+\fBParameters:\fR
+.br
+\fIbuffer\fR (Buffer \\| Uint8Array \\| ArrayBuffer; required)
+\fBReturns:\fR
+.br
+\fIPromise<TarArchive>\fR
+.TP
+\fBcreateInMemory(options)\fR
+Creates a new in\-memory tar archive for writing.
+\fBParameters:\fR
+.br
+\fIoptions\fR (TarOpenOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<TarArchive>\fR
+.TP
+\fBclose()\fR
+Closes the underlying archive descriptor. Further operations on this instance will throw.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBentries()\fR
+Lists all entries in the archive.
+\fBReturns:\fR
+.br
+\fIPromise<TarEntryStat[]>\fR
+.TP
+\fBextractAll(destDir, options)\fR
+Extracts all file and directory entries in the archive into a destination directory using streaming. Attempts to preserve mode/mtime metadata.
+\fBParameters:\fR
+.br
+\fIdestDir\fR (string \\| URL; required)
+.br
+\fIoptions\fR ({ signal?: AbortSignal, timeout?: number, filter?: (entry: TarEntryStat) => boolean, preserveLinks?: boolean, preserveOwner?: boolean, preserveSpecialModes?: boolean }; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBstat(entryPath)\fR
+Returns metadata for a single entry path.
+\fBParameters:\fR
+.br
+\fIentryPath\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<TarEntryStat>\fR
+.TP
+\fBread(path, options)\fR
+Reads a slice of an entry as a Buffer.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIoptions\fR (TarReadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR
+.TP
+\fBreadStream(path, options)\fR
+Creates an async iterator that yields Buffer chunks for a given entry. This provides a streaming decode interface without requiring Node.js streams.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIoptions\fR (TarReadStreamOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIAsyncIterableIterator<Buffer>\fR
+.TP
+\fBappend(header, body, options)\fR
+Appends a single entry to the archive. The entry body can be a Buffer, ArrayBuffer, Uint8Array, or an async iterable of Buffers.
+\fBParameters:\fR
+.br
+\fIheader\fR (TarEntryHeader; required)
+.br
+\fIbody\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| AsyncIterable<Buffer \\| Uint8Array>; required)
+.br
+\fIoptions\fR (TarWriteOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBfinalize()\fR
+Finalizes the archive, writing terminating blocks and flushing the sink. After calling this, the archive is still considered open but no further writes should be performed.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBtoBuffer(options)\fR
+Finalizes the archive if necessary and returns the underlying tar archive bytes as a Buffer. For in\-memory writable archives this contains the composed archive; for read\-only archives created via fromBuffer it returns the original buffer.
+\fBParameters:\fR
+.br
+\fIoptions\fR ({ signal?: AbortSignal, timeout?: number }; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR
+.TP
+\fBextract(path, destPath, options)\fR
+Extracts a single entry to a destination path on disk. This helper uses streaming reads for large entries.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIdestPath\fR (string \\| URL; required)
+.br
+\fIoptions\fR ({ signal?: AbortSignal, timeout?: number, preserveOwner?: boolean, preserveSpecialModes?: boolean }; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBopen(path, options)\fR
+Opens an existing tar archive.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| URL; required)
+.br
+\fIoptions\fR (TarOpenOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<TarArchive>\fR
+.TP
+\fBcreate(path, options)\fR
+Creates a new tar archive for writing. If the archive already exists it will be truncated.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| URL; required)
+.br
+\fIoptions\fR (TarOpenOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<TarArchive>\fR
+.TP
+\fBfromBuffer(buffer)\fR
+Opens a tar archive from an in\-memory buffer (read\-only).
+\fBParameters:\fR
+.br
+\fIbuffer\fR (Buffer \\| Uint8Array \\| ArrayBuffer; required)
+\fBReturns:\fR
+.br
+\fIPromise<TarArchive>\fR
+.TP
+\fBcreateInMemory(options)\fR
+Creates a new in\-memory tar archive for writing.
+\fBParameters:\fR
+.br
+\fIoptions\fR (TarOpenOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<TarArchive>\fR

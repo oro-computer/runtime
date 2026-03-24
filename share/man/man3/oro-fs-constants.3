@@ -1,0 +1,188 @@
+.TH ORO-FS-CONSTANTS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/constants \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/constants'
+.fi
+.SH DESCRIPTION
+.PP
+oro:fs/constants is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBCOPYFILE_EXCL\fR
+This flag can be used with uv_fs_copyfile() to return an error if the destination already exists.
+.TP
+\fBCOPYFILE_FICLONE\fR
+This flag can be used with uv_fs_copyfile() to attempt to create a reflink. If copy\-on\-write is not supported, a fallback copy mechanism is used.
+.TP
+\fBCOPYFILE_FICLONE_FORCE\fR
+This flag can be used with uv_fs_copyfile() to attempt to create a reflink. If copy\-on\-write is not supported, an error is returned.
+.TP
+\fBUV_DIRENT_UNKNOWN\fR
+A constant representing a directory entry whose type is unknown. It indicates that the type of the file or directory cannot be determined.
+.TP
+\fBUV_DIRENT_FILE\fR
+A constant representing a directory entry of type file. It indicates that the entry is a regular file.
+.TP
+\fBUV_DIRENT_DIR\fR
+A constant epresenting a directory entry of type directory. It indicates that the entry is a directory.
+.TP
+\fBUV_DIRENT_LINK\fR
+A constant representing a directory entry of type symbolic link.
+.TP
+\fBUV_DIRENT_FIFO\fR
+A constant representing a directory entry of type FIFO (named pipe).
+.TP
+\fBUV_DIRENT_SOCKET\fR
+A constant representing a directory entry of type socket.
+.TP
+\fBUV_DIRENT_CHAR\fR
+A constant representing a directory entry of type character device
+.TP
+\fBUV_DIRENT_BLOCK\fR
+A constant representing a directory entry of type block device.
+.TP
+\fBUV_FS_SYMLINK_DIR\fR
+A constant representing a symlink should target a directory.
+.TP
+\fBUV_FS_SYMLINK_JUNCTION\fR
+A constant representing a symlink should be created as a Windows junction.
+.TP
+\fBUV_FS_O_FILEMAP\fR
+A constant representing an opened file for memory mapping on Windows systems.
+.TP
+\fBO_RDONLY\fR
+Opens a file for read\-only access.
+.TP
+\fBO_WRONLY\fR
+Opens a file for write\-only access.
+.TP
+\fBO_RDWR\fR
+Opens a file for both reading and writing.
+.TP
+\fBO_APPEND\fR
+Appends data to the file instead of overwriting.
+.TP
+\fBO_ASYNC\fR
+Enables asynchronous I/O notifications.
+.TP
+\fBO_CLOEXEC\fR
+Ensures file descriptors are closed on `exec()` calls.
+.TP
+\fBO_CREAT\fR
+Creates a new file if it does not exist.
+.TP
+\fBO_DIRECT\fR
+Minimizes caching effects for file I/O.
+.TP
+\fBO_DIRECTORY\fR
+Ensures the opened file is a directory.
+.TP
+\fBO_DSYNC\fR
+Writes file data synchronously.
+.TP
+\fBO_EXCL\fR
+Fails the operation if the file already exists.
+.TP
+\fBO_LARGEFILE\fR
+Enables handling of large files.
+.TP
+\fBO_NOATIME\fR
+Prevents updating the file's last access time.
+.TP
+\fBO_NOCTTY\fR
+Prevents becoming the controlling terminal for the process.
+.TP
+\fBO_NOFOLLOW\fR
+Does not follow symbolic links.
+.TP
+\fBO_NONBLOCK\fR
+Opens the file in non\-blocking mode.
+.TP
+\fBO_NDELAY\fR
+Alias for `O_NONBLOCK` on some systems.
+.TP
+\fBO_PATH\fR
+Obtains a file descriptor for a file but does not open it.
+.TP
+\fBO_SYNC\fR
+Writes both file data and metadata synchronously.
+.TP
+\fBO_TMPFILE\fR
+Creates a temporary file that is not linked to a directory.
+.TP
+\fBO_TRUNC\fR
+Truncates the file to zero length if it exists.
+.TP
+\fBS_IFMT\fR
+Bitmask for extracting the file type from a mode.
+.TP
+\fBS_IFREG\fR
+Indicates a regular file.
+.TP
+\fBS_IFDIR\fR
+Indicates a directory.
+.TP
+\fBS_IFCHR\fR
+Indicates a character device.
+.TP
+\fBS_IFBLK\fR
+Indicates a block device.
+.TP
+\fBS_IFIFO\fR
+Indicates a FIFO (named pipe).
+.TP
+\fBS_IFLNK\fR
+Indicates a symbolic link.
+.TP
+\fBS_IFSOCK\fR
+Indicates a socket.
+.TP
+\fBS_IRWXU\fR
+Grants read, write, and execute permissions for the file owner.
+.TP
+\fBS_IRUSR\fR
+Grants read permission for the file owner.
+.TP
+\fBS_IWUSR\fR
+Grants write permission for the file owner.
+.TP
+\fBS_IXUSR\fR
+Grants execute permission for the file owner.
+.TP
+\fBS_IRWXG\fR
+Grants read, write, and execute permissions for the group.
+.TP
+\fBS_IRGRP\fR
+Grants read permission for the group.
+.TP
+\fBS_IWGRP\fR
+Grants write permission for the group.
+.TP
+\fBS_IXGRP\fR
+Grants execute permission for the group.
+.TP
+\fBS_IRWXO\fR
+Grants read, write, and execute permissions for others.
+.TP
+\fBS_IROTH\fR
+Grants read permission for others.
+.TP
+\fBS_IWOTH\fR
+Grants write permission for others.
+.TP
+\fBS_IXOTH\fR
+Grants execute permission for others.
+.TP
+\fBF_OK\fR
+Checks for the existence of a file.
+.TP
+\fBR_OK\fR
+Checks for read permission on a file.
+.TP
+\fBW_OK\fR
+Checks for write permission on a file.
+.TP
+\fBX_OK\fR
+Checks for execute permission on a file.

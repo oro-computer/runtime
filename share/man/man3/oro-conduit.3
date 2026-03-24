@@ -1,0 +1,133 @@
+.TH ORO-CONDUIT 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:conduit \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:conduit'
+.fi
+.SH DESCRIPTION
+.PP
+oro:conduit is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBDEFAULT_MAX_RECONNECT_RETRIES\fR
+This is an exported `VariableDeclaration` named `DEFAULT_MAX_RECONNECT_RETRIES`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBDEFAULT_INITIAL_RECONNECT_TIMEOUT\fR
+This is an exported `VariableDeclaration` named `DEFAULT_INITIAL_RECONNECT_TIMEOUT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBDEFAULT_MAX_RECONNECT_TIMEOUT\fR
+This is an exported `VariableDeclaration` named `DEFAULT_MAX_RECONNECT_TIMEOUT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBpool\fR
+A pool of known `Conduit` instances.
+.TP
+\fBConduit (extends EventTarget)\fR
+A container for managing a WebSocket connection to the internal runtime Conduit WebSocket server.
+.TP
+\fBport()\fR
+The global `Conduit` port
+.TP
+\fBdiagnostics()\fR
+Returns diagnostics information about the conduit server
+\fBReturns:\fR
+.br
+\fIPromise<ConduitDiagnostics>\fR
+.TP
+\fBstatus()\fR
+Returns the current Conduit server status
+\fBReturns:\fR
+.br
+\fIPromise<ConduitStatus>\fR
+.TP
+\fBwaitForActiveState(options)\fR
+Waits for conduit to be active
+\fBParameters:\fR
+.br
+\fIoptions\fR ({ maxQueriesForStatus?: number }; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBgetSharedKey()\fR
+Gets the current conduit shared key.
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBsetSharedKey(sharedKey)\fR
+Sets the conduit shared key.
+\fBParameters:\fR
+.br
+\fIsharedKey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBconstructor(options)\fR
+Creates an instance of Conduit.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ConduitOptions; required)
+.TP
+\fBurl()\fR
+The URL string for the WebSocket server.
+.TP
+\fBonmessage()\fR
+Documented method exposed by this module.
+.TP
+\fBonerror()\fR
+Documented method exposed by this module.
+.TP
+\fBonclose()\fR
+Documented method exposed by this module.
+.TP
+\fBonopen()\fR
+Documented method exposed by this module.
+.TP
+\fBconnect(callback)\fR
+Connects the underlying conduit `WebSocket`.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function(Error?); optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Conduit>\fR
+.TP
+\fBreconnect(options)\fR
+Reconnects a `Conduit` socket.
+\fBParameters:\fR
+.br
+\fIoptions\fR ({retries?: number, timeout?: number}; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Conduit>\fR
+.TP
+\fBdecodeMessage(data)\fR
+Decodes a Uint8Array message into options and payload.
+\fBParameters:\fR
+.br
+\fIdata\fR (Uint8Array; required) The data to decode.
+\fBReturns:\fR
+.br
+\fIReceiveMessage\fR The decoded message containing options and payload.
+.TP
+\fBreceive(callback)\fR
+Registers a callback to handle incoming messages. The callback will receive an error object and an object containing decoded options and payload.
+\fBParameters:\fR
+.br
+\fIcallback\fR (ReceiveCallback; required) The callback function to handle incoming messages.
+.TP
+\fBsend(options, payload)\fR
+Sends a message with the specified options and payload over the WebSocket connection.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required) The options to send.
+.br
+\fIpayload\fR (Uint8Array; optional; default null) The payload to send.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBclose()\fR
+Closes the WebSocket connection, preventing reconnects.

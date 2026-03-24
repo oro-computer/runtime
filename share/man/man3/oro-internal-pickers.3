@@ -1,0 +1,38 @@
+.TH ORO-INTERNAL-PICKERS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/pickers \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/pickers'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/pickers is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBshowDirectoryPicker(options)\fR
+Shows a directory picker which allows the user to select a directory.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ShowDirectoryPickerOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<FileSystemDirectoryHandle[]>\fR
+.TP
+\fBshowOpenFilePicker(options)\fR
+Shows a file picker that allows a user to select a file or multiple files and returns a handle for each selected file.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ShowOpenFilePickerOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<FileSystemFileHandle[]>\fR
+.TP
+\fBshowSaveFilePicker(options)\fR
+Shows a file picker that allows a user to save a file by selecting an existing file, or entering a name for a new file.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ShowSaveFilePickerOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<FileSystemHandle>\fR

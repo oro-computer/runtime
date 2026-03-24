@@ -1,0 +1,152 @@
+.TH OROC 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc \- command line interface for Oro Runtime projects
+.SH SYNOPSIS
+.nf
+oroc [SUBCOMMAND] [options] [<project\-dir>]
+oroc [SUBCOMMAND] \-h
+oroc help [query...]
+.fi
+.SH DESCRIPTION
+.PP
+oroc is the main command line interface for Oro Runtime projects.
+.SH SUBCOMMANDS
+.TP
+\fBhelp\fR
+search commands, options, and platform notes
+.TP
+\fBbuild\fR
+build project
+.TP
+\fBlist\-devices\fR
+get the list of connected devices
+.TP
+\fBinit\fR
+create a new project (in the current directory)
+.TP
+\fBinstall\-app\fR
+install app to the device
+.TP
+\fBprint\-build\-dir\fR
+print build path to stdout
+.TP
+\fBrun\fR
+run application
+.TP
+\fBconfig\fR
+inspect configuration values and docs
+.TP
+\fBenv\fR
+print relevant environment variables
+.TP
+\fBmcp\fR
+run an MCP server for agent tooling
+.TP
+\fBsetup\fR
+install build dependencies
+.TP
+\fBversion\fR
+inspect or bump project version
+.TP
+\fBversions\fR
+print Oro CLI/runtime and dependency versions
+.TP
+\fBupdate\fR
+update tooling (keys, manifests, bundles)
+.SH ENVIRONMENT
+.TP
+\fBORO_DEBUG\fR
+enable debug mode (like \-D)
+.TP
+\fBORO_VERBOSE\fR
+enable verbose logs (like \-V)
+.TP
+\fBORO_LOG_NO_COLOR\fR
+disable colored log output
+.TP
+\fBORO_LOG_JSON\fR
+enable structured JSON logs on stdout
+.TP
+\fBORO_LOG_FILE\fR
+mirror logs to a JSON file
+.TP
+\fBORO_ALLOW_EXEC\fR
+allow external exec during builds
+.TP
+\fBORO_ENABLE_SANITIZERS\fR
+enable ASan/UBSan on desktop builds
+.SH GENERAL OPTIONS
+.TP
+\fB\-h, \-\-help\fR
+print help message
+.TP
+\fB\-\-prefix\fR
+print install path
+.TP
+\fB\-v, \-\-version\fR
+print program version
+.TP
+\fB\-q, \-\-quiet\fR
+hint for less log output
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output (can be global)
+.TP
+\fB\-D, \-\-debug\fR
+enable debug output (can be global)
+.TP
+\fB\-\-no\-color\fR
+disable colored log output
+.TP
+\fB\-\-json\fR
+enable structured JSON logs on stdout
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+Run 'oroc <subcommand> \-\-help' for subcommand\-specific flags, examples, and platform notes. Use 'oroc help <query>' to search commands, options, examples, and workflow notes by topic. 'oroc <subcommand> \-\-json' emits structured command results when that subcommand supports it. The global 'oroc \-\-json <subcommand>' form is reserved for JSON log streaming. Use '\-\-log\-file=<path>' when you need machine\-readable stdout plus a separate log stream.
+.SH EXAMPLES
+.TP
+\fBoroc init my\-app\fR
+create a starter Oro project in ./my\-app
+.TP
+\fBoroc run .\fR
+run the app rooted at the current directory
+.TP
+\fBoroc build \-\-platform=ios \-\-prod .\fR
+build a production iOS artifact from the current project
+.TP
+\fBoroc config \-\-describe meta.version\fR
+inspect documentation for a single configuration key
+.TP
+\fBoroc help ios signing\fR
+search for commands and notes related to iOS signing and provisioning
+.SH UPDATE TOOLING
+.TP
+\fBoroc update keygen\fR
+generate an Ed25519 keypair for signing update manifests
+.TP
+\fBoroc update init\fR
+scaffold a manifest JSON file
+.TP
+\fBoroc update server\fR
+run an update server over HTTP/TCP/UDP
+.TP
+\fBoroc update info\fR
+query update servers or static manifests over HTTP/TCP/UDP
+.TP
+\fBoroc update sign\fR
+sign a manifest JSON file and emit a sidecar signature
+.TP
+\fBoroc update verify\fR
+verify a manifest JSON file + signature using a public key
+.TP
+\fBoroc update bundle\fR
+build a tar archive from a directory suitable as an update artifact
+.TP
+\fBoroc update extract\fR
+extract an update bundle tar archive into a directory
+.TP
+\fBoroc update validate\fR
+validate a manifest.json file against the update manifest schema shape

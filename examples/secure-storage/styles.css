@@ -1,0 +1,41 @@
+.secure-storage__scope-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.secure-storage__scope-row .ui-input {
+  flex: 1 1 220px;
+}
+
+.secure-storage__keys {
+  max-height: 260px;
+  overflow: auto;
+  border-radius: var(--ui-radius-sm);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.secure-storage__value {
+  margin-top: 12px;
+}
+
+.secure-storage__value .ui-code {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.secure-storage__inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.secure-storage__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--ui-foreground-muted);
+}

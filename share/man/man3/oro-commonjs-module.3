@@ -1,0 +1,264 @@
+.TH ORO-COMMONJS-MODULE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:commonjs/module \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:commonjs/module'
+.fi
+.SH DESCRIPTION
+.PP
+oro:commonjs/module is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBbuiltinModules\fR
+This is an exported `VariableDeclaration` named `builtinModules`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBCOMMONJS_WRAPPER\fR
+CommonJS module scope source wrapper.
+.TP
+\fBImportMap\fR
+A container for imports.
+.TP
+\fBimports()\fR
+The imports object for the importmap.
+.TP
+\fBextend(imports)\fR
+Extends the current imports object.
+\fBParameters:\fR
+.br
+\fIimports\fR (object; required)
+\fBReturns:\fR
+.br
+\fIImportMap\fR
+.TP
+\fBState\fR
+A container for `Module` instance state.
+.TP
+\fBconstructor(module)\fR
+`ModuleScope` class constructor.
+\fBParameters:\fR
+.br
+\fImodule\fR (Module; required)
+.TP
+\fBModuleLoader\fR
+An abstract base class for loading a module.
+.TP
+\fBfrom(module, options)\fR
+Creates a `ModuleLoader` instance from the `module` currently being loaded.
+\fBParameters:\fR
+.br
+\fImodule\fR (Module; required)
+.br
+\fIoptions\fR (ModuleLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIModuleLoader\fR
+.TP
+\fBload(module, options)\fR
+Creates a new `ModuleLoader` instance from the `module` currently being loaded with the `source` string to parse and load with optional `ModuleLoadOptions` options.
+\fBParameters:\fR
+.br
+\fImodule\fR (Module; required)
+.br
+\fIoptions\fR (ModuleLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBload(module, options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImodule\fR (Module; required)
+.br
+\fIoptions\fR (ModuleLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBJavaScriptModuleLoader (extends ModuleLoader)\fR
+A JavaScript module loader
+.TP
+\fBload(module, options)\fR
+Loads the JavaScript module.
+\fBParameters:\fR
+.br
+\fImodule\fR (Module; required)
+.br
+\fIoptions\fR (ModuleLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBJSONModuleLoader (extends ModuleLoader)\fR
+A JSON module loader.
+.TP
+\fBload(module, options)\fR
+Loads the JSON module.
+\fBParameters:\fR
+.br
+\fImodule\fR (Module; required)
+.br
+\fIoptions\fR (ModuleLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBWASMModuleLoader (extends ModuleLoader)\fR
+A WASM module loader
+.TP
+\fBload((Position 0), module, options)\fR
+Loads the WASM module.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (string; required)
+.br
+\fImodule\fR (Module; required)
+.br
+\fIoptions\fR (ModuleLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBModule (extends EventTarget)\fR
+A container for a loaded CommonJS module. All errors bubble to the "main" module and global object (if possible).
+.TP
+\fBmain()\fR
+The main entry module, lazily created.
+.TP
+\fBwrap(source)\fR
+Wraps source in a CommonJS module scope.
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.TP
+\fBcompile(source, options)\fR
+Compiles given JavaScript module source. object, function(string): any, Module, string, string, typeof process, object ): any}
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.br
+\fIoptions\fR ({ url?: URL \\| string }; optional; default null)
+.TP
+\fBfrom(url, options)\fR
+Creates a `Module` from source URL and optionally a parent module.
+\fBParameters:\fR
+.br
+\fIurl\fR (string \\| URL \\| Module; required)
+.br
+\fIoptions\fR (ModuleOptions; optional; default null)
+.TP
+\fBcreateRequire(url, options)\fR
+Creates a `require` function from a given module URL.
+\fBParameters:\fR
+.br
+\fIurl\fR (string \\| URL; required)
+.br
+\fIoptions\fR (ModuleOptions; optional; default null)
+.TP
+\fBconstructor(url, options)\fR
+`Module` class constructor.
+\fBParameters:\fR
+.br
+\fIurl\fR (string \\| URL; required)
+.br
+\fIoptions\fR (ModuleOptions; optional; default null)
+.TP
+\fBid()\fR
+A unique ID for this module.
+.TP
+\fBmain()\fR
+A reference to the "main" module.
+.TP
+\fBchildren()\fR
+Child modules of this module.
+.TP
+\fBcache()\fR
+A reference to the module cache. Possibly shared with all children modules.
+.TP
+\fBpackage()\fR
+A reference to the module package.
+.TP
+\fBimportmap()\fR
+The `ImportMap` for this module.
+.TP
+\fBresolvers()\fR
+The module level resolvers.
+.TP
+\fBloading()\fR
+`true` if the module is currently loading, otherwise `false`.
+.TP
+\fBloaded()\fR
+`true` if the module is currently loaded, otherwise `false`.
+.TP
+\fBerror()\fR
+An error associated with the module if it failed to load.
+.TP
+\fBexports()\fR
+The exports of the module
+.TP
+\fBscope()\fR
+The scope of the module given to parsed modules.
+.TP
+\fBorigin()\fR
+The origin of the loaded module.
+.TP
+\fBparent()\fR
+The parent module for this module.
+.TP
+\fBloader()\fR
+The `Loader` for this module.
+.TP
+\fBfilename()\fR
+The filename of the module.
+.TP
+\fBloaders()\fR
+Known source loaders for this module keyed by file extension.
+.TP
+\fBcreateRequire(options)\fR
+Factory for creating a `require()` function based on a module context.
+\fBParameters:\fR
+.br
+\fIoptions\fR (CreateRequireOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIRequireFunction\fR
+.TP
+\fBcreateModule(url, options)\fR
+Creates a `Module` from source the URL with this module as the parent.
+\fBParameters:\fR
+.br
+\fIurl\fR (string \\| URL \\| Module; required)
+.br
+\fIoptions\fR (ModuleOptions; optional; default null)
+.TP
+\fBrequire(input, options)\fR
+Requires a module at for a given `input` which can be a relative file, named module, or an absolute URL within the context of this odule.
+\fBParameters:\fR
+.br
+\fIinput\fR (string \\| URL; required)
+.br
+\fIoptions\fR (RequireOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIany\fR
+.TP
+\fBload(options)\fR
+Loads the module
+\fBParameters:\fR
+.br
+\fIoptions\fR (ModuleLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBcreateRequire(url, options)\fR
+Creates a `require` function from a given module URL.
+\fBParameters:\fR
+.br
+\fIurl\fR (string \\| URL; required)
+.br
+\fIoptions\fR (ModuleOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIRequireFunction\fR

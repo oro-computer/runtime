@@ -1,0 +1,309 @@
+.TH ORO-FS-HANDLE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/handle \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/handle'
+.fi
+.SH DESCRIPTION
+.PP
+oro:fs/handle is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBkOpening\fR
+This is an exported `VariableDeclaration` named `kOpening`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBkClosing\fR
+This is an exported `VariableDeclaration` named `kClosing`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBkClosed\fR
+This is an exported `VariableDeclaration` named `kClosed`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFileHandle (extends EventEmitter)\fR
+A container for a descriptor tracked in `fds` and opened in the native layer. This class implements the Node.js `FileHandle` interface
+.TP
+\fBDEFAULT_ACCESS_MODE()\fR
+Emitted when the file handle has been opened. Emitted when the file handle has been closed.
+.TP
+\fBfrom(id)\fR
+Creates a `FileHandle` from a given `id` or `fd`
+\fBParameters:\fR
+.br
+\fIid\fR (string \\| number \\| FileHandle \\| object \\| FileSystemFileHandle; required)
+\fBReturns:\fR
+.br
+\fIFileHandle\fR
+.TP
+\fBaccess(path, mode, options)\fR
+Determines if access to `path` for `mode` is possible.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fImode\fR (number; optional; default 0o666)
+.br
+\fIoptions\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBopen(path, flags, mode, options)\fR
+Asynchronously open a file.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIflags\fR (string; optional; default 'r')
+.br
+\fImode\fR (string \\| number; optional; default 0o666)
+.br
+\fIoptions\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIPromise<FileHandle>\fR
+.TP
+\fBopened()\fR
+`true` if the `FileHandle` instance has been opened.
+.TP
+\fBopening()\fR
+`true` if the `FileHandle` is opening.
+.TP
+\fBclosing()\fR
+`true` if the `FileHandle` is closing.
+.TP
+\fBclosed()\fR
+`true` if the `FileHandle` is closed.
+.TP
+\fBappendFile(data, options)\fR
+Appends to a file, if handle was opened with `O_APPEND`, otherwise this method is just an alias to `FileHandle#writeFile()`.
+\fBParameters:\fR
+.br
+\fIdata\fR (string \\| Buffer \\| TypedArray \\| Array; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.signal\fR (object; optional)
+.TP
+\fBchmod(mode, options)\fR
+Change permissions of file handle.
+\fBParameters:\fR
+.br
+\fImode\fR (number; required)
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBchown(uid, gid, options)\fR
+Change ownership of file handle.
+\fBParameters:\fR
+.br
+\fIuid\fR (number; required)
+.br
+\fIgid\fR (number; required)
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBclose(options)\fR
+Close underlying file handle
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBcreateReadStream(options)\fR
+Creates a `ReadStream` for the underlying file.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional) An options object
+.TP
+\fBcreateWriteStream(options)\fR
+Creates a `WriteStream` for the underlying file.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional) An options object
+.TP
+\fBdatasync(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBopen(options)\fR
+Opens the underlying descriptor for the file handle.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBread(buffer, offset, length, position, options)\fR
+Reads `length` bytes starting from `position` into `buffer` at `offset`.
+\fBParameters:\fR
+.br
+\fIbuffer\fR (Buffer \\| object; required)
+.br
+\fIoffset\fR (number; optional)
+.br
+\fIlength\fR (number; optional)
+.br
+\fIposition\fR (number; optional)
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBreadv(buffers, position)\fR
+Read into multiple buffers sequentially (vector read)
+\fBParameters:\fR
+.br
+\fIbuffers\fR (Array<Buffer \\| TypedArray>; required)
+.br
+\fIposition\fR (number \\| null; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<{ bytesRead: number, buffers: any[] }>\fR
+.TP
+\fBreadFile(options)\fR
+Reads the entire contents of a file and returns it as a buffer or a string specified of a given encoding specified at `options.encoding`.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.signal\fR (object; optional)
+.TP
+\fBstat(options)\fR
+Returns the stats of the underlying file.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Stats>\fR
+.TP
+\fBlstat(options)\fR
+Returns the stats of the underlying symbolic link.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Stats>\fR
+.TP
+\fBsync()\fR
+Synchronize a file's in\-core state with storage device
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBtruncate(offset)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoffset\fR (number; optional; default 0)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBwrite(buffer, offset, length, position, options)\fR
+Writes `length` bytes at `offset` in `buffer` to the underlying file at `position`.
+\fBParameters:\fR
+.br
+\fIbuffer\fR (Buffer \\| object; required)
+.br
+\fIoffset\fR (number; required)
+.br
+\fIlength\fR (number; required)
+.br
+\fIposition\fR (number; required)
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBwritev(buffers, position)\fR
+Write multiple buffers sequentially (vector write)
+\fBParameters:\fR
+.br
+\fIbuffers\fR (Array<Buffer \\| TypedArray>; required)
+.br
+\fIposition\fR (number \\| null; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<number>\fR bytesWritten
+.TP
+\fBwriteFile(data, options)\fR
+Writes `data` to file.
+\fBParameters:\fR
+.br
+\fIdata\fR (string \\| Buffer \\| TypedArray \\| Array; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.signal\fR (object; optional)
+.TP
+\fBDirectoryHandle (extends EventEmitter)\fR
+A container for a directory handle tracked in `fds` and opened in the native layer.
+.TP
+\fBMAX_BUFFER_SIZE()\fR
+The max number of entries that can be bufferd with the `bufferSize` option.
+.TP
+\fBDEFAULT_BUFFER_SIZE()\fR
+The default number of entries `Dirent` that are buffered for each read request.
+.TP
+\fBfrom(id, options)\fR
+Creates a `DirectoryHandle` from a given `id` or `fd`
+\fBParameters:\fR
+.br
+\fIid\fR (string \\| number \\| DirectoryHandle \\| object \\| FileSystemDirectoryHandle; required)
+.br
+\fIoptions\fR (object; required)
+\fBReturns:\fR
+.br
+\fIDirectoryHandle\fR
+.TP
+\fBopen(path, options)\fR
+Asynchronously open a directory.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIPromise<DirectoryHandle>\fR
+.TP
+\fBfd()\fR
+DirectoryHandle file descriptor id
+.TP
+\fBopened()\fR
+`true` if the `DirectoryHandle` instance has been opened.
+.TP
+\fBopening()\fR
+`true` if the `DirectoryHandle` is opening.
+.TP
+\fBclosing()\fR
+`true` if the `DirectoryHandle` is closing.
+.TP
+\fBclosed()\fR
+`true` if `DirectoryHandle` is closed.
+.TP
+\fBopen(options)\fR
+Opens the underlying handle for a directory.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBclose(options)\fR
+Close underlying directory handle
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBread(options)\fR
+Reads directory entries
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.entries\fR (number; optional; default DirectoryHandle.MAX_ENTRIES)

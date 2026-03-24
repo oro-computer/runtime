@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src http://* https://* ipc://* file://* oro://* data://*;
+        script-src oro: https: 'unsafe-eval';
+        worker-src oro: blob: 'unsafe-inline' 'unsafe-eval';
+      "
+    >
+    <title>Oro Runtime JavaScript Tests</title>
+  </head>
+  <body>
+    <h1>window 0</h1>
+  </body>
+</html>

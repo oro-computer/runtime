@@ -1,0 +1,190 @@
+.TH ORO-COMMONJS-PACKAGE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:commonjs/package \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:commonjs/package'
+.fi
+.SH DESCRIPTION
+.PP
+oro:commonjs/package is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBDEFAULT_PACKAGE_INDEX\fR
+{import('./loader.js').RequestOptions & { load?: boolean, type?: 'commonjs' | 'module', browser?: boolean, children?: string[] extensions?: string[] | Set<string> }} PackageResolveOptions
+.TP
+\fBDEFAULT_PACKAGE_MANIFEST_FILE_NAME\fR
+The default package manifest file name such as 'package.json'
+.TP
+\fBDEFAULT_PACKAGE_PREFIX\fR
+The default package path prefix such as 'node_modules/'
+.TP
+\fBDEFAULT_PACKAGE_VERSION\fR
+The default package version, when one is not provided
+.TP
+\fBDEFAULT_LICENSE\fR
+The default license for a package'
+.TP
+\fBName\fR
+A container for a package name that includes a package organization identifier, its fully qualified name, or for relative package names, its pathname
+.TP
+\fBparse(input, options)\fR
+Parses a package name input resolving the actual module name, including an organization name given. If a path includes a manifest file ('package.json'), then the directory containing that file is considered a valid package and it will be included in the returned value. If a relative path is given, then the path is returned if it is a valid pathname. This function returns `null` for bad input.
+\fBParameters:\fR
+.br
+\fIinput\fR (string \\| URL; required)
+.br
+\fIoptions\fR ({ origin?: string \\| URL, manifest?: string }; optional; default null)
+\fBReturns:\fR
+.br
+\fIParsedPackageName?\fR
+.TP
+\fBcanParse(input, options)\fR
+Returns `true` if the given `input` can be parsed by `Name.parse` or given as input to the `Name` class constructor.
+\fBParameters:\fR
+.br
+\fIinput\fR (string \\| URL; required)
+.br
+\fIoptions\fR ({ origin?: string \\| URL, manifest?: string }; optional; default null)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBfrom(input, options)\fR
+Creates a new `Name` from input.
+\fBParameters:\fR
+.br
+\fIinput\fR (string \\| URL; required)
+.br
+\fIoptions\fR ({ origin?: string \\| URL, manifest?: string }; optional; default null)
+\fBReturns:\fR
+.br
+\fIName\fR
+.TP
+\fBconstructor(name, options)\fR
+`Name` class constructor.
+\fBParameters:\fR
+.br
+\fIname\fR (string \\| URL \\| NameOptions \\| Name; required)
+.br
+\fIoptions\fR ({ origin?: string \\| URL, manifest?: string }; optional; default null)
+.TP
+\fBid()\fR
+The id of this package name.
+.TP
+\fBname()\fR
+The actual package name.
+.TP
+\fBvalue()\fR
+An alias for 'name'.
+.TP
+\fBorigin()\fR
+The origin of the package, if available. This value may be `null`.
+.TP
+\fBversion()\fR
+The package version if available. This value may be `null`.
+.TP
+\fBpathname()\fR
+The actual package pathname, if given in name string. This value is always a string defaulting to '.' if no path was given in name string.
+.TP
+\fBorganization()\fR
+The organization name. This value may be `null`.
+.TP
+\fBisRelative()\fR
+`true` if the package name was relative, otherwise `false`.
+.TP
+\fBDependencies\fR
+A container for package dependencies that map a package name to a `Package` instance.
+.TP
+\fBPackage\fR
+A container for CommonJS module metadata, often in a `package.json` file.
+.TP
+\fBload(name, options)\fR
+Creates and loads a package
+\fBParameters:\fR
+.br
+\fIname\fR (string \\| URL \\| NameOptions \\| Name; required)
+.br
+\fIoptions\fR (PackageOptions & PackageLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPackage\fR
+.TP
+\fBconstructor(name, options)\fR
+`Package` class constructor.
+\fBParameters:\fR
+.br
+\fIname\fR (string \\| URL \\| NameOptions \\| Name; required)
+.br
+\fIoptions\fR (PackageOptions; optional; default null)
+.TP
+\fBid()\fR
+The unique ID of this `Package`, which is the absolute URL of the directory that contains its manifest file.
+.TP
+\fBurl()\fR
+The absolute URL to the package manifest file
+.TP
+\fBimports()\fR
+A reference to the package subpath imports and browser mappings. These values are typically used with its corresponding `Module` instance require resolvers.
+.TP
+\fBloader()\fR
+A loader for this package, if available. This value may be `null`.
+.TP
+\fBloaded()\fR
+`true` if the package was actually "loaded", otherwise `false`.
+.TP
+\fBname()\fR
+The name of the package.
+.TP
+\fBdescription()\fR
+The description of the package.
+.TP
+\fBorganization()\fR
+The organization of the package. This value may be `null`.
+.TP
+\fBlicense()\fR
+The license of the package.
+.TP
+\fBversion()\fR
+The version of the package.
+.TP
+\fBorigin()\fR
+The origin for this package.
+.TP
+\fBexports()\fR
+The exports mappings for the package
+.TP
+\fBtype()\fR
+The package type.
+.TP
+\fBinfo()\fR
+The raw package metadata object.
+.TP
+\fBdependencies()\fR
+Documented method exposed by this module.
+.TP
+\fBmain()\fR
+An alias for `entry`
+.TP
+\fBentry()\fR
+The entry to the package
+.TP
+\fBload(options)\fR
+Load the package information at an optional `origin` with optional request `options`.
+\fBParameters:\fR
+.br
+\fIoptions\fR (PackageLoadOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBresolve(pathname, options)\fR
+Resolve a file's `pathname` within the package.
+\fBParameters:\fR
+.br
+\fIpathname\fR (string \\| URL; required)
+.br
+\fIoptions\fR (PackageResolveOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIstring\fR

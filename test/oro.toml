@@ -1,0 +1,91 @@
+[build]
+name = "oro-runtime-javascript-tests"
+copy = "src"
+copy_map = "src/mapping.ini"
+output = "build"
+flags = "-O3 -g"
+headless = true
+env = [
+  "PWD",
+  "TMP",
+  "TEMP",
+  "TMPDIR",
+  "HOME",
+  "DEBUG",
+  "ORO_ANDROID_CI",
+  "ORO_DEBUG_IPC",
+  "ORO_VM_DEBUG",
+  "TEST_INJECTED_VARIABLE"
+]
+
+[build.extensions]
+simple-ipc-ping = "src/extensions/simple/ipc-ping.cc"
+sqlite3 = "src/extensions/sqlite3"
+# wasm = "src/extensions/wasm"
+
+[build.extensions.linux]
+runtime-core-tests = "src/runtime-core"
+
+[build.extensions.mac]
+runtime-core-tests = "src/runtime-core"
+
+[build.extensions.win]
+runtime-core-tests = "src/runtime-core"
+
+[env]
+TEST_INJECTED_VARIABLE = "TEST_INJECTED_VARIABLE"
+ai_llm_enable_metrics = true
+ai_llm_enable_props = true
+ai_llm_enable_rerank = true
+
+[meta]
+title = "Oro Runtime API Tests"
+version = "1.0.0"
+description = "Oro Runtime JavaScript Tests"
+lang = "en-US"
+copyright = "Oro Runtime Contributors © 2025"
+maintainer = "Oro Runtime Contributors"
+bundle_identifier = "computer.oro.runtime.tests"
+application_protocol = "computer-oro-runtime-tests"
+
+[i18n.locales]
+en = "i18n/locales/en"
+fr = "i18n/locales/fr-FR"
+fr-FR = "i18n/locales/fr-FR"
+
+[debug]
+flags = "-g"
+
+[window]
+width = "80%"
+height = "80%"
+max_width = "90%"
+max_height = "90%"
+min_width = "50%"
+min_height = "50%"
+resizable = true
+frameless = false
+utility = false
+
+[mac]
+cmd = "node backend/backend.js"
+
+[linux]
+cmd = "node backend/backend.js"
+
+[win]
+cmd = "node backend/backend.js"
+
+[ios]
+simulator_device = "iPhone 14"
+icon = "src/icon.png"
+
+[android]
+manifest_permissions = "MANAGE_EXTERNAL_STORAGE"
+icon = "src/icon.png"
+
+[test-section]
+array = [1, 2, 3]
+
+[test-section.subsection]
+key = "value"

@@ -1,0 +1,62 @@
+.TH ORO-FS-STREAM 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/stream \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/stream'
+.fi
+.SH DESCRIPTION
+.PP
+oro:fs/stream is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBDEFAULT_STREAM_HIGH_WATER_MARK\fR
+This is an exported `VariableDeclaration` named `DEFAULT_STREAM_HIGH_WATER_MARK`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBReadStream (extends Readable)\fR
+A `Readable` stream for a `FileHandle`. Emitted when the underlying file descriptor is opened. Emitted when the stream is ready to be used. Emitted when the stream is closed.
+.TP
+\fBsetHandle(handle)\fR
+Sets file handle for the ReadStream.
+\fBParameters:\fR
+.br
+\fIhandle\fR (FileHandle; required)
+.TP
+\fBhighWaterMark()\fR
+The max buffer size for the ReadStream.
+.TP
+\fBpath()\fR
+Relative or absolute path of the underlying `FileHandle`.
+.TP
+\fBpending()\fR
+`true` if the stream is in a pending state.
+.TP
+\fBemit()\fR
+Handles `shouldEmitClose` setting from `options.emitClose` in constructor.
+.TP
+\fBWriteStream (extends Writable)\fR
+A `Writable` stream for a `FileHandle`. Emitted when the underlying file descriptor is opened. Emitted when the stream is ready to be used. Emitted when the stream is closed.
+.TP
+\fBsetHandle(handle)\fR
+Sets file handle for the WriteStream.
+\fBParameters:\fR
+.br
+\fIhandle\fR (FileHandle; required)
+.TP
+\fBhighWaterMark()\fR
+The max buffer size for the Writetream.
+.TP
+\fBpath()\fR
+Relative or absolute path of the underlying `FileHandle`.
+.TP
+\fBpending()\fR
+`true` if the stream is in a pending state.
+.TP
+\fBemit()\fR
+Handles `shouldEmitClose` setting from `options.emitClose` in constructor.
+.TP
+\fBFileReadStream\fR
+This is an exported `VariableDeclaration` named `FileReadStream`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFileWriteStream\fR
+This is an exported `VariableDeclaration` named `FileWriteStream`, but it does not yet have a dedicated description in the generated reference.

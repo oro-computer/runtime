@@ -1,0 +1,341 @@
+.TH ORO-FS-PROMISES 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/promises \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/promises'
+.fi
+.SH DESCRIPTION
+.PP
+* This module enables interacting with the file system in a way modeled on standard POSIX functions.
+.PP
+The Application Sandbox restricts access to the file system.
+.PP
+iOS Application Sandboxing has a set of rules that limits access to the file system. Apps can only access files in their own sandboxed home directory.
+.PP
+| Directory | Description | | \-\-\- | \-\-\- | | `Documents` | The app’s sandboxed documents directory. The contents of this directory are backed up by iTunes and may be set as accessible to the user via iTunes when `UIFileSharingEnabled` is set to `true` in the application's `info.plist`. | | `Library` | The app’s sandboxed library directory. The contents of this directory are synchronized via iTunes (except the `Library/Caches` subdirectory, see below), but never exposed to the user. | | `Library/Caches` | The app’s sandboxed caches directory. The contents of this directory are not synchronized via iTunes and may be deleted by the system at any time. It's a good place to store data which provides a good offline\-first experience for the user. | | `Library/Preferences` | The app’s sandboxed preferences directory. The contents of this directory are synchronized via iTunes. Its purpose is to be used by the Settings app. Avoid creating your own files in this directory. | | `tmp` | The app’s sandboxed temporary directory. The contents of this directory are not synchronized via iTunes and may be deleted by the system at any time. Although, it's recommended that you delete data that is not necessary anymore manually to minimize the space your app takes up on the file system. Use this directory to store data that is only useful during the app runtime. |
+.PP
+Example usage: import fs from 'oro:fs/promises'
+.SH REFERENCE
+.TP
+\fBaccess(path, mode, options)\fR
+Asynchronously check access a file.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number; optional)
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBchmod(path, mode)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBchown(path, uid, gid)\fR
+Changes ownership of file or directory at `path` with `uid` and `gid`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIuid\fR (number; required)
+.br
+\fIgid\fR (number; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBcopyFile(src, dest, flags)\fR
+Asynchronously copies `src` to `dest` calling `callback` upon success or error.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required) The source file path.
+.br
+\fIdest\fR (string; required) The destination file path.
+.br
+\fIflags\fR (number; required; default 0) Modifiers for copy operation.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBlchown(path, uid, gid)\fR
+Changes ownership of a symbolic link at `path` with `uid` and `gid`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIuid\fR (number; required)
+.br
+\fIgid\fR (number; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBlchmod(path, mode)\fR
+Changes permissions of a symbolic link at `path`.
+.br
+On platforms that do not implement `lchmod`, the native backend may treat this as a no\-op or reject the request with a platform\-specific error.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBlink(src, dest)\fR
+Creates a hard link to `dest` from `src`.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBmkdir(path, options)\fR
+Asynchronously creates a directory.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required) The path to create
+.br
+\fIoptions\fR (object; optional) The optional options argument can be an integer specifying mode (permission and sticky bits), or an object with a mode property and a recursive property indicating whether parent directories should be created. Calling fs.mkdir() when path is a directory that exists results in an error only when recursive is false.
+.br
+\fIoptions.recursive\fR (boolean; optional; default false) Recursively create missing path segments.
+.br
+\fIoptions.mode\fR (number; optional; default 0o777) Set the mode of directory, or missing path segments when recursive is true.
+\fBReturns:\fR
+.br
+\fIPromise\fR Upon success, fulfills with undefined if recursive is false, or the first directory path created if recursive is true.
+.TP
+\fBmkdtemp(prefix, options)\fR
+Create a unique temporary directory
+.TP
+\fBopen(path, flags, mode)\fR
+Asynchronously open a file.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIflags\fR (string; optional; default 'r') default: 'r'
+.br
+\fImode\fR (number; optional; default 0o666) default: 0o666
+\fBReturns:\fR
+.br
+\fIPromise<FileHandle>\fR
+.TP
+\fBopendir(path, options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.bufferSize\fR (number; optional; default 32)
+\fBReturns:\fR
+.br
+\fIPromise<Dir>\fR
+.TP
+\fBreaddir(path, options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.withFileTypes\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fIPromise<(string \\| Dirent)[]>\fR
+.TP
+\fBreadFile(path, options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string \\| null; optional; default null)
+.br
+\fIoptions.flag\fR (string; optional; default 'r')
+.br
+\fIoptions.signal\fR (AbortSignal \\| undefined; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer \\| string>\fR
+.TP
+\fBreadlink(path, options)\fR
+Reads link at `path`
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBrealpath(path)\fR
+Computes real path for `path`
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBrename(src, dest)\fR
+Renames file or directory at `src` to `dest`.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBrmdir(path)\fR
+Removes directory at `path`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBstat(path, options)\fR
+Get the stats of a file
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.bigint\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fIPromise<Stats>\fR
+.TP
+\fBfstat(fd, options)\fR
+Get the stats of an open file descriptor.
+\fBParameters:\fR
+.br
+\fIfd\fR (number \\| FileHandle; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.bigint\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fIPromise<Stats>\fR
+.TP
+\fBlstat(path, options)\fR
+Get the stats of a symbolic link.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.bigint\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fIPromise<Stats>\fR
+.TP
+\fBsymlink(src, dest, type)\fR
+Creates a symlink of `src` at `dest`.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fButimes(path, atime, mtime)\fR
+Update atime/mtime for a path (promises)
+.TP
+\fBfutimes(fd, atime, mtime)\fR
+Update atime/mtime for an fd (promises)
+.TP
+\fBlutimes(path, atime, mtime)\fR
+Update atime/mtime for a symlink without following it (promises)
+.TP
+\fBunlink(path)\fR
+Unlinks (removes) file at `path`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBwriteFile(path, data, options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL \\| FileHandle; required) filename or FileHandle
+.br
+\fIdata\fR (string \\| Buffer \\| Array \\| DataView \\| TypedArray; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string \\| null; optional; default 'utf8')
+.br
+\fIoptions.mode\fR (number; optional; default 0o666)
+.br
+\fIoptions.flag\fR (string; optional; default 'w')
+.br
+\fIoptions.signal\fR (AbortSignal \\| undefined; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBwritev(fdOrHandle, buffers, position)\fR
+Vector write: write multiple buffers to a FileHandle or fd
+.TP
+\fBreadv(fdOrHandle, buffers, position)\fR
+Vector read: read into multiple buffers from a FileHandle or fd
+.TP
+\fBtruncate(path, len)\fR
+Truncate file
+.TP
+\fBappendFile(path, data, options)\fR
+Append data
+.TP
+\fBrm(path, options)\fR
+Remove file or directory
+.TP
+\fBcp(src, dest, options)\fR
+Copy file or directory. Options: \- recursive: copy directories recursively \- dereference: follow symlinks (default true). When false, copies symlinks as symlinks \- force: overwrite if destination exists; when false and errorOnExist is false, leaves dest untouched \- errorOnExist: if true and destination exists, error (when force is false) \- preserveTimestamps: set atime/mtime on dest to match src (files) \- preserveMode: apply src mode (chmod) to dest \- preserveOwner: attempt to apply src uid/gid (chown) to dest (may be ignored by platform; may require privileges) \- filter: function (src, dest) => boolean|Promise<boolean> to include/exclude entries
+.TP
+\fBwatch(path, options)\fR
+Watch for changes at `path` calling `callback`
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (string; required)
+.br
+\fIoptions\fR (function \\| object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.signal\fR (AbortSignal; optional)
+\fBReturns:\fR
+.br
+\fIWatcher\fR

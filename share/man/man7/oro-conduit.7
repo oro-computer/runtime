@@ -1,0 +1,79 @@
+.TH ORO-CONDUIT 7 "" "Oro Runtime" "Oro Runtime Guides"
+.SH NAME
+oro\-conduit \- high\-frequency binary transport guide for runtime services
+.SH DESCRIPTION
+.PP
+Conduit is the long\-lived WebSocket\-based transport used when request/response IPC would impose too much overhead or UI\-thread churn.
+.PP
+Services such as UDP, streaming AI workloads, and future high\-throughput features should prefer Conduit when they need sustained message flow and graceful reconnect behaviour.
+.SH WHEN TO USE IT
+.IP \(bu 2
+Use Conduit for sustained inbound message streams.
+.IP \(bu 2
+Use it when reconnect and pause/resume behaviour matter more than one\-shot request latency.
+.IP \(bu 2
+Keep ipc.request()/ipc.write() as the fallback path for setup, capability checks, and degraded operation.
+.SH MESSAGE MODEL
+.PP
+Conduit messages are binary payloads with a compact header section. Header values carry route and metadata, while the payload remains a raw Uint8Array.
+.PP
+The transport is intentionally stable across reconnects: clients hold an id, the runtime restarts the server on pause/resume transitions, and reopen events tell higher layers to resubscribe.
+.SH LIFECYCLE AND RECONNECT
+.PP
+Conduit is designed around the reality that sockets may disappear during application lifecycle transitions, especially on mobile targets. A Conduit client is expected to reconnect and restore subscriptions rather than assuming a single immortal connection.
+.PP
+That lifecycle behavior is not accidental glue code. It is a core part of the contract and should shape how higher\-level services model state restoration.
+.IP \(bu 2
+Register receive handlers before sending commands that expect streamed responses.
+.IP \(bu 2
+Treat reconnect or reopen notifications as the signal to restore subscriptions, listeners, or producer state.
+.IP \(bu 2
+If a feature cannot survive reconnect, Conduit is probably the wrong transport for its current design.
+.SH STATUS, DIAGNOSTICS, AND SHARED KEYS
+.PP
+The public `oro:conduit` module exposes status and diagnostics helpers because connection state is operational data, not a hidden implementation detail. If you are debugging a stream\-heavy feature, inspect the transport first.
+.IP \(bu 2
+Use status queries to verify whether the server is active and which port/key are currently in effect.
+.IP \(bu 2
+Use diagnostics to confirm whether handles or clients are accumulating unexpectedly.
+.IP \(bu 2
+If a shared key is part of the flow, treat it as a real compatibility/security input rather than as a debug convenience.
+.SH CHOOSING BETWEEN CONDUIT AND IPC
+.IP \(bu 2
+Choose plain IPC for one\-shot commands, setup requests, validation, and fallback flows.
+.IP \(bu 2
+Choose Conduit for sustained streams, push\-heavy workloads, or transports where polling would be wasteful.
+.IP \(bu 2
+Keep the initial capability check on IPC even when the steady\-state data path uses Conduit.
+.IP \(bu 2
+If a service must degrade cleanly, design the IPC path first and let Conduit be the acceleration path.
+.SH EXAMPLE
+.nf
+import Conduit from 'oro:conduit'
+
+const conduit = new Conduit({ id: 'udp\-client' })
+conduit.receive((err, message) => {
+  if (err) throw err
+  console.log(message.options.route, message.payload)
+})
+
+await conduit.connect()
+.fi
+.SH DEBUGGING CHECKLIST
+.IP \(bu 2
+Confirm the server is active before debugging application\-level message handling.
+.IP \(bu 2
+Inspect reconnect paths, not just initial connect paths.
+.IP \(bu 2
+If `send()` returns false, treat the socket as unusable and switch to recovery logic immediately.
+.IP \(bu 2
+When a stream stalls only on mobile lifecycle transitions, debug pause/resume handling first.
+.SH NEED TO KNOW
+.IP \(bu 2
+Register receive handlers before issuing commands that expect streamed data.
+.IP \(bu 2
+A false return from send() means the socket is unusable and the caller should fall back and trigger reconnect().
+.IP \(bu 2
+Pause/resume cycles are expected to tear the socket down; treat reopen as the signal to restore subscriptions.
+.SH SEE ALSO
+oro\-ipc(7), oro\-agent\-workflows(7), oro\-conduit(3), oro\-dgram(3), oro\-ai\-chat(3)

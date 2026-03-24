@@ -1,0 +1,169 @@
+.TH ORO-LATICA 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:latica \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:latica'
+.fi
+.SH DESCRIPTION
+.PP
+This module provides primitives for creating a p2p network.
+.SH REFERENCE
+.TP
+\fBPING_RETRY\fR
+Retry delay in milliseconds for ping.
+.TP
+\fBPROBE_WAIT\fR
+Probe wait timeout in milliseconds.
+.TP
+\fBDEFAULT_KEEP_ALIVE\fR
+Default keep alive timeout.
+.TP
+\fBDEFAULT_RATE_LIMIT_THRESHOLD\fR
+Default rate limit threshold in milliseconds.
+.TP
+\fBgetRandomPort(ports, p)\fR
+Port generator factory function.
+\fBParameters:\fR
+.br
+\fIports\fR (object; required) the cache to use (a set)
+.br
+\fIp\fR (number?; required) initial port
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBrateLimit(rates, type, port, address, subclusterIdQuota)\fR
+Computes rate limit predicate value for a port and address pair for a given threshold updating an input rates map. This method is accessed concurrently, the rates object makes operations atomic to avoid race conditions.
+\fBParameters:\fR
+.br
+\fIrates\fR (Map; required)
+.br
+\fItype\fR (number; required)
+.br
+\fIport\fR (number; required)
+.br
+\fIaddress\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBRemotePeer\fR
+A `RemotePeer` represents an initial, discovered, or connected remote peer. Typically, you will not need to create instances of this class directly.
+.TP
+\fBconstructor()\fR
+`RemotePeer` class constructor. peerId?: string, address?: string, port?: number, natType?: number, clusters: object, reflectionId?: string, distance?: number, publicKey?: string, privateKey?: string, clock?: number, lastUpdate?: number, lastRequest?: number }} o
+.TP
+\fBPeer\fR
+`Peer` class factory.
+\fBParameters:\fR
+.br
+\fIoptions\fR ({ createSocket: function('udp4', null, object?): object }; required)
+.TP
+\fBconstructor(opts, dgram)\fR
+`Peer` class constructor.
+\fBParameters:\fR
+.br
+\fIopts\fR (object; optional) Options
+.br
+\fIopts.peerId\fR (Buffer; required) A 32 byte buffer (ie, `Encryption.createId()`).
+.br
+\fIopts.clusterId\fR (Buffer; required) A 32 byte buffer (ie, `Encryption.createClusterId()`).
+.br
+\fIopts.port\fR (number; optional) A port number.
+.br
+\fIopts.probeInternalPort\fR (number; optional) An internal port number (semi\-private for testing).
+.br
+\fIopts.probeExternalPort\fR (number; optional) An external port number (semi\-private for testing).
+.br
+\fIopts.natType\fR (number; optional) A nat type.
+.br
+\fIopts.address\fR (string; optional) An ipv4 address.
+.br
+\fIopts.keepalive\fR (number; optional) The interval of the main loop.
+.br
+\fIopts.siblingResolver\fR (function; optional) A function that can be used to determine canonical data in case two packets have concurrent clock values.
+.br
+\fIdgram\fR (object; required) A nodejs compatible implementation of the dgram module (sans multicast).
+.TP
+\fBgetState()\fR
+Get the serializable state of the peer (can be passed to the constructor or create method)
+.TP
+\fBjoin(keys, args)\fR
+This should be called at least once when an app starts to multicast this peer, and starts querying the network to discover peers.
+\fBParameters:\fR
+.br
+\fIkeys\fR (object; required) Created by `Encryption.createKeyPair()`.
+.br
+\fIargs\fR (object; optional) Options
+.br
+\fIargs.rateLimit\fR (number=MAX_BANDWIDTH; required) How many requests per second to allow for this subclusterId.
+\fBReturns:\fR
+.br
+\fIRemotePeer\fR
+.TP
+\fBpublish(keys, args)\fR
+Sends a packet into the network that will be replicated and buffered. Each peer that receives it will buffer it until TTL and then replicate it provided it has has not exceeded their maximum number of allowed hops.
+\fBParameters:\fR
+.br
+\fIkeys\fR (object; required) the public and private key pair created by `Encryption.createKeyPair()`.
+.br
+\fIargs\fR (object; required) The arguments to be applied.
+.br
+\fIargs.message\fR (Buffer; required) The message to be encrypted by keys and sent.
+.br
+\fIargs.packet\fR (Packet<T>; optional) The previous packet in the packet chain.
+.br
+\fIargs.usr1\fR (Buffer; required) 32 bytes of arbitrary clusterId in the protocol framing.
+.br
+\fIargs.usr2\fR (Buffer; required) 32 bytes of arbitrary clusterId in the protocol framing.
+\fBReturns:\fR
+.br
+\fIArray<PacketPublish>\fR
+.TP
+\fBsync()\fR
+Documented method exposed by this module.
+.TP
+\fBquery()\fR
+Deploy a query into the network
+.TP
+\fBcachePredicate()\fR
+This is a default implementation for deciding what to summarize from the cache when receiving a request to sync. that can be overridden
+.TP
+\fB_onQuery()\fR
+Received a Query Packet
+.br
+a \-> b \-> c \-> (d) \-> c \-> b \-> a
+.br
+peer.onQuery = (packet) => { // // read a database or something // return { message: Buffer.from('hello'), publicKey: '', privateKey: '' } }
+.TP
+\fB_onMessage(data, info)\fR
+When a packet is received it is decoded, the packet contains the type of the message. Based on the message type it is routed to a function. like WebSockets, don't answer queries unless we know its another SRP peer.
+\fBParameters:\fR
+.br
+\fIdata\fR (Buffer \\| Uint8Array; required)
+.br
+\fIinfo\fR ({ port: number, address: string }; required)
+.TP
+\fBisValidPeerId(pid)\fR
+Test a peerID is valid
+\fBParameters:\fR
+.br
+\fIpid\fR (string; required)
+.TP
+\fBisValidReflectionId(rid)\fR
+Test a reflectionID is valid
+\fBParameters:\fR
+.br
+\fIrid\fR (string; required)
+.TP
+\fBisValidPingId(pid)\fR
+Test a pingID is valid
+\fBParameters:\fR
+.br
+\fIpid\fR (string; required)
+.TP
+\fBonLine()\fR
+Returns the online status of the browser, else true.
+.br
+note: globalThis.navigator was added to node in v22.

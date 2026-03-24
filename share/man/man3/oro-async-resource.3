@@ -1,0 +1,80 @@
+.TH ORO-ASYNC-RESOURCE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:async/resource \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:async/resource'
+.fi
+.SH DESCRIPTION
+.PP
+Primitives for creating user defined async resources that implement async hooks.
+.SH REFERENCE
+.TP
+\fBAsyncResource (extends CoreAsyncResource)\fR
+A container that should be extended that represents a resource with an asynchronous execution context.
+.TP
+\fBbind(fn, type, thisArg)\fR
+Binds function `fn` with an optional this `thisArg` binding to run in the execution context of an anonymous `AsyncResource`.
+\fBParameters:\fR
+.br
+\fIfn\fR (function; required)
+.br
+\fItype\fR (object \\| string; optional)
+.br
+\fIthisArg\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBconstructor(type, options)\fR
+`AsyncResource` class constructor.
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIoptions\fR (AsyncResourceOptions \\| number; optional; default null)
+.TP
+\fBtype()\fR
+The `AsyncResource` type.
+.TP
+\fBasyncId()\fR
+The unique async resource ID.
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBtriggerAsyncId()\fR
+The trigger async resource ID.
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBemitDestroy()\fR
+Manually emits destroy hook for the resource.
+\fBReturns:\fR
+.br
+\fIAsyncResource\fR
+.TP
+\fBbind(fn, thisArg)\fR
+Binds function `fn` with an optional this `thisArg` binding to run in the execution context of this `AsyncResource`.
+\fBParameters:\fR
+.br
+\fIfn\fR (function; required)
+.br
+\fIthisArg\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBrunInAsyncScope(fn, thisArg, args)\fR
+Runs function `fn` in the execution context of this `AsyncResource`.
+\fBParameters:\fR
+.br
+\fIfn\fR (function; required)
+.br
+\fIthisArg\fR (object; optional)
+.br
+\fIargs\fR (\&...any; optional)
+\fBReturns:\fR
+.br
+\fIany\fR

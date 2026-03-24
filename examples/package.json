@@ -1,0 +1,17 @@
+{
+  "name": "@orocomputer/examples",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ./build.js"
+  },
+  "dependencies": {
+    "@xterm/addon-attach": "^0.11.0",
+    "@xterm/addon-canvas": "^0.7.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-search": "^0.15.0",
+    "@xterm/xterm": "^5.5.0",
+    "acorn": "8.12.0",
+    "acorn-walk": "8.3.3"
+  }
+}

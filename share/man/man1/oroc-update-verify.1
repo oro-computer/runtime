@@ -1,0 +1,41 @@
+.TH OROC-UPDATE-VERIFY 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-update\-verify \- Verify a manifest + signature pair using an Ed25519 public key.
+.SH SYNOPSIS
+.nf
+oroc update verify [\-\-manifest=<path>] [\-\-signature=<path>] (\-\-keys=<file> | \-\-public\-key=<hex>) [options]
+.fi
+.SH DESCRIPTION
+.PP
+Verify a manifest + signature pair using an Ed25519 public key.
+.SH OPTIONS
+.TP
+\fB\-\-manifest=<path>\fR
+path to the manifest JSON file (default: manifest\-name or ORO_UPDATE_MANIFEST_FILENAME)
+.TP
+\fB\-\-manifest\-name=<name>\fR
+manifest filename to use when \-\-manifest is not provided
+.TP
+\fB\-\-signature=<path>\fR
+path to the manifest.sig JSON file (default: <manifest>.sig)
+.TP
+\fB\-\-keys=<file>\fR
+JSON file containing a public key ("publicKey" or "key" field)
+.TP
+\fB\-\-public\-key=<hex>\fR
+Ed25519 public key as a hex string
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+Exits with status 0 when the signature is valid for the manifest and public key; non\-zero otherwise. Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '\-\-manifest\-name' to change the default manifest filename (the default signature path is derived as '<manifest\-without\-extension>.sig', e.g. manifest.json \-> manifest.sig).
+.SH EXAMPLES
+.TP
+\fBoroc update verify \-\-keys key.json \-\-manifest manifest.json\fR
+verify manifest.json against manifest.sig using the public key in key.json
+.TP
+\fBoroc update verify \-\-public\-key <hex\-public\-key> \-\-manifest manifest.json \-\-signature manifest.sig\fR
+verify using an explicit hex\-encoded public key and signature file
+.SH SEE ALSO
+oroc(1), oroc\-update(1)

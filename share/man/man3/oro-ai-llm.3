@@ -1,0 +1,158 @@
+.TH ORO-AI-LLM 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:ai/llm \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:ai/llm'
+.fi
+.SH DESCRIPTION
+.PP
+oro:ai/llm is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBModel\fR
+This is an exported `ClassDeclaration` named `Model`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ModelOptions; required)
+.TP
+\fBid()\fR
+Documented method exposed by this module.
+.TP
+\fBname()\fR
+Documented method exposed by this module.
+.TP
+\fBready()\fR
+Documented method exposed by this module.
+.TP
+\fBloaded()\fR
+`true` if the model is loaded, otherwise `false`.
+.TP
+\fBload(options)\fR
+Loads the model it not already loaded.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ModelLoadOptions; optional; default null)
+.TP
+\fBLoRA\fR
+This is an exported `ClassDeclaration` named `LoRA`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(model, options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImodel\fR (Model; required)
+.br
+\fIoptions\fR (LoRAOptions; required)
+.TP
+\fBid()\fR
+Documented method exposed by this module.
+.TP
+\fBname()\fR
+Documented method exposed by this module.
+.TP
+\fBready()\fR
+Documented method exposed by this module.
+.TP
+\fBloaded()\fR
+Documented method exposed by this module.
+.TP
+\fBmodel()\fR
+Documented method exposed by this module.
+.TP
+\fBload(options)\fR
+Load this adapter. Pass `options.id` to reference an already\-loaded LoRA without providing `name`/`model` metadata.
+\fBParameters:\fR
+.br
+\fIoptions\fR (LoRALoadOptions; optional; default null)
+.TP
+\fBattach(context, options)\fR
+Attach a LoRA to a context.
+\fBParameters:\fR
+.br
+\fIcontext\fR (Context; required)
+.br
+\fIoptions\fR (LoraAttachOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBdetach(context)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIcontext\fR (Context; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBLoRAAttachment\fR
+This is an exported `ClassDeclaration` named `LoRAAttachment`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (LoRAAttachmentOptions; required)
+.TP
+\fBcontext()\fR
+Documented method exposed by this module.
+.TP
+\fBmodel()\fR
+Documented method exposed by this module.
+.TP
+\fBlora()\fR
+Documented method exposed by this module.
+.TP
+\fBContext\fR
+This is an exported `ClassDeclaration` named `Context`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ContextOptions; optional; default null)
+.TP
+\fBid()\fR
+Documented method exposed by this module.
+.TP
+\fBsize()\fR
+Documented method exposed by this module.
+.TP
+\fBloaded()\fR
+Documented method exposed by this module.
+.TP
+\fBmodel()\fR
+Documented method exposed by this module.
+.TP
+\fBready()\fR
+Documented method exposed by this module.
+.TP
+\fBoptions()\fR
+Documented method exposed by this module.
+.TP
+\fBattachments()\fR
+Documented method exposed by this module.
+.TP
+\fBadapters()\fR
+Documented method exposed by this module.
+.TP
+\fBload(model, options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImodel\fR (Model; required)
+.br
+\fIoptions\fR (ContextOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBstats()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIPromise<ContextStats>\fR

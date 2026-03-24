@@ -1,0 +1,41 @@
+.TH OROC-UPDATE-VALIDATE 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-update\-validate \- Validate an update manifest JSON file against the expected schema shape.
+.SH SYNOPSIS
+.nf
+oroc update validate [\-\-manifest=<path>] [options]
+.fi
+.SH DESCRIPTION
+.PP
+Validate an update manifest JSON file against the expected schema shape.
+.SH OPTIONS
+.TP
+\fB\-\-manifest=<path>\fR
+path to the manifest JSON file (default: manifest\-name or ORO_UPDATE_MANIFEST_FILENAME)
+.TP
+\fB\-\-manifest\-name=<name>\fR
+manifest filename to use when \-\-manifest is not provided
+.TP
+\fB\-\-strict\fR
+enable additional consistency checks (for example, channels vs updates, artifactUrl shape)
+.TP
+\fB\-\-json\fR
+print a machine\-readable JSON result object (for CI)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+This command parses the manifest and performs lightweight structural validation aligned with 'schemas/update\-manifest.schema.json' (required fields, types, and key relationships). It does not attempt full JSON Schema validation, but is suitable for fast local checks and CI. When '\-\-strict' is provided, additional consistency rules are enforced. When '\-\-json' is provided, stdout is reserved for the result object only.
+.SH EXAMPLES
+.TP
+\fBoroc update validate \-\-manifest manifest.json\fR
+run basic structural checks against manifest.json
+.TP
+\fBoroc update validate \-\-manifest manifest.json \-\-strict\fR
+enable stricter consistency rules in addition to structural checks
+.TP
+\fBoroc update validate \-\-manifest manifest.json \-\-json\fR
+print validation status as JSON for CI or agents
+.SH SEE ALSO
+oroc(1), oroc\-update(1)

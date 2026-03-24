@@ -1,0 +1,2 @@
+export default SharedArrayBufferPolyfill;
+declare let SharedArrayBufferPolyfill: SharedArrayBufferConstructor;

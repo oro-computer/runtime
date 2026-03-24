@@ -1,0 +1,163 @@
+.ann-app__grid {
+  gap: 24px;
+}
+
+.ann-app__summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.ann-app__summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: var(--ui-radius-sm);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.08);
+  padding: 14px 16px;
+}
+
+.ann-app__summary-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-foreground-muted);
+}
+
+.ann-app__summary-value {
+  font-family: var(--ui-font-mono, 'JetBrains Mono', monospace);
+  font-size: 14px;
+  color: var(--ui-foreground);
+  word-break: break-word;
+}
+
+.ann-app__class-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ann-app__class-list li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.ann-app__registry-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.ann-app__registry-table {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.ann-app__form-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.ann-app__toggles {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.ann-app__toggle-field .ui-field__control {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.ann-app__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ann-app__actions .ui-button {
+  min-width: 160px;
+}
+
+.ann-app__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.ann-app__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: var(--ui-radius-sm);
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.ann-app__metric-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-foreground-muted);
+}
+
+.ann-app__metric-value {
+  font-family: var(--ui-font-mono, 'JetBrains Mono', monospace);
+  font-size: 15px;
+}
+
+.ann-app__prediction-table {
+  max-height: 340px;
+  overflow: auto;
+}
+
+.ann-app__label-badge {
+  margin-left: 6px;
+}
+
+.ann-app__log-entry {
+  display: grid;
+  grid-template-columns: 90px 70px 1fr;
+  gap: 12px;
+  font-family: var(--ui-font-mono, 'JetBrains Mono', monospace);
+  font-size: 13px;
+  padding: 6px 0;
+}
+
+.ann-app__log-kind {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ann-app__log-kind--info {
+  color: var(--ui-accent, #0ea5e9);
+}
+
+.ann-app__log-kind--success {
+  color: #16a34a;
+}
+
+.ann-app__log-kind--warning {
+  color: #f59e0b;
+}
+
+.ann-app__log-kind--error {
+  color: #dc2626;
+}
+
+.ann-app__log-timestamp {
+  color: var(--ui-foreground-muted);
+}
+
+.ann-app__log-message {
+  color: var(--ui-foreground);
+  word-break: break-word;
+}

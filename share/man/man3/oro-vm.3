@@ -1,0 +1,265 @@
+.TH ORO-VM 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:vm \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:vm'
+.fi
+.SH DESCRIPTION
+.PP
+This module enables compiling and running JavaScript source code in an isolated execution context optionally with a user supplied context object.
+.PP
+Example usage: import fs from 'oro:fs/promises' import vm from 'oro:vm'
+.PP
+const data = await fs.readFile('data.json') const context = { data, value: null } const source = ` const text = new TextDecoder().decode(data) const json = JSON.parse(text)
+.PP
+// get `.value` from parsed JSON and set it to global `value` // that exists on the user context value = json.value ` const result = await vm.runInContext(source, context) console.log(context.value) // set from `json.value` in VM context
+.SH REFERENCE
+.TP
+\fBchannel\fR
+Shared broadcast for virtual machaines
+.TP
+\fBRESERVED_GLOBAL_INTRINSICS\fR
+Global reserved values that a script context may not modify.
+.TP
+\fBReference\fR
+A unique reference to a value owner by a "context object" and a `Script` instance.
+.TP
+\fBisReference(value)\fR
+Predicate function to determine if a `value` is an internal or external script reference value.
+\fBParameters:\fR
+.br
+\fIvalue\fR (amy; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBconstructor(id, value, context, options)\fR
+`Reference` class constructor.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+.br
+\fIvalue\fR (any; required)
+.br
+\fIcontext\fR (object; optional; default null)
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBid()\fR
+The unique id of the reference
+.TP
+\fBvalue()\fR
+The underlying value of the reference.
+.TP
+\fBname()\fR
+The name of the type.
+.TP
+\fBscript()\fR
+The `Script` this value belongs to, if available.
+.TP
+\fBcontext()\fR
+The "context object" this reference value belongs to.
+.TP
+\fBisIntrinsic()\fR
+A boolean value to indicate if the underlying reference value is an intrinsic value.
+.TP
+\fBisExternal()\fR
+A boolean value to indicate if the underlying reference value is an external reference value.
+.TP
+\fBintrinsicType()\fR
+The intrinsic type this reference may be an instance of or directly refer to.
+.TP
+\fBrelease()\fR
+Releases strongly held value and weak references to the "context object".
+.TP
+\fBtoJSON(includeValue)\fR
+Converts this `Reference` to a JSON object.
+\fBParameters:\fR
+.br
+\fIincludeValue\fR (boolean; optional; default false)
+.TP
+\fBScript (extends EventTarget)\fR
+A `Script` is a container for raw JavaScript to be executed in a completely isolated virtual machine context, optionally with user supplied context. Context objects references are not actually shared, but instead provided to the script execution context using the structured cloning algorithm used by the Message Channel API. Context differences are computed and applied after execution so the user supplied context object realizes context changes after script execution. All script sources run in an "async" context so a "top level await" should work.
+.TP
+\fBconstructor(source, options)\fR
+`Script` class constructor
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.br
+\fIoptions\fR (ScriptOptions; optional; default null)
+.TP
+\fBid()\fR
+The script identifier.
+.TP
+\fBsource()\fR
+The source for this script.
+.TP
+\fBfilename()\fR
+The filename for this script.
+.TP
+\fBready()\fR
+A promise that resolves when the script is ready.
+.TP
+\fBcontext()\fR
+The default script context object
+.TP
+\fBdestroy()\fR
+Destroy the script execution context.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBrunInContext(options, context)\fR
+Run `source` JavaScript in given context. The script context execution context is preserved until the `context` object that points to it is garbage collected or there are no longer any references to it and its associated `Script` instance.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ScriptOptions; optional; default null)
+.br
+\fIcontext\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR
+.TP
+\fBrunInNewContext(options, context)\fR
+Run `source` JavaScript in new context. The script context is destroyed after execution. This is typically a "one off" isolated run.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ScriptOptions; optional; default null)
+.br
+\fIcontext\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR
+.TP
+\fBrunInThisContext(options)\fR
+Run `source` JavaScript in this current context (`globalThis`).
+\fBParameters:\fR
+.br
+\fIoptions\fR (ScriptOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR
+.TP
+\fBgetContextWindow()\fR
+Gets the VM context window. This function will create it if it does not already exist.
+\fBReturns:\fR
+.br
+\fIPromise<import('./window.js').ApplicationWindow\fR
+.TP
+\fBgetContextWorker()\fR
+Gets the `SharedWorker` that for the VM context.
+\fBReturns:\fR
+.br
+\fIPromise<SharedWorker>\fR
+.TP
+\fBisIntrinsic(value)\fR
+Returns `true` if value is an intrinsic, otherwise `false`.
+\fBParameters:\fR
+.br
+\fIvalue\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBgetIntrinsicType(value)\fR
+Get the intrinsic type of a given `value`.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (any; required)
+\fBReturns:\fR
+.br
+\fIfunction \\| object \\| null \\| undefined\fR
+.TP
+\fBgetIntrinsicTypeString(value)\fR
+Get the intrinsic type string of a given `value`.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (any; required)
+\fBReturns:\fR
+.br
+\fIstring \\| null\fR
+.TP
+\fBrunInContext(source, context, options)\fR
+Run `source` JavaScript in given context. The script context execution context is preserved until the `context` object that points to it is garbage collected or there are no longer any references to it and its associated `Script` instance.
+\fBParameters:\fR
+.br
+\fIsource\fR (string \\| object \\| function; required)
+.br
+\fIcontext\fR (object; optional)
+.br
+\fIoptions\fR (ScriptOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR
+.TP
+\fBrunInNewContext(source, context, options)\fR
+Run `source` JavaScript in new context. The script context is destroyed after execution. This is typically a "one off" isolated run.
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.br
+\fIcontext\fR (object; optional)
+.br
+\fIoptions\fR (ScriptOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR
+.TP
+\fBrunInThisContext(source, options)\fR
+Run `source` JavaScript in this current context (`globalThis`).
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.br
+\fIoptions\fR (ScriptOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR
+.TP
+\fBcreateReference(value, context, options)\fR
+Create a `Reference` for a `value` in a script `context`.
+\fBParameters:\fR
+.br
+\fIvalue\fR (any; required)
+.br
+\fIcontext\fR (object; required)
+.br
+\fIoptions\fR (object; optional; default null)
+\fBReturns:\fR
+.br
+\fIReference\fR
+.TP
+\fBgetReference(id)\fR
+Get a script context by ID or values
+\fBParameters:\fR
+.br
+\fIid\fR (string \\| object \\| function; required)
+\fBReturns:\fR
+.br
+\fIReference?\fR
+.TP
+\fBremoveReference(id)\fR
+Remove a script context reference by ID.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+.TP
+\fBgetTransferables(object)\fR
+Get all transferable values in the `object` hierarchy.
+\fBParameters:\fR
+.br
+\fIobject\fR (object; required)
+\fBReturns:\fR
+.br
+\fIobject[]\fR
+.TP
+\fBisContext(object)\fR
+Returns `true` if `object` is a "context" object.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (object; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR

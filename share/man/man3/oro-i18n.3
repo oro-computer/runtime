@@ -1,0 +1,60 @@
+.TH ORO-I18N 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:i18n \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:i18n'
+.fi
+.SH DESCRIPTION
+.PP
+Functions to internationalize your application. These module APIs can be used to get localized strings from locale files packaged with your application, find out the browser's current language, and find out the value of its Accept\-Language header.
+.SH REFERENCE
+.TP
+\fBcache\fR
+A cache of loaded locale messages.
+.TP
+\fBDEFAULT_LOCALES_LOCATION\fR
+Default location of i18n locale messages
+.TP
+\fBLanguageCode\fR
+An enumeration of supported ISO 639 language codes or RFC 5646 language tags.
+.TP
+\fBgetAcceptLanguages()\fR
+Returns user preferred ISO 639 language codes or RFC 5646 language tags.
+\fBReturns:\fR
+.br
+\fIstring[]\fR
+.TP
+\fBgetUILanguage()\fR
+Returns the current user ISO 639 language code or RFC 5646 language tag.
+\fBReturns:\fR
+.br
+\fI?string\fR
+.TP
+\fBgetMessage(messageName, substitutions, options)\fR
+Gets a localized message string for the specified message name.
+\fBParameters:\fR
+.br
+\fImessageName\fR (string; required)
+.br
+\fIsubstitutions\fR (object \\| string[]; optional)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.locale\fR (string; optional; default null)
+\fBReturns:\fR
+.br
+\fI?string\fR
+.TP
+\fBgetMessageDescription(messageName, options)\fR
+Gets a localized message description string for the specified message name.
+\fBParameters:\fR
+.br
+\fImessageName\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.locale\fR (string; optional; default null)
+\fBReturns:\fR
+.br
+\fI?string\fR

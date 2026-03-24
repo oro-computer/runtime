@@ -1,0 +1,11 @@
+[background]
+enabled = true
+default_entry = "examples/background-scheduler/worker.js"
+
+[background.service.example_periodic_sync]
+entry = "examples/background-scheduler/worker.js"
+permissions = "network"
+
+[background.service.example_periodic_sync.trigger]
+type = "interval"
+minimum_interval = 300000

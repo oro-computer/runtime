@@ -1,0 +1,73 @@
+.TH ORO-MCP 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:mcp \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:mcp'
+.fi
+.SH DESCRIPTION
+.PP
+Runtime MCP helpers for registering tools/resources and controlling the native HTTP/SSE bridge.
+.SH REFERENCE
+.TP
+\fBregisterTool(tool)\fR
+Register a tool that can be invoked by MCP clients.
+\fBParameters:\fR
+.br
+\fItool\fR (MCPRegisterToolOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<number \\| null>\fR
+.TP
+\fBunregisterTool(name)\fR
+This is an exported `FunctionDeclaration` named `unregisterTool`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBlistTools()\fR
+This is an exported `FunctionDeclaration` named `listTools`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBregisterResource(resource)\fR
+Register a resource that can be read or subscribed to by MCP clients.
+\fBParameters:\fR
+.br
+\fIresource\fR (MCPRegisterResourceOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<number \\| null>\fR
+.TP
+\fBunregisterResource(uri)\fR
+This is an exported `FunctionDeclaration` named `unregisterResource`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBlistResources()\fR
+This is an exported `FunctionDeclaration` named `listResources`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBinvokeTool(name, args, options)\fR
+This is an exported `FunctionDeclaration` named `invokeTool`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBpublishResource(uri, result, options)\fR
+This is an exported `FunctionDeclaration` named `publishResource`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBsetAuthorizationHandler(handler)\fR
+Configure a runtime authorization handler for incoming MCP HTTP requests. Pass a function to enable dynamic authorization or `null`/`undefined` to clear. The handler can return a boolean or an {@link MCPAuthorizationDecision} object.
+\fBParameters:\fR
+.br
+\fIhandler\fR ((request: MCPAuthorizationRequest) => boolean \\| MCPAuthorizationDecision \\| Promise<boolean \\| MCPAuthorizationDecision> \\| null \\| undefined; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBstartServer(options)\fR
+Start the embedded MCP HTTP/SSE bridge.
+.br
+\- Supplying `port: 0` binds to an ephemeral port and the resolved value is returned in the result. \- `authorize` registers a dynamic authorization handler for this server.
+\fBParameters:\fR
+.br
+\fIoptions\fR (MCPStartServerOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<{ running: boolean, host: string, port: number, endpoint: string, oauth?: { authorizePath?: string \\| null, tokenPath?: string \\| null, metadataPath?: string \\| null } }>\fR
+.TP
+\fBstopServer()\fR
+This is an exported `FunctionDeclaration` named `stopServer`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBserverStatus()\fR
+This is an exported `FunctionDeclaration` named `serverStatus`, but it does not yet have a dedicated description in the generated reference.

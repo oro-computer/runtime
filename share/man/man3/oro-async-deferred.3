@@ -1,0 +1,49 @@
+.TH ORO-ASYNC-DEFERRED 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:async/deferred \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:async/deferred'
+.fi
+.SH DESCRIPTION
+.PP
+oro:async/deferred is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBDeferredResolveEvent (extends Event)\fR
+Dispatched when a `Deferred` internal promise is resolved.
+.TP
+\fBDeferredRejectEvent (extends ErrorEvent)\fR
+Dispatched when a `Deferred` internal promise is rejected.
+.TP
+\fBDeferred (extends EventTarget)\fR
+A utility class for creating deferred promises.
+.TP
+\fBconstructor(promise)\fR
+`Deferred` class constructor.
+\fBParameters:\fR
+.br
+\fIpromise\fR (Deferred \\| Promise?; optional)
+.TP
+\fBpromise()\fR
+The promise associated with this Deferred instance.
+.TP
+\fBthen(resolve, reject)\fR
+Attaches a fulfillment callback and a rejection callback to the promise, and returns a new promise resolving to the return value of the called callback.
+\fBParameters:\fR
+.br
+\fIresolve\fR (function(any); optional)
+.br
+\fIreject\fR (function(Error); optional)
+.TP
+\fBcatch(callback)\fR
+Attaches a rejection callback to the promise, and returns a new promise resolving to the return value of the callback if it is called, or to its original fulfillment value if the promise is instead fulfilled.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function(Error); optional)
+.TP
+\fBfinally(callback)\fR
+Attaches a callback for when the promise is settled (fulfilled or rejected).
+\fBParameters:\fR
+.br
+\fIcallback\fR (function(any?); optional)

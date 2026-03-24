@@ -1,0 +1,76 @@
+.TH ORO-INTERNAL-EVENTS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/events \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/events'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/events is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBApplicationURLEvent (extends Event)\fR
+An event dispatched when an application URL is opening the application.
+.TP
+\fBconstructor(type, options)\fR
+`ApplicationURLEvent` class constructor.
+\fBParameters:\fR
+.br
+\fItype\fR (string; optional; default 'applicationurl')
+.br
+\fIoptions\fR (object; optional; default null)
+.TP
+\fBisValid()\fR
+`true` if the application URL is valid (parses correctly).
+.TP
+\fBdata()\fR
+Data associated with the `ApplicationURLEvent`.
+.TP
+\fBsource()\fR
+The original source URI
+.TP
+\fBurl()\fR
+The `URL` for the `ApplicationURLEvent`.
+.TP
+\fBHotKeyEvent (extends MessageEvent)\fR
+An event dispacted for a registered global hotkey expression.
+.TP
+\fBid()\fR
+The global unique ID for this hotkey binding.
+.TP
+\fBhash()\fR
+The computed hash for this hotkey binding.
+.TP
+\fBsequence()\fR
+The normalized hotkey expression as a sequence of tokens.
+.TP
+\fBexpression()\fR
+The original expression of the hotkey binding.
+.TP
+\fBMenuItemEvent (extends MessageEvent)\fR
+An event dispacted when a menu item is selected.
+.TP
+\fBmenu()\fR
+The `Menu` this event has been dispatched for.
+.TP
+\fBtitle()\fR
+The title of the menu item.
+.TP
+\fBtag()\fR
+An optional tag value for the menu item that may also be the parent menu item title.
+.TP
+\fBparent()\fR
+The parent title of the menu item.
+.TP
+\fBSignalEvent (extends MessageEvent)\fR
+An event dispacted when the application receives an OS signal
+.TP
+\fBcode()\fR
+The code of the signal.
+.TP
+\fBname()\fR
+The name of the signal.
+.TP
+\fBmessage()\fR
+An optional message describing the signal

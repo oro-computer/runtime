@@ -1,0 +1,24 @@
+.TH ORO-DNS-PROMISES 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:dns/promises \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:dns/promises'
+.fi
+.SH DESCRIPTION
+.PP
+This module enables name resolution. For example, use it to look up IP addresses of host names. Although named for the Domain Name System (DNS), it does not always use the DNS protocol for lookups. dns.lookup() uses the operating system facilities to perform name resolution. It may not need to perform any network communication. To perform name resolution the way other applications on the same system do, use dns.lookup().
+.PP
+Example usage: import { lookup } from 'oro:dns/promises'
+.SH REFERENCE
+.TP
+\fBlookup(hostname, opts)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIhostname\fR (string; required) The host name to resolve.
+.br
+\fIopts\fR (LookupOptions \\| number \\| string; optional) Lookup options or family.
+\fBReturns:\fR
+.br
+\fIPromise<LookupAddress \\| LookupAddress[]>\fR

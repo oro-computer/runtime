@@ -1,0 +1,56 @@
+.TH OROC-CONFIG 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-config \- Inspect configuration values.
+.SH SYNOPSIS
+.nf
+oroc config [options] [<key\-or\-path>]
+.fi
+.SH DESCRIPTION
+.PP
+Inspect configuration values.
+.SH OPTIONS
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml/oro.ini file
+.TP
+\fB\-\-list\fR
+list known configuration keys with current and default values
+.TP
+\fB\-\-key=<name>\fR
+print the current value for a specific key
+.TP
+\fB\-\-describe=<name>\fR
+print help and metadata for a specific key
+.TP
+\fB\-f, \-\-format=<format>\fR
+print the full configuration as 'toml', 'ini', or 'json'
+.TP
+\fB\-\-json\fR
+shorthand for '\-\-format=json'
+.TP
+\fB\-\-strict\fR
+treat unknown or unset keys as errors (non\-zero exit)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+Keys may be provided in flattened form (e.g., "filesystem_sandbox_enabled") or as TOML\-style paths (e.g., "filesystem.sandbox_enabled"). A bare argument after 'config' is treated as a key query (for example, 'oroc config filesystem.sandbox_enabled'). Unknown keys are printed when present in the active configuration but are marked as undocumented. `\-\-format` prints the merged effective configuration after applying oro.toml, local .ororc overrides, and CLI\-selected config sources. Use '\-\-log\-file=<path>' instead of the global 'oroc \-\-json ...' flag when you need structured config output on stdout and logs at the same time.
+.SH EXAMPLES
+.TP
+\fBoroc config \-\-list\fR
+list all known configuration keys with effective values
+.TP
+\fBoroc config meta.version\fR
+print the effective value of meta.version
+.TP
+\fBoroc config \-\-describe webview.root\fR
+print the description, default, and source for webview.root
+.TP
+\fBoroc config "ios.*"\fR
+glob\-match a group of related keys
+.TP
+\fBoroc config \-\-format json\fR
+print the merged effective configuration as JSON
+.SH SEE ALSO
+oroc(1)

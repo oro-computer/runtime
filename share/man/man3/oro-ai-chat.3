@@ -1,0 +1,122 @@
+.TH ORO-AI-CHAT 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:ai/chat \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:ai/chat'
+.fi
+.SH DESCRIPTION
+.PP
+oro:ai/chat is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBChatMessageEvent (extends MessageEvent)\fR
+This is an exported `ClassDeclaration` named ``ChatMessageEvent` (extends `MessageEvent`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(type, options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIoptions\fR (MessageEventInit & { finished?: boolean }; required)
+.TP
+\fBMessage\fR
+This is an exported `ClassDeclaration` named `Message`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBid()\fR
+Documented method exposed by this module.
+.TP
+\fBrole()\fR
+Documented method exposed by this module.
+.TP
+\fBcontent()\fR
+Documented method exposed by this module.
+.TP
+\fBSession (extends EventTarget)\fR
+This is an exported `ClassDeclaration` named ``Session` (extends `EventTarget`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(context, options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIcontext\fR (Context; required)
+.br
+\fIoptions\fR (SessionOptions; optional; default null)
+.TP
+\fBid()\fR
+Documented method exposed by this module.
+.TP
+\fBprompt()\fR
+Documented method exposed by this module.
+.TP
+\fBcontext()\fR
+Documented method exposed by this module.
+.TP
+\fBconduit()\fR
+Documented method exposed by this module.
+.TP
+\fBstarted()\fR
+Documented method exposed by this module.
+.TP
+\fBloaded()\fR
+Documented method exposed by this module.
+.TP
+\fBgenerating()\fR
+Documented method exposed by this module.
+.TP
+\fBmessages()\fR
+Documented method exposed by this module.
+.TP
+\fBantiprompts()\fR
+Documented method exposed by this module.
+.TP
+\fBload(model, options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImodel\fR (Model; required)
+.br
+\fIoptions\fR (ModelLoadOptions & ContextOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBstart()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBgenerate(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (GenerateOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<object>\fR
+.TP
+\fBChat (extends Session)\fR
+This is an exported `ClassDeclaration` named ``Chat` (extends `Session`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ChatOptions; required)
+.TP
+\fBid()\fR
+Documented method exposed by this module.
+.TP
+\fBmodel()\fR
+Documented method exposed by this module.
+.TP
+\fBready()\fR
+Documented method exposed by this module.
+.TP
+\fBload()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIPromise\fR

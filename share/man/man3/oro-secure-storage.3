@@ -1,0 +1,64 @@
+.TH ORO-SECURE-STORAGE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:secure\-storage \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:secure\-storage'
+.fi
+.SH DESCRIPTION
+.PP
+oro:secure\-storage is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBsetItem(key, value, options)\fR
+Stores a value inside secure storage for the given key.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (string \\| Uint8Array \\| ArrayBuffer \\| Buffer; required)
+.br
+\fIoptions\fR (SetItemOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBgetItem(key, options)\fR
+Retrieves a previously stored value.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIoptions\fR (GetItemOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<string \\| Uint8Array \\| null>\fR
+.TP
+\fBremoveItem(key, options)\fR
+Removes a single key from secure storage.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIoptions\fR (SecureStorageOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBclear(options)\fR
+Clears all keys for the provided scope (or default scope).
+\fBParameters:\fR
+.br
+\fIoptions\fR (SecureStorageOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBkeys(options)\fR
+Lists the stored keys for the provided scope.
+\fBParameters:\fR
+.br
+\fIoptions\fR (SecureStorageOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<string[]>\fR

@@ -1,0 +1,47 @@
+.TH ORO-COMMONJS-BUILTINS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:commonjs/builtins \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:commonjs/builtins'
+.fi
+.SH DESCRIPTION
+.PP
+oro:commonjs/builtins is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBbuiltins\fR
+A mapping of builtin modules
+.TP
+\fBdefineBuiltin(name, exports, copy)\fR
+Defines a builtin module by name making a shallow copy of the module exports.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (string; required)
+.br
+\fIexports\fR (object; required)
+.TP
+\fBruntimeModules\fR
+Known runtime specific builtin modules.
+.TP
+\fBisBuiltin(name, options)\fR
+Predicate to determine if a given module name is a builtin module.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fI(Position 1)\fR ({ builtins?: object }; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBgetBuiltin(name, options)\fR
+Gets a builtin module by name.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIoptions\fR ({ builtins?: object }; optional; default null)
+\fBReturns:\fR
+.br
+\fIany\fR

@@ -1,0 +1,112 @@
+.TH ORO-INTERNAL-ASYNC-HOOKS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/async/hooks \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/async/hooks'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/async/hooks is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBTOP_LEVEL_ASYNC_RESOURCE_ID\fR
+The default top level async resource ID
+.TP
+\fBstate\fR
+The internal async hook state.
+.TP
+\fBhooks\fR
+The current async hooks enabled.
+.TP
+\fBCoreAsyncResource\fR
+A base class for the `AsyncResource` class or other higher level async resource classes.
+.TP
+\fBconstructor(type, options)\fR
+`CoreAsyncResource` class constructor.
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIoptions\fR (object \\| number; optional; default null)
+.TP
+\fBtype()\fR
+The `CoreAsyncResource` type.
+.TP
+\fBdestroyed()\fR
+`true` if the `CoreAsyncResource` was destroyed, otherwise `false`. This value is only set to `true` if `emitDestroy()` was called, likely from destroying the resource manually.
+.TP
+\fBasyncId()\fR
+The unique async resource ID.
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBtriggerAsyncId()\fR
+The trigger async resource ID.
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBemitDestroy()\fR
+Manually emits destroy hook for the resource.
+\fBReturns:\fR
+.br
+\fICoreAsyncResource\fR
+.TP
+\fBbind(fn, thisArg)\fR
+Binds function `fn` with an optional this `thisArg` binding to run in the execution context of this `CoreAsyncResource`.
+\fBParameters:\fR
+.br
+\fIfn\fR (function; required)
+.br
+\fIthisArg\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBrunInAsyncScope(fn, thisArg, args)\fR
+Runs function `fn` in the execution context of this `CoreAsyncResource`.
+\fBParameters:\fR
+.br
+\fIfn\fR (function; required)
+.br
+\fIthisArg\fR (object; optional)
+.br
+\fIargs\fR (\&...any; optional)
+\fBReturns:\fR
+.br
+\fIany\fR
+.TP
+\fBTopLevelAsyncResource (extends CoreAsyncResource)\fR
+This is an exported `ClassDeclaration` named ``TopLevelAsyncResource` (extends `CoreAsyncResource`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBdispatch(hook, asyncId, type, triggerAsyncId, resource)\fR
+This is an exported `FunctionDeclaration` named `dispatch`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBgetNextAsyncResourceId()\fR
+This is an exported `FunctionDeclaration` named `getNextAsyncResourceId`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBexecutionAsyncResource()\fR
+This is an exported `FunctionDeclaration` named `executionAsyncResource`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBexecutionAsyncId()\fR
+This is an exported `FunctionDeclaration` named `executionAsyncId`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBtriggerAsyncId()\fR
+This is an exported `FunctionDeclaration` named `triggerAsyncId`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBgetDefaultExecutionAsyncId()\fR
+This is an exported `FunctionDeclaration` named `getDefaultExecutionAsyncId`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBwrap(callback, type, asyncId, triggerAsyncId, resource)\fR
+This is an exported `FunctionDeclaration` named `wrap`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBgetTopLevelAsyncResourceName()\fR
+This is an exported `FunctionDeclaration` named `getTopLevelAsyncResourceName`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBasyncContextVariable\fR
+This is an exported `VariableDeclaration` named `asyncContextVariable`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBtopLevelAsyncResource\fR
+This is an exported `VariableDeclaration` named `topLevelAsyncResource`, but it does not yet have a dedicated description in the generated reference.

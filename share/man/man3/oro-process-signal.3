@@ -1,0 +1,166 @@
+.TH ORO-PROCESS-SIGNAL 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:process/signal \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:process/signal'
+.fi
+.SH DESCRIPTION
+.PP
+oro:process/signal is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBchannel\fR
+This is an exported `VariableDeclaration` named `channel`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGHUP\fR
+This is an exported `VariableDeclaration` named `SIGHUP`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGINT\fR
+This is an exported `VariableDeclaration` named `SIGINT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGQUIT\fR
+This is an exported `VariableDeclaration` named `SIGQUIT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGILL\fR
+This is an exported `VariableDeclaration` named `SIGILL`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGTRAP\fR
+This is an exported `VariableDeclaration` named `SIGTRAP`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGABRT\fR
+This is an exported `VariableDeclaration` named `SIGABRT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGIOT\fR
+This is an exported `VariableDeclaration` named `SIGIOT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGBUS\fR
+This is an exported `VariableDeclaration` named `SIGBUS`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGFPE\fR
+This is an exported `VariableDeclaration` named `SIGFPE`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGKILL\fR
+This is an exported `VariableDeclaration` named `SIGKILL`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGUSR1\fR
+This is an exported `VariableDeclaration` named `SIGUSR1`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGSEGV\fR
+This is an exported `VariableDeclaration` named `SIGSEGV`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGUSR2\fR
+This is an exported `VariableDeclaration` named `SIGUSR2`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGPIPE\fR
+This is an exported `VariableDeclaration` named `SIGPIPE`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGALRM\fR
+This is an exported `VariableDeclaration` named `SIGALRM`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGTERM\fR
+This is an exported `VariableDeclaration` named `SIGTERM`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGCHLD\fR
+This is an exported `VariableDeclaration` named `SIGCHLD`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGCONT\fR
+This is an exported `VariableDeclaration` named `SIGCONT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGSTOP\fR
+This is an exported `VariableDeclaration` named `SIGSTOP`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGTSTP\fR
+This is an exported `VariableDeclaration` named `SIGTSTP`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGTTIN\fR
+This is an exported `VariableDeclaration` named `SIGTTIN`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGTTOU\fR
+This is an exported `VariableDeclaration` named `SIGTTOU`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGURG\fR
+This is an exported `VariableDeclaration` named `SIGURG`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGXCPU\fR
+This is an exported `VariableDeclaration` named `SIGXCPU`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGXFSZ\fR
+This is an exported `VariableDeclaration` named `SIGXFSZ`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGVTALRM\fR
+This is an exported `VariableDeclaration` named `SIGVTALRM`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGPROF\fR
+This is an exported `VariableDeclaration` named `SIGPROF`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGWINCH\fR
+This is an exported `VariableDeclaration` named `SIGWINCH`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGIO\fR
+This is an exported `VariableDeclaration` named `SIGIO`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGINFO\fR
+This is an exported `VariableDeclaration` named `SIGINFO`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSIGSYS\fR
+This is an exported `VariableDeclaration` named `SIGSYS`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBstrings\fR
+This is an exported `VariableDeclaration` named `strings`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBtoString(code)\fR
+Converts an `signal` code to its corresponding string message.
+\fBParameters:\fR
+.br
+\fI{code}\fR (import('./os/constants.js').signal; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBgetCode(name)\fR
+Gets the code for a given 'signal' name.
+\fBParameters:\fR
+.br
+\fIname\fR (string \\| number; required)
+\fBReturns:\fR
+.br
+\fIsignal\fR
+.TP
+\fBgetName(code)\fR
+Gets the name for a given 'signal' code
+\fBParameters:\fR
+.br
+\fIcode\fR (string \\| number; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBgetMessage(code)\fR
+Gets the message for a 'signal' code.
+\fBParameters:\fR
+.br
+\fIcode\fR (number \\| string; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBaddEventListener(signalName, callback, options)\fR
+Add a signal event listener.
+\fBParameters:\fR
+.br
+\fIsignal\fR (string \\| number; required)
+.br
+\fIcallback\fR (function(SignalEvent); required)
+.br
+\fIoptions\fR ({ once?: boolean }; optional; default null)
+.TP
+\fBremoveEventListener(signalName, callback, options)\fR
+Remove a signal event listener.
+\fBParameters:\fR
+.br
+\fIsignal\fR (string \\| number; required)
+.br
+\fIcallback\fR (function(SignalEvent); required)
+.br
+\fIoptions\fR ({ once?: boolean }; optional; default null)

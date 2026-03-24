@@ -1,0 +1,110 @@
+.TH ORO-MIME 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:mime \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:mime'
+.fi
+.SH DESCRIPTION
+.PP
+oro:mime is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBDatabaseQueryResult\fR
+A container for a database lookup query.
+.TP
+\fBDatabase\fR
+A container for MIME types by class (audio, video, text, etc)
+.TP
+\fBconstructor(name)\fR
+`Database` class constructor.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.TP
+\fBentries()\fR
+An enumeration of all database entries.
+\fBReturns:\fR
+.br
+\fIArray<Array<string>>\fR
+.TP
+\fBload()\fR
+Loads database MIME entries into internal map.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBloadSync()\fR
+Loads database MIME entries synchronously into internal map.
+.TP
+\fBlookup(query)\fR
+Lookup MIME type by name or content type
+\fBParameters:\fR
+.br
+\fIquery\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<DatabaseQueryResult[]>\fR
+.TP
+\fBlookupSync(query)\fR
+Lookup MIME type by name or content type synchronously.
+\fBParameters:\fR
+.br
+\fIquery\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<DatabaseQueryResult[]>\fR
+.TP
+\fBquery(query)\fR
+Queries database map and returns an array of results
+\fBParameters:\fR
+.br
+\fIquery\fR (string; required)
+\fBReturns:\fR
+.br
+\fIDatabaseQueryResult[]\fR
+.TP
+\fBapplication\fR
+A database of MIME types for 'application/' content types
+.TP
+\fBaudio\fR
+A database of MIME types for 'audio/' content types
+.TP
+\fBfont\fR
+A database of MIME types for 'font/' content types
+.TP
+\fBimage\fR
+A database of MIME types for 'image/' content types
+.TP
+\fBmodel\fR
+A database of MIME types for 'model/' content types
+.TP
+\fBmultipart\fR
+A database of MIME types for 'multipart/' content types
+.TP
+\fBtext\fR
+A database of MIME types for 'text/' content types
+.TP
+\fBvideo\fR
+A database of MIME types for 'video/' content types
+.TP
+\fBdatabases\fR
+An array of known MIME databases. Custom databases can be added to this array in userspace for lookup with `mime.lookup()`
+.TP
+\fBlookup(query)\fR
+Look up a MIME type in various MIME databases.
+\fBParameters:\fR
+.br
+\fIquery\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<DatabaseQueryResult[]>\fR
+.TP
+\fBlookupSync(query)\fR
+Look up a MIME type in various MIME databases synchronously.
+\fBParameters:\fR
+.br
+\fIquery\fR (string; required)
+\fBReturns:\fR
+.br
+\fIDatabaseQueryResult[]\fR

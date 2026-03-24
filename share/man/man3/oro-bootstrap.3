@@ -1,0 +1,49 @@
+.TH ORO-BOOTSTRAP 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:bootstrap \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:bootstrap'
+.fi
+.SH DESCRIPTION
+.PP
+This module is responsible for downloading the bootstrap file and writing it to disk. It also provides a function to check the hash of the file on disk. This is used to determine if the file needs to be downloaded again. The bootstrap file is used to bootstrap the backend.
+.SH REFERENCE
+.TP
+\fBcheckHash(dest, hash, hashAlgorithm)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIdest\fR (string; required) file path
+.br
+\fIhash\fR (string; required) hash string
+.br
+\fIhashAlgorithm\fR (string; required) hash algorithm
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBwrite(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIoptions.fileBuffer\fR (Uint8Array; required)
+.br
+\fIoptions.dest\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBdownload(url)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIurl\fR (string; required) url to download
+\fBReturns:\fR
+.br
+\fIPromise<Uint8Array>\fR
+.TP
+\fBbootstrap(options)\fR
+This is an exported `FunctionDeclaration` named `bootstrap`, but it does not yet have a dedicated description in the generated reference.

@@ -1,0 +1,90 @@
+.TH ORO-HCI 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:hci \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:hci'
+.fi
+.SH DESCRIPTION
+.PP
+Provides a low\-level interface to the Linux Bluetooth Host Controller Interface (HCI) via the `HCI_CHANNEL_USER` socket. This API is intended for advanced use cases where direct access to the controller is required; higher\-level Bluetooth features should prefer the standard runtime Bluetooth services when possible.
+.SH REFERENCE
+.TP
+\fBlistAdapters()\fR
+Enumerate available HCI adapters on the host.
+\fBReturns:\fR
+.br
+\fIHCIAdapter[]\fR
+.TP
+\fBgetAdapter(devId)\fR
+Retrieve information for a specific adapter.
+\fBParameters:\fR
+.br
+\fIdevId\fR (number; required) Adapter identifier (e.g. `0` for `hci0`)
+\fBReturns:\fR
+.br
+\fIHCIAdapter\fR
+.TP
+\fBsetAdapterState(devId, up)\fR
+Enable or disable an adapter by bringing it up or down.
+\fBParameters:\fR
+.br
+\fIdevId\fR (number; required) Adapter identifier
+.br
+\fIup\fR (boolean; required) When `true`, powers the adapter; otherwise powers it off
+\fBReturns:\fR
+.br
+\fI{ devId: number, up: boolean }\fR
+.TP
+\fBHCISocket (extends EventEmitter)\fR
+Low\-level socket for interacting with a Bluetooth controller via HCI.
+.TP
+\fBconstructor(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (number \\| { devId?: number }; optional) Optional adapter identifier or configuration object.
+.TP
+\fBclosed()\fR
+Indicates whether the socket has been closed.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBwrite(chunk)\fR
+Write an HCI packet to the controller.
+\fBParameters:\fR
+.br
+\fIchunk\fR (ArrayBufferView \\| ArrayBuffer \\| Buffer \\| string \\| number[]; required) HCI packet bytes.
+\fBReturns:\fR
+.br
+\fInumber\fR Number of bytes written.
+.TP
+\fBclose()\fR
+Stop receiving data and close the underlying socket.
+.TP
+\fBlistAdapters()\fR
+Convenience helper mirroring {@link listAdapters}.
+\fBReturns:\fR
+.br
+\fIHCIAdapter[]\fR
+.TP
+\fBgetAdapter(devId)\fR
+Convenience helper mirroring {@link getAdapter}.
+\fBParameters:\fR
+.br
+\fIdevId\fR (number; required)
+\fBReturns:\fR
+.br
+\fIHCIAdapter\fR
+.TP
+\fBsetAdapterState(devId, up)\fR
+Convenience helper mirroring {@link setAdapterState}.
+\fBParameters:\fR
+.br
+\fIdevId\fR (number; required)
+.br
+\fIup\fR (boolean; required)
+\fBReturns:\fR
+.br
+\fI{ devId: number, up: boolean }\fR

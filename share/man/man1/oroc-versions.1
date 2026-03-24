@@ -1,0 +1,38 @@
+.TH OROC-VERSIONS 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-versions \- Print Oro CLI/runtime and dependency versions.
+.SH SYNOPSIS
+.nf
+oroc versions [options] [<dependency\-name>]
+.fi
+.SH DESCRIPTION
+.PP
+Print Oro CLI/runtime and dependency versions.
+.SH OPTIONS
+.TP
+\fB\-f, \-\-format=<format>\fR
+print as 'text' or 'json'
+.TP
+\fB\-\-json\fR
+shorthand for '\-\-format=json'
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+With no dependency name, prints the full version map for the CLI, runtime, and linked libraries. Passing a dependency name filters to a single entry (for example: oro, oroc, uv, sqlite, iroh). Use '\-\-json' or '\-\-format=json' when you need stable machine\-readable output on stdout. Use '\-\-log\-file=<path>' if you also need logs; the global 'oroc \-\-json ...' form is reserved for JSON log streaming.
+.SH EXAMPLES
+.TP
+\fBoroc versions\fR
+print all known dependency versions as text
+.TP
+\fBoroc versions \-\-json\fR
+print all known dependency versions as JSON
+.TP
+\fBoroc versions uv\fR
+print only the libuv version
+.SH SEE ALSO
+oroc(1)

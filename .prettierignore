@@ -1,0 +1,33 @@
+node_modules/
+schemas/
+docs/
+tmp/
+
+*.html
+pnpm-lock.yaml
+
+# Vendored / external JS that should not be reformatted
+api/external
+api/navigation/navigation.js
+api/test/fast-deep-equal.js
+api/crypto/sodium.js
+api/url/urlpattern/urlpattern.js
+api/url/url/url.js
+api/fetch/fetch.js
+api/internal/streams/web.js
+npm/packages/@orocomputer/runtime-node/index.cjs
+
+# JavaScript is formatted by Standard, not Prettier.
+*.js
+*.mjs
+*.cjs
+
+# Generated declaration files are validated by the typings generator.
+api/*.d.ts
+api/**/*.d.ts
+
+# Generated API/reference docs should preserve generator output verbatim.
+api/README.md
+api/CLI.md
+api/CONFIG.md
+npm/packages/@orocomputer/runtime-node/API.md

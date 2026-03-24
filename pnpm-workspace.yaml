@@ -1,0 +1,7 @@
+packages:
+  - npm/packages/@orocomputer/runtime-node
+  - examples
+
+onlyBuiltDependencies:
+  - esbuild
+  - puppeteer

@@ -1,0 +1,40 @@
+.TH OROC-SETUP 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-setup \- Setup build tools for host or target platform.
+.SH SYNOPSIS
+.nf
+oroc setup [options] [\-\-platform=<platform>] [\-y|\-\-yes]
+.fi
+.SH DESCRIPTION
+.PP
+Setup build tools for host or target platform.
+.SH OPTIONS
+.TP
+\fB\-\-platform=<platform>\fR
+platform target to run setup for (defaults to host):
+.br
+\(bu android
+.br
+\(bu ios
+.br
+\(bu linux
+.br
+\(bu windows
+.TP
+\fB\-q, \-\-quiet\fR
+hint for less log output
+.TP
+\fB\-y, \-\-yes\fR
+answer yes to any prompts
+.SH COMMON ERRORS
+.PP
+Without `\-\-platform`, setup defaults to the host. Verify with `oroc env`.
+.SH EXAMPLES
+.TP
+\fBoroc setup \-\-platform=android\fR
+install or validate Android SDK/NDK requirements
+.TP
+\fBoroc setup \-\-platform=ios\fR
+install or validate host tools needed for iOS/macOS builds
+.SH SEE ALSO
+oroc(1)

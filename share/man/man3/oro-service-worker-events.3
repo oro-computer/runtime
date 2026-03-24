@@ -1,0 +1,94 @@
+.TH ORO-SERVICE-WORKER-EVENTS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:service\-worker/events \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:service\-worker/events'
+.fi
+.SH DESCRIPTION
+.PP
+oro:service\-worker/events is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBtextEncoder\fR
+This is an exported `VariableDeclaration` named `textEncoder`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFETCH_EVENT_TIMEOUT\fR
+This is an exported `VariableDeclaration` named `FETCH_EVENT_TIMEOUT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFETCH_EVENT_MAX_RESPONSE_REDIRECTS\fR
+This is an exported `VariableDeclaration` named `FETCH_EVENT_MAX_RESPONSE_REDIRECTS`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBExtendableEvent (extends Event)\fR
+The `ExtendableEvent` interface extends the lifetime of the "install" and "activate" events dispatched on the global scope as part of the service worker lifecycle.
+.TP
+\fBcontext()\fR
+A context for this `ExtendableEvent` instance.
+.TP
+\fBawaiting()\fR
+A promise that can be awaited which waits for this `ExtendableEvent` instance no longer has pending promises.
+.TP
+\fBpendingPromises()\fR
+The number of pending promises
+.TP
+\fBisActive()\fR
+`true` if the `ExtendableEvent` instance is considered "active", otherwise `false`.
+.TP
+\fBwaitUntil(promise)\fR
+Tells the event dispatcher that work is ongoing. It can also be used to detect whether that work was successful.
+\fBParameters:\fR
+.br
+\fIpromise\fR (Promise; required)
+.TP
+\fBwaitsFor()\fR
+Returns a promise that this `ExtendableEvent` instance is waiting for.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBFetchEvent (extends ExtendableEvent)\fR
+This is the event type for "fetch" events dispatched on the service worker global scope. It contains information about the fetch, including the request and how the receiver will treat the response.
+.TP
+\fBhandled()\fR
+The handled property of the `FetchEvent` interface returns a promise indicating if the event has been handled by the fetch algorithm or not. This property allows executing code after the browser has consumed a response, and is usually used together with the `waitUntil()` method.
+.TP
+\fBrequest()\fR
+The request read\-only property of the `FetchEvent` interface returns the `Request` that triggered the event handler.
+.TP
+\fBclientId()\fR
+The `clientId` read\-only property of the `FetchEvent` interface returns the id of the Client that the current service worker is controlling.
+.TP
+\fBrespondWith(response)\fR
+The `respondWith()` method of `FetchEvent` prevents the webview's default fetch handling, and allows you to provide a promise for a `Response` yourself.
+\fBParameters:\fR
+.br
+\fIresponse\fR (Response \\| Promise<Response>; required)
+.TP
+\fBExtendableMessageEvent (extends ExtendableEvent)\fR
+This is an exported `ClassDeclaration` named ``ExtendableMessageEvent` (extends `ExtendableEvent`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(type, options)\fR
+`ExtendableMessageEvent` class constructor.
+\fBParameters:\fR
+.br
+\fItype\fR (string; optional; default 'message')
+.br
+\fIoptions\fR (object; optional; default null)
+.TP
+\fBdata()\fR
+Documented method exposed by this module.
+.TP
+\fBports()\fR
+Documented method exposed by this module.
+.TP
+\fBsource()\fR
+Documented method exposed by this module.
+.TP
+\fBorigin()\fR
+Documented method exposed by this module.
+.TP
+\fBlastEventId()\fR
+Documented method exposed by this module.
+.TP
+\fBNotificationEvent (extends ExtendableEvent)\fR
+This is an exported `ClassDeclaration` named ``NotificationEvent` (extends `ExtendableEvent`)`, but it does not yet have a dedicated description in the generated reference.

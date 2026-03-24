@@ -1,0 +1,286 @@
+name: Release Artifacts
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version label to use when naming manual build artifacts
+        required: false
+        type: string
+      artifact_id:
+        description: Optional single artifact target to build for manual smoke runs
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - linux-x64-desktop
+          - linux-x64-android-sdk
+          - macos-x64-desktop
+          - macos-x64-ios-sdk
+          - macos-arm64-desktop
+          - macos-arm64-ios-sdk
+          - windows-x64-desktop
+
+permissions:
+  contents: write
+
+env:
+  CI: true
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RELEASE_VERSION: ${{ github.event.release.tag_name || github.event.inputs.version || format('manual-{0}', github.run_number) }}
+
+concurrency:
+  group: release-artifacts-${{ github.workflow }}-${{ github.event.release.tag_name || github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-release-artifacts:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64 Desktop
+            artifact_id: linux-x64-desktop
+            archive_ext: tar.gz
+            runs_on: ubuntu-24.04
+            build_android: false
+            release_support: desktop
+            no_android: true
+            build_ios: false
+            build_windows: false
+          - name: Linux x64 Android SDK
+            artifact_id: linux-x64-android-sdk
+            archive_ext: tar.gz
+            runs_on: ubuntu-24.04
+            build_android: true
+            release_support: android
+            no_android: false
+            build_ios: false
+            build_windows: false
+          - name: macOS x64 Desktop
+            artifact_id: macos-x64-desktop
+            archive_ext: tar.gz
+            runs_on: macos-15-intel
+            build_android: false
+            release_support: desktop
+            no_android: true
+            build_ios: false
+            build_windows: false
+          - name: macOS x64 iOS SDK
+            artifact_id: macos-x64-ios-sdk
+            archive_ext: tar.gz
+            runs_on: macos-15-intel
+            build_android: false
+            release_support: ios
+            no_android: true
+            build_ios: true
+            build_windows: false
+          - name: macOS arm64 Desktop
+            artifact_id: macos-arm64-desktop
+            archive_ext: tar.gz
+            runs_on: macos-14
+            build_android: false
+            release_support: desktop
+            no_android: true
+            build_ios: false
+            build_windows: false
+          - name: macOS arm64 iOS SDK
+            artifact_id: macos-arm64-ios-sdk
+            archive_ext: tar.gz
+            runs_on: macos-14
+            build_android: false
+            release_support: ios
+            no_android: true
+            build_ios: true
+            build_windows: false
+          - name: Windows x64
+            artifact_id: windows-x64-desktop
+            archive_ext: zip
+            runs_on: windows-2022
+            build_android: false
+            release_support: desktop
+            no_android: true
+            build_ios: false
+            build_windows: true
+
+    env:
+      DEBUG: '1'
+      VERBOSE: '1'
+      ORO_SKIP_PATH_PROMPT: '1'
+      RUN_SELECTED_ARTIFACT: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.artifact_id == 'all' || github.event.inputs.artifact_id == matrix.artifact_id }}
+
+    steps:
+      - name: Skip unselected manual artifact
+        if: env.RUN_SELECTED_ARTIFACT != 'true'
+        shell: bash
+        run: |
+          echo "Skipping ${{ matrix.artifact_id }} for workflow_dispatch artifact_id=${{ github.event.inputs.artifact_id }}"
+
+      - name: Checkout
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20.x
+
+      - name: Setup Java for Android builds
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_android
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '20.0.2'
+
+      - name: Install macOS build dependencies
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: |
+          brew install automake libtool pkg-config
+
+      - name: Install root dependencies
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
+        shell: bash
+        run: npm install --no-audit
+
+      - name: Regenerate shipped docs and typings
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
+        shell: bash
+        run: npm run gen
+
+      - name: Build staged runtime distribution (Unix)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        shell: bash
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+          PREFIX: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+        run: |
+          rm -rf "$ORO_HOME"
+          if [[ "${{ matrix.build_ios }}" != "true" ]]; then
+            export NO_IOS=1
+          else
+            unset NO_IOS
+          fi
+
+          if [[ "${{ matrix.no_android }}" == "true" ]]; then
+            export NO_ANDROID=1
+          elif [[ "${{ matrix.build_android }}" == "true" ]]; then
+            export ORO_ANDROID_CI=1
+            export ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes
+            unset NO_ANDROID
+          else
+            export NO_ANDROID=1
+          fi
+
+          ./bin/install.sh --yes-deps
+
+      - name: Build staged runtime distribution (Windows)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_windows
+        shell: pwsh
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+          PREFIX: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+        run: |
+          if (Test-Path $env:ORO_HOME) {
+            Remove-Item -Recurse -Force $env:ORO_HOME
+          }
+          $env:NO_IOS = "1"
+          $env:NO_ANDROID = "1"
+          .\bin\install.ps1 -yesdeps -verbose
+
+      - name: Record packaged targets
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        shell: bash
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+        run: |
+          {
+            echo "release_version=$RELEASE_VERSION"
+            echo "artifact_id=${{ matrix.artifact_id }}"
+            echo "release_support=${{ matrix.release_support }}"
+            echo "runner_os=${{ runner.os }}"
+            echo "runner_arch=${{ runner.arch }}"
+            echo "included_targets:"
+            find "$ORO_HOME/lib" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read -r path; do
+              echo "  - $(basename "$path")"
+            done | sort || true
+            echo "manpages:"
+            find "$ORO_HOME/share/man" -type f 2>/dev/null | sed 's#^#  - #' | sort || true
+          } > "$ORO_HOME/RELEASE-METADATA.txt"
+
+      - name: Record packaged targets (Windows)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_windows
+        shell: pwsh
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+        run: |
+          $metadata = Join-Path $env:ORO_HOME 'RELEASE-METADATA.txt'
+          $lines = @(
+            "release_version=$env:RELEASE_VERSION",
+            "artifact_id=${{ matrix.artifact_id }}",
+            "release_support=${{ matrix.release_support }}",
+            "runner_os=${{ runner.os }}",
+            "runner_arch=${{ runner.arch }}",
+            "included_targets:"
+          )
+
+          $libRoot = Join-Path $env:ORO_HOME 'lib'
+          if (Test-Path $libRoot) {
+            Get-ChildItem -Path $libRoot -Directory | Sort-Object Name | ForEach-Object {
+              $lines += "  - $($_.Name)"
+            }
+          }
+
+          $lines += "manpages:"
+          $manRoot = Join-Path $env:ORO_HOME 'share\man'
+          if (Test-Path $manRoot) {
+            Get-ChildItem -Path $manRoot -Recurse -File | Sort-Object FullName | ForEach-Object {
+              $lines += "  - $($_.FullName)"
+            }
+          }
+
+          Set-Content -Path $metadata -Value $lines
+
+      - name: Archive runtime distribution (tar.gz)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.archive_ext == 'tar.gz'
+        shell: bash
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+        run: |
+          tar -C "$(dirname "$ORO_HOME")" -czf "${RUNNER_TEMP}/oro-runtime-${RELEASE_VERSION}-${{ matrix.artifact_id }}.tar.gz" "$(basename "$ORO_HOME")"
+
+      - name: Archive runtime distribution (zip)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.archive_ext == 'zip'
+        shell: pwsh
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "oro-runtime-$env:RELEASE_VERSION-${{ matrix.artifact_id }}.zip"
+          if (Test-Path $archive) {
+            Remove-Item -Force $archive
+          }
+          Compress-Archive -Path $env:ORO_HOME -DestinationPath $archive
+
+      - name: Upload workflow artifact
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+          path: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.${{ matrix.archive_ext }}
+          if-no-files-found: error
+
+      - name: Attach asset to GitHub release
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.${{ matrix.archive_ext }}

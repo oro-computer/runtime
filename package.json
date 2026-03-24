@@ -1,0 +1,70 @@
+{
+  "type": "module",
+  "scripts": {
+    "clean": "./bin/clean.sh",
+    "gen": "npm run gen:docs && npm run gen:tsc",
+    "gen:docs": "node ./bin/generate-docs.js",
+    "gen:tsc": "./bin/generate-typescript-typings.sh",
+    "test": "node ./test/scripts/run.js desktop",
+    "test:runtime-core": "node ./test/scripts/run.js runtime-core",
+    "test:lint": "npm run lint",
+    "test:lint:ci": "npm run lint:ci",
+    "test:ios-simulator": "node ./test/scripts/run.js ios-simulator",
+    "test:android": "node ./test/scripts/run.js android",
+    "test:android-emulator": "node ./test/scripts/run.js android-emulator",
+    "test:clean": "cd test && rm -rf dist",
+    "update-network-protocol": "./bin/update-network-protocol.sh",
+    "relink": "./bin/publish-npm-modules.sh --link",
+    "docs:diagrams": "node ./bin/render-diagrams.mjs",
+    "docs:diagrams:png": "node ./bin/render-diagrams.mjs --format=png",
+    "lint:standard": "standard .",
+    "lint:standard:fix": "standard . --fix",
+    "lint:types": "npm run gen:tsc",
+    "lint:deps": "node ./bin/check-dependency-urls.js",
+    "lint:cpp": "python3 -m cpplint --recursive src include/oro include/iroh",
+    "lint:oxlint": "oxlint .",
+    "lint:oxlint:fix": "oxlint api/ test/ --fix",
+    "lint:prettier": "prettier --check .",
+    "lint:prettier:fix": "prettier --write .",
+    "lint": "npm run lint:standard && npm run lint:types && npm run lint:deps && npm run lint:oxlint && npm run lint:prettier && npm run lint:cpp",
+    "lint:ci": "XDG_CACHE_HOME=.cache npm run lint",
+    "lint:fix": "npm run lint:standard:fix && npm run lint:types && npm run lint:oxlint:fix && npm run lint:prettier:fix"
+  },
+  "private": true,
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.12.0",
+    "@virtualstate/navigation": "^1.0.1-alpha.206",
+    "acorn": "8.15.0",
+    "acorn-walk": "8.3.4",
+    "esbuild": "0.27.0",
+    "oxlint": "^1.29.0",
+    "prettier": "^3.6.2",
+    "puppeteer": "^24.31.0",
+    "standard": "^17.1.0",
+    "typescript": "5.9.3",
+    "urlpattern-polyfill": "^10.0.0",
+    "web-streams-polyfill": "^4.0.0",
+    "whatwg-fetch": "^3.6.20",
+    "whatwg-url": "^15.1.0"
+  },
+  "optionalDependencies": {
+    "@orocomputer/latica": "^0.1.0"
+  },
+  "standard": {
+    "ignore": [
+      "/api/external/",
+      "/api/navigation/navigation.js",
+      "/api/test/fast-deep-equal.js",
+      "/api/crypto/sodium.js",
+      "/api/url/urlpattern/urlpattern.js",
+      "/api/url/url/url.js",
+      "/api/fetch/fetch.js",
+      "/api/internal/streams/web.js",
+      "/npm/packages/@orocomputer/runtime-node/index.cjs"
+    ]
+  },
+  "workspaces": [
+    "npm/packages/@orocomputer/runtime-node"
+  ],
+  "version": "0.0.0"
+}

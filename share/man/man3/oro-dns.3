@@ -1,0 +1,29 @@
+.TH ORO-DNS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:dns \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:dns'
+.fi
+.SH DESCRIPTION
+.PP
+This module enables name resolution. For example, use it to look up IP addresses of host names. Although named for the Domain Name System (DNS), it does not always use the DNS protocol for lookups. dns.lookup() uses the operating system facilities to perform name resolution. It may not need to perform any network communication. To perform name resolution the way other applications on the same system do, use dns.lookup().
+.PP
+Example usage: import { lookup } from 'oro:dns'
+.SH REFERENCE
+.TP
+\fBlookup(hostname, options, cb)\fR
+Resolves a host name (e.g. `example.org`) into the first found A (IPv4) or AAAA (IPv6) record. All option properties are optional. If options is an integer, then it must be 4 or 6 – if options is 0 or not provided, then IPv4 and IPv6 addresses are both returned if found.
+.br
+From the node.js website...
+.br
+> With the all option set to true, the arguments for callback change to (err, addresses), with addresses being an array of objects with the properties address and family.
+.br
+> On error, err is an Error object, where err.code is the error code. Keep in mind that err.code will be set to 'ENOTFOUND' not only when the host name does not exist but also when the lookup fails in other ways such as no available file descriptors. dns.lookup() does not necessarily have anything to do with the DNS protocol. The implementation uses an operating system facility that can associate names with addresses and vice versa. This implementation can have subtle but important consequences on the behavior of any Node.js program. Please take some time to consult the Implementation considerations section before using dns.lookup().
+\fBParameters:\fR
+.br
+\fIhostname\fR (string; required) The host name to resolve.
+.br
+\fIoptions\fR (LookupOptions \\| number \\| string; optional) Lookup options or the record family.
+.br
+\fIcb\fR (function(Error, string \\| LookupAddress[], 4 \\| 6=):void; required) Invoked when the lookup completes.

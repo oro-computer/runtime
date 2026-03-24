@@ -1,0 +1,42 @@
+.TH ORO-ENUMERATION 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:enumeration \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:enumeration'
+.fi
+.SH DESCRIPTION
+.PP
+oro:enumeration is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBEnumeration (extends Set)\fR
+This module provides a data structure for enumerated unique values. A container for enumerated values.
+.TP
+\fBfrom(values)\fR
+Creates an `Enumeration` instance from arguments.
+\fBParameters:\fR
+.br
+\fIvalues\fR (\&...any; required)
+\fBReturns:\fR
+.br
+\fIEnumeration\fR
+.TP
+\fBconstructor(values, options)\fR
+`Enumeration` class constructor.
+\fBParameters:\fR
+.br
+\fIvalues\fR (any[]; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.start\fR (number; optional; default 0)
+.TP
+\fBlength()\fR
+Documented method exposed by this module.
+.TP
+\fBcontains()\fR
+Returns `true` if enumeration contains `value`. An alias for `Set.prototype.has`.
+\fBReturns:\fR
+.br
+\fIboolean\fR

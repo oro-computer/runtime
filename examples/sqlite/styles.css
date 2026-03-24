@@ -1,0 +1,66 @@
+.sqlite-app__editor {
+  font-family: var(--ui-font-mono, 'JetBrains Mono', monospace);
+  min-height: 160px;
+  resize: vertical;
+}
+
+.sqlite-app__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.sqlite-app__summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: var(--ui-radius-sm);
+  padding: 14px 16px;
+}
+
+.sqlite-app__summary-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-foreground-muted);
+}
+
+.sqlite-app__summary-value {
+  font-family: var(--ui-font-mono, 'JetBrains Mono', monospace);
+  font-size: 14px;
+  color: var(--ui-foreground);
+  word-break: break-word;
+}
+
+.sqlite-app__samples {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sqlite-app__samples .ui-button {
+  justify-content: space-between;
+}
+
+.sqlite-app__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sqlite-app__actions .ui-button:first-child {
+  min-width: 140px;
+}
+
+.sqlite-app__actions .ui-button:last-child {
+  min-width: 170px;
+}
+
+.sqlite-app__table {
+  max-height: 340px;
+  overflow: auto;
+  border-radius: var(--ui-radius-sm);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}

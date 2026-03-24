@@ -1,0 +1,4 @@
+#ifndef ORO_RUNTIME_WEBASSEMBLY_BITS_STDINT_H
+#define ORO_RUNTIME_WEBASSEMBLY_BITS_STDINT_H
+// empty on purpose
+#endif

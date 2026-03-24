@@ -1,0 +1,12 @@
+export default exports;
+import AsyncLocalStorage from './async/storage.js';
+import AsyncResource from './async/resource.js';
+import AsyncContext from './async/context.js';
+import Deferred from './async/deferred.js';
+import { executionAsyncResource } from './async/hooks.js';
+import { executionAsyncId } from './async/hooks.js';
+import { triggerAsyncId } from './async/hooks.js';
+import { createHook } from './async/hooks.js';
+import { AsyncHook } from './async/hooks.js';
+import * as exports from './async.js';
+export { AsyncLocalStorage, AsyncResource, AsyncContext, Deferred, executionAsyncResource, executionAsyncId, triggerAsyncId, createHook, AsyncHook };

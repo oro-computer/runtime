@@ -1,0 +1,170 @@
+import { Buffer } from 'oro:buffer'
+import { test } from 'oro:test'
+import ipc, { primordials } from 'oro:ipc'
+import process from 'oro:process'
+
+// node compat
+// import { Buffer } from 'node:buffer'
+// import './test-context.js'
+
+test('ipc exports', async (t) => {
+  t.deepEqual(
+    Object.keys(ipc).sort(),
+    [
+      'OK',
+      'Result',
+      'TIMEOUT',
+      'createBinding',
+      'debug',
+      'default',
+      'emit',
+      'findMessageTransfers',
+      'ERROR',
+      'kDebugEnabled',
+      'primordials',
+      'maybeMakeError',
+      'Message',
+      'parseSeq',
+      'postMessage',
+      'ready',
+      'request',
+      'resolve',
+      'send',
+      'sendSync',
+      'write',
+      'Headers'
+    ].sort()
+  )
+
+  try {
+    await ipc.ready()
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
+test('primordials', (t) => {
+  t.deepEqual(
+    Object.keys(primordials).sort(),
+    ['arch', 'cwd', 'platform', 'version', 'host-operating-system'].sort(),
+    'primordials keys match'
+  )
+  t.equal(typeof primordials.arch, 'string', 'primordials.arch is a string')
+  t.equal(typeof primordials.cwd, 'string', 'primordials.cwd is a string')
+  t.ok(
+    primordials.cwd.length > 1,
+    'primordials.cwd is a more than one character'
+  )
+  t.equal(
+    typeof primordials.platform,
+    'string',
+    'primordials.platform is a string'
+  )
+  t.equal(
+    typeof primordials.version,
+    'object',
+    'primordials.version is an object'
+  )
+  t.ok(
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(
+      primordials.version.short
+    ),
+    `primordials.version.short is correct (${primordials.version.short})`
+  )
+  t.ok(
+    /^[0-9A-Fa-f]{8}$/.test(primordials.version.hash),
+    `primordials.version.hash is correct (${primordials.version.hash})`
+  )
+  t.ok(
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\s\([0-9A-Fa-f]{8}\)$/.test(
+      primordials.version.full
+    ),
+    `primordials.version.full version is correct (${primordials.version.full})`
+  )
+})
+
+test('ipc constants', (t) => {
+  t.equal(ipc.OK, 0)
+  t.equal(ipc.ERROR, 1)
+  t.equal(ipc.TIMEOUT, 32000)
+  t.equal(ipc.kDebugEnabled, Symbol.for('oro.runtime.ipc.debug.enabled'))
+})
+
+test('ipc.debug', (t) => {
+  ipc.debug(true)
+  t.equal(ipc.debug.enabled, true)
+  ipc.debug(false)
+  t.equal(ipc.debug.enabled, false)
+  ipc.debug(true)
+})
+
+test('ipc.Message', (t) => {
+  t.ok(ipc.Message.prototype instanceof URL, 'is a URL')
+  // pass a Buffer
+  let msg = ipc.Message.from(Buffer.from('test'), { foo: 'bar' })
+  t.equal(msg.protocol, 'ipc:')
+  t.equal(msg.command, 'test')
+  t.deepEqual(msg.params, { foo: 'bar' })
+  // pass an ipc.Message
+  msg = ipc.Message.from(msg)
+  t.equal(msg.protocol, 'ipc:')
+  t.equal(msg.command, 'test')
+  t.deepEqual(msg.params, { foo: 'bar' })
+  // pass an object
+  msg = ipc.Message.from({ protocol: 'ipc:', command: 'test' }, { foo: 'bar' })
+  t.equal(msg.protocol, 'ipc:')
+  t.equal(msg.command, 'test')
+  t.deepEqual(msg.params, { foo: 'bar' })
+  // pass a string
+  msg = ipc.Message.from('test', { foo: 'bar' })
+  t.equal(msg.protocol, 'ipc:')
+  t.equal(msg.command, 'test')
+  t.deepEqual(msg.params, { foo: 'bar' })
+  t.ok(ipc.Message.isValidInput('ipc://test'), 'is valid input')
+  t.ok(!ipc.Message.isValidInput('test'), 'is valid input')
+  t.ok(!ipc.Message.isValidInput('foo://test'), 'is valid input')
+})
+
+// FIXME: hangs on iOS
+if (process.platform !== 'ios' && process.platform !== 'android') {
+  test('ipc.sendSync not found', (t) => {
+    const response = ipc.sendSync('test', { foo: 'bar' })
+    t.ok(response instanceof ipc.Result)
+    const { err } = response
+    // Make lower case to adjust for implementation differences.
+    t.equal(err?.toString().toLowerCase(), 'notfounderror: not found')
+    t.equal(err?.name, 'NotFoundError')
+    // Make lower case to adjust for implementation differences.
+    t.equal(err?.message.toLowerCase(), 'not found')
+    t.ok(err?.url.startsWith('ipc://test/?foo=bar&index=0&seq=R'))
+    t.equal(err?.code, 'NOT_FOUND_ERR')
+  })
+}
+
+test('ipc.sendSync success', (t) => {
+  const response = ipc.sendSync('platform.primordials')
+  t.ok(response instanceof ipc.Result, 'response is an ipc.Result')
+  const { data } = response
+  t.ok(typeof data === 'object', 'sendSync works')
+})
+
+//
+// TODO: ipc.send error should match ipc.sendSync error
+// FIXME: hangs on iOS
+if (process.platform !== 'ios' && process.platform !== 'android') {
+  test('ipc.send not found', async (t) => {
+    const response = await ipc.send('test', { foo: 'bar' })
+    t.ok(response instanceof ipc.Result, 'response is an ipc.Result')
+    t.ok(response.err instanceof Error, 'response.err is an Error')
+    t.equal(response.err.toString(), 'NotFoundError: Not found')
+    t.equal(response.err.name, 'NotFoundError')
+    t.equal(response.err.message, 'Not found')
+  })
+}
+
+test('ipc.send success', async (t) => {
+  const response = await ipc.send('platform.primordials')
+  t.ok(response instanceof ipc.Result)
+  const { data } = response
+  t.ok(typeof data === 'object', 'sendSync works')
+})

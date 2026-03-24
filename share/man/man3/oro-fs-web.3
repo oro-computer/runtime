@@ -1,0 +1,75 @@
+.TH ORO-FS-WEB 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/web \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/web'
+.fi
+.SH DESCRIPTION
+.PP
+oro:fs/web is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBkFileSystemHandleFullName\fR
+This is an exported `VariableDeclaration` named `kFileSystemHandleFullName`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBkFileDescriptor\fR
+This is an exported `VariableDeclaration` named `kFileDescriptor`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBkFileFullName\fR
+This is an exported `VariableDeclaration` named `kFileFullName`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFile\fR
+This is an exported `VariableDeclaration` named `File`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFileSystemHandle\fR
+This is an exported `VariableDeclaration` named `FileSystemHandle`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFileSystemFileHandle\fR
+This is an exported `VariableDeclaration` named `FileSystemFileHandle`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFileSystemDirectoryHandle\fR
+This is an exported `VariableDeclaration` named `FileSystemDirectoryHandle`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBFileSystemWritableFileStream\fR
+This is an exported `VariableDeclaration` named `FileSystemWritableFileStream`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBcreateFile(filename, options)\fR
+Creates a new `File` instance from `filename`.
+\fBParameters:\fR
+.br
+\fIfilename\fR (string; required)
+.br
+\fIoptions\fR ({ fd: fs.FileHandle, highWaterMark?: number }; optional; default null)
+\fBReturns:\fR
+.br
+\fIFile\fR
+.TP
+\fBcreateFileSystemWritableFileStream(handle, options)\fR
+Creates a `FileSystemWritableFileStream` instance backed by `oro:fs:` module from a given `FileSystemFileHandle` instance.
+\fBParameters:\fR
+.br
+\fIfile\fR (string \\| File; required)
+\fBReturns:\fR
+.br
+\fIPromise<FileSystemFileHandle>\fR
+.TP
+\fBcreateFileSystemFileHandle(file, options)\fR
+Creates a `FileSystemFileHandle` instance backed by `oro:fs:` module from a given `File` instance or filename string.
+\fBParameters:\fR
+.br
+\fIfile\fR (string \\| File; required)
+.br
+\fIoptions\fR (object; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<FileSystemFileHandle>\fR
+.TP
+\fBcreateFileSystemDirectoryHandle(dirname, options)\fR
+Creates a `FileSystemDirectoryHandle` instance backed by `oro:fs:` module from a given directory name string.
+\fBParameters:\fR
+.br
+\fIdirname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<FileSystemFileHandle>\fR

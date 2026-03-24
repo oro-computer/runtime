@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "appId": "com.example.hello",
+  "generatedAt": "2025-12-03T02:36:53.918Z",
+  "channels": ["stable"],
+  "updates": [
+    {
+      "id": "stable-1.0.0",
+      "version": "1.0.0",
+      "channel": "stable",
+      "minRuntimeVersion": "0.6.0",
+      "critical": false,
+      "targets": [
+        {
+          "platform": "darwin",
+          "arch": "x64",
+          "artifactUrl": "manifest.json",
+          "length": 389,
+          "hashAlgorithm": "sha256",
+          "hash": "75c4a86cee5e8bb6c7f76b79a81ee75cf31d112af49ca445aa4dcd76c5770616"
+        }
+      ]
+    }
+  ]
+}

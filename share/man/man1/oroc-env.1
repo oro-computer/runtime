@@ -1,0 +1,41 @@
+.TH OROC-ENV 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-env \- Print environment variables relevant to the Oro CLI and build configuration.
+.SH SYNOPSIS
+.nf
+oroc env [options]
+.fi
+.SH DESCRIPTION
+.PP
+Print environment variables relevant to the Oro CLI and build configuration.
+.SH OPTIONS
+.TP
+\fB\-f, \-\-format=<format>\fR
+print as 'text' or 'json'
+.TP
+\fB\-\-json\fR
+shorthand for '\-\-format=json'
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.IP \(bu 2
+Prints a curated set of CLI, runtime, toolchain, and platform variables (for example, ORO_DEBUG, ORO_VERBOSE, ORO_HOME, JAVA_HOME, ANDROID_HOME, APPLE_ID, SIGNTOOL).
+.IP \(bu 2
+Merges [env] / env_* entries from the active configuration and from local .ororc files when present.
+.IP \(bu 2
+Filters out unset variables; text output prints each line as KEY=VALUE.
+.IP \(bu 2
+JSON output emits a flat object keyed by environment variable name.
+.SH EXAMPLES
+.TP
+\fBoroc env\fR
+print the effective environment inputs visible to Oro tooling
+.TP
+\fBoroc env \-\-json\fR
+print the effective environment inputs as JSON
+.SH SEE ALSO
+oroc(1)

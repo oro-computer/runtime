@@ -1,0 +1,119 @@
+.TH ORO-FS-DIR 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/dir \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/dir'
+.fi
+.SH DESCRIPTION
+.PP
+oro:fs/dir is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBkType\fR
+This is an exported `VariableDeclaration` named `kType`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBsortDirectoryEntries(a, b)\fR
+Sorts directory entries
+\fBParameters:\fR
+.br
+\fIa\fR (string \\| Dirent; required)
+.br
+\fIb\fR (string \\| Dirent; required)
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBDir\fR
+A containerr for a directory and its entries. This class supports scanning a directory entry by entry with a `read()` method. The `Symbol.asyncIterator` interface is exposed along with an AsyncGenerator `entries()` method.
+.TP
+\fBconstructor(handle, options)\fR
+`Dir` class constructor.
+\fBParameters:\fR
+.br
+\fIhandle\fR (DirectoryHandle; required)
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBclose(options, callback)\fR
+Closes container and underlying handle.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object \\| function; required; default null)
+.br
+\fIcallback\fR (function; optional; default null)
+.TP
+\fBcloseSync(options)\fR
+Closes container and underlying handle synchronously.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional; default null)
+.TP
+\fBread(options, callback)\fR
+Reads and returns directory entry.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object \\| function; required)
+.br
+\fIcallback\fR (function; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Dirent[] \\| string[]>\fR
+.TP
+\fBreadSync(options)\fR
+Reads and returns directory entry synchronously.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object \\| function; required; default null)
+\fBReturns:\fR
+.br
+\fIDirent[] \\| string[]\fR
+.TP
+\fBentries(options)\fR
+AsyncGenerator which yields directory entries.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional)
+.TP
+\fBDirent\fR
+A container for a directory entry.
+.TP
+\fBfrom(name, type)\fR
+Creates `Dirent` instance from input.
+\fBParameters:\fR
+.br
+\fIname\fR (object \\| string; required)
+.br
+\fItype\fR (string \\| number; optional)
+.TP
+\fBconstructor(name, type)\fR
+`Dirent` class constructor.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fItype\fR (string \\| number; required)
+.TP
+\fBtype()\fR
+Read only type.
+.TP
+\fBisDirectory()\fR
+`true` if `Dirent` instance is a directory.
+.TP
+\fBisFile()\fR
+`true` if `Dirent` instance is a file.
+.TP
+\fBisBlockDevice()\fR
+`true` if `Dirent` instance is a block device.
+.TP
+\fBisCharacterDevice()\fR
+`true` if `Dirent` instance is a character device.
+.TP
+\fBisSymbolicLink()\fR
+`true` if `Dirent` instance is a symbolic link.
+.TP
+\fBisFIFO()\fR
+`true` if `Dirent` instance is a FIFO.
+.TP
+\fBisSocket()\fR
+`true` if `Dirent` instance is a socket.

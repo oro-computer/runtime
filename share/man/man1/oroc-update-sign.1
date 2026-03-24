@@ -1,0 +1,44 @@
+.TH OROC-UPDATE-SIGN 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-update\-sign \- Sign an update manifest and emit a detached manifest.sig file.
+.SH SYNOPSIS
+.nf
+oroc update sign [\-\-manifest=<path>] (\-\-keys=<file> | \-\-private\-key=<hex>) [options]
+.fi
+.SH DESCRIPTION
+.PP
+Sign an update manifest and emit a detached manifest.sig file.
+.SH OPTIONS
+.TP
+\fB\-\-manifest=<path>\fR
+path to the manifest JSON file to sign (default: manifest\-name or ORO_UPDATE_MANIFEST_FILENAME)
+.TP
+\fB\-\-manifest\-name=<name>\fR
+manifest filename to use when \-\-manifest is not provided
+.TP
+\fB\-\-keys=<file>\fR
+JSON file containing a signing key (with "privateKey" or "secretKey" field)
+.TP
+\fB\-\-private\-key=<hex>\fR
+Ed25519 private key as a hex string
+.TP
+\fB\-\-key\-id=<id>\fR
+optional key identifier to embed in manifest.sig (default: "pk\-1")
+.TP
+\fB\-\-out=<path>\fR
+output path for manifest.sig (default: <manifest\-without\-extension>.sig, e.g. manifest.json \-> manifest.sig)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+The signature file is JSON containing "schemaVersion", "algorithm", "keyId", and "signature" fields. Clients verify manifest bytes against manifest.sig and the configured public key(s). Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '\-\-manifest\-name' to change the default manifest filename.
+.SH EXAMPLES
+.TP
+\fBoroc update sign \-\-keys key.json \-\-manifest manifest.json\fR
+sign manifest.json using the private key in key.json
+.TP
+\fBoroc update sign \-\-private\-key <hex\-private\-key> \-\-manifest manifest.json \-\-out manifest.sig\fR
+sign a manifest using a raw hex private key
+.SH SEE ALSO
+oroc(1), oroc\-update(1)

@@ -1,0 +1,54 @@
+.TH OROC-LIST-DEVICES 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-list\-devices \- Get the list of connected devices.
+.SH SYNOPSIS
+.nf
+oroc list\-devices [options] \-\-platform=<platform>
+.fi
+.SH DESCRIPTION
+.PP
+Get the list of connected devices.
+.SH OPTIONS
+.TP
+\fB\-\-platform=<platform>\fR
+platform target to list devices for:
+.br
+\(bu android
+.br
+\(bu ios
+.TP
+\fB\-f, \-\-format=<format>\fR
+print as 'text' or 'json'
+.TP
+\fB\-\-json\fR
+shorthand for '\-\-format=json'
+.TP
+\fB\-\-ecid\fR
+show device ECID (ios only)
+.TP
+\fB\-\-udid\fR
+show device UDID (ios only)
+.TP
+\fB\-\-only\fR
+only show ECID or UDID of the first device (ios only)
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+Android output mirrors the device identifiers returned by `adb devices`. iOS output can include the human\-readable simulator/device name plus ECID or UDID for scripting. JSON output emits an array of device objects with stable id fields for automation.
+.SH EXAMPLES
+.TP
+\fBoroc list\-devices \-\-platform=android\fR
+list attached Android devices visible to adb
+.TP
+\fBoroc list\-devices \-\-platform=ios \-\-udid\fR
+print iOS devices with UDID values you can pass to \-\-device
+.TP
+\fBoroc list\-devices \-\-platform=ios \-\-json\fR
+print connected iOS devices as JSON for scripts or agents
+.SH SEE ALSO
+oroc(1)

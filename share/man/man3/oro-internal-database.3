@@ -1,0 +1,253 @@
+.TH ORO-INTERNAL-DATABASE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/database \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/database'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/database is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBwaitFor(target, eventType)\fR
+Waits for an event of `eventType` to be dispatched on a given `EventTarget`.
+\fBParameters:\fR
+.br
+\fItarget\fR (EventTarget; required)
+.br
+\fIeventType\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<Event>\fR
+.TP
+\fBopened\fR
+A mapping of named `Database` instances that are currently opened
+.TP
+\fBDatabaseRequestQueueRequestConflict\fR
+A container for conflict resolution for a `DatabaseRequestQueue` instance `IDBRequest` instance.
+.TP
+\fBconstructor(resolve, reject, cleanup)\fR
+`DatabaseRequestQueueRequestConflict` class constructor
+\fBParameters:\fR
+.br
+\fIresolve\fR (function(any): void); required)
+.br
+\fIreject\fR (function(Error): void); required)
+.br
+\fIcleanup\fR (function(): void); required)
+.TP
+\fBresolve(argument)\fR
+Called when a conflict is resolved.
+\fBParameters:\fR
+.br
+\fIargument\fR (any; required)
+.TP
+\fBreject(error)\fR
+Called when a conflict is rejected
+\fBParameters:\fR
+.br
+\fIerror\fR (Error; required)
+.TP
+\fBDatabaseRequestQueueEvent (extends Event)\fR
+An event dispatched on a `DatabaseRequestQueue`
+.TP
+\fBconstructor(type, request)\fR
+`DatabaseRequestQueueEvent` class constructor.
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIrequest\fR (IDBRequest \\| IDBTransaction; required)
+.TP
+\fBrequest()\fR
+A reference to the underlying request for this event.
+.TP
+\fBDatabaseEvent (extends Event)\fR
+An event dispatched on a `Database`
+.TP
+\fBconstructor(type, database)\fR
+`DatabaseEvent` class constructor.
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIdatabase\fR (Database; required)
+.TP
+\fBdatabase()\fR
+A reference to the underlying database for this event.
+.TP
+\fBDatabaseRequestQueueErrorEvent (extends ErrorEvent)\fR
+An error event dispatched on a `DatabaseRequestQueue`
+.TP
+\fBconstructor(type, request, options)\fR
+`DatabaseRequestQueueErrorEvent` class constructor.
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIrequest\fR (IDBRequest \\| IDBTransaction; required)
+.br
+\fIoptions\fR ({ error: Error, cause?: Error }; required)
+.TP
+\fBrequest()\fR
+A reference to the underlying request for this error event.
+.TP
+\fBDatabaseRequestQueue (extends EventTarget)\fR
+A container for various `IDBRequest` and `IDBTransaction` instances occurring during the life cycles of a `Database` instance.
+.TP
+\fBlength()\fR
+Computed queue length
+.TP
+\fBpush((Position 0), conflictResolutionCallback)\fR
+Pushes an `IDBRequest` or `IDBTransaction onto the queue and returns a `Promise` that resolves upon a 'success' or 'complete' event and rejects upon an error' event.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (IDBRequest \\| IDBTransaction; required)
+.br
+\fIconflictResolutionCallback\fR (?DatabaseRequestQueueConflictResolutionCallback; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBwait(options)\fR
+Waits for all pending requests to complete. This function will throw when an `IDBRequest` or `IDBTransaction` instance emits an 'error' event. Callers of this function can optionally specify a maximum backlog to wait for instead of waiting for all requests to finish.
+\fBParameters:\fR
+.br
+\fIoptions\fR (?DatabaseRequestQueueWaitOptions \\| undefined; optional; default null)
+.TP
+\fBDatabase (extends EventTarget)\fR
+An interface for reading from named databases backed by IndexedDB.
+.TP
+\fBconstructor(name, options)\fR
+`Database` class constructor.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIoptions\fR (?DatabaseOptions \\| undefined; optional; default null)
+.TP
+\fBopening()\fR
+`true` if the `Database` is currently opening, otherwise `false`. A `Database` instance should not attempt to be opened if this property value is `true`.
+.TP
+\fBopened()\fR
+`true` if the `Database` instance was successfully opened such that the internal `IDBDatabase` storage instance was created and can be referenced on the `Database` instance, otherwise `false`.
+.TP
+\fBclosed()\fR
+`true` if the `Database` instance was closed or has not been opened such that the internal `IDBDatabase` storage instance was not created or cannot be referenced on the `Database` instance, otherwise `false`.
+.TP
+\fBclosing()\fR
+`true` if the `Database` is currently closing, otherwise `false`. A `Database` instance should not attempt to be closed if this property value is `true`.
+.TP
+\fBname()\fR
+The name of the `IDBDatabase` database. This value cannot be `null`.
+.TP
+\fBversion()\fR
+The version of the `IDBDatabase` database. This value may be `null`.
+.TP
+\fBstorage()\fR
+A reference to the `IDBDatabase`, if the `Database` instance was opened. This value may ba `null`.
+.TP
+\fBopen()\fR
+Opens the `IDBDatabase` database optionally at a specific "version" if one was given upon construction of the `Database` instance. This function is not idempotent and will throw if the underlying `IDBDatabase` instance was created successfully or is in the process of opening.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBclose()\fR
+Closes the `IDBDatabase` database storage, if opened. This function is not idempotent and will throw if the underlying `IDBDatabase` instance is already closed (not opened) or currently closing.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBdrop()\fR
+Deletes entire `Database` instance and closes after successfully delete storage.
+.TP
+\fBget(key, options)\fR
+Gets a "readonly" value by `key` in the `Database` object storage.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIoptions\fR (?DatabaseGetOptions \\| undefined; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<object \\| object[] \\| null>\fR
+.TP
+\fBput(key, value, options)\fR
+Put a `value` at `key`, updating if it already exists, otherwise "inserting" it into the `Database` instance.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (any; required)
+.br
+\fIoptions\fR (?DatabasePutOptions \\| undefined; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBinsert(key, value, options)\fR
+Inserts a new `value` at `key`. This function throws if a value at `key` already exists.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (any; required)
+.br
+\fIoptions\fR (?DatabasePutOptions \\| undefined; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBupdate(key, value, options)\fR
+Update a `value` at `key`, updating if it already exists, otherwise "inserting" it into the `Database` instance.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (any; required)
+.br
+\fIoptions\fR (?DatabasePutOptions \\| undefined; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBdelete(key, options)\fR
+Delete a value at `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIoptions\fR (?DatabaseDeleteOptions \\| undefined; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBentries(options)\fR
+Gets a "readonly" value by `key` in the `Database` object storage.
+\fBParameters:\fR
+.br
+\fIoptions\fR (?DatabaseEntriesOptions \\| undefined; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<object \\| object[] \\| null>\fR
+.TP
+\fBopen(name, options)\fR
+Creates an opens a named `Database` instance.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIoptions\fR (?DatabaseOptions \\| undefined; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Database>\fR
+.TP
+\fBdrop(name, options)\fR
+Complete deletes a named `Database` instance.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIoptions\fR (?DatabaseOptions \\| undefined; optional)

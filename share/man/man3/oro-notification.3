@@ -1,0 +1,177 @@
+.TH ORO-NOTIFICATION 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:notification \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:notification'
+.fi
+.SH DESCRIPTION
+.PP
+The Notification modules provides an API to configure and display desktop and mobile notifications to the user. It also includes mechanisms for request permissions to use notifications on the user's device.
+.SH REFERENCE
+.TP
+\fBaction()\fR
+A string identifying a user action to be displayed on the notification.
+.TP
+\fBtitle()\fR
+A string containing action text to be shown to the user.
+.TP
+\fBicon()\fR
+A string containing the URL of an icon to display with the action.
+.TP
+\fBactions()\fR
+An array of actions to display in the notification.
+.TP
+\fBbadge()\fR
+A string containing the URL of the image used to represent the notification when there isn't enough space to display the notification itself.
+.TP
+\fBbody()\fR
+A string representing the body text of the notification, which is displayed below the title.
+.TP
+\fBdata()\fR
+Arbitrary data that you want associated with the notification. This can be of any data type.
+.TP
+\fBdir()\fR
+The direction in which to display the notification. It defaults to 'auto', which just adopts the environments language setting behavior, but you can override that behavior by setting values of 'ltr' and 'rtl'.
+.TP
+\fBicon()\fR
+A string containing the URL of an icon to be displayed in the notification.
+.TP
+\fBimage()\fR
+The URL of an image to be displayed as part of the notification, as specified in the constructor's options parameter.
+.TP
+\fBlang()\fR
+The notification's language, as specified using a string representing a language tag according to RFC 5646.
+.TP
+\fBrenotify()\fR
+A boolean value specifying whether the user should be notified after a new notification replaces an old one. The default is `false`, which means they won't be notified. If `true`, then tag also must be set.
+.TP
+\fBrequireInteraction()\fR
+Indicates that a notification should remain active until the user clicks or dismisses it, rather than closing automatically. The default value is `false`.
+.TP
+\fBsilent()\fR
+A boolean value specifying whether the notification is silent (no sounds or vibrations issued), regardless of the device settings. The default is `false`, which means it won't be silent. If `true`, then vibrate must not be present.
+.TP
+\fBtag()\fR
+A string representing an identifying tag for the notification. The default is the empty string.
+.TP
+\fBvibrate()\fR
+A vibration pattern for the device's vibration hardware to emit with the notification. If specified, silent must not be `true`.
+.TP
+\fBshowNotification(title, options, onclick, onshow)\fR
+Show a notification. Creates a `Notification` instance and displays it to the user.
+\fBParameters:\fR
+.br
+\fItitle\fR (string; required)
+.br
+\fIoptions\fR (NotificationOptions; optional)
+.br
+\fIonclick\fR (function(Event); optional; default null)
+.br
+\fIonclose\fR (function(Event); optional)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBNotification (extends EventTarget)\fR
+The Notification interface is used to configure and display desktop and mobile notifications to the user.
+.TP
+\fBpermission()\fR
+A read\-only property that indicates the current permission granted by the user to display notifications.
+.TP
+\fBmaxActions()\fR
+The maximum number of actions supported by the device.
+.TP
+\fBrequestPermission(options)\fR
+Requests permission from the user to display notifications.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional; default null)
+.br
+\fIoptions.alert\fR (boolean; optional; default true) (macOS/iOS only)
+.br
+\fIoptions.sound\fR (boolean; optional; default false) (macOS/iOS only)
+.br
+\fIoptions.badge\fR (boolean; optional; default false) (macOS/iOS only)
+.br
+\fIoptions.force\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fIPromise<'granted' \\| 'default' \\| 'denied'>\fR
+.TP
+\fBconstructor(title, options)\fR
+`Notification` class constructor.
+\fBParameters:\fR
+.br
+\fItitle\fR (string; required)
+.br
+\fIoptions\fR (NotificationOptions; optional)
+.TP
+\fBid()\fR
+A unique identifier for this notification.
+.TP
+\fBclosed()\fR
+`true` if the notification was closed, otherwise `false`.
+.TP
+\fBaction()\fR
+The last action identifier associated with this notification. Empty string represents the default action.
+.TP
+\fBonclick()\fR
+The click event is dispatched when the user clicks on displayed notification.
+.TP
+\fBonclose()\fR
+The close event is dispatched when the notification closes.
+.TP
+\fBonerror()\fR
+The eror event is dispatched when the notification fails to display or encounters an error.
+.TP
+\fBonshow()\fR
+The click event is dispatched when the notification is displayed.
+.TP
+\fBactions()\fR
+An array of actions to display in the notification.
+.TP
+\fBbadge()\fR
+A string containing the URL of the image used to represent the notification when there isn't enough space to display the notification itself.
+.TP
+\fBbody()\fR
+A string representing the body text of the notification, which is displayed below the title.
+.TP
+\fBdata()\fR
+Arbitrary data that you want associated with the notification. This can be of any data type.
+.TP
+\fBdir()\fR
+The direction in which to display the notification. It defaults to 'auto', which just adopts the environments language setting behavior, but you can override that behavior by setting values of 'ltr' and 'rtl'.
+.TP
+\fBicon()\fR
+A string containing the URL of an icon to be displayed in the notification.
+.TP
+\fBimage()\fR
+The URL of an image to be displayed as part of the notification, as specified in the constructor's options parameter.
+.TP
+\fBlang()\fR
+The notification's language, as specified using a string representing a language tag according to RFC 5646.
+.TP
+\fBrenotify()\fR
+A boolean value specifying whether the user should be notified after a new notification replaces an old one. The default is `false`, which means they won't be notified. If `true`, then tag also must be set.
+.TP
+\fBrequireInteraction()\fR
+Indicates that a notification should remain active until the user clicks or dismisses it, rather than closing automatically. The default value is `false`.
+.TP
+\fBsilent()\fR
+A boolean value specifying whether the notification is silent (no sounds or vibrations issued), regardless of the device settings. The default is `false`, which means it won't be silent. If `true`, then vibrate must not be present.
+.TP
+\fBtag()\fR
+A string representing an identifying tag for the notification. The default is the empty string.
+.TP
+\fBvibrate()\fR
+A vibration pattern for the device's vibration hardware to emit with the notification. If specified, silent must not be `true`.
+.TP
+\fBtimestamp()\fR
+The timestamp of the notification.
+.TP
+\fBtitle()\fR
+The title read\-only property of the `Notification` instace indicates the title of the notification, as specified in the `title` parameter of the `Notification` constructor.
+.TP
+\fBclose()\fR
+Closes the notification programmatically.

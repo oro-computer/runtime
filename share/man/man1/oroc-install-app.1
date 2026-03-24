@@ -1,0 +1,46 @@
+.TH OROC-INSTALL-APP 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-install\-app \- Install the app to the device or host target.
+.SH SYNOPSIS
+.nf
+oroc install\-app [\-\-platform=<platform>] [\-\-device=<identifier>] [options]
+.fi
+.SH DESCRIPTION
+.PP
+Install the app to the device or host target.
+.SH OPTIONS
+.TP
+\fB\-D, \-\-debug\fR
+enable debug output
+.TP
+\fB\-\-device[=identifier]\fR
+identifier (ecid, ID) of the device to install to if not specified, tries to run on the current device
+.TP
+\fB\-\-platform=<platform>\fR
+platform to install application to device (defaults to host)::
+.br
+\(bu android
+.br
+\(bu ios
+.TP
+\fB\-\-prod\fR
+install production application
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output
+.SH MACOS OPTIONS
+.TP
+\fB\-\-target=<target>\fR
+installation target for macOS application (defaults to '/') the application is installed into '$target/Applications'
+.SH COMMON ERRORS
+.PP
+Android: list devices with `adb devices` or pass `\-\-device`. iOS/macOS: list devices with `oroc list\-devices \-\-platform=ios` and pass `\-\-device`.
+.SH EXAMPLES
+.TP
+\fBoroc install\-app \-\-platform=android \-\-device emulator\-5554\fR
+install the current Android build onto a specific emulator
+.TP
+\fBoroc install\-app \-\-platform=ios \-\-device <udid>\fR
+install the current iOS build onto a specific simulator or device
+.SH SEE ALSO
+oroc(1)

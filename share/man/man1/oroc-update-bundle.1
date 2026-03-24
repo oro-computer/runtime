@@ -1,0 +1,59 @@
+.TH OROC-UPDATE-BUNDLE 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-update\-bundle \- Build a tar archive containing the contents of a directory for use as an update artifact.
+.SH SYNOPSIS
+.nf
+oroc update bundle [\-\-input=<dir>] [\-\-output=<bundle.tar>] [options]
+.fi
+.SH DESCRIPTION
+.PP
+Build a tar archive containing the contents of a directory for use as an update artifact.
+.SH OPTIONS
+.TP
+\fB\-\-input=<dir>\fR
+directory whose contents will be archived (default: project directory)
+.TP
+\fB\-\-output=<bundle.tar>\fR
+path to the tar archive to write (default: <build_name>\-<version>.tar)
+.TP
+\fB\-\-manifest=<path>\fR
+optional manifest path to update with a new target for this bundle
+.TP
+\fB\-\-manifest\-name=<name>\fR
+manifest filename to use when \-\-manifest is not provided
+.TP
+\fB\-\-channel=<name>\fR
+update channel to associate with this bundle (default: update_channel or "stable")
+.TP
+\fB\-\-update\-id=<id>\fR
+update id to associate with this bundle (default: <channel>\-<version>)
+.TP
+\fB\-\-platform=<id>\fR
+platform identifier for the bundle target (default: "source")
+.TP
+\fB\-\-arch=<id>\fR
+architecture identifier for the bundle target (default: "any")
+.TP
+\fB\-\-artifact\-url=<url\-or\-path>\fR
+artifactUrl to record in the manifest target (default: bundle filename)
+.TP
+\fB\-\-hash\-algorithm=<sha256|sha1>\fR
+hash algorithm to use for the bundle payload (default: sha256 when libsodium is available, otherwise sha1)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+The archive is a plain tar file (no compression) built using the runtime's native tar implementation. Directory layout and basic metadata (mode bits, mtime) are preserved. When omitted, '\-\-input' defaults to the project directory (app source), and '\-\-output' defaults to "<build_name>\-<version>.tar" derived from your oro.toml metadata. When '\-\-manifest' or '\-\-manifest\-name' (or ORO_UPDATE_MANIFEST_FILENAME) is provided, the manifest is updated with a new target entry describing this bundle (including length and hash).
+.SH EXAMPLES
+.TP
+\fBoroc update bundle\fR
+bundle the current project source into <build_name>\-<version>.tar
+.TP
+\fBoroc update bundle \-\-manifest manifest.json\fR
+bundle the project and record the artifact in manifest.json
+.TP
+\fBoroc update bundle \-\-input dist \-\-output app\-1.2.3.tar \-\-manifest manifest.json \-\-channel beta\fR
+bundle a custom directory and attach it as a beta update in the manifest
+.SH SEE ALSO
+oroc(1), oroc\-update(1)

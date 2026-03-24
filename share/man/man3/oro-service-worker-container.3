@@ -1,0 +1,20 @@
+.TH ORO-SERVICE-WORKER-CONTAINER 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:service\-worker/container \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:service\-worker/container'
+.fi
+.SH DESCRIPTION
+.PP
+oro:service\-worker/container is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBisServiceWorkerAllowed()\fR
+Predicate to determine if service workers are allowed
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBServiceWorkerContainer (extends EventTarget)\fR
+A `ServiceWorkerContainer` implementation that is attached to the global `globalThis.navigator.serviceWorker` object.

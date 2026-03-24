@@ -1,0 +1,120 @@
+Oro Runtime — Installed Runtime Reference For Humans And AI Agents
+
+Purpose
+- This file is a compact map of the installed Oro Runtime distribution.
+- It assumes you are working from an app workspace with an installed runtime, not from the runtime source repository.
+- Prefer the installed docs, manpages, CLI help, and MCP resources that ship with the runtime over guesses or source-tree assumptions.
+
+What Oro Runtime ships downstream
+- `oroc` — the CLI for project setup, config inspection, build/package flows, updates, devices, and diagnostics.
+- Public JavaScript modules imported as `oro:<module>`.
+- Generated API reference: `api/README.md`
+- Generated TypeScript declarations: `api/index.d.ts`
+- Generated CLI reference: `api/CLI.md`
+- Generated config reference: `api/CONFIG.md`
+- Installed manpages:
+  - `share/man/man1` — CLI commands
+  - `share/man/man3` — JavaScript and C APIs
+  - `share/man/man7` — concepts, IPC, workflows, route catalogs
+- Installed high-level docs: `share/doc/oroc/{README.md,MCP.md,llms.txt}`
+
+Recommended discovery order
+- Operational task or CLI question:
+  - Start with `oroc help <query>`
+  - Then `man 1 oroc` or `api/CLI.md`
+- Public API question:
+  - Start with `man 3 <module>` or `api/README.md`
+  - Confirm exact types in `api/index.d.ts`
+- Concept, transport, or workflow question:
+  - Start with `man 7 oro-api-concepts`
+  - Then `man 7 oro-ipc`, `man 7 oro-conduit`, `man 7 oro-agent-workflows`, `man 7 oro-ipc-routes`
+- MCP or tool-integration question:
+  - Start with `share/doc/oroc/MCP.md`
+  - Then use `oroc mcp` plus MCP `search_docs` / `resources/list`
+
+MCP discovery model
+- `oroc mcp` exposes two kinds of docs:
+  - `runtime-doc:/...` — runtime docs shipped with the installed runtime
+  - `workspace:/...` — app-local docs/config files from the current workspace when present
+- For runtime behavior, prefer `runtime-doc:/...`
+- For app-specific behavior, prefer `workspace:/...`
+- Recommended MCP flow:
+  - `initialize`
+  - `workspace_info`
+  - `search_docs`
+  - `resources/list`
+  - `read_config` when the active config exists
+
+Configuration model
+- Primary project config: `oro.toml`
+- Legacy fallback config: `oro.ini` when `oro.toml` is absent
+- Local developer overrides/secrets: `.ororc`
+- Treat config as part of the runtime contract:
+  - build/resource roots
+  - window defaults
+  - service worker behavior
+  - signing/packaging/update identity
+  - environment forwarding
+
+Public API usage rules
+- Prefer high-level public modules before raw IPC:
+  - `oro:application`
+  - `oro:window`
+  - `oro:fs` / `oro:fs/promises`
+  - `oro:secure-storage`
+  - `oro:net`, `oro:http`, `oro:tls`, `oro:sqlite`, etc.
+- Use `oro:ipc` only when:
+  - you need an advanced capability that is not wrapped yet
+  - you are debugging transport or bridge behavior
+  - you are intentionally working at the low-level route boundary
+- Transport rules:
+  - `ipc.request()` for standard async request/response
+  - `ipc.send()` for async structured calls that do not need binary tuning
+  - `ipc.sendSync()` only when blocking behavior is truly required
+  - `ipc.write()` for binary request bodies
+  - Conduit for sustained or high-frequency streaming flows
+
+Important runtime constraints
+- Oro Runtime is not full Node.js. It exposes a selective subset of Node-like APIs and browser-like APIs.
+- Do not assume `SharedArrayBuffer` or `Atomics.wait`; code that depends on shared memory needs a safe fallback.
+- Do not assume a service-worker mode. Respect the project configuration and installed docs.
+- Autoindex is opt-in.
+- Platform support varies. Verify capability limits from the installed docs before assuming parity across desktop and mobile targets.
+
+Useful installed references
+- Runtime overview: `share/doc/oroc/README.md`
+- MCP guide: `share/doc/oroc/MCP.md`
+- CLI reference: `api/CLI.md`
+- Config reference: `api/CONFIG.md`
+- API reference: `api/README.md`
+- Exact typings: `api/index.d.ts`
+- Concepts: `man 7 oro-api-concepts`
+- IPC: `man 7 oro-ipc`
+- Route inventory: `man 7 oro-ipc-routes`
+- Workflows: `man 7 oro-agent-workflows`
+
+Quick recipes
+- Discover how to do something:
+  - `oroc help <query>`
+  - `man 1 oroc`
+- Inspect a config key:
+  - `oroc config --describe <key>`
+- Inspect the merged effective config:
+  - `oroc config --format json`
+- Inspect environment inputs:
+  - `oroc env --json`
+- Create a window:
+  - `import { createWindow } from 'oro:application'`
+- Read a file:
+  - `import { readFile } from 'oro:fs/promises'`
+- Store a scoped secret:
+  - `import { setItem } from 'oro:secure-storage'`
+- Start an MCP server:
+  - `oroc mcp --stdio`
+
+Questions to ask first
+- Is there already a public wrapper for this capability?
+- What is the ownership key: window index, origin, scope, bundle identifier, route family, or config path?
+- Is this behavior controlled by project config?
+- Is this capability platform-gated or partial on some targets?
+- Do I need structured data, raw bytes, or a long-lived stream?

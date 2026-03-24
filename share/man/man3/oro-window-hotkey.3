@@ -1,0 +1,220 @@
+.TH ORO-WINDOW-HOTKEY 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:window/hotkey \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:window/hotkey'
+.fi
+.SH DESCRIPTION
+.PP
+oro:window/hotkey is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBnormalizeExpression(expression)\fR
+Normalizes an expression string.
+\fBParameters:\fR
+.br
+\fIexpression\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBBindings (extends EventTarget)\fR
+A high level bindings container map that dispatches events.
+.TP
+\fBsize()\fR
+The number of `Binding` instances in the mapping.
+.TP
+\fBonerror()\fR
+Level 1 'error'` event listener.
+.TP
+\fBonhotkey()\fR
+Level 1 'hotkey'` event listener.
+.TP
+\fBget(id)\fR
+Get a binding by `id`
+\fBParameters:\fR
+.br
+\fIid\fR (number; required)
+\fBReturns:\fR
+.br
+\fIBinding\fR
+.TP
+\fBset(id, binding)\fR
+Set a `binding` a by `id`.
+\fBParameters:\fR
+.br
+\fIid\fR (number; required)
+.br
+\fIbinding\fR (Binding; required)
+.TP
+\fBdelete(id)\fR
+Delete a binding by `id`
+\fBParameters:\fR
+.br
+\fIid\fR (number; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBhas()\fR
+Returns `true` if a binding exists in the mapping, otherwise `false`.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBvalues()\fR
+Known `Binding` values in the mapping.
+\fBReturns:\fR
+.br
+\fI{ next: function(): { value: Binding \\| undefined, done: boolean } }\fR
+.TP
+\fBkeys()\fR
+Known `Binding` keys in the mapping.
+\fBReturns:\fR
+.br
+\fI{ next: function(): { value: number \\| undefined, done: boolean } }\fR
+.TP
+\fBids()\fR
+Known `Binding` ids in the mapping.
+\fBReturns:\fR
+.br
+\fI{ next: function(): { value: number \\| undefined, done: boolean } }\fR
+.TP
+\fBentries()\fR
+Known `Binding` ids and values in the mapping.
+\fBReturns:\fR
+.br
+\fI{ next: function(): { value: [number, Binding] \\| undefined, done: boolean } }\fR
+.TP
+\fBbind(expression)\fR
+Bind a global hotkey expression.
+\fBParameters:\fR
+.br
+\fIexpression\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<Binding>\fR
+.TP
+\fBunbind(expression)\fR
+Bind a global hotkey expression.
+\fBParameters:\fR
+.br
+\fIexpression\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<Binding>\fR
+.TP
+\fBactive()\fR
+Returns an array of all active bindings for the application.
+\fBReturns:\fR
+.br
+\fIPromise<Binding[]>\fR
+.TP
+\fBreset(currentContextOnly)\fR
+Resets all active bindings in the application.
+\fBParameters:\fR
+.br
+\fIcurrentContextOnly\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBBinding (extends EventTarget)\fR
+An `EventTarget` container for a hotkey binding.
+.TP
+\fBisValid()\fR
+`true` if the binding is valid, otherwise `false`.
+.TP
+\fBisActive()\fR
+`true` if the binding is considered active, otherwise `false`.
+.TP
+\fBid()\fR
+The global unique ID for this binding.
+.TP
+\fBhash()\fR
+The computed hash for this binding expression.
+.TP
+\fBsequence()\fR
+The normalized expression as a sequence of tokens.
+.TP
+\fBexpression()\fR
+The original expression of the binding.
+.TP
+\fBonhotkey()\fR
+Level 1 'hotkey'` event listener.
+.TP
+\fBbind()\fR
+Binds this hotkey expression.
+\fBReturns:\fR
+.br
+\fIPromise<Binding>\fR
+.TP
+\fBunbind()\fR
+Unbinds this hotkey expression.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBbind(expression, options)\fR
+Bind a global hotkey expression.
+\fBParameters:\fR
+.br
+\fIexpression\fR (string; required)
+.br
+\fIoptions\fR ({ passive?: boolean }; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Binding>\fR
+.TP
+\fBunbind(id, options)\fR
+Bind a global hotkey expression.
+\fBParameters:\fR
+.br
+\fIexpression\fR (string; required)
+.br
+\fIoptions\fR (object; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Binding>\fR
+.TP
+\fBgetBindings(options)\fR
+Get all known globally register hotkey bindings.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Binding[]>\fR
+.TP
+\fBgetMappings(options)\fR
+Get all known possible keyboard modifier and key mappings for expression bindings.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<{ keys: object, modifiers: object }>\fR
+.TP
+\fBaddEventListener(type, listener, optionsOrUseCapture)\fR
+Adds an event listener to the global active bindings. This function is just proxy to `bindings.addEventListener`.
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIlistener\fR (function(Event); required)
+.br
+\fIoptionsOrUseCapture\fR (boolean \\| object; optional)
+.TP
+\fBremoveEventListener(type, listener, optionsOrUseCapture)\fR
+Removes an event listener to the global active bindings. This function is just a proxy to `bindings.removeEventListener`
+\fBParameters:\fR
+.br
+\fItype\fR (string; required)
+.br
+\fIlistener\fR (function(Event); required)
+.br
+\fIoptionsOrUseCapture\fR (boolean \\| object; optional)
+.TP
+\fBbindings\fR
+A container for all the bindings currently bound by this window context.

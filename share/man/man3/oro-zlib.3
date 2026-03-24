@@ -1,0 +1,124 @@
+.TH ORO-ZLIB 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:zlib \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:zlib'
+.fi
+.SH DESCRIPTION
+.PP
+Native zlib (v1.3.1) helpers exposed through the Oro runtime. This module provides convenient buffer\-based compression utilities as well as a streaming API built on top of the runtime's zlib service.
+.PP
+Examples:
+.PP
+import { deflate, inflate } from 'oro:zlib'
+.PP
+const compressed = await deflate(Buffer.from('hello')) const plain = await inflate(compressed)
+.SH REFERENCE
+.TP
+\fBisAvailable()\fR
+Reports whether the zlib primitive is available in the current runtime (based on native build configuration).
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBdeflate(input, options)\fR
+Compresses a buffer using zlib/deflate.
+\fBParameters:\fR
+.br
+\fIinput\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| string; required)
+.br
+\fIoptions\fR (ZlibOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR
+.TP
+\fBinflate(input, options)\fR
+Decompresses a buffer using zlib/inflate.
+\fBParameters:\fR
+.br
+\fIinput\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| string; required)
+.br
+\fIoptions\fR (ZlibOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR
+.TP
+\fBgzip(input, options)\fR
+Compresses a buffer using gzip framing.
+\fBParameters:\fR
+.br
+\fIinput\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| string; required)
+.br
+\fIoptions\fR (ZlibOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR
+.TP
+\fBgunzip(input, options)\fR
+Decompresses a gzip buffer.
+\fBParameters:\fR
+.br
+\fIinput\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| string; required)
+.br
+\fIoptions\fR (ZlibOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR
+.TP
+\fBZlibStream\fR
+Represents a stateful zlib stream backed by the native runtime.
+.TP
+\fBcreate(mode, options)\fR
+Opens a new zlib stream.
+\fBParameters:\fR
+.br
+\fImode\fR (ZlibMode; optional; default 'deflate')
+.br
+\fIoptions\fR (ZlibStreamOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<ZlibStream>\fR
+.TP
+\fBwrite(chunk, options)\fR
+Writes a chunk into the stream and returns the processed output chunk.
+\fBParameters:\fR
+.br
+\fIchunk\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| string; required)
+.br
+\fIoptions\fR (ZlibChunkOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR
+.TP
+\fBend(chunk, options)\fR
+Signals the end of the stream. An optional final chunk can be provided.
+\fBParameters:\fR
+.br
+\fIchunk\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| string; optional; default null)
+.br
+\fIoptions\fR (ZlibChunkOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR
+.TP
+\fBclose()\fR
+Closes the stream without sending additional data. Subsequent writes will throw.
+.TP
+\fBcreateDeflateStream(options)\fR
+Convenience helper for creating a deflate stream.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ZlibStreamOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<ZlibStream>\fR
+.TP
+\fBcreateInflateStream(options)\fR
+Convenience helper for creating an inflate stream.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ZlibStreamOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<ZlibStream>\fR

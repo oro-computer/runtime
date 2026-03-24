@@ -1,0 +1,178 @@
+import test from 'oro:test'
+
+import { fetch, Headers, Request, Response } from 'oro:fetch'
+import { URL, URLPattern, URLSearchParams } from 'oro:url'
+import { ApplicationURLEvent } from 'oro:internal/events'
+import Notification from 'oro:notification'
+import { Buffer } from 'oro:buffer'
+
+import {
+  File,
+  FileSystemHandle,
+  FileSystemFileHandle,
+  FileSystemDirectoryHandle,
+  FileSystemWritableFileStream
+} from 'oro:fs/web'
+
+import {
+  showDirectoryPicker,
+  showOpenFilePicker,
+  showSaveFilePicker
+} from 'oro:internal/pickers'
+
+test('globalThis runtime detection global', (t) => {
+  t.ok(globalThis.isOroRuntime === true, 'globalThis.isOroRuntime')
+})
+
+test('navigator.userAgent uses Oro branding', (t) => {
+  const ua = globalThis.navigator?.userAgent || ''
+  t.ok(
+    ua.includes('OroRuntime/'),
+    'navigator.userAgent includes OroRuntime token'
+  )
+})
+
+test('globalThis.Buffer', (t) => {
+  t.ok(
+    typeof globalThis.Buffer === 'function' && globalThis.Buffer === Buffer,
+    'globalThis.Buffer'
+  )
+})
+
+test('globalThis.URL', (t) => {
+  t.ok(
+    typeof globalThis.URL === 'function' && globalThis.URL === URL,
+    'globalThis.URL'
+  )
+})
+
+test('globalThis.URLPattern', (t) => {
+  t.ok(
+    typeof globalThis.URLPattern === 'function' &&
+      globalThis.URLPattern === URLPattern,
+    'globalThis.URLPattern'
+  )
+})
+
+test('globalThis.URLSearchParams', (t) => {
+  t.ok(
+    typeof globalThis.URLSearchParams === 'function' &&
+      globalThis.URLSearchParams === URLSearchParams,
+    'globalThis.URLSearchParams'
+  )
+})
+
+test('globalThis.fetch', (t) => {
+  t.ok(
+    typeof globalThis.fetch === 'function' && globalThis.fetch === fetch,
+    'globalThis.fetch'
+  )
+})
+
+test('globalThis.Headers', (t) => {
+  t.ok(
+    typeof globalThis.Headers === 'function' && globalThis.Headers === Headers,
+    'globalThis.Headers'
+  )
+})
+
+test('globalThis.Request', (t) => {
+  t.ok(
+    typeof globalThis.Request === 'function' && globalThis.Request === Request,
+    'globalThis.Request'
+  )
+})
+
+test('globalThis.Response', (t) => {
+  t.ok(
+    typeof globalThis.Response === 'function' &&
+      globalThis.Response === Response,
+    'globalThis.Response'
+  )
+})
+
+test('globalThis.File', (t) => {
+  t.ok(
+    typeof globalThis.File === 'function' && globalThis.File === File,
+    'globalThis.File'
+  )
+})
+
+test('globalThis.FileSystemHandle', (t) => {
+  t.ok(
+    typeof globalThis.FileSystemHandle === 'function' &&
+      globalThis.FileSystemHandle === FileSystemHandle,
+    'globalThis.FileSystemHandle'
+  )
+})
+
+test('globalThis.FileSystemFileHandle', (t) => {
+  t.ok(
+    typeof globalThis.FileSystemFileHandle === 'function' &&
+      globalThis.FileSystemFileHandle === FileSystemFileHandle,
+    'globalThis.FileSystemFileHandle'
+  )
+})
+
+test('globalThis.FileSystemDirectoryHandle', (t) => {
+  t.ok(
+    typeof globalThis.FileSystemDirectoryHandle === 'function' &&
+      globalThis.FileSystemDirectoryHandle === FileSystemDirectoryHandle,
+    'globalThis.FileSystemDirectoryHandle'
+  )
+})
+
+test('globalThis.FileSystemWritableFileStream', (t) => {
+  t.ok(
+    typeof globalThis.FileSystemWritableFileStream === 'function' &&
+      globalThis.FileSystemWritableFileStream === FileSystemWritableFileStream,
+    'globalThis.FileSystemWritableFileStream'
+  )
+})
+
+test('globalThis.showDirectoryPicker', (t) => {
+  t.ok(
+    typeof globalThis.showDirectoryPicker === 'function' &&
+      globalThis.showDirectoryPicker === showDirectoryPicker,
+    'globalThis.showDirectoryPicker'
+  )
+})
+
+test('globalThis.showOpenFilePicker', (t) => {
+  t.ok(
+    typeof globalThis.showOpenFilePicker === 'function' &&
+      globalThis.showOpenFilePicker === showOpenFilePicker,
+    'globalThis.showOpenFilePicker'
+  )
+})
+
+test('globalThis.showSaveFilePicker', (t) => {
+  t.ok(
+    typeof globalThis.showSaveFilePicker === 'function' &&
+      globalThis.showSaveFilePicker === showSaveFilePicker,
+    'globalThis.showSaveFilePicker'
+  )
+})
+
+test('globalThis.ApplicationURLEvent', (t) => {
+  t.ok(
+    typeof globalThis.ApplicationURLEvent === 'function' &&
+      globalThis.ApplicationURLEvent === ApplicationURLEvent,
+    'globalThis.ApplicationURLEvent'
+  )
+})
+
+test('globalThis.Notification', (t) => {
+  t.ok(
+    typeof globalThis.Notification === 'function' &&
+      globalThis.Notification === Notification,
+    'globalThis.Notification'
+  )
+})
+
+test('globalThis.navigator.permissions', (t) => {
+  t.ok(
+    typeof globalThis.navigator.permissions.query === 'function',
+    'globalThis.navigator.permissions.query'
+  )
+})

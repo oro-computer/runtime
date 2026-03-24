@@ -1,0 +1,73 @@
+.TH ORO-RUNTIME-INIT 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro\-runtime\-init \- embedder initialization and configuration helpers
+.SH SYNOPSIS
+.nf
+#include <oro/runtime_init.h>
+.fi
+.SH DESCRIPTION
+.PP
+The oro/runtime_init.h header exposes build\-time runtime metadata to host applications that embed Oro Runtime.
+.PP
+Callers can inspect embedded user configuration bytes, debug mode, development host settings, and the encoded configuration format without depending on internal runtime state.
+.SH TYPES
+.TP
+\fBoro_runtime_user_config_format\fR
+.nf
+enum oro_runtime_user_config_format { ... } ;
+.fi
+.PP
+Known user configuration formats returned by `oro_runtime_init_get_user_config_format()`.
+.PP
+Additional formats may be introduced over time; callers should handle unrecognized values by treating them as an opaque enum.
+.SH FUNCTIONS
+.TP
+\fBoro_runtime_init_get_user_config_bytes\fR
+.nf
+const unsigned char* oro_runtime_init_get_user_config_bytes (void);
+.fi
+.PP
+Get a pointer to the embedded user configuration bytes, if any.
+.PP
+The buffer and its lifetime are owned by the runtime; callers must not free it. When no configuration is embedded this returns `NULL` and `oro_runtime_init_get_user_config_bytes_size()` returns `0`.
+.TP
+\fBoro_runtime_init_get_user_config_bytes_size\fR
+.nf
+unsigned int oro_runtime_init_get_user_config_bytes_size (void);
+.fi
+.PP
+Get the size in bytes of the buffer returned by `oro_runtime_init_get_user_config_bytes()`.
+.TP
+\fBoro_runtime_init_is_debug_enabled\fR
+.nf
+bool oro_runtime_init_is_debug_enabled (void);
+.fi
+.PP
+Return `true` when the runtime was built in debug mode.
+.TP
+\fBoro_runtime_init_get_dev_host\fR
+.nf
+const char* oro_runtime_init_get_dev_host (void);
+.fi
+.PP
+Get the development host configured for the embedded runtime, or an empty string when unset.
+.PP
+The returned pointer is owned by the runtime and remains valid for the lifetime of the process.
+.TP
+\fBoro_runtime_init_get_dev_port\fR
+.nf
+int oro_runtime_init_get_dev_port (void);
+.fi
+.PP
+Get the development port configured for the embedded runtime, or `0` when unset.
+.TP
+\fBoro_runtime_init_get_user_config_format\fR
+.nf
+int oro_runtime_init_get_user_config_format (void);
+.fi
+.PP
+Get the user configuration format as an integer value.
+.PP
+This corresponds to the `oro_runtime_user_config_format` enum above (for example, INI vs TOML). Callers should treat the value as an opaque enum and compare it against the symbolic constants rather than hard\-coding numeric literals.
+.SH HEADER
+include/oro/runtime_init.h

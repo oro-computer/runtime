@@ -1,0 +1,198 @@
+.TH ORO-SEMVER 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:semver \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:semver'
+.fi
+.SH DESCRIPTION
+.PP
+A SemVer 2.0.0 implementation backed by the native runtime. This module provides helpers for parsing, comparing, incrementing, and checking ranges.
+.PP
+Example: import * as semver from 'oro:semver'
+.PP
+const v = semver.parse('1.2.3\-alpha.1') if (!v) throw new Error('invalid') console.log(v.major, v.minor, v.patch, v.prerelease)
+.PP
+if (semver.satisfies('1.2.3', '>=1.0.0 <2.0.0')) { console.log('compatible') }
+.SH REFERENCE
+.TP
+\fBparse(version)\fR
+Parse a semantic version string into its structured representation. Returns `null` when the input is not a valid SemVer 2.0.0 version.
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+\fBReturns:\fR
+.br
+\fISemVer \\| null\fR
+.TP
+\fBvalid(version)\fR
+Returns the canonical version string when `version` is valid, otherwise `null`.
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring \\| null\fR
+.TP
+\fBcompare(a, b)\fR
+Compare two semantic versions.
+\fBParameters:\fR
+.br
+\fIa\fR (string; required)
+.br
+\fIb\fR (string; required)
+\fBReturns:\fR
+.br
+\fI\-1 \\| 0 \\| 1\fR
+.TP
+\fBeq(a, b)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIa\fR (string; required)
+.br
+\fIb\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBneq(a, b)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIa\fR (string; required)
+.br
+\fIb\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBlt(a, b)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIa\fR (string; required)
+.br
+\fIb\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBlte(a, b)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIa\fR (string; required)
+.br
+\fIb\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBgt(a, b)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIa\fR (string; required)
+.br
+\fIb\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBgte(a, b)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIa\fR (string; required)
+.br
+\fIb\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBsatisfies(version, range)\fR
+Test whether a version satisfies a range expression.
+.br
+Supported range grammar includes: \- Simple comparators (`<`, `<=`, `>`, `>=`, `=`, or bare versions) \- Hyphen ranges: `1.2.3 \- 2.3.4` \- Wildcard ranges: `1.x`, `1.2.x`, `1`, `1.2`, `*` \- Tilde ranges: `~1.2.3`, `~1.2`, `~1` \- Caret ranges: `^1.2.3`, `^0.2.3`, `^0.0.3` \- `||` for OR between sets of comparators
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+.br
+\fIrange\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBinc(version, release, preid)\fR
+Increment a version according to the given release type.
+.br
+Release types: \- 'major', 'minor', 'patch' \- 'premajor', 'preminor', 'prepatch', 'prerelease'
+.br
+When a pre* release type is used, `preid` (when provided) becomes the pre\-release identifier (e.g., `beta` \-> `1.2.3\-beta.0`). If omitted, `rc` is used by default.
+.br
+Returns `null` when the input version is invalid.
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+.br
+\fIrelease\fR (\&'major' \\| 'minor' \\| 'patch' \\| 'premajor' \\| 'preminor' \\| 'prepatch' \\| 'prerelease'; required)
+.br
+\fIpreid\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIstring \\| null\fR
+.TP
+\fBclean(version)\fR
+Clean a version by returning its canonical form or `null` when invalid.
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring \\| null\fR
+.TP
+\fBmajor(version)\fR
+Extract the major component of a version or `NaN` when invalid.
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBminor(version)\fR
+Extract the minor component of a version or `NaN` when invalid.
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBpatch(version)\fR
+Extract the patch component of a version or `NaN` when invalid.
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBprerelease(version)\fR
+Returns the prerelease components of a version or `null` when invalid or when the version has no prerelease identifiers.
+\fBParameters:\fR
+.br
+\fIversion\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring[] \\| null\fR
+.TP
+\fBvalidRange(range)\fR
+Validate and normalize a range expression. Returns the normalized comparator\-based range or `null` when invalid.
+\fBParameters:\fR
+.br
+\fIrange\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring \\| null\fR

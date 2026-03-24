@@ -1,0 +1,246 @@
+.TH ORO-ASYNC-CONTEXT 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:async/context \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:async/context'
+.fi
+.SH DESCRIPTION
+.PP
+oro:async/context is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBFrozenRevert\fR
+Async Context for JavaScript based on the TC39 proposal.
+.br
+Example usage: // `AsyncContext` is also globally available as `globalThis.AsyncContext` import AsyncContext from 'oro:async/context'
+.br
+const var = new AsyncContext.Variable() var.run('top', () => { console.log(var.get()) // 'top' queueMicrotask(() => { var.run('nested', () => { console.log(var.get()) // 'nested' }) }) })
+.br
+`FrozenRevert` holds a frozen Mapping that will be simply restored when the revert is run.
+\fBParameters:\fR
+.br
+\fIargs\fR (\&...any; required)
+\fBReturns:\fR
+.br
+\fIany\fR
+.TP
+\fBconstructor(mapping)\fR
+`FrozenRevert` class constructor.
+\fBParameters:\fR
+.br
+\fImapping\fR (Mapping; required)
+.TP
+\fBrestore(unused)\fR
+Restores (unchaged) mapping from this `FrozenRevert`. This function is called by `AsyncContext.Storage` when it reverts a current mapping to the previous state before a "fork".
+\fBParameters:\fR
+.br
+\fIunused\fR (Mapping; optional; default null)
+\fBReturns:\fR
+.br
+\fIMapping\fR
+.TP
+\fBRevert\fR
+Revert holds the state on how to revert a change to the `AsyncContext.Storage` current `Mapping`
+.TP
+\fBconstructor(mapping, key)\fR
+`Revert` class constructor.
+\fBParameters:\fR
+.br
+\fImapping\fR (Mapping; required)
+.br
+\fIkey\fR (Variable<T>; required)
+.TP
+\fBpreviousVariable()\fR
+Documented method exposed by this module.
+.TP
+\fBrestore(current)\fR
+Restores a mapping from this `Revert`. This function is called by `AsyncContext.Storage` when it reverts a current mapping to the previous state before a "fork".
+\fBParameters:\fR
+.br
+\fIcurrent\fR (Mapping; required)
+\fBReturns:\fR
+.br
+\fIMapping\fR
+.TP
+\fBMapping\fR
+A container for all `AsyncContext.Variable` instances and snapshot state.
+.TP
+\fBconstructor(data)\fR
+`Mapping` class constructor.
+\fBParameters:\fR
+.br
+\fIdata\fR (Map<Variable<any>, any>; required)
+.TP
+\fBfreeze()\fR
+Freezes the `Mapping` preventing `AsyncContext.Variable` modifications with `set()` and `delete()`.
+.TP
+\fBisFrozen()\fR
+Returns `true` if the `Mapping` is frozen, otherwise `false`.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBfork()\fR
+Optionally returns a new `Mapping` if the current one is "frozen", otherwise it just returns the current instance.
+\fBReturns:\fR
+.br
+\fIMapping\fR
+.TP
+\fBhas(key)\fR
+Returns `true` if the `Mapping` has a `AsyncContext.Variable` at `key`, otherwise `false.
+\fBParameters:\fR
+.br
+\fIkey\fR (Variable<T>; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBget(key)\fR
+Gets an `AsyncContext.Variable` value at `key`. If not set, this function returns `undefined`.
+\fBParameters:\fR
+.br
+\fIkey\fR (Variable<T>; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBset(key, value)\fR
+Sets an `AsyncContext.Variable` value at `key`. If the `Mapping` is frozen, then a "forked" (new) instance with the value set on it is returned, otherwise the current instance.
+\fBParameters:\fR
+.br
+\fIkey\fR (Variable<T>; required)
+.br
+\fIvalue\fR (T; required)
+\fBReturns:\fR
+.br
+\fIMapping\fR
+.TP
+\fBdelete(key, value)\fR
+Delete an `AsyncContext.Variable` value at `key`. If the `Mapping` is frozen, then a "forked" (new) instance is returned, otherwise the current instance.
+\fBParameters:\fR
+.br
+\fIkey\fR (Variable<T>; required)
+.br
+\fIvalue\fR (T; required)
+\fBReturns:\fR
+.br
+\fIMapping\fR
+.TP
+\fBhas(key)\fR
+Returns `true` if the current `Mapping` has a `AsyncContext.Variable` at `key`, otherwise `false.
+\fBParameters:\fR
+.br
+\fIkey\fR (Variable<T>; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBget(key)\fR
+Gets an `AsyncContext.Variable` value at `key` for the current `Mapping`. If not set, this function returns `undefined`.
+\fBParameters:\fR
+.br
+\fIkey\fR (Variable<T>; required)
+\fBReturns:\fR
+.br
+\fIT \\| undefined\fR
+.TP
+\fBset(key, value)\fR
+Set updates the `AsyncContext.Variable` with a new value and returns a revert action that allows the modification to be reversed in the future.
+\fBParameters:\fR
+.br
+\fIkey\fR (Variable<T>; required)
+.br
+\fIvalue\fR (T; required)
+\fBReturns:\fR
+.br
+\fIRevert<T> \\| FrozenRevert\fR
+.TP
+\fBsnapshot()\fR
+"Freezes" the current storage `Mapping`, and returns a new `FrozenRevert` or `Revert` which can restore the storage state to the state at the time of the snapshot.
+\fBReturns:\fR
+.br
+\fIFrozenRevert\fR
+.TP
+\fBrestore(revert)\fR
+Restores the storage `Mapping` state to state at the time the "revert" (`FrozenRevert` or `Revert`) was created.
+\fBParameters:\fR
+.br
+\fIrevert\fR (Revert<T> \\| FrozenRevert; required)
+.TP
+\fBswitch(snapshot)\fR
+Switches storage `Mapping` state to the state at the time of a "snapshot".
+\fBParameters:\fR
+.br
+\fIsnapshot\fR (FrozenRevert; required)
+\fBReturns:\fR
+.br
+\fIFrozenRevert\fR
+.TP
+\fBVariable\fR
+`AsyncContext.Variable` is a container for a value that is associated with the current execution flow. The value is propagated through async execution flows, and can be snapshot and restored with Snapshot.
+.TP
+\fBconstructor(options)\fR
+`Variable` class constructor.
+\fBParameters:\fR
+.br
+\fIoptions\fR (VariableOptions<T>; optional; default null)
+.TP
+\fBname()\fR
+The name of this async context variable.
+.TP
+\fBrun(value, fn, args)\fR
+Executes a function `fn` with specified arguments, setting a new value to the current context before the call, and ensuring the environment is reverted back afterwards. The function allows for the modification of a specific context's state in a controlled manner, ensuring that any changes can be undone.
+\fBParameters:\fR
+.br
+\fIvalue\fR (T; required)
+.br
+\fIfn\fR (F; required)
+.br
+\fIargs\fR (\&...Parameters<F>; required)
+\fBReturns:\fR
+.br
+\fIReturnType<F>\fR
+.TP
+\fBget()\fR
+Get the `AsyncContext.Variable` value.
+\fBReturns:\fR
+.br
+\fIT \\| undefined\fR
+.TP
+\fBSnapshot\fR
+`AsyncContext.Snapshot` allows you to opaquely capture the current values of all `AsyncContext.Variable` instances and execute a function at a later time as if those values were still the current values (a snapshot and restore).
+.TP
+\fBwrap(fn)\fR
+Wraps a given function `fn` with additional logic to take a snapshot of `Storage` before invoking `fn`. Returns a new function with the same signature as `fn` that when called, will invoke `fn` with the current `this` context and provided arguments, after restoring the `Storage` snapshot.
+.br
+`AsyncContext.Snapshot.wrap` is a helper which captures the current values of all Variables and returns a wrapped function. When invoked, this wrapped function restores the state of all Variables and executes the inner function.
+\fBParameters:\fR
+.br
+\fIfn\fR (F; required)
+\fBReturns:\fR
+.br
+\fIF\fR
+.TP
+\fBname(args)\fR
+Documented property exposed by this module.
+\fBParameters:\fR
+.br
+\fIargs\fR (\&...any; required)
+\fBReturns:\fR
+.br
+\fIReturnType<F>\fR
+.TP
+\fBrun(fn, args)\fR
+Runs the given function `fn` with arguments `args`, using a `null` context and the current snapshot.
+\fBParameters:\fR
+.br
+\fIfn\fR (F; required)
+.br
+\fIargs\fR (\&...Parameters<F>; required)
+\fBReturns:\fR
+.br
+\fIReturnType<F>\fR
+.TP
+\fBAsyncContext\fR
+`AsyncContext` container.

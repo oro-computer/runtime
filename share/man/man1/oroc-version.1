@@ -1,0 +1,52 @@
+.TH OROC-VERSION 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-version \- Inspect or bump the project version defined in your configuration file.
+.SH SYNOPSIS
+.nf
+oroc version [options]
+oroc version <new\-version | release> [options]
+.fi
+.SH DESCRIPTION
+.PP
+Inspect or bump the project version defined in your configuration file.
+.SH OPTIONS
+.TP
+\fB\-\-config=<path>\fR
+explicit oro.toml/oro.ini to update
+.TP
+\fB\-\-preid=<id>\fR
+pre\-release identifier for pre* / prerelease bumps (default: "rc")
+.TP
+\fB\-\-verbose, \-V\fR
+enable verbose output
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.IP \(bu 2
+With no arguments, 'version' prints the current semantic version from the [meta] section.
+.IP \(bu 2
+With a <new\-version> argument, it sets the version to that exact SemVer 2.0.0 value.
+.IP \(bu 2
+With a release type, it bumps the version using SemVer rules:
+.PP
+major, minor, patch, premajor, preminor, prepatch, prerelease For pre* / prerelease bumps, '\-\-preid' controls the pre\-release tag (e.g., 'beta').
+.IP \(bu 2
+The command updates only your app configuration file; it does not call git or create tags.
+.IP \(bu 2
+oro.toml is the preferred config file, oro.ini is fully supported when oro.toml is absent.
+.SH EXAMPLES
+.TP
+\fBoroc version\fR
+print the current project version
+.TP
+\fBoroc version minor\fR
+bump version to the next minor
+.TP
+\fBoroc version prepatch \-\-preid beta\fR
+bump to the next patch and start a 'beta' pre\-release
+.TP
+\fBoroc version 1.2.3\fR
+set the version explicitly to 1.2.3
+.SH SEE ALSO
+oroc(1)

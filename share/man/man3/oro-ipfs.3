@@ -1,0 +1,117 @@
+.TH ORO-IPFS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:ipfs \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:ipfs'
+.fi
+.SH DESCRIPTION
+.PP
+High\-level bindings for the native libipfs integration. The API exposes helpers to start and stop the embedded daemon, add and retrieve UnixFS content, manage pins, and update peer connectivity from JavaScript.
+.SH REFERENCE
+.TP
+\fBstart(options)\fR
+Start the embedded IPFS node.
+\fBParameters:\fR
+.br
+\fIoptions\fR (Object; optional)
+.br
+\fIoptions.repoPath\fR (string; optional) Absolute path to the repo directory.
+.br
+\fIoptions.port\fR (number \\| string; optional) Swarm port to bind.
+\fBReturns:\fR
+.br
+\fIPromise<{repoPath: string, port: number, peerId: string}>\fR
+.TP
+\fBstop()\fR
+Stop the running IPFS node.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR Resolves to true when the node is stopped.
+.TP
+\fBstatus()\fR
+Fetch the current runtime status of the IPFS subsystem.
+\fBReturns:\fR
+.br
+\fIPromise<{available: boolean, started: boolean, repoPath: string, port: number, peerId: string}>\fR
+.TP
+\fBensureStarted(options)\fR
+Ensure that the embedded IPFS node has been started. When the node is not already running the helper will start it with the given options.
+\fBParameters:\fR
+.br
+\fIoptions\fR (Object; optional) Passed to {@link start} if the node is inactive.
+\fBReturns:\fR
+.br
+\fIPromise<{repoPath: string, port: number, peerId: string}>\fR
+.TP
+\fBadd(path)\fR
+Add a UnixFS file or directory tree to the node and return its CID.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required) Absolute path to the file or directory to add.
+\fBReturns:\fR
+.br
+\fIPromise<{cid: string}>\fR
+.TP
+\fBget(cid, arg)\fR
+Retrieve a CID or path from the network.
+\fBParameters:\fR
+.br
+\fIcid\fR (string; required) CID or IPFS/IPNS path to fetch.
+.br
+\fIoptions\fR (Object; required)
+.br
+\fIoptions.destination\fR (string; required) Filesystem path where the payload should be written.
+.br
+\fIoptions.pin\fR (boolean; optional; default false) Whether the fetched content should be pinned after saving.
+\fBReturns:\fR
+.br
+\fIPromise<{cid: string, path: string, pinned: boolean}>\fR
+.TP
+\fBpin(cid)\fR
+Pin a CID so it is retained locally.
+\fBParameters:\fR
+.br
+\fIcid\fR (string; required) CID or path to pin.
+\fBReturns:\fR
+.br
+\fIPromise<{cid: string, pinned: boolean}>\fR
+.TP
+\fBunpin(cid)\fR
+Remove a CID from the local pinset.
+\fBParameters:\fR
+.br
+\fIcid\fR (string; required) CID or path to unpin.
+\fBReturns:\fR
+.br
+\fIPromise<{cid: string, pinned: boolean}>\fR
+.TP
+\fBgarbageCollect()\fR
+Trigger repository garbage collection.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR Resolves to true when the sweep completes.
+.TP
+\fBpeerId()\fR
+Query the current peer ID for the running node.
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR The node's peer ID (may be empty if unavailable).
+.TP
+\fBaddPeer(address)\fR
+Connect to a remote peer using a multiaddress.
+\fBParameters:\fR
+.br
+\fIaddress\fR (string; required) Multiaddress of the peer to connect.
+\fBReturns:\fR
+.br
+\fIPromise<{peer: string, removed: boolean}>\fR
+.TP
+\fBremovePeer(address)\fR
+Disconnect a previously connected peer.
+\fBParameters:\fR
+.br
+\fIaddress\fR (string; required) Multiaddress of the peer to remove.
+\fBReturns:\fR
+.br
+\fIPromise<{peer: string, added: boolean}>\fR

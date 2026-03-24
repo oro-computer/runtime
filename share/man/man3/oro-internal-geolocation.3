@@ -1,0 +1,47 @@
+.TH ORO-INTERNAL-GEOLOCATION 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/geolocation \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/geolocation'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/geolocation is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBgetCurrentPosition(onSuccess, onError, options)\fR
+Get the current position of the device.
+\fBParameters:\fR
+.br
+\fIonSuccess\fR (function(GeolocationPosition); required)
+.br
+\fIonError\fR (onError(Error); required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.timeout\fR (number; optional)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBwatchPosition(onSuccess, onError, options)\fR
+Register a handler function that will be called automatically each time the position of the device changes. You can also, optionally, specify an error handling callback function.
+\fBParameters:\fR
+.br
+\fIonSuccess\fR (function(GeolocationPosition); required)
+.br
+\fIonError\fR (function(Error); required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.timeout\fR (number; optional; default null)
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBclearWatch(id)\fR
+Unregister location and error monitoring handlers previously installed using `watchPosition`.
+\fBParameters:\fR
+.br
+\fIid\fR (number; required)

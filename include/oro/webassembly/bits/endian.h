@@ -1,0 +1,10 @@
+#ifndef ORO_RUNTIME_WEBASSEMBLY_BITS_ENDIAN_H
+#define ORO_RUNTIME_WEBASSEMBLY_BITS_ENDIAN_H
+
+#if defined(__BYTE_ORDER)
+#undef __BYTE_ORDER
+#endif
+
+#define __BYTE_ORDER __LITTLE_ENDIAN
+
+#endif

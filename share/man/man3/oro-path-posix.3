@@ -1,0 +1,123 @@
+.TH ORO-PATH-POSIX 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:path/posix \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:path/posix'
+.fi
+.SH DESCRIPTION
+.PP
+oro:path/posix is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBposix\fR
+This is an exported `VariableDeclaration` named `posix`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBsep\fR
+This is an exported `VariableDeclaration` named `sep`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBdelimiter\fR
+This is an exported `VariableDeclaration` named `delimiter`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBcwd()\fR
+Computes current working directory for a path
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBresolve(...components)\fR
+Resolves path components to an absolute path.
+\fBParameters:\fR
+.br
+\fIcomponents\fR (\&...PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBjoin(...components)\fR
+Joins path components. This function may not return an absolute path.
+\fBParameters:\fR
+.br
+\fIcomponents\fR (\&...PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBdirname(path)\fR
+Computes directory name of path.
+\fBParameters:\fR
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBbasename(path, suffix)\fR
+Computes base name of path.
+\fBParameters:\fR
+.br
+\fIpath\fR (PathComponent; required)
+.br
+\fIsuffix\fR (string; optional; default null)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBextname(path)\fR
+Computes extension name of path.
+\fBParameters:\fR
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBisAbsolute(path)\fR
+Predicate helper to determine if path is absolute.
+\fBParameters:\fR
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBparse(path)\fR
+Parses input `path` into a `Path` instance.
+\fBParameters:\fR
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fI{ root: string, dir: string, base: string, ext: string, name: string }\fR
+.TP
+\fBformat(path)\fR
+Formats `Path` object into a string.
+\fBParameters:\fR
+.br
+\fIpath\fR (object \\| Path; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBnormalize(path)\fR
+Normalizes `path` resolving `..` and `./` preserving trailing slashes.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBrelative(from, to)\fR
+Computes the relative path from `from` to `to`.
+\fBParameters:\fR
+.br
+\fIfrom\fR (string; required)
+.br
+\fIto\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring\fR

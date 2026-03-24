@@ -1,0 +1,60 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  background: #101419;
+  color: #e6ebf2;
+}
+
+main {
+  margin: 0 auto;
+  padding: 2rem;
+  max-width: 720px;
+}
+
+h1 {
+  margin-bottom: 0.5rem;
+}
+
+p {
+  color: #a0aec0;
+}
+
+.controls {
+  margin: 1.5rem 0;
+  display: flex;
+  gap: 1rem;
+}
+
+.controls button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.controls button:hover {
+  background: #1d4ed8;
+}
+
+.log {
+  min-height: 200px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.75);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+}
+
+.log div {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+  background: rgba(37, 99, 235, 0.1);
+  border-radius: 4px;
+  padding: 0.5rem;
+  color: #cbd5f5;
+}

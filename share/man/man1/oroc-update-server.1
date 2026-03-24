@@ -1,0 +1,57 @@
+.TH OROC-UPDATE-SERVER 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-update\-server \- Run an update server that speaks the Oro Application Update Protocol.
+.SH SYNOPSIS
+.nf
+oroc update server [options]
+.fi
+.SH DESCRIPTION
+.PP
+Run an update server that speaks the Oro Application Update Protocol.
+.SH OPTIONS
+.TP
+\fB\-\-root=<dir>\fR
+directory containing manifest trees and artifacts to serve
+.TP
+\fB\-\-host=<host>\fR
+interface to bind (default: 0.0.0.0)
+.TP
+\fB\-\-port=<port>\fR
+TCP/UDP port to bind (default: 8080)
+.TP
+\fB\-\-manifest\-name=<name>\fR
+manifest filename to look up under each appId (default: manifest.json or ORO_UPDATE_MANIFEST_FILENAME)
+.TP
+\fB\-\-tcp\fR
+run in TCP mode (binary OUP CHECK/RESPONSE)
+.TP
+\fB\-\-udp\fR
+run in UDP mode (binary OUP CHECK/RESPONSE)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+Default mode is HTTP. The server exposes these endpoints.
+.IP \(bu 2
+GET /health           — readiness metadata
+.IP \(bu 2
+POST /check           — accepts a CHECK JSON payload with "appId" and responds with a RESPONSE JSON
+.PP
+whose manifestUrl points at "/<appId>/<manifest\-name>" when present
+.IP \(bu 2
+GET /<path>           — serves files rooted under \-\-root, including "<appId>/<manifest\-name>"
+.PP
+and "<appId>/<manifest\-name>.sig" HTTP mode is designed to be run behind a load balancer or reverse proxy in production. TCP and UDP modes implement the same CHECK/RESPONSE selection semantics using the binary OUP framing.
+.SH EXAMPLES
+.TP
+\fBoroc update server \-\-root ./updates\fR
+serve manifests and bundles over HTTP on port 8080
+.TP
+\fBoroc update server \-\-root ./updates \-\-tcp \-\-port 9090\fR
+run a TCP OUP server on port 9090
+.TP
+\fBoroc update server \-\-root ./updates \-\-udp \-\-port 9090\fR
+run a UDP OUP server on port 9090
+.SH SEE ALSO
+oroc(1), oroc\-update(1)

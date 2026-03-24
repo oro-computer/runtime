@@ -1,0 +1,356 @@
+.TH ORO-WINDOW 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:window \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:window'
+.fi
+.SH DESCRIPTION
+.PP
+Provides ApplicationWindow class and methods
+.PP
+Don't use this module directly, get instances of ApplicationWindow with `oro:application` methods like `getCurrentWindow`, `createWindow`, `getWindow`, and `getWindows`.
+.SH REFERENCE
+.TP
+\fBApplicationWindow (extends EventTarget)\fR
+Represents a window in the application
+.TP
+\fBid()\fR
+The unique ID of this window.
+.TP
+\fBindex()\fR
+Get the index of the window
+\fBReturns:\fR
+.br
+\fInumber\fR the index of the window
+.TP
+\fBhotkey()\fR
+Documented method exposed by this module.
+.TP
+\fBchannel()\fR
+The broadcast channel for this window.
+.TP
+\fBsize()\fR
+Get the size of the window
+.TP
+\fBposition()\fR
+get the position of the window
+.TP
+\fBtitle()\fR
+get the title of the window
+.TP
+\fBfollowSystemTheme()\fR
+Indicates whether the window follows the host desktop theme.
+.TP
+\fBpreferDarkTheme()\fR
+Indicates whether the window prefers a dark theme when not following the system theme.
+.TP
+\fBisDarkMode()\fR
+Whether the window is currently in dark mode.
+.TP
+\fBappearance()\fR
+Current appearance metadata for the window.
+.TP
+\fBtoken()\fR
+Documented method exposed by this module.
+.TP
+\fBstatus()\fR
+get the status of the window
+.TP
+\fBgetSize()\fR
+Get the size of the window
+\fBReturns:\fR
+.br
+\fI{ width: number, height: number }\fR the size of the window
+.TP
+\fBgetPosition()\fR
+Get the position of the window
+\fBReturns:\fR
+.br
+\fI{ x: number, y: number }\fR the position of the window
+.TP
+\fBgetTitle()\fR
+Get the title of the window
+\fBReturns:\fR
+.br
+\fIstring\fR the title of the window
+.TP
+\fBgetStatus()\fR
+Get the status of the window
+\fBReturns:\fR
+.br
+\fInumber\fR the status of the window
+.TP
+\fBclose()\fR
+Close the window
+\fBReturns:\fR
+.br
+\fIPromise<object>\fR the options of the window
+.TP
+\fBshow()\fR
+Shows the window
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBhide()\fR
+Hides the window
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBfocus()\fR
+Brings the window to the foreground and focuses it.
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBblur()\fR
+Removes focus from the window (desktop: sends to back; mobile: hides).
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBmaximize()\fR
+Maximize the window
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBminimize()\fR
+Minimize the window
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBrestore()\fR
+Restore the window
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBsetTitle(title)\fR
+Sets the title of the window
+\fBParameters:\fR
+.br
+\fItitle\fR (string; required) the title of the window
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBsetSize(opts)\fR
+Sets the size of the window
+\fBParameters:\fR
+.br
+\fIopts\fR (object; required) an options object
+.br
+\fIopts.width\fR (number \\| string; optional) the width of the window
+.br
+\fIopts.height\fR (number \\| string; optional) the height of the window
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBsetPosition(opts)\fR
+Sets the position of the window
+\fBParameters:\fR
+.br
+\fIopts\fR (object; required) an options object
+.br
+\fIopts.x\fR (number \\| string; optional) the x position of the window
+.br
+\fIopts.y\fR (number \\| string; optional) the y position of the window
+\fBReturns:\fR
+.br
+\fIPromise<object>\fR
+.TP
+\fBnavigate(path)\fR
+Navigate the window to a given path
+\fBParameters:\fR
+.br
+\fIpath\fR (object; required) file path
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBshowInspector()\fR
+Opens the Web Inspector for the window (desktop only).
+\fBReturns:\fR
+.br
+\fIPromise<object>\fR
+.TP
+\fBsetBackgroundColor(opts)\fR
+Sets the background color of the window
+\fBParameters:\fR
+.br
+\fIopts\fR (object; required) an options object
+.br
+\fIopts.red\fR (number; required) the red value
+.br
+\fIopts.green\fR (number; required) the green value
+.br
+\fIopts.blue\fR (number; required) the blue value
+.br
+\fIopts.alpha\fR (number; required) the alpha value
+\fBReturns:\fR
+.br
+\fIPromise<object>\fR
+.TP
+\fBgetBackgroundColor()\fR
+Gets the background color of the window
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBsetContextMenu(options)\fR
+Opens a native context menu.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required) an options object
+\fBReturns:\fR
+.br
+\fIPromise<object>\fR
+.TP
+\fBsetAlwaysOnTop(enabled)\fR
+Sets whether the window should stay always on top (desktop only).
+\fBParameters:\fR
+.br
+\fIenabled\fR (boolean; required)
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBisAlwaysOnTop()\fR
+Checks if the window is set to always be on top (desktop only).
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBshowOpenFilePicker(options)\fR
+Shows a native open file dialog.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required) an options object
+\fBReturns:\fR
+.br
+\fIPromise<string[]>\fR an array of file paths
+.TP
+\fBshowSaveFilePicker(options)\fR
+Shows a native save file dialog.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required) an options object
+\fBReturns:\fR
+.br
+\fIPromise<string \\| null>\fR the selected file path or null
+.TP
+\fBshowDirectoryFilePicker(options)\fR
+Shows a native directory dialog.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required) an options object
+\fBReturns:\fR
+.br
+\fIPromise<string[]>\fR an array of file paths
+.TP
+\fBshare(options)\fR
+Opens the platform share sheet for the current window.
+\fBParameters:\fR
+.br
+\fIoptions\fR ({ title?: string, text?: string, url?: string }; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBsend(options)\fR
+This is a high\-level API that you should use instead of `ipc.request` when you want to send a message to another window or to the backend.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required) an options object
+.br
+\fIoptions.window\fR (number; optional) the window to send the message to
+.br
+\fIoptions.backend\fR (boolean; optional; default false) whether to send the message to the backend
+.br
+\fIoptions.event\fR (string; required) the event to send
+.br
+\fIoptions.value\fR (string \\| object; optional) the value to send
+.TP
+\fBpostMessage(data)\fR
+Post a message to a window TODO(@jwerle): research using `BroadcastChannel` instead
+\fBParameters:\fR
+.br
+\fIdata\fR (object; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBopenExternal(value)\fR
+Opens an URL in the default application associated with the URL protocol, such as 'https:' for the default web browser.
+\fBParameters:\fR
+.br
+\fIvalue\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ url: string }>\fR
+.TP
+\fBrevealFile(value)\fR
+Opens a file in the default file explorer.
+\fBParameters:\fR
+.br
+\fIvalue\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBupdate()\fR
+Updates window state
+\fBReturns:\fR
+.br
+\fIPromise<ipc.Result>\fR
+.TP
+\fBaddListener(event, cb)\fR
+Adds a listener to the window.
+\fBParameters:\fR
+.br
+\fIevent\fR (string; required) the event to listen to
+.br
+\fIcb\fR (function(*): void; required) the callback to call
+.TP
+\fBon(event, cb)\fR
+Adds a listener to the window. An alias for `addListener`.
+\fBParameters:\fR
+.br
+\fIevent\fR (string; required) the event to listen to
+.br
+\fIcb\fR (function(*): void; required) the callback to call
+.TP
+\fBonce(event, cb)\fR
+Adds a listener to the window. The listener is removed after the first call.
+\fBParameters:\fR
+.br
+\fIevent\fR (string; required) the event to listen to
+.br
+\fIcb\fR (function(*): void; required) the callback to call
+.TP
+\fBremoveListener(event, cb)\fR
+Removes a listener from the window.
+\fBParameters:\fR
+.br
+\fIevent\fR (string; required) the event to remove the listener from
+.br
+\fIcb\fR (function(*): void; required) the callback to remove
+.TP
+\fBremoveAllListeners(event)\fR
+Removes all listeners from the window.
+\fBParameters:\fR
+.br
+\fIevent\fR (string; required) the event to remove the listeners from
+.TP
+\fBoff(event, cb)\fR
+Removes a listener from the window. An alias for `removeListener`.
+\fBParameters:\fR
+.br
+\fIevent\fR (string; required) the event to remove the listener from
+.br
+\fIcb\fR (function(*): void; required) the callback to remove

@@ -1,0 +1,16 @@
+declare const _default: any;
+export default _default;
+import { ReadableStream } from './streams/web.js';
+import { ReadableStreamBYOBReader } from './streams/web.js';
+import { ReadableByteStreamController } from './streams/web.js';
+import { ReadableStreamBYOBRequest } from './streams/web.js';
+import { ReadableStreamDefaultController } from './streams/web.js';
+import { ReadableStreamDefaultReader } from './streams/web.js';
+import { WritableStream } from './streams/web.js';
+import { WritableStreamDefaultController } from './streams/web.js';
+import { WritableStreamDefaultWriter } from './streams/web.js';
+import { TransformStream } from './streams/web.js';
+import { TransformStreamDefaultController } from './streams/web.js';
+import { ByteLengthQueuingStrategy } from './streams/web.js';
+import { CountQueuingStrategy } from './streams/web.js';
+export { ReadableStream, ReadableStreamBYOBReader, ReadableByteStreamController, ReadableStreamBYOBRequest, ReadableStreamDefaultController, ReadableStreamDefaultReader, WritableStream, WritableStreamDefaultController, WritableStreamDefaultWriter, TransformStream, TransformStreamDefaultController, ByteLengthQueuingStrategy, CountQueuingStrategy };

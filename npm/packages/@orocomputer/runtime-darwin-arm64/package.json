@@ -1,0 +1,37 @@
+{
+  "name": "@orocomputer/runtime-darwin-arm64",
+  "version": "0.1.0",
+  "description": "Oro Runtime binaries for macOS arm64 (Apple Silicon) plus iOS simulators.",
+  "type": "module",
+  "main": "src/index.js",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "scripts": {
+    "test": ":",
+    "install": "bin/verify-platform.js darwin arm64"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oro-computer/legacy-runtime.git"
+  },
+  "keywords": [
+    "oro",
+    "runtime",
+    "webview",
+    "javascript",
+    "desktop",
+    "mobile",
+    "darwin",
+    "arm64"
+  ],
+  "author": "Oro Runtime Maintainers <maintainers@oro.computer>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/oro-computer/legacy-runtime/issues"
+  },
+  "homepage": "https://oro.computer/runtime"
+}

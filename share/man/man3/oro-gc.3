@@ -1,0 +1,74 @@
+.TH ORO-GC 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:gc \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:gc'
+.fi
+.SH DESCRIPTION
+.PP
+oro:gc is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBfinalizers\fR
+This is an exported `VariableDeclaration` named `finalizers`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBkFinalizer\fR
+This is an exported `VariableDeclaration` named `kFinalizer`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBfinalizer\fR
+This is an exported `VariableDeclaration` named `finalizer`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBpool\fR
+Documented variable exposed by this module.
+.TP
+\fBregistry\fR
+Static registry for objects to clean up underlying resources when they are gc'd by the environment. There is no guarantee that the `finalizer()` is called at any time.
+.TP
+\fBgc\fR
+Default exports which also acts a retained value to persist bound `Finalizer#handle()` functions from being gc'd before the `FinalizationRegistry` callback is called because `heldValue` must be strongly held (retained) in order for the callback to be called.
+.TP
+\fBFinalizer\fR
+A container for strongly (retain) referenced finalizer function with arguments weakly referenced to an object that will be garbage collected.
+.TP
+\fBfrom()\fR
+Creates a `Finalizer` from input.
+.TP
+\fBref(object, ...args)\fR
+Track `object` ref to call `Symbol.for('oro.runtime.gc.finalize')` method when environment garbage collects object.
+\fBParameters:\fR
+.br
+\fIobject\fR (object; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBunref(object)\fR
+Stop tracking `object` ref to call `Symbol.for('oro.runtime.gc.finalize')` method when environment garbage collects object.
+\fBParameters:\fR
+.br
+\fIobject\fR (object; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBretain(object)\fR
+An alias for `unref()`
+\fBParameters:\fR
+.br
+\fIobject}\fR (object; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBfinalize(object, ...args)\fR
+Call finalize on `object` for `gc.finalizer` implementation.
+\fBParameters:\fR
+.br
+\fIobject\fR (object; required)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBrelease()\fR
+Calls all pending finalization handlers forcefully. This function may have unintended consequences as objects be considered finalized and still strongly held (retained) somewhere.

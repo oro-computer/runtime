@@ -1,0 +1,37 @@
+.TH ORO-IP 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:ip \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:ip'
+.fi
+.SH DESCRIPTION
+.PP
+Various functions for working with IP addresses.
+.PP
+Example usage: import ip from 'oro:ip'
+.PP
+console.log(ip.normalizeIPv4('127')) // '0.0.0.127' console.log(ip.normalizeIPv4('1.128')) // '0.0.1.128' console.log(ip.normalizeIPv4([0, 128])) // '0.0.0.128' console.log(ip.normalizeIPv4(Uint8Array.from([127, 0, 0, 01])) // '127.0.0.1'
+.PP
+console.log(ip.isIPv4('127')) // true console.log(ip.isIPv4('1.128')) // true console.log(ip.isIPv4([0, 128])) // true console.log(ip.isIPv4(Uint8Array.from([127, 0, 0, 01])) true
+.PP
+console.log(ip.isIPv4('x')) // false console.log(ip.isIPv4('1.x')) // false console.log(ip.isIPv4([0, 1, 2, 3, 4]))) // false console.log(ip.isIPv4([\-1])) // false console.log(ip.isIPv4(Uint8Array.from([127, 0, 0, 01])) false
+.SH REFERENCE
+.TP
+\fBnormalizeIPv4(input)\fR
+Normalizes input as an IPv4 address string
+\fBParameters:\fR
+.br
+\fIinput\fR (string \\| object \\| string[] \\| Uint8Array; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBisIPv4(input)\fR
+Determines if an input `string` is in IP address version 4 format.
+\fBParameters:\fR
+.br
+\fIinput\fR (string \\| object \\| string[] \\| Uint8Array; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR

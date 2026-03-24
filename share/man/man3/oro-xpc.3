@@ -1,0 +1,90 @@
+.TH ORO-XPC 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:xpc \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:xpc'
+.fi
+.SH DESCRIPTION
+.PP
+oro:xpc is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBavailability()\fR
+Retrieves XPC availability information for the current platform.
+\fBReturns:\fR
+.br
+\fIPromise<{ available: boolean, reason?: string }>\fR
+.TP
+\fBconnect(options)\fR
+Establishes an XPC connection.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIoptions.service\fR (string; required)
+.br
+\fIoptions.type\fR (\&'mach\-service' \\| 'named'; optional; default 'mach\-service')
+.br
+\fIoptions.listener\fR (boolean; optional; default false)
+.br
+\fIoptions.privileged\fR (boolean; optional; default false)
+.br
+\fIoptions.flags\fR (number; optional; default 0)
+.br
+\fIoptions.label\fR (string; optional)
+.br
+\fIoptions.pendingReplyTimeout\fR (number; optional; default 30000)
+\fBReturns:\fR
+.br
+\fIPromise<Connection>\fR
+.TP
+\fBdisconnectAll()\fR
+Closes all tracked XPC connections.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBint64(value)\fR
+Helper to encode a 64\-bit signed integer.
+\fBParameters:\fR
+.br
+\fIvalue\fR (bigint \\| number \\| string; required)
+\fBReturns:\fR
+.br
+\fIobject\fR
+.TP
+\fBuint64(value)\fR
+Helper to encode a 64\-bit unsigned integer.
+\fBParameters:\fR
+.br
+\fIvalue\fR (bigint \\| number \\| string; required)
+\fBReturns:\fR
+.br
+\fIobject\fR
+.TP
+\fBdata(value, encoding)\fR
+Helper to encode binary payloads as XPC data.
+\fBParameters:\fR
+.br
+\fIvalue\fR (Buffer \\| ArrayBuffer \\| ArrayBufferView \\| string; required)
+.br
+\fIencoding\fR (BufferEncoding; optional; default 'utf8')
+\fBReturns:\fR
+.br
+\fIobject\fR
+.TP
+\fBuuid(value)\fR
+Helper to encode UUID payloads.
+\fBParameters:\fR
+.br
+\fIvalue\fR (string \\| { toString(): string }; required)
+\fBReturns:\fR
+.br
+\fIXPCExplicitValue\fR
+.TP
+\fBConnection\fR
+Documented variable exposed by this module.
+.TP
+\fBListener\fR
+Documented variable exposed by this module.

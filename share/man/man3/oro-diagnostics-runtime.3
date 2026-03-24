@@ -1,0 +1,44 @@
+.TH ORO-DIAGNOSTICS-RUNTIME 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:diagnostics/runtime \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:diagnostics/runtime'
+.fi
+.SH DESCRIPTION
+.PP
+oro:diagnostics/runtime is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBDiagnostic\fR
+A base container class for diagnostic information.
+.TP
+\fBUVDiagnostic (extends Diagnostic)\fR
+A container for libuv diagnostics
+.TP
+\fBPostsDiagnostic (extends Diagnostic)\fR
+A container for Core Post diagnostics.
+.TP
+\fBChildProcessDiagnostic (extends Diagnostic)\fR
+A container for child process diagnostics.
+.TP
+\fBAIDiagnostic (extends Diagnostic)\fR
+A container for AI diagnostics.
+.TP
+\fBFSDiagnostic (extends Diagnostic)\fR
+A container for various filesystem diagnostics.
+.TP
+\fBTimersDiagnostic (extends Diagnostic)\fR
+A container for various timers diagnostics.
+.TP
+\fBUDPDiagnostic (extends Diagnostic)\fR
+A container for UDP diagnostics.
+.TP
+\fBQueryDiagnostic\fR
+A container for various queried runtime diagnostics.
+.TP
+\fBquery(type)\fR
+Queries runtime diagnostics.
+\fBReturns:\fR
+.br
+\fIPromise<QueryDiagnostic>\fR

@@ -1,0 +1,103 @@
+.TH OROC-UPDATE-INFO 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-update\-info \- Query update servers or static manifests over HTTP/TCP/UDP.
+.SH SYNOPSIS
+.nf
+oroc update info [\-\-transport=<http|tcp|udp>] [options]
+.fi
+.SH DESCRIPTION
+.PP
+Query update servers or static manifests over HTTP/TCP/UDP.
+.SH OPTIONS
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml/oro.ini file for local CHECK request defaults
+.TP
+\fB\-\-transport=<http|tcp|udp>\fR
+transport to use (default: http)
+.TP
+\fB\-\-http\fR
+shorthand for \-\-transport=http
+.TP
+\fB\-\-tcp\fR
+shorthand for \-\-transport=tcp
+.TP
+\fB\-\-udp\fR
+shorthand for \-\-transport=udp
+.TP
+\fB\-\-follow\-manifest\fR
+when contacting servers, follow 'manifestUrl' in the RESPONSE and fetch/validate that manifest over HTTP(S)
+.TP
+\fB\-\-timeout\-ms=<ms>\fR
+optional timeout for TCP/UDP CHECK requests (0 = no timeout)
+.TP
+\fB\-\-manifest\-url=<url>\fR
+HTTP(S) URL of a manifest.json hosted statically
+.TP
+\fB\-\-signature\-url=<url>\fR
+optional HTTP(S) URL of the corresponding signature JSON (default: derived from \-\-manifest\-url)
+.TP
+\fB\-\-keys=<file>\fR
+JSON file containing a public key ("publicKey" or "key" field) for manifest verification
+.TP
+\fB\-\-public\-key=<hex>\fR
+Ed25519 public key as a hex string for manifest verification
+.TP
+\fB\-\-host=<host>\fR
+host for HTTP/TCP/UDP update servers (default: 127.0.0.1)
+.TP
+\fB\-\-port=<port>\fR
+port for HTTP/TCP/UDP update servers (default: 8080)
+.TP
+\fB\-\-app\-id=<id>\fR
+application identifier to send in CHECK messages (default: active config meta.bundle_identifier when available)
+.TP
+\fB\-\-channel=<name>\fR
+update channel hint (default: active config update_channel or "stable")
+.TP
+\fB\-\-current\-version=<version>\fR
+current application version hint (default: active config meta.version when available)
+.TP
+\fB\-\-runtime\-version=<version>\fR
+runtime version hint advertised in CHECK (optional)
+.TP
+\fB\-\-platform=<id>\fR
+platform hint advertised in CHECK (optional)
+.TP
+\fB\-\-arch=<id>\fR
+architecture hint advertised in CHECK (optional)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.IP \(bu 2
+With '\-\-manifest\-url', this command fetches and pretty\-prints a manifest JSON and reports whether a signature file is reachable.
+.PP
+When '\-\-keys' or '\-\-public\-key' is provided and libsodium is available, it also verifies the manifest signature before printing.
+.IP \(bu 2
+With HTTP/TCP/UDP transports and no '\-\-manifest\-url', it sends a CHECK message to an update server and pretty\-prints the RESPONSE JSON.
+.PP
+With '\-\-follow\-manifest', if the RESPONSE includes a 'manifestUrl', it will fetch, validate, and optionally verify that manifest as well. When '\-\-app\-id' is provided, the fetched manifest must have a matching 'appId' or the command exits with an error.
+.IP \(bu 2
+When building a CHECK request and '\-\-config' is omitted, this command looks for `oro.toml` first and falls back to
+.PP
+`oro.ini` in the current workspace to derive app\-id, channel, and current\-version defaults. Outside a project workspace, pass those values explicitly.
+.IP \(bu 2
+When using TCP/UDP, '\-\-timeout\-ms' can be used to bound how long the client waits for a response.
+.IP \(bu 2
+The flags '\-\-http', '\-\-tcp', and '\-\-udp' are shorthands for '\-\-transport=http', '\-\-transport=tcp', and '\-\-transport=udp' respectively.
+.SH EXAMPLES
+.TP
+\fBoroc update info \-\-manifest\-url https://cdn.example.com/app/manifest.json\fR
+inspect a statically hosted manifest
+.TP
+\fBoroc update info \-\-manifest\-url https://cdn.example.com/app/manifest.json \-\-keys app\-pubkey.json\fR
+fetch and verify a statically hosted manifest + signature
+.TP
+\fBoroc update info \-\-http \-\-host 127.0.0.1 \-\-port 8080 \-\-app\-id com.example.app \-\-follow\-manifest\fR
+query an HTTP update server and then fetch the referenced manifest
+.TP
+\fBoroc update info \-\-tcp \-\-host 127.0.0.1 \-\-port 9000 \-\-app\-id com.example.app \-\-follow\-manifest\fR
+query a TCP update server using the binary OUP protocol
+.SH SEE ALSO
+oroc(1), oroc\-update(1)

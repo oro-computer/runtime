@@ -1,0 +1,32 @@
+{
+  "name": "@orocomputer/runtime-node",
+  "version": "0.1.0",
+  "description": "Oro Runtime Node adapter",
+  "main": "index.js",
+  "exports": {
+    "import": "./index.js",
+    "require": "./index.cjs"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "standard index.js",
+    "pub": "npm pub && npm publish --registry https://npm.pkg.github.com",
+    "build": "esbuild index.js --outfile=index.cjs --platform=node --format=cjs",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oro-computer/legacy-runtime.git"
+  },
+  "author": "Oro Runtime Maintainers <maintainers@oro.computer>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/oro-computer/legacy-runtime/issues"
+  },
+  "homepage": "https://oro.computer/runtime",
+  "devDependencies": {
+    "@types/node": "20.7.0",
+    "esbuild": "0.19.3",
+    "standard": "^17.1.0"
+  }
+}

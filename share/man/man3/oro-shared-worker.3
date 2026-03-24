@@ -1,0 +1,46 @@
+.TH ORO-SHARED-WORKER 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:shared\-worker \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:shared\-worker'
+.fi
+.SH DESCRIPTION
+.PP
+oro:shared\-worker is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBSHARED_WORKER_WINDOW_TITLE\fR
+This is an exported `VariableDeclaration` named `SHARED_WORKER_WINDOW_TITLE`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSHARED_WORKER_WINDOW_PATH\fR
+This is an exported `VariableDeclaration` named `SHARED_WORKER_WINDOW_PATH`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBchannel\fR
+This is an exported `VariableDeclaration` named `channel`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBworkers\fR
+This is an exported `VariableDeclaration` named `workers`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBinit(sharedWorker, options)\fR
+This is an exported `FunctionDeclaration` named `init`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSharedWorkerMessagePort (extends undefined)\fR
+This is an exported `ClassDeclaration` named ``SharedWorkerMessagePort` (extends `undefined`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSharedWorker (extends EventTarget)\fR
+This is an exported `ClassDeclaration` named ``SharedWorker` (extends `EventTarget`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(aURL, nameOrOptions)\fR
+`SharedWorker` class constructor.
+\fBParameters:\fR
+.br
+\fIaURL\fR (string \\| URL \\| Blob; required)
+.br
+\fInameOrOptions\fR (string \\| object; optional; default null)
+.TP
+\fBgetContextWindow()\fR
+Gets the SharedWorker context window. This function will create it if it does not already exist.
+\fBReturns:\fR
+.br
+\fIPromise<import('./window.js').ApplicationWindow\fR

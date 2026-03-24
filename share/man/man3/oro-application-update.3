@@ -1,0 +1,73 @@
+.TH ORO-APPLICATION-UPDATE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:application/update \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:application/update'
+.fi
+.SH DESCRIPTION
+.PP
+High\-level helpers for fetching and verifying signed application updates.
+.PP
+The wire format and transport bindings are described in `docs/APPLICATION_UPDATE_PROTOCOL.md`. This module focuses on the client side: downloading manifests and artifacts, verifying signatures and hashes, and selecting suitable updates for the current platform.
+.SH REFERENCE
+.TP
+\fBselectUpdate(manifest, options)\fR
+Selects a suitable update for the given options.
+\fBParameters:\fR
+.br
+\fImanifest\fR (UpdateManifest; required)
+.br
+\fIoptions\fR (UpdateSelectionOptions; optional)
+\fBReturns:\fR
+.br
+\fIUpdateSelectionResult \\| null\fR
+.TP
+\fBverifyArtifact(payload, target)\fR
+Verifies an artifact payload against the hash declared in the target.
+\fBParameters:\fR
+.br
+\fIpayload\fR (Uint8Array \\| ArrayBuffer; required)
+.br
+\fItarget\fR (UpdateTarget; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBopenArtifactArchive(artifact)\fR
+Opens a verified artifact as a tar archive using the native tar service. This is a convenience helper that wraps the artifact bytes in a TarArchive so callers can inspect and extract entries using the `oro:tar` API surface.
+\fBParameters:\fR
+.br
+\fIartifact\fR (Uint8Array \\| ArrayBuffer \\| import('../buffer.js').Buffer; required)
+\fBReturns:\fR
+.br
+\fIPromise<import('../tar.js').TarArchive>\fR
+.TP
+\fBdownloadUpdate(target, options)\fR
+Downloads an artifact and verifies its hash. Prefers the native update service and falls back to the JS fetch\-based implementation when the service is not available in this build.
+\fBParameters:\fR
+.br
+\fItarget\fR (UpdateTarget; required)
+.br
+\fIoptions\fR (DownloadOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Uint8Array>\fR
+.TP
+\fBfetchManifest(options)\fR
+Fetches and verifies a manifest + signature pair.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ManifestFetchOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ manifest: UpdateManifest, raw: Uint8Array, signature: ManifestSignature }>\fR
+.TP
+\fBcheckForUpdates(options)\fR
+High\-level helper: fetches & verifies the manifest, selects an update, and optionally downloads the artifact. Prefers the native update(service) when available and falls back to the JS implementation otherwise.
+\fBParameters:\fR
+.br
+\fIoptions\fR (UpdateCheckOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<UpdateCheckResult>\fR

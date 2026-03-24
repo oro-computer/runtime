@@ -1,0 +1,24 @@
+.TH ORO-NPM-MODULE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:npm/module \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:npm/module'
+.fi
+.SH DESCRIPTION
+.PP
+oro:npm/module is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBresolve(specifier, origin, options)\fR
+Resolves an NPM module for a given `specifier` and an optional `origin`.
+\fBParameters:\fR
+.br
+\fIspecifier\fR (string \\| URL; required)
+.br
+\fIorigin\fR (string \\| URL; optional; default null)
+.br
+\fIoptions\fR ({ prefix?: string, type?: 'commonjs' \\| 'module' }; optional; default null)
+\fBReturns:\fR
+.br
+\fIModuleResolution \\| null\fR

@@ -1,0 +1,38 @@
+.TH ORO-COMMONJS-REQUIRE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:commonjs/require \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:commonjs/require'
+.fi
+.SH DESCRIPTION
+.PP
+oro:commonjs/require is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBglobalPaths\fR
+An array of global require paths, relative to the origin.
+.TP
+\fBMeta\fR
+An object attached to a `require()` function that contains metadata about the current module context.
+.TP
+\fBconstructor(module)\fR
+`Meta` class constructor.
+\fBParameters:\fR
+.br
+\fImodule\fR (import('./module.js').Module; required)
+.TP
+\fBreferrer()\fR
+The referrer (parent) of this module.
+.TP
+\fBurl()\fR
+The referrer (parent) of this module.
+.TP
+\fBcreateRequire(options)\fR
+Factory for creating a `require()` function based on a module context.
+\fBParameters:\fR
+.br
+\fIoptions\fR (CreateRequireOptions; required)
+\fBReturns:\fR
+.br
+\fIRequireFunction\fR

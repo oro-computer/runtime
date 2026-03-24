@@ -1,0 +1,44 @@
+[meta]
+bundle_identifier = "oro.examples"
+version = "1.0.0"
+
+[build]
+name = "examples"
+copy_map = "copy-map.toml"
+script = "./scripts/build-examples.sh"
+
+[webview]
+default_index = "/"
+autoindex = true
+
+[webview.navigator.mounts]
+"$HOME/models" = "/models"
+
+[permissions]
+allow_service_worker = true
+
+[mcp]
+host = "127.0.0.1"
+port = 8000
+endpoint = "/mcp"
+token = "cb99009c98edf9de8ada78d290ab3e67"
+auth_timeout_ms = 5000
+
+# AI LLaMA embedded server defaults (average desktop)
+ai_llm_rate_limit_concurrency = 2
+ai_llm_default_max_tokens = 128
+ai_llm_hard_max_tokens = 256
+ai_llm_max_prompt_bytes = 65536
+ai_llm_pool_capacity = 2
+ai_llm_pool_prewarm = 0
+ai_llm_gpu_layer_count = 0
+ai_llm_n_threads = 4
+ai_llm_default_temperature = 0.2
+ai_llm_debug_kv_log = false
+ai_llm_debug_route_metrics = false
+
+[ai.llm.http]
+enable = true
+host = "127.0.0.1"
+port = 11434
+allow_cors = true

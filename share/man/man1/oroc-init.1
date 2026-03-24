@@ -1,0 +1,29 @@
+.TH OROC-INIT 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-init \- Create a new project. If the path is not provided, the new project will be created in the current directory.
+.SH SYNOPSIS
+.nf
+oroc init [<project\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Create a new project. If the path is not provided, the new project will be created in the current directory.
+.SH OPTIONS
+.TP
+\fB\-C, \-\-config\fR
+only create the config file
+.TP
+\fB\-n, \-\-name\fR
+project name
+.SH NOTES
+.PP
+By default this command creates a starter `oro.toml`, `src/index.html`, `src/index.js`, `src/serviceworker.js`, and `.gitignore`. Use `\-\-config` when you only want the config scaffold without the example app files.
+.SH EXAMPLES
+.TP
+\fBoroc init my\-app\fR
+create a new starter project in ./my\-app
+.TP
+\fBoroc init \-\-config\fR
+write only the default oro.toml into the current directory
+.SH SEE ALSO
+oroc(1)

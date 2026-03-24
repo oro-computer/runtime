@@ -1,0 +1,129 @@
+import { test } from 'oro:test'
+import process from 'oro:process'
+import { primordials } from 'oro:ipc'
+import path from 'oro:path'
+
+test('process', (t) => {
+  t.ok(typeof process.addListener === 'function', 'process is an EventEmitter')
+})
+
+test('process.exit()', (t) => {
+  t.ok(typeof process.exit === 'function', 'process.exit() is a function')
+})
+
+test('process.cwd', async (t) => {
+  t.equal(typeof process.cwd(), 'string', 'process.cwd() returns a string')
+  t.equal(
+    process.cwd(),
+    primordials.cwd,
+    'process.cwd() equals primordials.cwd'
+  )
+  if (process.platform === 'darwin') {
+    t.equal(
+      process.cwd(),
+      path.resolve(process.argv0, '../../Resources'),
+      'process.cwd() returns a correct value'
+    )
+  } else if (process.platform === 'linux') {
+    t.equal(
+      process.cwd(),
+      path.resolve(process.argv0, '../../oro-runtime-javascript-tests'),
+      'process.cwd() returns a correct value'
+    )
+  } else if (process.platform === 'android' || process.platform === 'ios') {
+    // TODO: how can we improve this?
+    t.ok(process.cwd(), 'process.cwd() returns a correct value')
+  } else if (process.platform === 'win32') {
+    // TODO(trevnorris): Fix to use path once implemented for Windows
+    t.equal(
+      process.cwd(),
+      process.argv0.slice(0, process.argv0.lastIndexOf('\\')),
+      'process.cwd() returns a correct value'
+    )
+  } else {
+    // for future platforms
+    t.fail(`FIXME: not implemented for platform ${process.platform}`)
+  }
+
+  // make us happy
+  delete globalThis.process
+})
+
+test('process.arch', (t) => {
+  t.ok(['x64', 'arm64'].includes(process.arch), 'process.arch is correct')
+  t.equal(
+    process.arch,
+    primordials.arch,
+    'process.arch equals primordials.arch'
+  )
+})
+
+test('process.platform', (t) => {
+  t.ok(
+    typeof process.platform === 'string',
+    'process.platform returns an string'
+  )
+  t.ok(
+    [
+      'darwin',
+      'freebsd',
+      'linux',
+      'openbsd',
+      'sunos',
+      'win32',
+      'android',
+      'ios'
+    ].includes(process.platform),
+    'process.platform is correct'
+  )
+  t.equal(
+    process.platform,
+    primordials.platform,
+    'process.platform equals primordials.platform'
+  )
+})
+
+test('process.env', (t) => {
+  for (const key in globalThis.__args.env) {
+    t.equal(
+      globalThis.__args.env[key],
+      process.env[key],
+      `globalThis.__args.env.${key} === process.env.${key}`
+    )
+  }
+})
+
+test('process.argv', (t) => {
+  t.deepEqual(
+    process.argv,
+    globalThis.__args.argv,
+    'process.argv is equal to globalThis.__args.argv'
+  )
+})
+
+test('os.hrtime()', (t) => {
+  const hrtime = process.hrtime()
+  t.ok(Array.isArray(hrtime), 'process.hrtime() returns array')
+  t.ok(hrtime?.length === 2, 'process.hrtime() returns array of length 2')
+  t.equal(typeof hrtime[0], 'number', 'hrtime[0] is a number')
+  t.equal(typeof hrtime[1], 'number', 'hrtime[1] is a number')
+})
+
+test('os.hrtime.bigint()', (t) => {
+  const hrtime = process.hrtime.bigint()
+  t.ok(hrtime > 0, 'hrtime > 0')
+  t.equal(typeof hrtime, 'bigint', 'hrtime is bigint')
+})
+
+test('process.versions freeze + oro version', (t) => {
+  t.equal(
+    process.versions.socket,
+    '0.6.0',
+    'process.versions.socket is pinned to 0.6.0'
+  )
+  t.equal(
+    process.versions.oro,
+    primordials.version.short,
+    'process.versions.oro reflects runtime version'
+  )
+})

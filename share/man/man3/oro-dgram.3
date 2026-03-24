@@ -1,0 +1,280 @@
+.TH ORO-DGRAM 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:dgram \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:dgram'
+.fi
+.SH DESCRIPTION
+.PP
+This module provides an implementation of UDP datagram sockets. It does not (yet) provide any of the multicast methods or properties.
+.PP
+Example usage: import { createSocket } from 'oro:dgram'
+.SH REFERENCE
+.TP
+\fBcreateSocket(options, callback)\fR
+Creates a `Socket` instance.
+\fBParameters:\fR
+.br
+\fIoptions\fR (string \\| Object; required) either a string ('udp4' or 'udp6') or an options object
+.br
+\fIoptions.type\fR (string; optional) The family of socket. Must be either 'udp4' or 'udp6'. Required.
+.br
+\fIoptions.reuseAddr\fR (boolean; optional; default false) When true socket.bind() will reuse the address, even if another process has already bound a socket on it. Default: false.
+.br
+\fIoptions.ipv6Only\fR (boolean; optional; default false) Default: false.
+.br
+\fIoptions.recvBufferSize\fR (number; optional) Sets the SO_RCVBUF socket value.
+.br
+\fIoptions.sendBufferSize\fR (number; optional) Sets the SO_SNDBUF socket value.
+.br
+\fIoptions.signal\fR (AbortSignal; optional) An AbortSignal that may be used to close a socket.
+.br
+\fIcallback\fR (function(Buffer, RemoteInfo); optional) Attached as a listener for 'message' events. Optional.
+\fBReturns:\fR
+.br
+\fISocket\fR
+.TP
+\fBSocket (extends EventEmitter)\fR
+New instances of dgram.Socket are created using dgram.createSocket(). The new keyword is not to be used to create dgram.Socket instances. Emitted when a new datagram is available to read. Emitted once the socket has been bound and is ready to receive messages. Emitted when an error occurs on the socket. Emitted when the socket has been closed.
+.TP
+\fBbind(port, address, callback)\fR
+Listen for datagram messages on a named port and optional address If the address is not specified, the operating system will attempt to listen on all addresses. Once the binding is complete, a 'listening' event is emitted and the optional callback function is called.
+.br
+If binding fails, an 'error' event is emitted.
+\fBParameters:\fR
+.br
+\fIport\fR (number; required) The port to listen for messages on
+.br
+\fIaddress\fR (string; required) The address to bind to (0.0.0.0)
+.br
+\fIcallback\fR (function; required) With no parameters. Called when binding is complete.
+.TP
+\fBconnect(port, host, connectListener)\fR
+Associates the dgram.Socket to a remote address and port. Every message sent by this handle is automatically sent to that destination. Also, the socket will only receive messages from that remote peer. Trying to call connect() on an already connected socket will result in an ERR_SOCKET_DGRAM_IS_CONNECTED exception. If the address is not provided, '0.0.0.0' (for udp4 sockets) or '::1' (for udp6 sockets) will be used by default. Once the connection is complete, a 'connect' event is emitted and the optional callback function is called. In case of failure, the callback is called or, failing this, an 'error' event is emitted.
+\fBParameters:\fR
+.br
+\fIport\fR (number; required) Port the client should connect to.
+.br
+\fIhost\fR (string; optional) Host the client should connect to.
+.br
+\fIconnectListener\fR (function; optional) Common parameter of socket.connect() methods. Will be added as a listener for the 'connect' event once.
+.TP
+\fBdisconnect()\fR
+A synchronous function that disassociates a connected dgram.Socket from its remote address. Trying to call disconnect() on an unbound or already disconnected socket will result in an ERR_SOCKET_DGRAM_NOT_CONNECTED exception.
+.TP
+\fBsend(msg, offset, length, port, address, callback)\fR
+Broadcasts a datagram on the socket. For connectionless sockets, the destination port and address must be specified. Connected sockets, on the other hand, will use their associated remote endpoint, so the port and address arguments must not be set.
+.br
+> The msg argument contains the message to be sent. Depending on its type, different behavior can apply. If msg is a Buffer, any TypedArray, or a DataView, the offset and length specify the offset within the Buffer where the message begins and the number of bytes in the message, respectively. If msg is a String, then it is automatically converted to a Buffer with 'utf8' encoding. With messages that contain multi\-byte characters, offset, and length will be calculated with respect to byte length and not the character position. If msg is an array, offset and length must not be specified.
+.br
+> The address argument is a string. If the value of the address is a hostname, DNS will be used to resolve the address of the host. If the address is not provided or otherwise nullish, '0.0.0.0' (for udp4 sockets) or '::' (for udp6 sockets) will be used by default.
+.br
+> If the socket has not been previously bound with a call to bind, the socket is assigned a random port number and is bound to the "all interfaces" address ('0.0.0.0' for udp4 sockets, '::' for udp6 sockets.)
+.br
+> An optional callback function may be specified as a way of reporting DNS errors or for determining when it is safe to reuse the buf object. DNS lookups delay the time to send for at least one tick of the Node.js event loop.
+.br
+> The only way to know for sure that the datagram has been sent is by using a callback. If an error occurs and a callback is given, the error will be passed as the first argument to the callback. If a callback is not given, the error is emitted as an 'error' event on the socket object.
+.br
+> Offset and length are optional but both must be set if either is used. They are supported only when the first argument is a Buffer, a TypedArray, or a DataView.
+\fBParameters:\fR
+.br
+\fImsg\fR (Buffer \\| TypedArray \\| DataView \\| string \\| Array; required) Message to be sent.
+.br
+\fIoffset\fR (number; optional) Offset in the buffer where the message starts.
+.br
+\fIlength\fR (number; optional) Number of bytes in the message.
+.br
+\fIport\fR (number; optional) Destination port.
+.br
+\fIaddress\fR (string; optional) Destination host name or IP address.
+.br
+\fIcallback\fR (Function; optional) Called when the message has been sent.
+.TP
+\fBclose(callback)\fR
+Close the underlying socket and stop listening for data on it. If a callback is provided, it is added as a listener for the 'close' event.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function(Error?); required) Called when the connection is completed or on error.
+.TP
+\fBaddress()\fR
+Returns an object containing the address information for a socket. For UDP sockets, this object will contain address, family, and port properties.
+.br
+This method throws EBADF if called on an unbound socket.
+\fBReturns:\fR
+.br
+\fIObject\fR socketInfo \- Information about the local socket
+.br
+\fIstring\fR socketInfo.address \- The IP address of the socket
+.br
+\fIstring\fR socketInfo.port \- The port of the socket
+.br
+\fIstring\fR socketInfo.family \- The IP family of the socket
+.TP
+\fBremoteAddress()\fR
+Returns an object containing the address, family, and port of the remote endpoint. This method throws an ERR_SOCKET_DGRAM_NOT_CONNECTED exception if the socket is not connected.
+\fBReturns:\fR
+.br
+\fIObject\fR socketInfo \- Information about the remote socket
+.br
+\fIstring\fR socketInfo.address \- The IP address of the socket
+.br
+\fIstring\fR socketInfo.port \- The port of the socket
+.br
+\fIstring\fR socketInfo.family \- The IP family of the socket
+.TP
+\fBsetRecvBufferSize(size)\fR
+Sets the SO_RCVBUF socket option. Sets the maximum socket receive buffer in bytes.
+\fBParameters:\fR
+.br
+\fIsize\fR (number; required) The size of the new receive buffer
+.TP
+\fBsetSendBufferSize(size)\fR
+Sets the SO_SNDBUF socket option. Sets the maximum socket send buffer in bytes.
+\fBParameters:\fR
+.br
+\fIsize\fR (number; required) The size of the new send buffer
+.TP
+\fBgetRecvBufferSize()\fR
+Documented method exposed by this module.
+.TP
+\fBgetSendBufferSize()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fInumber\fR the SO_SNDBUF socket send buffer size in bytes.
+.TP
+\fBsetBroadcast(on)\fR
+Enable or disable SO_BROADCAST on the socket.
+\fBParameters:\fR
+.br
+\fIon\fR (boolean; optional; default true)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBsetTTL(ttl)\fR
+Set unicast TTL for outgoing packets.
+\fBParameters:\fR
+.br
+\fIttl\fR (number; optional; default 64)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBsetMulticastTTL(ttl)\fR
+Set multicast TTL for outgoing multicast packets.
+\fBParameters:\fR
+.br
+\fIttl\fR (number; optional; default 1)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBsetMulticastLoopback(on)\fR
+Enable or disable multicast loopback.
+\fBParameters:\fR
+.br
+\fIon\fR (boolean; optional; default true)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBsetMulticastInterface(iface)\fR
+Set the default network interface for multicast.
+\fBParameters:\fR
+.br
+\fIiface\fR (string; optional; default '') network interface name or address
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBaddMembership(address, iface)\fR
+Join a multicast group.
+\fBParameters:\fR
+.br
+\fIaddress\fR (string; required) multicast group address
+.br
+\fIiface\fR (string; optional; default '') optional interface name or address
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBdropMembership(address, iface)\fR
+Leave a multicast group.
+\fBParameters:\fR
+.br
+\fIaddress\fR (string; required) multicast group address
+.br
+\fIiface\fR (string; optional; default '') optional interface name or address
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBaddSourceSpecificMembership(address, source, iface)\fR
+Add source\-specific multicast membership (if supported).
+\fBParameters:\fR
+.br
+\fIaddress\fR (string; required) multicast group address (SSM range)
+.br
+\fIsource\fR (string; required) source address
+.br
+\fIiface\fR (string; optional; default '') optional interface name or address
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBdropSourceSpecificMembership(address, source, iface)\fR
+Drop source\-specific multicast membership (if supported).
+\fBParameters:\fR
+.br
+\fIaddress\fR (string; required) multicast group address (SSM range)
+.br
+\fIsource\fR (string; required) source address
+.br
+\fIiface\fR (string; optional; default '') optional interface name or address
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBsetIPv6Only(on)\fR
+Configure the socket as IPv6\-only.
+\fBParameters:\fR
+.br
+\fIon\fR (boolean; optional; default true)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBgetCapabilities()\fR
+Query UDP capabilities from the runtime (multicast, broadcast, ipv6only, ssm).
+\fBReturns:\fR
+.br
+\fIPromise<{ multicast: boolean, broadcast: boolean, ipv6only: boolean, ssm: boolean }>\fR
+.TP
+\fBisSSMSupported()\fR
+Convenience helper for Source\-Specific Multicast support.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBcode()\fR
+Documented method exposed by this module.
+.TP
+\fBERR_SOCKET_ALREADY_BOUND (extends SocketError)\fR
+Thrown when a socket is already bound.
+.TP
+\fBERR_SOCKET_DGRAM_IS_CONNECTED (extends SocketError)\fR
+Thrown when the socket is already connected.
+.TP
+\fBERR_SOCKET_DGRAM_NOT_CONNECTED (extends SocketError)\fR
+Thrown when the socket is not connected.
+.TP
+\fBERR_SOCKET_DGRAM_NOT_RUNNING (extends SocketError)\fR
+Thrown when the socket is not running (not bound or connected).
+.TP
+\fBERR_SOCKET_BAD_TYPE (extends TypeError)\fR
+Thrown when a bad socket type is used in an argument.
+.TP
+\fBERR_SOCKET_BAD_PORT (extends RangeError)\fR
+Thrown when a bad port is given.

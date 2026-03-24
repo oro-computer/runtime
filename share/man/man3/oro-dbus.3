@@ -1,0 +1,218 @@
+.TH ORO-DBUS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro\-dbus \- D\-Bus feature\-detection macros for Oro Runtime builds
+.SH SYNOPSIS
+.nf
+#include <oro/dbus.h>
+.fi
+.SH DESCRIPTION
+.PP
+The oro/dbus.h header centralizes detection of libdbus header availability for builds that integrate D\-Bus\-backed services.
+.PP
+It keeps the public contract intentionally small: include the header, inspect ORO_RUNTIME_HAVE_DBUS, and compile optional integrations accordingly.
+.SH HEADER
+include/oro/dbus.h
+s.
+.TP
+\fBRELEASE_NAME_REPLY\fR
+Replies for `releaseName`, mirroring `DBUS_RELEASE_NAME_REPLY_*` constants.
+.TP
+\fBMESSAGE_TYPE\fR
+Message type codes per the DBus specification.
+.TP
+\fBWELL_KNOWN_NAMES\fR
+Common well\-known names.
+.TP
+\fBWELL_KNOWN_PATHS\fR
+Common well\-known object paths.
+.TP
+\fBWELL_KNOWN_INTERFACES\fR
+Common well\-known interfaces.
+.TP
+\fBWELL_KNOWN_MEMBERS\fR
+Common well\-known members.
+.TP
+\fBWELL_KNOWN_ERRORS\fR
+Common well\-known error names.
+.TP
+\fBConnection (extends EventEmitter)\fR
+Runtime DBus connection wrapper.
+.TP
+\fBconstructor(id)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIid\fR (string \\| number; required)
+.TP
+\fBid()\fR
+Unique identifier of the underlying DBus connection.
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBclosed()\fR
+Indicates whether the connection has been closed.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBavailability()\fR
+Fetches global DBus availability metadata.
+\fBReturns:\fR
+.br
+\fIPromise<{ available: boolean, reason?: string }>\fR
+.TP
+\fBclose()\fR
+Terminates the connection and removes all local bookkeeping.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBrequestName(name, flags)\fR
+Requests the provided bus name on the connection.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIflags\fR (number; optional; default 0)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBreleaseName(name)\fR
+Releases a previously requested bus name.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBaddMatch(rule, handler)\fR
+Adds a match rule for DBus signals.
+\fBParameters:\fR
+.br
+\fIrule\fR (string; required)
+.br
+\fIhandler\fR ((signal: DBusSignal, matchId: string) => void; optional)
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBremoveMatch(matchId)\fR
+Removes a previously installed match rule.
+\fBParameters:\fR
+.br
+\fImatchId\fR (string \\| number; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBcall(options)\fR
+Invokes a DBus method on the remote peer.
+\fBParameters:\fR
+.br
+\fIoptions\fR (MethodCallOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR
+.TP
+\fBemitSignal(options)\fR
+Emits a custom signal to the bus.
+\fBParameters:\fR
+.br
+\fIoptions\fR (SignalOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBexportObject(options)\fR
+Exports an object path so native method calls are forwarded to JS listeners.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ExportOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBunexportObject(exportId)\fR
+Removes a previously exported object path.
+\fBParameters:\fR
+.br
+\fIexportId\fR (string \\| number; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBrespond(callId, result)\fR
+Replies to a pending method call originating from the runtime.
+\fBParameters:\fR
+.br
+\fIcallId\fR (string \\| number; required)
+.br
+\fIresult\fR (MethodResult \\| MethodError \\| Error; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBrespondError(callId, name, message)\fR
+Convenience helper to send an error response.
+\fBParameters:\fR
+.br
+\fIcallId\fR (string \\| number; required)
+.br
+\fIname\fR (string; optional)
+.br
+\fImessage\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fB_handleMethodCall(payload)\fR
+Internal handler invoked when the runtime forwards a method call into JS.
+\fBParameters:\fR
+.br
+\fIpayload\fR (DBusSignal & { callId: string }; required)
+.TP
+\fBavailability()\fR
+Retrieves global DBus availability metadata.
+\fBReturns:\fR
+.br
+\fIPromise<{ available: boolean, reason?: string }>\fR
+.TP
+\fBconnect(options)\fR
+Establishes a DBus connection via the runtime.
+\fBParameters:\fR
+.br
+\fIoptions\fR (Record<string, any>; optional)
+\fBReturns:\fR
+.br
+\fIPromise<Connection>\fR
+.TP
+\fBdisconnectAll()\fR
+Closes every tracked DBus connection.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBvariant(signature, value)\fR
+Helper for constructing DBus variant payloads.
+\fBParameters:\fR
+.br
+\fIsignature\fR (string; required)
+.br
+\fIvalue\fR (any; required)
+\fBReturns:\fR
+.br
+\fIVariantBody\fR
+.TP
+\fBdictEntry(key, value)\fR
+Helper for constructing DBus dictionary entries.
+\fBParameters:\fR
+.br
+\fIkey\fR (any; required)
+.br
+\fIvalue\fR (any; required)
+\fBReturns:\fR
+.br
+\fI{ key: any, value: any }\fR

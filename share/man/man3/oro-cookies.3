@@ -1,0 +1,48 @@
+.TH ORO-COOKIES 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:cookies \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:cookies'
+.fi
+.SH DESCRIPTION
+.PP
+WebView cookie helpers backed by the native platform cookie store.
+.SH REFERENCE
+.TP
+\fBget(url)\fR
+Get cookies for a URL as a `Cookie` header value ("a=b; c=d").
+\fBParameters:\fR
+.br
+\fIurl\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ value: string }>\fR
+.TP
+\fBset(url, cookie)\fR
+Set a cookie for a URL from a `Set\-Cookie` header value.
+\fBParameters:\fR
+.br
+\fIurl\fR (string; required)
+.br
+\fIcookie\fR (string; required) a Set\-Cookie header value
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean }>\fR
+.TP
+\fBremove(url, name)\fR
+Remove cookies matching `name` for a URL.
+\fBParameters:\fR
+.br
+\fIurl\fR (string; required)
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean }>\fR
+.TP
+\fBclear()\fR
+Clear all cookies in the current WebView data store.
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean }>\fR

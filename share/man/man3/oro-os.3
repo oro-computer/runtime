@@ -1,0 +1,79 @@
+.TH ORO-OS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:os \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:os'
+.fi
+.SH DESCRIPTION
+.PP
+This module provides normalized system information from all the major operating systems.
+.PP
+Example usage: import { arch, platform } from 'oro:os'
+.SH REFERENCE
+.TP
+\fBarch()\fR
+Returns the operating system CPU architecture for which Socket was compiled.
+\fBReturns:\fR
+.br
+\fIstring\fR 'arm64', 'ia32', 'x64', or 'unknown'
+.TP
+\fBcpus()\fR
+Returns an array of objects containing information about each CPU/core. The properties of the objects are: \- model `<string>` \- CPU model name. \- speed `<number>` \- CPU clock speed (in MHz). \- times `<object>` \- An object containing the fields user, nice, sys, idle, irq representing the number of milliseconds the CPU has spent in each mode. \- user `<number>` \- Time spent by this CPU or core in user mode. \- nice `<number>` \- Time spent by this CPU or core in user mode with low priority (nice). \- sys `<number>` \- Time spent by this CPU or core in system mode. \- idle `<number>` \- Time spent by this CPU or core in idle mode. \- irq `<number>` \- Time spent by this CPU or core in IRQ mode.
+\fBReturns:\fR
+.br
+\fIArray<object>\fR cpus \- An array of objects containing information about each CPU/core.
+.TP
+\fBnetworkInterfaces()\fR
+Returns an object containing network interfaces that have been assigned a network address. Each key on the returned object identifies a network interface. The associated value is an array of objects that each describe an assigned network address. The properties available on the assigned network address object include: \- address `<string>` \- The assigned IPv4 or IPv6 address. \- netmask `<string>` \- The IPv4 or IPv6 network mask. \- family `<string>` \- The address family ('IPv4' or 'IPv6'). \- mac `<string>` \- The MAC address of the network interface. \- internal `<boolean>` \- Indicates whether the network interface is a loopback interface. \- scopeid `<number>` \- The numeric scope ID (only specified when family is 'IPv6'). \- cidr `<string>` \- The CIDR notation of the interface.
+\fBReturns:\fR
+.br
+\fIobject\fR An object containing network interfaces that have been assigned a network address.
+.TP
+\fBplatform()\fR
+Returns the operating system platform. The returned value is equivalent to `process.platform`.
+\fBReturns:\fR
+.br
+\fIstring\fR 'android', 'cygwin', 'freebsd', 'linux', 'darwin', 'ios', 'openbsd', 'win32', or 'unknown'
+.TP
+\fBtype()\fR
+Returns the operating system name.
+\fBReturns:\fR
+.br
+\fIstring\fR 'CYGWIN_NT', 'Mac', 'Darwin', 'FreeBSD', 'Linux', 'OpenBSD', 'Windows_NT', 'Win32', or 'Unknown'
+.TP
+\fBisWindows()\fR
+Documented function exposed by this module.
+\fBReturns:\fR
+.br
+\fIboolean\fR `true` if the operating system is Windows.
+.TP
+\fBtmpdir()\fR
+Documented function exposed by this module.
+\fBReturns:\fR
+.br
+\fIstring\fR The operating system's default directory for temporary files.
+.TP
+\fBEOL\fR
+The operating system's end\-of\-line marker. `'\\r\\n'` on Windows and `'\\n'` on POSIX.
+.TP
+\fBrusage()\fR
+Get resource usage.
+.TP
+\fBuptime()\fR
+Returns the system uptime in seconds.
+\fBReturns:\fR
+.br
+\fInumber\fR The system uptime in seconds.
+.TP
+\fBuname()\fR
+Returns the operating system name.
+\fBReturns:\fR
+.br
+\fIstring\fR The operating system name.
+.TP
+\fBhomedir()\fR
+Returns the home directory of the current user.
+\fBReturns:\fR
+.br
+\fIstring\fR

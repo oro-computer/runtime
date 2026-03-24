@@ -1,0 +1,136 @@
+.TH ORO-LATICA-ENCRYPTION 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:latica/encryption \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:latica/encryption'
+.fi
+.SH DESCRIPTION
+.PP
+oro:latica/encryption is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBEncryption\fR
+Class for handling encryption and key management.
+.TP
+\fBcreateSharedKey(seed)\fR
+Creates a shared key based on the provided seed or generates a random one.
+\fBParameters:\fR
+.br
+\fIseed\fR (Uint8Array \\| string; required) Seed for key generation.
+\fBReturns:\fR
+.br
+\fIPromise<Uint8Array>\fR Shared key.
+.TP
+\fBcreateKeyPair(seed)\fR
+Creates a key pair for signing and verification.
+\fBParameters:\fR
+.br
+\fIseed\fR (Uint8Array \\| string; required) Seed for key generation.
+\fBReturns:\fR
+.br
+\fIPromise<{ publicKey: Uint8Array, privateKey: Uint8Array }>\fR Key pair.
+.TP
+\fBcreateId(str)\fR
+Creates an ID using SHA\-256 hash.
+\fBParameters:\fR
+.br
+\fIstr\fR (string; required) String to hash.
+\fBReturns:\fR
+.br
+\fIPromise<Uint8Array>\fR SHA\-256 hash.
+.TP
+\fBcreateClusterId(str)\fR
+Creates a cluster ID using SHA\-256 hash with specified output size.
+\fBParameters:\fR
+.br
+\fIstr\fR (string; required) String to hash.
+\fBReturns:\fR
+.br
+\fIPromise<Uint8Array>\fR SHA\-256 hash with specified output size.
+.TP
+\fBadd(publicKey, privateKey)\fR
+Adds a key pair to the keys mapping.
+\fBParameters:\fR
+.br
+\fIpublicKey\fR (Uint8Array \\| string; required) Public key.
+.br
+\fIprivateKey\fR (Uint8Array; required) Private key.
+.TP
+\fBremove(publicKey)\fR
+Removes a key from the keys mapping.
+\fBParameters:\fR
+.br
+\fIpublicKey\fR (Uint8Array \\| string; required) Public key.
+.TP
+\fBhas(to)\fR
+Checks if a key is in the keys mapping.
+\fBParameters:\fR
+.br
+\fIto\fR (Uint8Array \\| string; required) Public key or Uint8Array.
+\fBReturns:\fR
+.br
+\fIboolean\fR True if the key is present, false otherwise.
+.TP
+\fBsign(b, sk)\fR
+Signs a message using the given secret key.
+\fBParameters:\fR
+.br
+\fIb\fR (Buffer; required) The message to sign.
+.br
+\fIsk\fR (Uint8Array; required) The secret key to use.
+\fBReturns:\fR
+.br
+\fIUint8Array\fR Signature.
+.TP
+\fBverify(b, sig, pk)\fR
+Verifies the signature of a message using the given public key.
+\fBParameters:\fR
+.br
+\fIb\fR (Buffer; required) The message to verify.
+.br
+\fIsig\fR (Uint8Array; required) The signature to check.
+.br
+\fIpk\fR (Uint8Array; required) The public key to use.
+\fBReturns:\fR
+.br
+\fInumber\fR Returns non\-zero if the buffer could not be verified.
+.TP
+\fBopenUnsigned(message, v)\fR
+Opens a sealed message using the specified key.
+\fBParameters:\fR
+.br
+\fImessage\fR (Buffer; required) The sealed message.
+.br
+\fIv\fR (Object \\| string; required) Key object or public key.
+\fBReturns:\fR
+.br
+\fIBuffer\fR Decrypted message.
+.TP
+\fBopen(message, v)\fR
+Decrypts a sealed and signed message for a specific receiver.
+\fBParameters:\fR
+.br
+\fImessage\fR (Buffer; required) The sealed message.
+.br
+\fIv\fR (Object \\| string; required) Key object or public key.
+\fBReturns:\fR
+.br
+\fIBuffer\fR Decrypted message.
+.TP
+\fBseal(message, v)\fR
+Seals and signs a message for a specific receiver using their public key.
+.br
+`Seal(message, receiver)` performs an _encrypt\-sign\-encrypt_ (ESE) on a plaintext `message` for a `receiver` identity. This prevents repudiation attacks and doesn't rely on packet chain guarantees.
+.br
+let ct = Seal(sender | pt, receiver) let sig = Sign(ct, sk) let out = Seal(sig | ct)
+.br
+In an setup between Alice & Bob, this means: \- Only Bob sees the plaintext \- Alice wrote the plaintext and the ciphertext \- Only Bob can see that Alice wrote the plaintext and ciphertext \- Bob cannot forward the message without invalidating Alice's signature. \- The outer encryption serves to prevent an attacker from replacing Alice's signature. As with _sign\-encrypt\-sign (SES), ESE is a variant of including the recipient's name inside the plaintext, which is then signed and encrypted Alice signs her plaintext along with her ciphertext, so as to protect herself from a laintext\-substitution attack. At the same time, Alice's signed plaintext gives Bob non\-repudiation.
+\fBParameters:\fR
+.br
+\fImessage\fR (Buffer; required) The message to seal.
+.br
+\fIv\fR (Object \\| string; required) Key object or public key.
+\fBReturns:\fR
+.br
+\fIBuffer\fR Sealed message.

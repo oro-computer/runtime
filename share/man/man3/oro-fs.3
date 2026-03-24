@@ -1,0 +1,752 @@
+.TH ORO-FS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs'
+.fi
+.SH DESCRIPTION
+.PP
+This module enables interacting with the file system in a way modeled on standard POSIX functions.
+.PP
+The Application Sandbox restricts access to the file system.
+.PP
+iOS Application Sandboxing has a set of rules that limits access to the file system. Apps can only access files in their own sandboxed home directory.
+.PP
+| Directory | Description | | \-\-\- | \-\-\- | | `Documents` | The app’s sandboxed documents directory. The contents of this directory are backed up by iTunes and may be set as accessible to the user via iTunes when `UIFileSharingEnabled` is set to `true` in the application's `info.plist`. | | `Library` | The app’s sandboxed library directory. The contents of this directory are synchronized via iTunes (except the `Library/Caches` subdirectory, see below), but never exposed to the user. | | `Library/Caches` | The app’s sandboxed caches directory. The contents of this directory are not synchronized via iTunes and may be deleted by the system at any time. It's a good place to store data which provides a good offline\-first experience for the user. | | `Library/Preferences` | The app’s sandboxed preferences directory. The contents of this directory are synchronized via iTunes. Its purpose is to be used by the Settings app. Avoid creating your own files in this directory. | | `tmp` | The app’s sandboxed temporary directory. The contents of this directory are not synchronized via iTunes and may be deleted by the system at any time. Although, it's recommended that you delete data that is not necessary anymore manually to minimize the space your app takes up on the file system. Use this directory to store data that is only useful during the app runtime. |
+.PP
+Example usage: import * as fs from 'oro:fs';
+.SH REFERENCE
+.TP
+\fBwatchFile(path, options, listener)\fR
+Polls for file changes and invokes listener with (curr, prev) Stats. This is a compatibility helper; prefer fs.watch for evented changes.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIoptions\fR (object \\| function; optional)
+.br
+\fIoptions.interval\fR (number; optional; default 5007)
+.br
+\fIoptions.bigint\fR (boolean; optional; default false)
+.br
+\fIlistener\fR (function(Stats, Stats); optional)
+.TP
+\fBunwatchFile(path, listener)\fR
+Removes a watchFile listener or stops watching entirely for a path.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIlistener\fR (function; optional; default null)
+.TP
+\fBaccess(path, mode, callback)\fR
+Asynchronously check access to a file for a given mode calling `callback` upon success or error.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number \\| function(Error \\| null):any; optional; default F_OK(0))
+.br
+\fIcallback\fR (function(Error \\| null):any; optional)
+.TP
+\fBaccessSync(path, mode)\fR
+Synchronously check access to a file for a given mode calling `callback` upon success or error.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number; optional)
+.TP
+\fBexists(path, callback)\fR
+Checks if a path exists
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIcallback\fR (function(Boolean)?; optional)
+.TP
+\fBexistsSync(path)\fR
+Checks if a path exists
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIcallback\fR (function(Boolean)?; optional)
+.TP
+\fBchmod(path, mode, callback)\fR
+Asynchronously changes the permissions of a file. No arguments other than a possible exception are given to the completion callback
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number; required)
+.br
+\fIcallback\fR (function(Error?); required)
+.TP
+\fBchmodSync(path, mode)\fR
+Synchronously changes the permissions of a file.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number; required)
+.TP
+\fBchown(path, uid, gid, callback)\fR
+Changes ownership of file or directory at `path` with `uid` and `gid`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIuid\fR (number; required)
+.br
+\fIgid\fR (number; required)
+.br
+\fIcallback\fR (function; required)
+.TP
+\fBchownSync(path, uid, gid)\fR
+Changes ownership of file or directory at `path` with `uid` and `gid`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIuid\fR (number; required)
+.br
+\fIgid\fR (number; required)
+.TP
+\fBclose(fd, callback)\fR
+Asynchronously close a file descriptor calling `callback` upon success or error.
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required)
+.br
+\fIcallback\fR (function(Error?)?; optional)
+.TP
+\fBcloseSync(fd)\fR
+Synchronously close a file descriptor.
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required) fd
+.TP
+\fBcopyFile(src, dest, flags, callback)\fR
+Asynchronously copies `src` to `dest` calling `callback` upon success or error.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required) The source file path.
+.br
+\fIdest\fR (string; required) The destination file path.
+.br
+\fIflags\fR (number; required; default 0) Modifiers for copy operation.
+.br
+\fIcallback\fR (function(Error=); optional) The function to call after completion.
+.TP
+\fBcopyFileSync(src, dest, flags)\fR
+Synchronously copies `src` to `dest` calling `callback` upon success or error.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required) The source file path.
+.br
+\fIdest\fR (string; required) The destination file path.
+.br
+\fIflags\fR (number; required; default 0) Modifiers for copy operation.
+.TP
+\fBcreateReadStream(path, options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object?; optional)
+\fBReturns:\fR
+.br
+\fIReadStream\fR
+.TP
+\fBcreateWriteStream(path, options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object?; optional)
+\fBReturns:\fR
+.br
+\fIWriteStream\fR
+.TP
+\fBfstat(fd, options, callback)\fR
+Invokes the callback with the <fs.Stats> for the file descriptor. See the POSIX fstat(2) documentation for more detail.
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required) A file descriptor.
+.br
+\fIoptions\fR (object? \\| function?; optional) An options object.
+.br
+\fIcallback\fR (function?; required) The function to call after completion.
+.TP
+\fBfsync(fd, callback)\fR
+Request that all data for the open file descriptor is flushed to the storage device.
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required) A file descriptor.
+.br
+\fIcallback\fR (function; required) The function to call after completion.
+.TP
+\fBftruncate(fd, offset, callback)\fR
+Truncates the file up to `offset` bytes.
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required) A file descriptor.
+.br
+\fIoffset\fR (number= \\| function; optional; default 0)
+.br
+\fIcallback\fR (function?; required) The function to call after completion.
+.TP
+\fBlchown(path, uid, gid, callback)\fR
+Changes ownership of a symbolic link at `path` with `uid` and `gid`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIuid\fR (number; required)
+.br
+\fIgid\fR (number; required)
+.br
+\fIcallback\fR (function; required)
+.TP
+\fBlchmod(path, mode, callback)\fR
+Changes permissions of link at `path` with `mode` (POSIX). No\-op where unsupported.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number; required)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBlchmodSync(path, mode)\fR
+Synchronously changes permissions of a symbolic link at `path`.
+.br
+On platforms that do not implement `lchmod`, the native backend may treat this as a no\-op or return a platform\-specific error.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fImode\fR (number; required)
+.TP
+\fBlink(src, dest, callback)\fR
+Creates a link to `dest` from `src`.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+.br
+\fI(Position 2)\fR (function; required)
+.TP
+\fBlinkSync(src, dest)\fR
+Creates a hard link synchronously
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+.TP
+\fBmkdtemp(prefix, options, callback)\fR
+Create a unique temporary directory. The `prefix` is appended with a platform\-specific unique suffix.
+\fBParameters:\fR
+.br
+\fIprefix\fR (string; required)
+.br
+\fIoptions\fR (object \\| string \\| function; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIcallback\fR (function(Error \\| null, string \\| Buffer):any; optional)
+.TP
+\fBmkdtempSync(prefix, options)\fR
+Create a unique temporary directory synchronously
+.TP
+\fBopen(path, flags, mode, options, callback)\fR
+Asynchronously open a file calling `callback` upon success or error.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIflags\fR (string; optional; default 'r')
+.br
+\fImode\fR (number; optional; default 0o666)
+.br
+\fIoptions\fR (object \\| function(Error \\| null, number \\| undefined):any; optional; default null)
+.br
+\fIcallback\fR ((function(Error \\| null, number \\| undefined):any) \\| null; optional; default null)
+.TP
+\fBopenSync(path, flags, mode, options)\fR
+Synchronously open a file.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIflags\fR (string; optional; default 'r')
+.br
+\fImode\fR (string; optional; default 0o666)
+.br
+\fIoptions\fR (object; optional; default null)
+.TP
+\fBopendir(path, options, callback)\fR
+Asynchronously open a directory calling `callback` upon success or error.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object \\| function(Error \\| null, Dir \\| undefined):any; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.withFileTypes\fR (boolean; optional; default false)
+.br
+\fIcallback\fR (function(Error \\| null, Dir \\| undefined):any); required)
+.TP
+\fBopendirSync(path, options)\fR
+Synchronously open a directory.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.withFileTypes\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fIDir\fR
+.TP
+\fBread(fd, buffer, offset, length, position, options, callback)\fR
+Asynchronously read from an open file descriptor.
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required)
+.br
+\fIbuffer\fR (object \\| Buffer \\| Uint8Array; required) The buffer that the data will be written to.
+.br
+\fIoffset\fR (number; required) The position in buffer to write the data to.
+.br
+\fIlength\fR (number; required) The number of bytes to read.
+.br
+\fIposition\fR (number \\| BigInt \\| null; required) Specifies where to begin reading from in the file. If position is null or \-1 , data will be read from the current file position, and the file position will be updated. If position is an integer, the file position will be unchanged.
+.br
+\fIcallback\fR (function(Error \\| null, number \\| undefined, Buffer \\| undefined):any; required)
+.TP
+\fBwrite(fd, buffer, offset, length, position, options, callback)\fR
+Asynchronously write to an open file descriptor.
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required)
+.br
+\fIbuffer\fR (object \\| Buffer \\| Uint8Array; required) The buffer that the data will be written to.
+.br
+\fIoffset\fR (number; required) The position in buffer to write the data to.
+.br
+\fIlength\fR (number; required) The number of bytes to read.
+.br
+\fIposition\fR (number \\| BigInt \\| null; required) Specifies where to begin reading from in the file. If position is null or \-1 , data will be read from the current file position, and the file position will be updated. If position is an integer, the file position will be unchanged.
+.br
+\fIcallback\fR (function(Error \\| null, number \\| undefined, Buffer \\| undefined):any; required)
+.TP
+\fBwritev(fd, buffers, position, callback)\fR
+Vector write convenience: writes multiple buffers sequentially to fd
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required)
+.br
+\fIbuffers\fR (Array<Buffer \\| TypedArray>; required)
+.br
+\fIposition\fR (number \\| null \\| function; optional)
+.br
+\fIcallback\fR (function(Error \\| null, number=):any; optional)
+.TP
+\fBreadv(fd, buffers, position, callback)\fR
+Vector read convenience: reads into multiple buffers sequentially from fd
+\fBParameters:\fR
+.br
+\fIfd\fR (number; required)
+.br
+\fIbuffers\fR (Array<Buffer \\| TypedArray>; required)
+.br
+\fIposition\fR (number \\| null \\| function; optional)
+.br
+\fIcallback\fR (function(Error \\| null, number, any[]):any; optional)
+.TP
+\fBreaddir(path, options, callback)\fR
+Asynchronously read all entries in a directory.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object \\| function(Error \\| null, (Dirent \\| string)[] \\| undefined):any; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.withFileTypes\fR (boolean; optional; default false)
+.br
+\fIcallback\fR (function(Error \\| null, (Dirent \\| string)[]):any; required)
+.TP
+\fBreaddirSync(path, options)\fR
+Synchronously read all entries in a directory.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.withFileTypes\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fI(Dirent \\| string)[]\fR
+.TP
+\fBreadFile(path, options, callback)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL \\| number; required)
+.br
+\fIoptions\fR (object \\| function(Error \\| null, Buffer \\| string \\| undefined):any; required)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.flag\fR (string; optional; default 'r')
+.br
+\fIoptions.signal\fR (AbortSignal \\| undefined; optional)
+.br
+\fIcallback\fR (function(Error \\| null, Buffer \\| string \\| undefined):any; required)
+.TP
+\fBreadFileSync(path, options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL \\| number; required)
+.br
+\fIoptions\fR ({ encoding?: string, flags?: string }; optional; default null)
+.br
+\fIoptions\fR (object \\| function(Error \\| null, Buffer \\| undefined):any; optional; default null)
+.br
+\fIoptions.signal\fR (AbortSignal \\| undefined; optional)
+\fBReturns:\fR
+.br
+\fIstring \\| Buffer\fR
+.TP
+\fBreadlink(path, options, callback)\fR
+Reads link at `path`
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIcallback\fR (function(Error \\| null, string \\| undefined):any; required)
+.TP
+\fBreadlinkSync(path, options)\fR
+Reads link target at `path` synchronously
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBrealpath(path, callback)\fR
+Computes real path for `path`
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIcallback\fR (function(Error \\| null, string \\| undefined):any; required)
+.TP
+\fBrealpathSync(path)\fR
+Computes real path for `path`
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBrename(src, dest, callback)\fR
+Renames file or directory at `src` to `dest`.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBrenameSync(src, dest)\fR
+Renames file or directory at `src` to `dest`, synchronously.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+.TP
+\fBrmdir(path, callback)\fR
+Removes directory at `path`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBrmdirSync(path)\fR
+Removes directory at `path`, synchronously.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.TP
+\fBstatSync(path, options)\fR
+Synchronously get the stats of a file
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required) filename or file descriptor
+.br
+\fIoptions\fR (object; optional; default null)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.flag\fR (string; optional; default 'r')
+.TP
+\fBfstatSync(fd, options)\fR
+Synchronously get the stats of an open file descriptor.
+\fBParameters:\fR
+.br
+\fIfd\fR (number \\| FileHandle; required)
+.br
+\fIoptions\fR (object; optional; default null)
+.TP
+\fBstat(path, options, callback)\fR
+Get the stats of a file
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL \\| number; required) filename or file descriptor
+.br
+\fIoptions\fR (object \\| function(Error \\| null, Stats \\| undefined):any; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.flag\fR (string; optional; default 'r')
+.br
+\fIoptions.signal\fR (AbortSignal \\| undefined; optional)
+.br
+\fIcallback\fR (function(Error \\| null, Stats \\| undefined):any; required)
+.TP
+\fBlstat(path, options, callback)\fR
+Get the stats of a symbolic link
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL \\| number; required) filename or file descriptor
+.br
+\fIoptions\fR (object \\| function(Error \\| null, Stats \\| undefined):any; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.flag\fR (string; optional; default 'r')
+.br
+\fIoptions.signal\fR (AbortSignal \\| undefined; optional)
+.br
+\fIcallback\fR (function(Error \\| null, Stats \\| undefined):any; required)
+.TP
+\fBlstatSync(path, options)\fR
+Synchronously get stats of a symbolic link
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL; required)
+.br
+\fIoptions\fR (object; optional; default null)
+.TP
+\fBsymlink(src, dest, type, callback)\fR
+Creates a symlink of `src` at `dest`.
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBsymlinkSync(src, dest, type)\fR
+Synchronously create a symlink
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+.br
+\fItype\fR (string; optional; default null)
+.TP
+\fBunlink(path, callback)\fR
+Unlinks (removes) file at `path`.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBunlinkSync(path)\fR
+Unlinks (removes) file at `path`, synchronously.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.TP
+\fBlchownSync(path, uid, gid)\fR
+Changes ownership of link at `path` synchronously
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIuid\fR (number; required)
+.br
+\fIgid\fR (number; required)
+.TP
+\fBwriteFile(path, data, options, callback)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL \\| number; required) filename or file descriptor
+.br
+\fIdata\fR (string \\| Buffer \\| TypedArray \\| DataView \\| object; required)
+.br
+\fIoptions\fR (object \\| function(Error \\| null):any; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.mode\fR (string; optional; default 0o666)
+.br
+\fIoptions.flag\fR (string; optional; default 'w')
+.br
+\fIoptions.signal\fR (AbortSignal \\| undefined; optional)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBwriteFileSync(path, data, options)\fR
+Writes data to a file synchronously.
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL \\| number; required) filename or file descriptor
+.br
+\fIdata\fR (string \\| Buffer \\| TypedArray \\| DataView \\| object; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIoptions.mode\fR (string; optional; default 0o666)
+.br
+\fIoptions.flag\fR (string; optional; default 'w')
+.br
+\fIoptions.signal\fR (AbortSignal \\| undefined; optional)
+.TP
+\fBtruncate(path, len, callback)\fR
+Truncate file at `path` to `len` bytes (default 0)
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIlen\fR (number \\| function; optional; default 0)
+.br
+\fIcallback\fR (function(Error \\| null):any; optional)
+.TP
+\fBtruncateSync(path, len)\fR
+Truncate file synchronously
+.TP
+\fBappendFile(path, data, options, callback)\fR
+Append data to a file
+\fBParameters:\fR
+.br
+\fIpath\fR (string \\| Buffer \\| URL \\| number; required)
+.br
+\fIdata\fR (string \\| Buffer \\| TypedArray \\| DataView \\| object; required)
+.br
+\fIoptions\fR (object \\| function(Error \\| null):any; optional)
+.br
+\fIoptions.encoding\fR (string; optional)
+.br
+\fIoptions.mode\fR (number; optional)
+.br
+\fIoptions.flag\fR (string; optional)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBappendFileSync(path, data, options)\fR
+Append data synchronously
+.TP
+\fBrm(path, options, callback)\fR
+Remove a file or directory
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIoptions\fR ({ recursive?: boolean, force?: boolean }; optional)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBrmSync(path, options)\fR
+Remove synchronously
+.TP
+\fBcp(src, dest, options, callback)\fR
+Copy file or directory. Options: \- recursive: copy directories recursively \- dereference: follow symlinks (default true). When false, copies symlinks as symlinks \- force: overwrite if destination exists; when false and errorOnExist is false, leaves dest untouched \- errorOnExist: if true and destination exists, error (when force is false) \- preserveTimestamps: set atime/mtime on dest to match src (files) \- preserveMode: apply src mode (chmod) to dest \- preserveOwner: attempt to apply src uid/gid (chown) to dest (may be ignored by platform; may require privileges) \- filter: function (src, dest) => boolean|Promise<boolean> to include/exclude entries
+\fBParameters:\fR
+.br
+\fIsrc\fR (string; required)
+.br
+\fIdest\fR (string; required)
+.br
+\fIoptions\fR ({ recursive?: boolean, dereference?: boolean, force?: boolean, errorOnExist?: boolean, preserveTimestamps?: boolean, preserveMode?: boolean, preserveOwner?: boolean, filter?: function(string, string): (boolean \\| Promise<boolean>) }; optional)
+.br
+\fIcallback\fR (function(Error \\| null):any; required)
+.TP
+\fBcpSync(src, dest, options)\fR
+Copy synchronously
+.TP
+\fButimes(path, atime, mtime, callback)\fR
+Update atime/mtime for a path
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIatime\fR (number \\| Date \\| string; required)
+.br
+\fImtime\fR (number \\| Date \\| string; required)
+.br
+\fIcallback\fR (function(Error=); optional)
+.TP
+\fBlutimes(path, atime, mtime, callback)\fR
+Update atime/mtime for a symlink without following it
+.TP
+\fBlutimesSync(path, atime, mtime)\fR
+Update atime/mtime for a symlink without following it (sync)
+.TP
+\fButimesSync(path, atime, mtime)\fR
+Update atime/mtime for a path (sync)
+.TP
+\fBfutimes(fd, atime, mtime, callback)\fR
+Update atime/mtime for an fd
+\fBParameters:\fR
+.br
+\fIfd\fR (number \\| FileHandle; required)
+.TP
+\fBfutimesSync(fd, atime, mtime)\fR
+Update atime/mtime for an fd (sync)
+.TP
+\fBwatch(path, options, callback)\fR
+Watch for changes at `path` calling `callback`
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (string; required)
+.br
+\fIoptions\fR (function \\| object; optional)
+.br
+\fIoptions.encoding\fR (string; optional; default 'utf8')
+.br
+\fIcallback\fR (function; optional; default null)
+\fBReturns:\fR
+.br
+\fIWatcher\fR

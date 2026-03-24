@@ -1,0 +1,18 @@
+.TH ORO-INTERNAL-DIRECT-SOCKETS-POLICY 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/direct\-sockets\-policy \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/direct\-sockets\-policy'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/direct\-sockets\-policy is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBisDirectSocketsAllowed()\fR
+Direct Sockets Permissions\-Policy gating.
+.br
+This runtime does not consume HTTP Permissions\-Policy headers directly, but apps may configure an opt\-in/opt\-out toggle using either: \- __args.config.permissions_policy_direct_sockets (boolean) \- __args.env.DIRECT_SOCKETS_ALLOWED ("1" | "true" | "yes" | "0" | "false" | "no")
+.br
+Default behavior: allowed.

@@ -1,0 +1,36 @@
+.TH ORO-HTTP-ADAPTERS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:http/adapters \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:http/adapters'
+.fi
+.SH DESCRIPTION
+.PP
+oro:http/adapters is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBServerAdapter (extends EventTarget)\fR
+An abstract base class for an HTTP server adapter.
+.TP
+\fBserver()\fR
+A readonly reference to the underlying HTTP(S) server for this adapter.
+.TP
+\fBhttpInterface()\fR
+A readonly reference to the underlying HTTP(S) module interface for creating various HTTP module class objects.
+.TP
+\fBcontext()\fR
+A readonly reference to the `AsyncContext.Variable` associated with this `ServerAdapter` instance.
+.TP
+\fBdestroy()\fR
+Called when the adapter should destroy itself.
+.TP
+\fBServiceWorkerServerAdapter (extends ServerAdapter)\fR
+An HTTP adapter for running an HTTP server in a Service Worker that uses the "fetch" event for the request and response lifecycle.
+.br
+Emitted when the Service Worker 'install' event fires.
+.br
+Emitted when the Service Worker 'activate' event fires.
+.TP
+\fBdestroy()\fR
+Called when the adapter should destroy itself.

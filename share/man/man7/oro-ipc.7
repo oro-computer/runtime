@@ -1,0 +1,113 @@
+.TH ORO-IPC 7 "" "Oro Runtime" "Oro Runtime Guides"
+.SH NAME
+oro\-ipc \- IPC protocol, transports, and result semantics
+.SH DESCRIPTION
+.PP
+Oro Runtime exposes native capabilities to JavaScript through a small family of IPC primitives layered behind the oro:ipc module and higher\-level oro:* APIs.
+.PP
+For most application code, prefer the high\-level module methods in man section 3. Reach for raw IPC only when you are building a library, binding a new service, debugging a protocol edge case, or bridging to extension/native code.
+.SH PROCESS MODEL
+.PP
+The API surface is split across render processes, the bridge process, and optional main/background workers. JavaScript talks to native services through ipc:// requests, queued responses, and longer\-lived transports such as Conduit.
+.PP
+The bridge owns route dispatch and turns native responses back into JavaScript Result objects, exceptions, ArrayBuffers, or streamed events depending on the transport you chose.
+.SH CHOOSE THE RIGHT TRANSPORT
+.IP \(bu 2
+ipc.request(): asynchronous request/response. Use when you need a Result object, structured errors, abort signals, timeouts, or responseType control.
+.IP \(bu 2
+ipc.send(): asynchronous fire\-and\-wait helper for standard JSON\-like request flows. Good default for many service calls that do not need binary response tuning.
+.IP \(bu 2
+ipc.sendSync(): blocking route invocation. Reserve it for low\-level compatibility or cases where asynchronous control flow is not viable.
+.IP \(bu 2
+ipc.write(): asynchronous request with a binary payload. Use for archive writes, compression, streaming model input, or any route that expects bytes.
+.IP \(bu 2
+Conduit/WebSocket transport: preferred for high\-frequency or long\-lived message streams when a service supports it.
+.SH RESULTS, ERRORS, AND NORMALIZATION
+.PP
+At the public wrapper layer, most async IPC flows resolve to a Result\-like shape with `data` and `err`. Downstream wrappers frequently convert that into thrown exceptions, richer classes, or narrower return types for convenience.
+.PP
+The low\-level IPC contract deliberately preserves enough metadata for debugging. Error objects may carry names, numeric or string codes, URLs, backend fields, and original payload fragments that a wrapper later rehydrates with `maybeMakeError()`.
+.IP \(bu 2
+Success responses usually arrive as { source, data } or as binary data when responseType is arraybuffer.
+.IP \(bu 2
+Errors may come back as structured plain objects. oro:ipc rehydrates them into Error instances with name, code, url, and backend metadata preserved.
+.IP \(bu 2
+Binary responses should validate content\-type and buffer shape before assuming a payload is usable.
+.IP \(bu 2
+If a wrapper throws but the underlying route normally reports `result.err`, inspect both the wrapper contract and the raw route behavior before changing either.
+.SH BINARY AND STRUCTURED-CLONE BOUNDARIES
+.PP
+A surprising amount of the runtime surface is byte\-oriented: compression, tar/archive work, TLS pin extraction, AI/audio payloads, child\-process pipes, and some network services. Those paths are different from plain object IPC and should be treated as such.
+.PP
+Oro also supports structured\-clone\-friendly wrappers for channels and transfers. That is useful for ports, ArrayBuffers, and richer bridge\-side event flow, but it still needs explicit transport\-aware handling.
+.IP \(bu 2
+Use `ipc.write()` when a route expects bytes in the request body.
+.IP \(bu 2
+Use `responseType: arraybuffer` when a route returns raw bytes and the caller must not coerce them into a string or JSON blob.
+.IP \(bu 2
+Do not layer ad hoc base64 encoding on top of a route that already has a byte transport.
+.IP \(bu 2
+When posting through IPC message ports, preserve transfer lists and cloned buffer semantics instead of copying arbitrarily.
+.SH MESSAGE PORTS, BROADCAST, AND EVENT FLOWS
+.PP
+Not every interaction is a single request followed by a single response. `IPCMessagePort`, `IPCMessageChannel`, and `IPCBroadcastChannel` exist so modules can coordinate event\-driven flows without re\-inventing transport logic on top of plain request routes.
+.PP
+These surfaces matter when you are bridging between windows, workers, and runtime services that need durable message delivery or structured clone semantics.
+.IP \(bu 2
+Use request/response IPC for one\-shot commands.
+.IP \(bu 2
+Use ports or broadcast\-style APIs when you need repeated message delivery with shared transport state.
+.IP \(bu 2
+When debugging message delivery, check both lifecycle state and origin/channel naming, not just the payload.
+.SH WHEN TO DROP BELOW PUBLIC WRAPPERS
+.PP
+The existence of a route in the catalog does not mean application code should call it directly. Many route names are implementation details hidden behind a stable public module because the wrapper also validates input, normalizes output, or enforces platform checks.
+.IP \(bu 2
+Stay at the public wrapper when one already exists for the feature you need.
+.IP \(bu 2
+Drop to raw IPC when you are integrating an advanced feature, debugging a bridge issue, or using a capability that does not yet have a stable higher\-level wrapper.
+.IP \(bu 2
+If you build an app\-local wrapper around raw IPC, document the transport family, ownership key, and error shape explicitly so callers do not have to reverse\-engineer the contract.
+.SH DEBUGGING CHECKLIST
+.IP \(bu 2
+Confirm the route name, owning module, and transport family before changing payload shape.
+.IP \(bu 2
+Inspect `result.err`, timeout options, abort signals, and responseType together.
+.IP \(bu 2
+If the bug reproduces only on one platform, verify capability gating before assuming the route is globally supported.
+.IP \(bu 2
+For binary routes, validate whether the breakage is in encoding/decoding rather than in the native service implementation.
+.SH EXAMPLES
+.nf
+import ipc from 'oro:ipc'
+
+const result = await ipc.request('window.create', {
+  index: 0,
+  path: '/index.html'
+})
+
+if (result.err) throw result.err
+console.log(result.data)
+
+const compressed = await ipc.write('zlib.deflate', { format: 'gzip' }, bytes, {
+  responseType: 'arraybuffer'
+})
+
+// Ports are appropriate when you need repeated message delivery.
+const channel = new ipc.IPCMessageChannel()
+channel.port1.onmessage = (event) => console.log('port1', event.data)
+channel.port2.postMessage({ type: 'ping' })
+.fi
+.SH NEED TO KNOW
+.IP \(bu 2
+Prefer the highest abstraction level that already exists. If oro:window or oro:sqlite already wraps a route, use that wrapper instead of calling the route directly.
+.IP \(bu 2
+Choose async transports by default. sendSync() blocks and should stay exceptional.
+.IP \(bu 2
+Routes are namespaced by domain prefix such as window.*, application.*, dbus.*, ai.*, or udp.*. That prefix is the fastest way to find the owning module and native service.
+.IP \(bu 2
+Binary\-capable routes often pair write() with responseType=arraybuffer. Treat those as protocol contracts, not incidental implementation details.
+.IP \(bu 2
+When debugging, inspect both the JS call site and the service implementation; IPC problems are often caused by parameter shape or process\-lifecycle timing rather than the route name itself.
+.SH SEE ALSO
+oro\-ipc\-routes(7), oro\-api\-concepts(7), oro\-agent\-workflows(7), oro\-conduit(7), oro\-ipc(3), oroc(1)

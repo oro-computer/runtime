@@ -1,0 +1,164 @@
+.TH ORO-API-CONCEPTS 7 "" "Oro Runtime" "Oro Runtime Guides"
+.SH NAME
+oro\-api\-concepts \- cross\-cutting concepts that shape the public API surface
+.SH DESCRIPTION
+.PP
+Oro Runtime is easier to use when you treat it as a layered system rather than as a flat pile of modules. The public API surface is organized around ownership boundaries, origin\-scoped state, route families, and explicit platform capability checks.
+.PP
+This guide explains the concepts that recur across the installed JavaScript APIs, CLI commands, generated references, and MCP\-discoverable runtime docs. It is intended to shorten the path from "I need to build something" to "I know which module, config key, and transport to use".
+.SH START AT THE HIGHEST LAYER
+.IP \(bu 2
+Use `oroc` when you need project discovery, configuration inspection, build/package operations, update tooling, or host\-level workflows.
+.IP \(bu 2
+Use the section 3 manpages for stable JavaScript and C extension contracts. That is the compatibility boundary application code should target first.
+.IP \(bu 2
+Use the section 7 manpages for concepts, route catalogs, and workflows when you need to understand how several modules fit together.
+.IP \(bu 2
+Use raw `oro:ipc` only for advanced integrations, unsupported edge cases, or debugging when the higher\-level wrapper layer is not enough.
+.IP \(bu 2
+For AI\-oriented exploration, the MCP surface should prefer `workspace_info`, `search_docs`, `resources/list`, and specialized tools before falling back to `run_cli` or raw file walking.
+.SH PROCESS MODEL AND OWNERSHIP
+.PP
+The runtime is split across distinct responsibilities. Render code runs your HTML, CSS, and JavaScript. The bridge brokers IPC and owns many native service boundaries. Some applications also use worker\-like or background execution surfaces for heavier work.
+.PP
+This split matters because many APIs are shaped by ownership. `oro:application` owns app\-wide lifecycle, window creation, enumeration, menu/tray setup, and process\-launch helpers. `oro:window` represents one concrete window and is usually the right entry point once you already know which window you are talking about.
+.IP \(bu 2
+If the operation affects the whole app, start from `oro:application` or the CLI.
+.IP \(bu 2
+If the operation affects one concrete window, expect a window id or index to be part of the contract.
+.IP \(bu 2
+If an API looks global but still asks for an index, origin, or scope, that value is usually the real ownership key.
+.IP \(bu 2
+Route families often reveal ownership quickly: `window.*`, `application.*`, `internal.conduit.*`, `bluetooth.*`, `usb.*`, and so on.
+.SH IDENTIFIERS AND ISOLATION KEYS
+.PP
+Several subsystems are intentionally scoped rather than globally shared. The same application may have multiple windows, multiple worker contexts, several mounted resource roots, and state that must stay isolated by origin or bundle identity.
+.PP
+That is why the API surface repeatedly uses values such as window index, bundle identifier, origin, route name, scope, and path. These are not cosmetic parameters. They usually determine routing, persistence boundaries, or permission checks.
+.IP \(bu 2
+Window index: identifies a concrete application window and is frequently used for window\-scoped UI mutations.
+.IP \(bu 2
+Origin: identifies the URL/security context for browser\-facing features such as cookies, service workers, loaders, and request helpers.
+.IP \(bu 2
+Bundle identifier: ties packaging, update identity, and runtime origin construction together.
+.IP \(bu 2
+Secure\-storage scope: isolates stored secrets by origin\-like namespace rather than by key alone.
+.IP \(bu 2
+Route name: identifies the backend capability behind a public wrapper. It is useful for debugging, but it is usually not the primary application\-level API.
+.SH RESOURCE LOADING AND THE BROWSER BOUNDARY
+.PP
+Oro distinguishes between direct host filesystem access and browser\-style resource access. This distinction is fundamental: code running with `oro:fs` can talk to host paths directly, while code inside the webview often needs URL\-based access through mounted resources, `oro:` origins, or fetch\-compatible handlers.
+.PP
+A productive rule is to choose the interface that matches the consumer. If the browser/webview needs to load something by URL, expose it as a resource. If build scripts or trusted runtime code need direct file access, use filesystem APIs.
+.IP \(bu 2
+Use oro:fs for direct host filesystem reads and writes.
+.IP \(bu 2
+Use navigator mounts and oro:// resources when the webview needs URL\-based access rather than direct fs APIs.
+.IP \(bu 2
+Expect mounted resources to remain read\-only from the browser side even when the backing host directory is writable.
+.IP \(bu 2
+Treat `build.copy`, `webview.root`, and related packaging config as part of the resource\-loading contract, not just build metadata.
+.IP \(bu 2
+Protocol handlers and service\-worker\-backed flows are separate concepts. When a feature says it requires service worker support, do not assume a plain static resource mount is enough.
+.SH CONFIG IS PART OF THE API CONTRACT
+.PP
+Configuration is not an afterthought in Oro. `oro.toml`, `oro.ini`, local overrides, and generated config references shape how the runtime boots, where resources come from, how apps are packaged, and which platform\-specific knobs are active.
+.PP
+Many "API" questions are really config questions in disguise. If window sizing, service workers, signing, update identity, or resource roots look surprising, inspect the effective config before assuming the module implementation is wrong.
+.IP \(bu 2
+Relative config paths are generally interpreted from the project root or from the directory that contains the explicit config file being used.
+.IP \(bu 2
+Do not assume a service\-worker mode. Respect the project configuration and documented runtime defaults.
+.IP \(bu 2
+Autoindex is opt\-in. If a browser\-facing path fails because there is no implicit directory listing, that is likely expected behavior.
+.IP \(bu 2
+The generated config docs are there to explain meaning, but the effective merged config is what determines runtime behavior.
+.SH TRANSPORTS AND DATA SHAPES
+.PP
+The runtime uses several transport styles on purpose. Some operations are request/response, some are binary, and some are long\-lived streams. Choosing the right transport is part of using the API correctly.
+.PP
+If a module already wraps transport details for you, use that wrapper. If you do need to drop lower, preserve the transport expectations instead of rewriting them ad hoc.
+.IP \(bu 2
+`ipc.request()` is the general async request/response path when you need errors, timeouts, abort signals, or response\-shape control.
+.IP \(bu 2
+`ipc.send()` is an async convenience path for standard structured requests that do not need binary tuning.
+.IP \(bu 2
+`ipc.sendSync()` blocks and should remain exceptional.
+.IP \(bu 2
+`ipc.write()` is for routes that take raw bytes or large binary payloads.
+.IP \(bu 2
+Conduit is the long\-lived path for sustained message flow or high\-frequency streaming.
+.IP \(bu 2
+Binary\-oriented APIs frequently use `Buffer`, `Uint8Array`, `ArrayBuffer`, or `responseType: arraybuffer`. Treat those as part of the public contract.
+.IP \(bu 2
+The runtime does not guarantee `SharedArrayBuffer` or `Atomics.wait`. Always code defensively when shared\-memory assumptions would affect correctness.
+.SH WINDOWS, EVENTS, AND LIFECYCLE
+.PP
+A large amount of application behavior is window\-centric. Window creation, enumeration, focus, menu targeting, and some event delivery all use the window index or an `ApplicationWindow` instance as the effective routing key.
+.PP
+When you create a window, think beyond just the HTML path. Size constraints, service\-worker requirements, protocol handlers, theme behavior, and window\-scoped menu routing are all part of the practical lifecycle contract.
+.IP \(bu 2
+Treat `createWindow()` as the start of a resource\-loading and lifecycle configuration decision, not just a UI allocation call.
+.IP \(bu 2
+If a menu or tray API accepts an optional target window index, that means the platform may support window\-scoped behavior rather than only app\-global behavior.
+.IP \(bu 2
+If you are hydrating or enumerating windows, preserve ordering semantics and index identity rather than assuming the list is just a plain array.
+.SH PLATFORM GATING AND PARTIAL SURFACES
+.PP
+Not every route or helper exists on every target. Some modules are fundamentally platform\-specific, and some subsystems are present but intentionally partial on a subset of platforms.
+.PP
+A productive workflow is to treat platform support as data you verify, not as something you infer from a route name or from another platform behaving a certain way.
+.IP \(bu 2
+Check docs and public wrappers before assuming DBus, XPC, secure storage, AI helpers, Bluetooth, WebUSB, or TLS helpers are equivalent across desktop and mobile targets.
+.IP \(bu 2
+Public wrappers are the right place for capability checks and normalized errors. Route presence alone does not imply release\-ready parity.
+.IP \(bu 2
+When shipping cross\-platform features, document the degraded path explicitly rather than leaving clients to discover it through runtime errors.
+.SH DISCOVERY AND DEBUGGING WORKFLOW
+.PP
+Humans and AI agents are most productive when they move from stable documentation down toward low\-level protocol details only as needed. That means starting with high\-level docs, then public module contracts, then route catalogs, and only then low\-level IPC behavior.
+.IP \(bu 2
+Start with `oroc help <query>` for CLI discovery and operator workflows.
+.IP \(bu 2
+Use section 3 manpages for exact public API contracts.
+.IP \(bu 2
+Use section 7 manpages when you need concepts, route catalogs, or higher\-level workflows.
+.IP \(bu 2
+Use MCP `search_docs` and `resources/list` when operating through the CLI MCP server.
+.IP \(bu 2
+When debugging a failing call, inspect the public wrapper, the owning route family, the config that shapes it, and the platform gate together.
+.IP \(bu 2
+If a feature carries bytes, also inspect `responseType`, buffer conversion, and any wrapper\-level normalization before blaming native code.
+.SH EXAMPLES
+.nf
+import { createWindow } from 'oro:application'
+import { readFile } from 'oro:fs/promises'
+import { setItem } from 'oro:secure\-storage'
+import ipc from 'oro:ipc'
+
+const win = await createWindow({ index: 0, path: '/index.html' })
+
+// Direct host filesystem access for trusted runtime code.
+const html = await readFile('./src/index.html', 'utf8')
+console.log(html.length)
+
+// Origin\- or bundle\-scoped secret storage.
+await setItem('refresh\-token', token, { scope: 'oro://com.example.app' })
+
+// Drop to low\-level IPC only when the higher\-level wrapper is not the right tool.
+const result = await ipc.request('window.getBackgroundColor', { index: win.index })
+if (result.err) throw result.err
+.fi
+.SH NEED TO KNOW
+.IP \(bu 2
+The public JS module is usually the compatibility boundary. Route names and raw payloads are lower\-level implementation details unless you are working on the runtime itself.
+.IP \(bu 2
+Look for scope, origin, id, index, bundle identifier, or route prefix parameters first. They usually reveal the true ownership model faster than the function name alone.
+.IP \(bu 2
+If behavior surprises you, inspect the effective config and the current platform before assuming the API contract was universal.
+.IP \(bu 2
+If a guide sounds too generic, verify it against the section 3 contract and the generated route catalog. The productive path is specific, not hand\-wavy.
+.IP \(bu 2
+When you build app\-local abstractions on top of Oro, preserve the ownership key, config dependency, transport shape, and platform limits in your own docs and helpers.
+.SH SEE ALSO
+oroc(1), oroc\-help(1), oro\-ipc(7), oro\-ipc\-routes(7), oro\-agent\-workflows(7), oro\-conduit(7), oro\-application(3), oro\-window(3), oro\-ipc(3), oro\-secure\-storage(3), oro\-fs(3)

@@ -1,0 +1,99 @@
+.TH ORO-LANGUAGE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:language \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:language'
+.fi
+.SH DESCRIPTION
+.PP
+A module for querying ISO 639\-1 language names and codes and working with RFC 5646 language tags.
+.SH REFERENCE
+.TP
+\fBnames\fR
+A list of ISO 639\-1 language names.
+.TP
+\fBcodes\fR
+A list of ISO 639\-1 language codes.
+.TP
+\fBtags\fR
+A list of RFC 5646 language tag identifiers.
+.TP
+\fBdescriptions\fR
+A list of RFC 5646 language tag titles corresponding to language tags.
+.TP
+\fBLanguageQueryResult\fR
+A container for a language query response containing an ISO language name and code.
+.TP
+\fBconstructor(code, name, tags)\fR
+`LanguageQueryResult` class constructor.
+\fBParameters:\fR
+.br
+\fIcode\fR (string; required)
+.br
+\fIname\fR (string; required)
+.br
+\fItags\fR (string[]; optional)
+.TP
+\fBcode()\fR
+The language code corresponding to the query.
+.TP
+\fBname()\fR
+The language name corresponding to the query.
+.TP
+\fBtags()\fR
+The language tags corresponding to the query.
+.TP
+\fBtoJSON()\fR
+JSON represenation of a `LanguageQueryResult` instance. code: string, name: string, tags: string[] }}
+.TP
+\fBLanguageDescription\fR
+A container for a language code, tag, and description.
+.TP
+\fBconstructor(code, tag, description)\fR
+`LanguageDescription` class constructor.
+\fBParameters:\fR
+.br
+\fIcode\fR (string; required)
+.br
+\fItag\fR (string; required)
+.br
+\fIdescription\fR (string; required)
+.TP
+\fBcode()\fR
+The language code corresponding to the language
+.TP
+\fBtag()\fR
+The language tag corresponding to the language.
+.TP
+\fBdescription()\fR
+The language description corresponding to the language.
+.TP
+\fBtoJSON()\fR
+JSON represenation of a `LanguageDescription` instance. code: string, tag: string, description: string }}
+.TP
+\fBlookup(query, options)\fR
+Look up a language name or code by query.
+\fBParameters:\fR
+.br
+\fIquery\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.strict\fR (boolean; optional; default false)
+\fBReturns:\fR
+.br
+\fI?LanguageQueryResult[]\fR
+.TP
+\fBdescribe(query, options)\fR
+Describe a language by tag
+\fBParameters:\fR
+.br
+\fIquery\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.strict\fR (boolean; optional; default true)
+\fBReturns:\fR
+.br
+\fI?LanguageDescription[]\fR

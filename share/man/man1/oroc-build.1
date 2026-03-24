@@ -1,0 +1,152 @@
+.TH OROC-BUILD 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-build \- Build Oro application.
+.SH SYNOPSIS
+.nf
+oroc build [options] [<project\-or\-source>]
+.fi
+.SH DESCRIPTION
+.PP
+Build Oro application. Provide a project directory, HTML file, or JavaScript module. When no oro.toml is found, oroc infers a minimal configuration automatically.
+.SH OPTIONS
+.TP
+\fB\-\-platform=<platform>\fR
+platform target to build application for (defaults to host):
+.br
+\(bu android
+.br
+\(bu android\-emulator
+.br
+\(bu ios
+.br
+\(bu ios\-simulator
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml/oro.ini file
+.TP
+\fB\-\-copy=<source:dest>\fR
+extra copy mapping (like [build] copy; can be repeated)
+.TP
+\fB\-\-port=<port>\fR
+load "index.html" from a specific port (if host is not specified, defaults to localhost)
+.TP
+\fB\-\-host=<host>\fR
+load "index.html" from a specific host (if port is not specified, defaults to 80)
+.TP
+\fB\-\-test[=path]\fR
+indicate test mode, optionally importing a test file relative to resource files
+.TP
+\fB\-\-headless\fR
+build application to run in headless mode (without frame or window)
+.TP
+\fB\-\-prod\fR
+build for production (disables debugging info, inspector, etc.)
+.TP
+\fB\-D, \-\-debug\fR
+enable debug mode
+.TP
+\fB\-E, \-\-env\fR
+add environment variables
+.TP
+\fB\-o, \-\-only\-build\fR
+only run build step,
+.TP
+\fB\-p, \-\-package\fR
+package the app for distribution
+.TP
+\fB\-q, \-\-quiet\fR
+hint for less log output
+.TP
+\fB\-r, \-\-run\fR
+run after building
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output
+.TP
+\fB\-w, \-\-watch\fR
+watch for changes to rerun build step
+.TP
+\fB\-\-allow\-exec\fR
+allow external command execution (gates ndk\-build/gradle/git/build scripts)
+.TP
+\fB\-\-sanitizers\fR
+enable developer sanitizers (ASan/UBSan) for desktop core builds
+.TP
+\fB\-\-tls\-keylog=<path>\fR
+write NSS TLS key log lines to <path> (OpenSSL provider)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH ENVIRONMENT
+.TP
+\fBORO_ALLOW_EXEC\fR
+allow external exec during builds
+.TP
+\fBORO_ENABLE_SANITIZERS\fR
+enable ASan/UBSan on desktop builds
+.SH NOTES
+.PP
+Relative paths are resolved from the project root or from the directory containing the explicit `\-\-config` file when one is supplied. `\-\-prod` controls packaging/debug defaults; `\-\-package` controls whether a distributable artifact is produced in addition to the build output directory. Use `\-\-copy` for one\-off extra bundle mappings without modifying `oro.toml`.
+.SH COMMON ERRORS
+.PP
+Android builds: run `oroc setup \-\-platform=android` and accept SDK licenses. macOS/iOS signing: set `[ios] provisioning_profile`/specifier or `[mac.productbuild] identity` in your config file. If you see "external command execution is disabled", pass `\-\-allow\-exec` or set `ORO_ALLOW_EXEC=1`.
+.SH LINUX OPTIONS
+.TP
+\fB\-f, \-\-package\-format=<format>\fR
+package a Linux application in a specified format for distribution:
+.br
+\(bu deb (default)
+.br
+\(bu rpm
+.br
+\(bu zip
+.br
+\(bu aur (generate AUR PKGBUILD only)
+.TP
+\fB\-\-sign\fR
+sign Linux packages with GPG (writes .asc next to the artifact)
+.TP
+\fB\-\-sign\-key=<id>\fR
+optional GPG key ID or fingerprint to use with '\-\-sign' (letters/digits/@._\- only)
+.SH DEPENDENCIES
+.PP
+Windows 10/11 SDK and Visual Studio Build Tools are recommended. Ensure `signtool.exe` is available (set SIGNTOOL or add SDK bin to PATH).
+.SH MACOS OPTIONS
+.TP
+\fB\-c, \-\-codesign\fR
+code sign application with 'codesign'
+.TP
+\fB\-n, \-\-notarize\fR
+notarize application with 'notarytool'
+.TP
+\fB\-f, \-\-package\-format=<format>\fR
+package a macOS application in a specified format for distribution:
+.br
+\(bu zip (default)
+.br
+\(bu pkg
+.SH IOS OPTIONS
+.TP
+\fB\-c, \-\-codesign\fR
+code sign application during xcoddbuild (requires '[ios] provisioning_profile' in your config file)
+.SH WINDOWS OPTIONS
+.TP
+\fB\-f, \-\-package\-format=<format>\fR
+package a Windows application in a specified format for distribution:
+.br
+\(bu appx (default)
+.SH EXAMPLES
+.TP
+\fBoroc build .\fR
+build the current project for the host platform
+.TP
+\fBoroc build \-r \-\-debug .\fR
+rebuild and immediately run a debug build
+.TP
+\fBoroc build \-\-platform=ios \-\-prod \-\-package .\fR
+produce a signed/package\-ready iOS build using your config
+.TP
+\fBoroc build \-\-copy assets:assets .\fR
+include an extra assets directory in the bundle for this build only
+.SH SEE ALSO
+oroc(1)

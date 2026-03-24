@@ -1,0 +1,26 @@
+.TH ORO-FS-WATCHER 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/watcher \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/watcher'
+.fi
+.SH DESCRIPTION
+.PP
+oro:fs/watcher is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBWatcher (extends EventEmitter)\fR
+A container for a file system path watcher.
+.br
+Emitted when a file change is detected.
+.br
+Emitted when an error occurs during watching.
+.br
+Emitted when the watcher is closed.
+.TP
+\fBclose()\fR
+Closes watcher and stops listening for changes.
+\fBReturns:\fR
+.br
+\fIPromise\fR

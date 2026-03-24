@@ -1,0 +1,74 @@
+.TH ORO-CRYPTO 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:crypto \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:crypto'
+.fi
+.SH DESCRIPTION
+.PP
+Some high\-level methods around the `crypto.subtle` API for getting random bytes and hashing.
+.PP
+Example usage: import { randomBytes } from 'oro:crypto'
+.SH REFERENCE
+.TP
+\fBwebcrypto\fR
+WebCrypto API
+.TP
+\fBready\fR
+A promise that resolves when all internals to be loaded/ready.
+.TP
+\fBgetRandomValues(buffer, ...args)\fR
+Generate cryptographically strong random values into the `buffer`
+\fBParameters:\fR
+.br
+\fIbuffer\fR (TypedArray; required)
+\fBReturns:\fR
+.br
+\fITypedArray\fR
+.TP
+\fBrand64()\fR
+Generate a random 64\-bit number.
+\fBReturns:\fR
+.br
+\fIBigInt\fR A random 64\-bit number.
+.TP
+\fBRANDOM_BYTES_QUOTA\fR
+Maximum total size of random bytes per page
+.TP
+\fBMAX_RANDOM_BYTES\fR
+Maximum total size for random bytes.
+.TP
+\fBMAX_RANDOM_BYTES_PAGES\fR
+Maximum total amount of allocated per page of bytes (max/quota)
+.TP
+\fBrandomBytes(size)\fR
+Generate `size` random bytes.
+\fBParameters:\fR
+.br
+\fIsize\fR (number; required) The number of bytes to generate. The size must not be larger than 2**31 \- 1.
+\fBReturns:\fR
+.br
+\fIBuffer\fR A `Buffer` containing random bytes.
+.TP
+\fBcreateDigest(algorithm, buf)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIalgorithm\fR (string; required) `SHA\-1` | `SHA\-256` | `SHA\-384` | `SHA\-512`
+.br
+\fImessage\fR (Buffer \\| TypedArray \\| DataView; required) A `Buffer`, TypedArray, or DataView.
+\fBReturns:\fR
+.br
+\fIPromise<Buffer>\fR A promise that resolves to a `Buffer` containing the digest.
+.TP
+\fBmurmur3(value, seed)\fR
+A murmur3 hash implementation based on https://github.com/jwerle/murmurhash.c that works on strings and `ArrayBuffer` views (typed arrays)
+\fBParameters:\fR
+.br
+\fIvalue\fR (string \\| Uint8Array \\| ArrayBuffer; required)
+.br
+\fIseed\fR (number; optional; default 0)
+\fBReturns:\fR
+.br
+\fInumber\fR

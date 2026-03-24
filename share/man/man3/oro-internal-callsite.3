@@ -1,0 +1,273 @@
+.TH ORO-INTERNAL-CALLSITE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/callsite \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/callsite'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/callsite is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBStackFrameLocation\fR
+A container for location data related to a `StackFrame`
+.TP
+\fBfrom(json)\fR
+Creates a `StackFrameLocation` from JSON input.
+\fBParameters:\fR
+.br
+\fIjson\fR (object; optional)
+\fBReturns:\fR
+.br
+\fIStackFrameLocation\fR
+.TP
+\fBStackFrame\fR
+A stack frame container related to a `CallSite`.
+.TP
+\fBparse(rawStackFrame)\fR
+Parses a raw stack frame string into structured data.
+\fBParameters:\fR
+.br
+\fIrawStackFrame\fR (string; required)
+\fBReturns:\fR
+.br
+\fIParsedStackFrame\fR
+.TP
+\fBfrom(error, rawStackFrame)\fR
+Creates a new `StackFrame` from an `Error` and raw stack frame source `rawStackFrame`.
+\fBParameters:\fR
+.br
+\fIerror\fR (Error; required)
+.br
+\fIrawStackFrame\fR (string; required)
+\fBReturns:\fR
+.br
+\fIStackFrame\fR
+.TP
+\fBconstructor(error, frame, source)\fR
+`StackFrame` class constructor.
+\fBParameters:\fR
+.br
+\fIerror\fR (Error; required)
+.br
+\fIframe\fR (ParsedStackFrame; optional; default null)
+.br
+\fIsource\fR (string; optional; default null)
+.TP
+\fBCallSite\fR
+A v8 compatible interface and container for call site information.
+.TP
+\fBconstructor(error, rawStackFrame, previous)\fR
+`CallSite` class constructor
+\fBParameters:\fR
+.br
+\fIerror\fR (Error; required)
+.br
+\fIrawStackFrame\fR (string; required)
+.br
+\fIprevious\fR (CallSite; optional; default null)
+.TP
+\fBerror()\fR
+The `Error` associated with the call site.
+.TP
+\fBprevious()\fR
+The previous `CallSite` instance, if available.
+.TP
+\fBframe()\fR
+A reference to the `StackFrame` data.
+.TP
+\fBgetThis()\fR
+This function _ALWAYS__ returns `globalThis` as `this` cannot be determined.
+\fBReturns:\fR
+.br
+\fIobject\fR
+.TP
+\fBgetTypeName()\fR
+This function _ALWAYS__ returns `null` as the type name of `this` cannot be determined.
+\fBReturns:\fR
+.br
+\fInull\fR
+.TP
+\fBgetFunction()\fR
+This function _ALWAYS__ returns `undefined` as the current function reference cannot be determined.
+.TP
+\fBgetFunctionName()\fR
+Returns the name of the function in at the call site, if available.
+\fBReturns:\fR
+.br
+\fIstring \\| undefined\fR
+.TP
+\fBgetMethodName()\fR
+An alias to `getFunctionName()
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBgetFileName()\fR
+Get the filename of the call site location, if available, otherwise this function returns 'unknown location'.
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBgetScriptNameOrSourceURL()\fR
+Returns the location source URL defaulting to the global location.
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBgetScriptHash()\fR
+Returns a hash value of the source URL return by `getScriptNameOrSourceURL()`
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBgetLineNumber()\fR
+Returns the line number of the call site location. This value may be `undefined`.
+\fBReturns:\fR
+.br
+\fInumber \\| undefined\fR
+.TP
+\fBgetEnclosingLineNumber((Position 0))\fR
+Attempts to get an "enclosing" line number, potentially the previous line number of the call site
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (number \\| undefined; required)
+.TP
+\fBgetColumnNumber()\fR
+Returns the column number of the call site location. This value may be `undefined`.
+\fBReturns:\fR
+.br
+\fInumber \\| undefined\fR
+.TP
+\fBgetEnclosingColumnNumber((Position 0))\fR
+Attempts to get an "enclosing" column number, potentially the previous line number of the call site
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (number \\| undefined; required)
+.TP
+\fBgetEvalOrigin()\fR
+Gets the origin of where `eval()` was called if this call site function originated from a call to `eval()`. This function may return `undefined`.
+\fBReturns:\fR
+.br
+\fIstring \\| undefined\fR
+.TP
+\fBisTopLevel()\fR
+This function _ALWAYS__ returns `false` as `this` cannot be determined so "top level" detection is not possible.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisEval()\fR
+Returns `true` if this call site originated from a call to `eval()`.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisNative()\fR
+Returns `true` if the call site is in a native location, otherwise `false`.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisConstructor()\fR
+This function _ALWAYS_ returns `false` as constructor detection is not possible.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisAsync()\fR
+Returns `true` if the call site is in async context, otherwise `false`.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisPromiseAll()\fR
+Returns `true` if the call site is in a `Promise.all()` function call, otherwise `false.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBgetPromiseIndex()\fR
+Gets the index of the promise element that was followed in a `Promise.all()` or `Promise.any()` function call. If not available, then this function returns `null`.
+\fBReturns:\fR
+.br
+\fInumber \\| null\fR
+.TP
+\fBtoString()\fR
+Converts this call site to a string.
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBCallSiteList (extends Array)\fR
+An array based list container for `CallSite` instances.
+.TP
+\fBfrom(error, source)\fR
+Creates a `CallSiteList` instance from `Error` input.
+\fBParameters:\fR
+.br
+\fIerror\fR (Error; required)
+.br
+\fIsource\fR (string; required)
+\fBReturns:\fR
+.br
+\fICallSiteList\fR
+.TP
+\fBconstructor(error, sources)\fR
+`CallSiteList` class constructor.
+\fBParameters:\fR
+.br
+\fIerror\fR (Error; required)
+.br
+\fIsources\fR (string[]; optional; default null)
+.TP
+\fBerror()\fR
+A reference to the `Error` for this `CallSiteList` instance.
+.TP
+\fBsources()\fR
+An array of stack frame source strings.
+.TP
+\fBstack()\fR
+The original stack string derived from the sources.
+.TP
+\fBunshift(callsites)\fR
+Adds `CallSite` instances to the top of the list, linking previous instances to the next one.
+\fBParameters:\fR
+.br
+\fIcallsites\fR (\&...CallSite; required)
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBpush()\fR
+A no\-op function as `CallSite` instances cannot be added to the end of the list.
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBpop()\fR
+Pops a `CallSite` off the end of the list.
+\fBReturns:\fR
+.br
+\fICallSite \\| undefined\fR
+.TP
+\fBtoString()\fR
+Converts the `CallSiteList` to a string combining the error name, message, and callsite stack information into a friendly string.
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBtoJSON()\fR
+Converts this `CallSiteList` to a JSON object. frame: { location: { lineNumber: number | undefined, columnNumber: number | undefined, sourceURL: string | null, isNative: boolean }, isNative: boolean, symbol: string | null, source: string | null, error: { message: string, name: string, stack: string } | null } }[]}
+.TP
+\fBcreateCallSites(error, source)\fR
+Creates an ordered and link array of `CallSite` instances from a given `Error`.
+\fBParameters:\fR
+.br
+\fIerror\fR (Error; required)
+.br
+\fIsource\fR (string; required)
+\fBReturns:\fR
+.br
+\fICallSite[]\fR

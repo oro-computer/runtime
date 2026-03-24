@@ -1,0 +1,21 @@
+{
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node ./scripts/run.js desktop",
+    "test:cli": "node ./scripts/test-cli.js",
+    "test:cli-ip": "node ./scripts/test-cli-ip.js",
+    "test:desktop": "node ./scripts/test-desktop.js",
+    "test:desktop-autoindex": "node ./scripts/test-desktop-autoindex.js",
+    "test:desktop-spa": "node ./scripts/test-desktop-spa.js",
+    "test:runtime-core": "node ./scripts/test-runtime-core.js",
+    "test:android": "node ./scripts/test-android.js",
+    "test:ios-simulator": "node ./scripts/test-ios-simulator.js",
+    "test:android-emulator": "sh ./scripts/shell.sh ./scripts/test-android-emulator.sh",
+    "test:node": "node ./scripts/test-node.js",
+    "start": "npm test"
+  },
+  "dependencies": {
+    "@orocomputer/runtime": "../api"
+  }
+}

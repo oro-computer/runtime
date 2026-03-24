@@ -1,0 +1,12 @@
+export const builtinModules: any;
+export default Module;
+export type ModuleOptions = import("./commonjs/module.js").ModuleOptions;
+export type ModuleResolver = import("./commonjs/module.js").ModuleResolver;
+export type ModuleLoadOptions = import("./commonjs/module.js").ModuleLoadOptions;
+export type RequireFunction = import("./commonjs/module.js").RequireFunction;
+export type CreateRequireOptions = import("./commonjs/module.js").CreateRequireOptions;
+import { createRequire } from './commonjs/module.js';
+import { Module } from './commonjs/module.js';
+import builtins from './commonjs/builtins.js';
+import { isBuiltin } from './commonjs/builtins.js';
+export { createRequire, Module, builtins, isBuiltin };

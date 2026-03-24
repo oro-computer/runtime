@@ -1,0 +1,231 @@
+.TH ORO-TLS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:tls \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:tls'
+.fi
+.SH DESCRIPTION
+.PP
+Native TLS client/server wrappers over the runtime TLS service.
+.SH REFERENCE
+.TP
+\fBTLSSocket (extends EventEmitter)\fR
+This is an exported `ClassDeclaration` named ``TLSSocket` (extends `EventEmitter`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(id)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIid\fR (string \\| number \\| bigint; optional)
+.TP
+\fB_setHandshake(info)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIinfo\fR (TlsHandshakeInfo; required)
+.TP
+\fBwrite(chunk, cb)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIchunk\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| DataView \\| string; required)
+.br
+\fIcb\fR ((err?: Error) => void; optional)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBend(chunk, cb)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIchunk\fR (Buffer \\| Uint8Array \\| ArrayBuffer \\| DataView \\| string \\| (() => void); optional)
+.br
+\fIcb\fR (() => void; optional)
+.TP
+\fBdestroy()\fR
+Documented method exposed by this module.
+.TP
+\fBTLSServer (extends EventEmitter)\fR
+This is an exported `ClassDeclaration` named ``TLSServer` (extends `EventEmitter`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBcreateServer(options, connectionListener)\fR
+This is an exported `FunctionDeclaration` named `createServer`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconnect(options, cb)\fR
+Establish a TLS client connection.
+\fBParameters:\fR
+.br
+\fIoptions\fR (number \\| TlsConnectOptions; required)
+.br
+\fIcb\fR ((err?: Error) => void; optional) Called once on success or failure.
+\fBReturns:\fR
+.br
+\fITLSSocket\fR
+.TP
+\fBsetTlsPins(pins, options)\fR
+Set or extend runtime TLS certificate pins at runtime.
+.br
+Pins use the same format as the static `tls_pins` config:
+.br
+<host> sha256/<base64>
+.br
+Invalid entries throw a `TypeError`.
+\fBParameters:\fR
+.br
+\fIpins\fR (string \\| string[]; required) a string or array of pin lines
+.br
+\fIoptions\fR (TlsPinsOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBgetTlsPins()\fR
+Get the current runtime TLS pins configuration.
+\fBReturns:\fR
+.br
+\fIPromise<{ value: string }>\fR
+.TP
+\fBgetTlsProvider()\fR
+Get the active runtime TLS provider name.
+\fBReturns:\fR
+.br
+\fIPromise<{ provider: string }>\fR
+.TP
+\fBclearTlsPins()\fR
+Clear all runtime TLS pins.
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBcreateTlsPinFromCertificateDer(der)\fR
+Create a `sha256/<base64>` pin from a leaf certificate DER payload.
+\fBParameters:\fR
+.br
+\fIder\fR (Buffer \\| TypedArray \\| DataView \\| ArrayBuffer; required)
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBcreateTlsPinFromCertificatePem(pem)\fR
+Create a `sha256/<base64>` pin from a PEM\-encoded certificate.
+\fBParameters:\fR
+.br
+\fIpem\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBgetTlsPinsForHost(host)\fR
+Get configured runtime TLS pins for a host.
+\fBParameters:\fR
+.br
+\fIhost\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ host: string, configured: boolean, pins: string[] }>\fR
+.TP
+\fBsetTlsPinsForHost(host, pins)\fR
+Replace runtime TLS pins for a single host.
+\fBParameters:\fR
+.br
+\fIhost\fR (string; required)
+.br
+\fIpins\fR (string \\| string[]; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBaddTlsPinsForHost(host, pins)\fR
+Add one or more runtime TLS pins for a single host.
+\fBParameters:\fR
+.br
+\fIhost\fR (string; required)
+.br
+\fIpins\fR (string \\| string[]; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBremoveTlsPinsForHost(host, pins)\fR
+Remove one or more runtime TLS pins for a single host. When `pins` is omitted, removes the host entry entirely.
+\fBParameters:\fR
+.br
+\fIhost\fR (string; required)
+.br
+\fIpins\fR (string \\| string[]; optional)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBsetWebViewTlsPins(pins, options)\fR
+Configure WebView TLS certificate pins at runtime.
+.br
+This updates the process\-wide `webview_tls_pins` configuration and refreshes all active window/bridge configs so platform WebViews immediately see the new pins. Pins use the same format as the static `webview_tls_pins` config:
+.br
+<host> sha256/<base64>
+.br
+Invalid entries throw a `TypeError`.
+\fBParameters:\fR
+.br
+\fIpins\fR (string \\| string[]; required) a string or array of pin lines
+.br
+\fIoptions\fR (WebViewTlsPinsOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBgetWebViewTlsPins()\fR
+Get the current WebView TLS pins configuration.
+\fBReturns:\fR
+.br
+\fIPromise<{ value: string }>\fR
+.TP
+\fBclearWebViewTlsPins()\fR
+Clear all WebView TLS pins.
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBgetWebViewTlsPinsForHost(host)\fR
+Get configured WebView TLS pins for a host.
+\fBParameters:\fR
+.br
+\fIhost\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ host: string, configured: boolean, pins: string[] }>\fR
+.TP
+\fBsetWebViewTlsPinsForHost(host, pins)\fR
+Replace WebView TLS pins for a single host.
+\fBParameters:\fR
+.br
+\fIhost\fR (string; required)
+.br
+\fIpins\fR (string \\| string[]; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBaddWebViewTlsPinsForHost(host, pins)\fR
+Add one or more WebView TLS pins for a single host.
+\fBParameters:\fR
+.br
+\fIhost\fR (string; required)
+.br
+\fIpins\fR (string \\| string[]; required)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR
+.TP
+\fBremoveWebViewTlsPinsForHost(host, pins)\fR
+Remove one or more WebView TLS pins for a single host. When `pins` is omitted, removes the host entry entirely.
+\fBParameters:\fR
+.br
+\fIhost\fR (string; required)
+.br
+\fIpins\fR (string \\| string[]; optional)
+\fBReturns:\fR
+.br
+\fIPromise<{ ok: boolean, value: string }>\fR

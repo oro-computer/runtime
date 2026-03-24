@@ -1,0 +1,66 @@
+.TH ORO-INTERNAL-RUNTIME-SCHEMES 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/runtime\-schemes \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/runtime\-schemes'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/runtime\-schemes is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBPRIMARY_SCHEME\fR
+This is an exported `VariableDeclaration` named `PRIMARY_SCHEME`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBRUNTIME_SCHEMES\fR
+This is an exported `VariableDeclaration` named `RUNTIME_SCHEMES`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBisRuntimeSpecifier(value)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIvalue\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisRuntimeURL(value)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIvalue\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBwithPreferredRuntimeScheme(value, arg)\fR
+Rewrites the provided specifier or URL so it uses the preferred runtime scheme. When `options.url === true`, the `://` delimiter is assumed. Otherwise `:` is used.
+\fBParameters:\fR
+.br
+\fIvalue\fR (string; required)
+.br
+\fIoptions\fR ({ url?: boolean, scheme?: string }; optional)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBruntimeOrigin(bundleIdentifier, arg)\fR
+Builds a runtime origin string (e.g., `oro://com.example.app`).
+\fBParameters:\fR
+.br
+\fIbundleIdentifier\fR (string; required)
+.br
+\fIoptions\fR ({ scheme?: string }; optional)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBnormalizeRuntimeScheme(scheme)\fR
+Normalizes a scheme string (with/without the trailing colon) to the runtime value. Returns an empty string for unrecognised schemes.
+\fBParameters:\fR
+.br
+\fIscheme\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring\fR

@@ -1,0 +1,19 @@
+.TH ORO-USB 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:usb \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:usb'
+.fi
+.SH DESCRIPTION
+.PP
+oro:usb is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBinstallNavigatorUSB()\fR
+Install the WebUSB scaffold on `navigator.usb` for the current global scope.
+.br
+This is the public `oro:usb` entrypoint for the downstream WebUSB surface. It returns the singleton `NavigatorUSB` instance when `navigator` is available, and `undefined` in non\-window contexts.
+\fBReturns:\fR
+.br
+\fINavigatorUSB \\| undefined\fR

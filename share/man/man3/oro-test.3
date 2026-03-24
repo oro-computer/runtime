@@ -1,0 +1,436 @@
+.TH ORO-TEST 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:test \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:test'
+.fi
+.SH DESCRIPTION
+.PP
+Provides a test runner for Oro Runtime.
+.PP
+Example usage: import { test } from 'oro:test'
+.PP
+test('test name', async t => { t.equal(1, 1) })
+.SH REFERENCE
+.TP
+\fBgetDefaultTestRunnerTimeout()\fR
+Documented function exposed by this module.
+\fBReturns:\fR
+.br
+\fInumber\fR The default timeout for tests in milliseconds.
+.TP
+\fBTest\fR
+Documented class exposed by this module.
+.TP
+\fBconstructor(name, fn, runner)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIfn\fR (TestFn; required)
+.br
+\fIrunner\fR (TestRunner; required)
+.TP
+\fBcomment(msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImsg\fR (string; required)
+.TP
+\fBplan(n)\fR
+Plan the number of assertions.
+\fBParameters:\fR
+.br
+\fIn\fR (number; required)
+.TP
+\fBdeepEqual(actual, expected, msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIactual\fR (T; required)
+.br
+\fIexpected\fR (T; required)
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBnotDeepEqual(actual, expected, msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIactual\fR (T; required)
+.br
+\fIexpected\fR (T; required)
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBequal(actual, expected, msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIactual\fR (T; required)
+.br
+\fIexpected\fR (T; required)
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBnotEqual(actual, expected, msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIactual\fR (unknown; required)
+.br
+\fIexpected\fR (unknown; required)
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBfail(msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBok(actual, msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIactual\fR (unknown; required)
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBpass(msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBifError(err, msg)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIerr\fR (Error \\| null \\| undefined; required)
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBthrows(fn, expected, message)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIfn\fR (Function; required)
+.br
+\fIexpected\fR (RegExp \\| any; optional)
+.br
+\fImessage\fR (string; optional)
+.TP
+\fBsleep(ms, msg)\fR
+Sleep for ms with an optional msg
+.br
+await t.sleep(100)
+\fBParameters:\fR
+.br
+\fIms\fR (number; required)
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBrequestAnimationFrame(msg)\fR
+Request animation frame with an optional msg. Falls back to a 0ms setTimeout when tests are run headlessly.
+.br
+await t.requestAnimationFrame()
+\fBParameters:\fR
+.br
+\fImsg\fR (string; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBclick(selector, msg)\fR
+Dispatch the `click` method on an element specified by selector.
+.br
+await t.click('.class button', 'Click a button')
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBeventClick(selector, msg)\fR
+Dispatch the click window.MouseEvent on an element specified by selector.
+.br
+await t.eventClick('.class button', 'Click a button with an event')
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBdispatchEvent(event, target, msg)\fR
+Dispatch an event on the target.
+.br
+await t.dispatchEvent('my\-event', '#my\-div', 'Fire the my\-event event')
+\fBParameters:\fR
+.br
+\fIevent\fR (string \\| Event; required) The event name or Event instance to dispatch.
+.br
+\fItarget\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element to dispatch the event on.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBfocus(selector, msg)\fR
+Call the focus method on element specified by selector.
+.br
+await t.focus('#my\-div')
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBblur(selector, msg)\fR
+Call the blur method on element specified by selector.
+.br
+await t.blur('#my\-div')
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBtype(selector, str, msg)\fR
+Consecutively set the str value of the element specified by selector to simulate typing.
+.br
+await t.typeValue('#my\-div', 'Hello World', 'Type "Hello World" into #my\-div')
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element.
+.br
+\fIstr\fR (string; required) The string to type into the :focus element.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBappendChild(parentSelector, el, msg)\fR
+appendChild an element el to a parent selector element.
+.br
+const myElement = createElement('div') await t.appendChild('#parent\-selector', myElement, 'Append myElement into #parent\-selector')
+\fBParameters:\fR
+.br
+\fIparentSelector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element to appendChild on.
+.br
+\fIel\fR (HTMLElement \\| Element; required) A element to append to the parent element.
+.br
+\fImsg\fR (string; optional; default 'Appended child element')
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBremoveElement(selector, msg)\fR
+Remove an element from the DOM.
+.br
+await t.removeElement('#dom\-selector', 'Remove #dom\-selector')
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element to remove from the DOM.
+.br
+\fImsg\fR (string; optional; default 'Removed element')
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBelementVisible(selector, msg)\fR
+Test if an element is visible
+.br
+await t.elementVisible('#dom\-selector','Element is visible')
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element to test visibility on.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBelementInvisible(selector, msg)\fR
+Test if an element is invisible
+.br
+await t.elementInvisible('#dom\-selector','Element is invisible')
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element to test visibility on.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBwaitFor(querySelectorOrFn, opts, msg)\fR
+Test if an element is invisible
+.br
+await t.waitFor('#dom\-selector', { visible: true },'#dom\-selector is on the page and visible')
+\fBParameters:\fR
+.br
+\fIquerySelectorOrFn\fR (string \\| (() => HTMLElement \\| Element \\| null \\| undefined); required) A query string or a function that returns an element.
+.br
+\fIopts\fR (Object; optional)
+.br
+\fIopts.visible\fR (boolean; optional) The element needs to be visible.
+.br
+\fIopts.timeout\fR (number; optional) The maximum amount of time to wait.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<HTMLElement \\| Element \\| void>\fR
+.TP
+\fBwaitForText(selector, opts, msg)\fR
+Test if an element is invisible
+.br
+await t.waitForText('#dom\-selector', 'Text to wait for')
+.br
+await t.waitForText('#dom\-selector', /hello/i)
+.br
+await t.waitForText('#dom\-selector', { text: 'Text to wait for', multipleTags: true })
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| HTMLElement \\| Element; required) A CSS selector string, or an instance of HTMLElement, or Element.
+.br
+\fIopts\fR (WaitForTextOpts \\| string \\| RegExp; optional)
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<HTMLElement \\| Element \\| void>\fR
+.TP
+\fBquerySelector(selector, msg)\fR
+Run a querySelector as an assert and also get the results
+.br
+const element = await t.querySelector('#dom\-selector')
+\fBParameters:\fR
+.br
+\fIselector\fR (string; required) A CSS selector string, or an instance of HTMLElement, or Element to select.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIHTMLElement \\| Element\fR
+.TP
+\fBquerySelectorAll(selector, msg)\fR
+Run a querySelectorAll as an assert and also get the results
+.br
+const elements = await t.querySelectorAll('#dom\-selector', '')
+\fBParameters:\fR
+.br
+\fIselector\fR (string; required) A CSS selector string, or an instance of HTMLElement, or Element to select.
+.br
+\fImsg\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIArray<HTMLElement \\| Element>\fR
+.TP
+\fBgetComputedStyle(selector, msg)\fR
+Retrieves the computed styles for a given element.
+.br
+// Using CSS selector const style = getComputedStyle('.my\-element', 'Custom success message');
+.br
+// Using Element object const el = document.querySelector('.my\-element'); const style = getComputedStyle(el);
+\fBParameters:\fR
+.br
+\fIselector\fR (string \\| Element; required) The CSS selector or the Element object for which to get the computed styles.
+.br
+\fImsg\fR (string; optional) An optional message to display when the operation is successful. Default message will be generated based on the type of selector.
+\fBReturns:\fR
+.br
+\fICSSStyleDeclaration\fR The computed styles of the element.
+.TP
+\fBrun()\fR
+pass: number, fail: number }>}
+.TP
+\fBTestRunner\fR
+Documented class exposed by this module.
+.TP
+\fBconstructor(report)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIreport\fR ((lines: string) => void; optional; default null)
+.TP
+\fBnextId()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBlength()\fR
+Documented method exposed by this module.
+.TP
+\fBadd(name, fn, only)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIfn\fR (TestFn; required)
+.br
+\fIonly\fR (boolean; required)
+.TP
+\fBrun()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBonFinish(callback)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIcallback\fR ((result: { total: number, success: number, fail: number }) => void; required)
+.TP
+\fBonly(name, fn)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIfn\fR (TestFn; optional)
+.TP
+\fBskip(_name, _fn)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fI_name\fR (string; required)
+.br
+\fI_fn\fR (TestFn; optional)
+.TP
+\fBsetStrict(strict)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIstrict\fR (boolean; required)
+.TP
+\fBtest(name, fn)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIfn\fR (TestFn; optional)

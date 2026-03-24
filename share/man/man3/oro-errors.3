@@ -1,0 +1,284 @@
+.TH ORO-ERRORS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:errors \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:errors'
+.fi
+.SH DESCRIPTION
+.PP
+oro:errors is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBABORT_ERR\fR
+This is an exported `VariableDeclaration` named `ABORT_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBENCODING_ERR\fR
+This is an exported `VariableDeclaration` named `ENCODING_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBINVALID_ACCESS_ERR\fR
+This is an exported `VariableDeclaration` named `INVALID_ACCESS_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBINDEX_SIZE_ERR\fR
+This is an exported `VariableDeclaration` named `INDEX_SIZE_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBNETWORK_ERR\fR
+This is an exported `VariableDeclaration` named `NETWORK_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBNOT_ALLOWED_ERR\fR
+This is an exported `VariableDeclaration` named `NOT_ALLOWED_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBNOT_FOUND_ERR\fR
+This is an exported `VariableDeclaration` named `NOT_FOUND_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBNOT_SUPPORTED_ERR\fR
+This is an exported `VariableDeclaration` named `NOT_SUPPORTED_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPERATION_ERR\fR
+This is an exported `VariableDeclaration` named `OPERATION_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBSECURITY_ERR\fR
+This is an exported `VariableDeclaration` named `SECURITY_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBTIMEOUT_ERR\fR
+This is an exported `VariableDeclaration` named `TIMEOUT_ERR`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBAbortError (extends Error)\fR
+An `AbortError` is an error type thrown in an `onabort()` level 0 event handler on an `AbortSignal` instance.
+.TP
+\fBcode()\fR
+The code given to an `ABORT_ERR` `DOMException`
+.TP
+\fBconstructor(reasonOrSignal, signal)\fR
+`AbortError` class constructor.
+\fBParameters:\fR
+.br
+\fIreasonOrSignal\fR (AbortSignal \\| string; required)
+.br
+\fIsignal\fR (AbortSignal; optional)
+.TP
+\fBBadRequestError (extends Error)\fR
+An `BadRequestError` is an error type thrown in an `onabort()` level 0 event handler on an `BadRequestSignal` instance.
+.TP
+\fBcode()\fR
+The default code given to a `BadRequestError`
+.TP
+\fBconstructor(message, code)\fR
+`BadRequestError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBEncodingError (extends Error)\fR
+An `EncodingError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `ENCODING_ERR` `DOMException`.
+.TP
+\fBconstructor(message, code)\fR
+`EncodingError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBErrnoError (extends Error)\fR
+An error type derived from an `errno` code.
+.TP
+\fBconstructor(code)\fR
+`ErrnoError` class constructor.
+\fBParameters:\fR
+.br
+\fIcode\fR (import('./errno').errno \\| string; required)
+.TP
+\fBFinalizationRegistryCallbackError (extends Error)\fR
+An `FinalizationRegistryCallbackError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The default code given to an `FinalizationRegistryCallbackError`
+.TP
+\fBconstructor(message, code)\fR
+`FinalizationRegistryCallbackError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBIllegalConstructorError (extends TypeError)\fR
+An `IllegalConstructorError` is an error type thrown when a constructor is called for a class constructor when it shouldn't be.
+.TP
+\fBcode()\fR
+The default code given to an `IllegalConstructorError`
+.TP
+\fBconstructor(message, code)\fR
+`IllegalConstructorError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBIndexSizeError (extends Error)\fR
+An `IndexSizeError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `INDEX_SIZE_ERR` `DOMException`
+.TP
+\fBconstructor(message, code)\fR
+`IndexSizeError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBkInternalErrorCode\fR
+This is an exported `VariableDeclaration` named `kInternalErrorCode`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBInternalError (extends Error)\fR
+An `InternalError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The default code given to an `InternalError`
+.TP
+\fBconstructor(message, code)\fR
+`InternalError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBcode()\fR
+Documented method exposed by this module.
+.TP
+\fBcode((Position 0))\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (number \\| string; required)
+.TP
+\fBInvalidAccessError (extends Error)\fR
+An `InvalidAccessError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `INVALID_ACCESS_ERR` `DOMException`
+.TP
+\fBconstructor(message, code)\fR
+`InvalidAccessError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBNetworkError (extends Error)\fR
+An `NetworkError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `NETWORK_ERR` `DOMException`
+.TP
+\fBconstructor(message, code)\fR
+`NetworkError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBNotAllowedError (extends Error)\fR
+An `NotAllowedError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `NOT_ALLOWED_ERR` `DOMException`
+.TP
+\fBconstructor(message, code)\fR
+`NotAllowedError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBNotFoundError (extends Error)\fR
+An `NotFoundError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `NOT_FOUND_ERR` `DOMException`
+.TP
+\fBconstructor(message, code)\fR
+`NotFoundError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBNotSupportedError (extends Error)\fR
+An `NotSupportedError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `NOT_SUPPORTED_ERR` `DOMException`
+.TP
+\fBconstructor(message, code)\fR
+`NotSupportedError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBModuleNotFoundError (extends NotFoundError)\fR
+An `ModuleNotFoundError` is an error type thrown when an imported or required module is not found.
+.TP
+\fBconstructor(message, requireStack)\fR
+`ModuleNotFoundError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIrequireStack\fR (string[]; optional)
+.TP
+\fBOperationError (extends Error)\fR
+An `OperationError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `OPERATION_ERR` `DOMException`
+.TP
+\fBconstructor(message, code)\fR
+`OperationError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBSecurityError (extends Error)\fR
+An `SecurityError` is an error type thrown when an internal exception has occurred, such as in the native IPC layer.
+.TP
+\fBcode()\fR
+The code given to an `SECURITY_ERR` `DOMException`
+.TP
+\fBconstructor(message, code)\fR
+`SecurityError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)
+.br
+\fIcode\fR (number; optional)
+.TP
+\fBTimeoutError (extends Error)\fR
+An `TimeoutError` is an error type thrown when an operation timesout.
+.TP
+\fBcode()\fR
+The code given to an `TIMEOUT_ERR` `DOMException`
+.TP
+\fBconstructor(message)\fR
+`TimeoutError` class constructor.
+\fBParameters:\fR
+.br
+\fImessage\fR (string; required)

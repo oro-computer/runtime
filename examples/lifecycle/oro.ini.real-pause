@@ -1,0 +1,6 @@
+; Desktop real pause/resume (opt-in)
+; Merge this into oro.toml (or copy the sections if you prefer another file).
+
+[settings]
+; Set to false to enable native pause/resume on desktop
+lifecycle_desktop_always_running = false

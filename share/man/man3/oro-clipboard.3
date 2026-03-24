@@ -1,0 +1,38 @@
+.TH ORO-CLIPBOARD 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:clipboard \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:clipboard'
+.fi
+.SH DESCRIPTION
+.PP
+Cross\-environment helpers for interacting with the system clipboard. In browser contexts this delegates to the standard `navigator.clipboard` API, falling back to a temporary textarea when direct access is not available. In non\-browser runtimes the helpers reject with a descriptive error so callers can present a friendly message.
+.SH REFERENCE
+.TP
+\fBwriteText(text)\fR
+Write a string to the system clipboard.
+\fBParameters:\fR
+.br
+\fItext\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBreadText()\fR
+Read the current text contents from the system clipboard.
+\fBReturns:\fR
+.br
+\fIPromise<string>\fR
+.TP
+\fBcanWriteText()\fR
+Documented function exposed by this module.
+\fBReturns:\fR
+.br
+\fIboolean\fR True when clipboard write operations are supported.
+.TP
+\fBcanReadText()\fR
+Documented function exposed by this module.
+\fBReturns:\fR
+.br
+\fIboolean\fR True when clipboard read operations are supported.

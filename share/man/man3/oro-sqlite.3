@@ -1,0 +1,66 @@
+.TH ORO-SQLITE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:sqlite \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:sqlite'
+.fi
+.SH DESCRIPTION
+.PP
+Lightweight SQLite convenience layer backed by the runtime's native sqlite3 integration. On supported platforms (desktop, Android, and iOS when configured), the runtime will attempt to auto\-load the cr\-sqlite extension for every database connection so that CRR (conflict\-free replicated relations) features are available transparently. You can use {@link hasCRSQLite} to detect whether cr\-sqlite is currently available.
+.PP
+Example:
+.PP
+import { open } from 'oro:sqlite'
+.PP
+const db = open('app.db') db.exec('CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, body TEXT)') db.exec('INSERT INTO notes (body) VALUES (?)', { params: ['hello'] }) const { rows } = db.exec('SELECT * FROM notes')
+.SH REFERENCE
+.TP
+\fBOPEN_READONLY\fR
+This is an exported `VariableDeclaration` named `OPEN_READONLY`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_READWRITE\fR
+This is an exported `VariableDeclaration` named `OPEN_READWRITE`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_CREATE\fR
+This is an exported `VariableDeclaration` named `OPEN_CREATE`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_URI\fR
+This is an exported `VariableDeclaration` named `OPEN_URI`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_MEMORY\fR
+This is an exported `VariableDeclaration` named `OPEN_MEMORY`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_NOMUTEX\fR
+This is an exported `VariableDeclaration` named `OPEN_NOMUTEX`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_FULLMUTEX\fR
+This is an exported `VariableDeclaration` named `OPEN_FULLMUTEX`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_SHAREDCACHE\fR
+This is an exported `VariableDeclaration` named `OPEN_SHAREDCACHE`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_PRIVATECACHE\fR
+This is an exported `VariableDeclaration` named `OPEN_PRIVATECACHE`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBOPEN_DEFAULT\fR
+This is an exported `VariableDeclaration` named `OPEN_DEFAULT`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBhasCRSQLite()\fR
+Returns true when the runtime is able to open a SQLite database with the cr\-sqlite extension loaded and ready for use.
+.br
+This reflects the *current* process configuration. On platforms where the runtime auto\-loads cr\-sqlite during database open (desktop, Android, and configured iOS builds), any failure to load the extension will cause this predicate to return false. On platforms where cr\-sqlite is not auto\-loaded or cannot be loaded for the current process, this predicate returns false.
+.br
+The result is cached for the lifetime of the process.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBStatement\fR
+This is an exported `ClassDeclaration` named `Statement`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBDatabase\fR
+This is an exported `ClassDeclaration` named `Database`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBopen(path, options)\fR
+This is an exported `FunctionDeclaration` named `open`, but it does not yet have a dedicated description in the generated reference.

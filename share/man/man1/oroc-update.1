@@ -1,0 +1,65 @@
+.TH OROC-UPDATE 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-update \- Update tooling for manifests, signatures, and bundles.
+.SH SYNOPSIS
+.nf
+oroc update <subcommand> [options]
+.fi
+.SH DESCRIPTION
+.PP
+Update tooling for manifests, signatures, and bundles.
+.SH SUBCOMMANDS
+.TP
+\fBkeygen\fR
+generate an Ed25519 keypair for update manifests
+.TP
+\fBinit\fR
+scaffold a manifest JSON file
+.TP
+\fBserver\fR
+run an update server over HTTP/TCP/UDP
+.TP
+\fBinfo\fR
+query update servers or static manifests over HTTP/TCP/UDP
+.TP
+\fBsign\fR
+sign a manifest JSON file and emit a sidecar signature
+.TP
+\fBverify\fR
+verify a manifest JSON file + signature using a public key
+.TP
+\fBbundle\fR
+build a tar archive from a directory suitable as an update artifact
+.TP
+\fBextract\fR
+extract an update bundle tar archive into a directory
+.TP
+\fBvalidate\fR
+validate a manifest.json file against the update manifest schema shape
+.SH NOTES
+.PP
+All subcommands support '\-\-log\-file=<path>' to mirror logs to a JSON file. Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '\-\-manifest\-name' on relevant subcommands to override the default manifest.json filename (and derived sidecar names).
+.SH EXAMPLES
+.TP
+\fBoroc update init\fR
+scaffold a default manifest.json in the current project
+.TP
+\fBoroc update bundle \-\-manifest manifest.json\fR
+build a source bundle and record it in the manifest
+.TP
+\fBoroc update keygen > key.json\fR
+generate a signing keypair JSON file
+.TP
+\fBoroc update sign \-\-keys key.json \-\-manifest manifest.json\fR
+sign the manifest and write manifest.sig
+.TP
+\fBoroc update verify \-\-keys key.json \-\-manifest manifest.json\fR
+verify manifest.json against manifest.sig with the public key
+.TP
+\fBoroc update server \-\-root ./updates\fR
+run an HTTP update server serving manifests and bundles
+.TP
+\fBoroc update info \-\-http \-\-app\-id com.example.app \-\-follow\-manifest\fR
+query an update server and fetch the referenced manifest
+.SH SEE ALSO
+oroc(1)

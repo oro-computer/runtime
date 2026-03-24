@@ -1,0 +1,88 @@
+.TH ORO-AGENT-WORKFLOWS 7 "" "Oro Runtime" "Oro Runtime Guides"
+.SH NAME
+oro\-agent\-workflows \- practical guidance for humans and AI agents working with Oro APIs
+.SH DESCRIPTION
+.PP
+A productive Oro workflow starts by choosing the right layer: CLI for inspection and packaging, man3 for public API contracts, man7 for concepts and route catalogs, and raw IPC only for advanced integrations or deep debugging.
+.PP
+This guide is written for app authors, tool builders, power users, and AI agents that need to move quickly without violating the runtime’s abstractions.
+.SH WORKING ORDER
+.IP \(bu 2
+Start with the public module in section 3. If the wrapper already exists, use it.
+.IP \(bu 2
+Use the route catalog in section 7 only when you need to understand the bridge contract behind a public API.
+.IP \(bu 2
+Drop to low\-level IPC details only after you know the owning module, route prefix, and transport family.
+.SH DISCOVERY RECIPES
+.nf
+oroc help ios signing
+oroc config \-\-describe webview.root
+man 3 oro\-ipc
+man 3 oro\-window
+man 3 oro\-application
+man 7 oro\-ipc
+man 7 oro\-api\-concepts
+man 7 oro\-ipc\-routes
+man 1 oroc
+.fi
+.SH HUMAN OPERATOR FLOW
+.IP \(bu 2
+Start with `oroc help <query>` or `man 1 oroc` when the task is operational: build, package, config inspection, update tooling, or device selection.
+.IP \(bu 2
+Move to section 3 when you need exact function signatures, options objects, and return values.
+.IP \(bu 2
+Move to section 7 when you need conceptual guidance, route inventories, or workflow maps that connect several modules.
+.IP \(bu 2
+Only drop to low\-level IPC details once the owning module and transport family are already known.
+.SH AI AGENT MCP FLOW
+.IP \(bu 2
+Initialize first, then inspect `workspace_info` before assuming config files or docs exist.
+.IP \(bu 2
+Use `search_docs` when the topic is known but the exact file is not.
+.IP \(bu 2
+Use `resources/list` to discover advertised docs from the workspace and installed runtime distribution.
+.IP \(bu 2
+Use specialized MCP tools such as config/build/version helpers before falling back to generic CLI execution.
+.IP \(bu 2
+Treat `run_cli` as a fallback, not the default discovery interface.
+.SH CHOOSING A TRANSPORT
+.IP \(bu 2
+If the API is synchronous today, preserve that only when compatibility requires it.
+.IP \(bu 2
+If the route expects or returns bytes, use the binary\-capable helper rather than layering ad hoc encoding on top of send().
+.IP \(bu 2
+If the feature streams or pushes events, consider Conduit before adding more request polling.
+.SH APPLICATION CHANGE WORKFLOW
+.IP \(bu 2
+Find the public wrapper first and verify whether the requested behavior belongs there or in a lower\-level service.
+.IP \(bu 2
+Identify the ownership key early: window index, origin, scope, route family, bundle identifier, or config path.
+.IP \(bu 2
+Prefer public modules and CLI/config workflows over raw route calls in application code.
+.IP \(bu 2
+When you add an app\-local abstraction, document platform limits, config expectations, and degraded behavior explicitly.
+.SH DEBUGGING CHECKLIST
+.IP \(bu 2
+Confirm the route name and transport family from the catalog before debugging payload shape.
+.IP \(bu 2
+Inspect result.err, headers, and responseType before assuming a failure is in native code.
+.IP \(bu 2
+Check platform capability docs for DBus, XPC, secure storage, AI, Bluetooth, or mobile\-only surfaces.
+.IP \(bu 2
+When a route is routed through a helper constant or wrapper, debug the wrapper and the final IPC primitive together.
+.SH SHIPPING CHECKLIST
+.IP \(bu 2
+Verify that your app docs, CLI usage, config examples, and supported\-platform claims all agree with the installed runtime docs you are shipping against.
+.IP \(bu 2
+Check the rendered manpages and generated references that ship with the runtime instead of assuming a behavior from memory.
+.IP \(bu 2
+Release readiness depends on more than code. Cross\-platform capability claims, config guidance, and operator workflows must all agree.
+.SH NEED TO KNOW
+.IP \(bu 2
+Section 3 documents stable public modules. Section 7 documents concepts, protocols, and generated route inventories.
+.IP \(bu 2
+The installed manuals describe the contract of the runtime build you are actually using. Re\-check them when you change runtime versions.
+.IP \(bu 2
+Some dynamic dispatch sites remain harder to inventory statically. Treat the unresolved\-site note in the route catalog as a signal that low\-level interpretation may still be required.
+.SH SEE ALSO
+oro\-ipc(7), oro\-ipc\-routes(7), oro\-api\-concepts(7), oro\-ipc(3), oroc(1)

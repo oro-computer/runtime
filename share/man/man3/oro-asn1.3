@@ -1,0 +1,33 @@
+.TH ORO-ASN1 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:asn1 \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:asn1'
+.fi
+.SH DESCRIPTION
+.PP
+Validates and normalises parse options.
+.SH REFERENCE
+.TP
+\fBparse(source, options)\fR
+Parses an ASN.1 document provided as a string.
+\fBParameters:\fR
+.br
+\fIsource\fR (string; required)
+.br
+\fIoptions\fR (Asn1ParseOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<{ modules: Asn1Module[], modulesCount: number, lexerDebug: boolean, maxDepth: number, sourceText?: string }>\fR
+.TP
+\fBparseFile(path, options)\fR
+Parses an ASN.1 document from a file path on disk.
+\fBParameters:\fR
+.br
+\fIpath\fR (string; required)
+.br
+\fIoptions\fR (Asn1ParseOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<{ modules: Asn1Module[], modulesCount: number, lexerDebug: boolean, maxDepth: number, sourceText?: string }>\fR

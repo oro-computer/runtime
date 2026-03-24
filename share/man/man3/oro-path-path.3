@@ -1,0 +1,190 @@
+.TH ORO-PATH-PATH 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:path/path \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:path/path'
+.fi
+.SH DESCRIPTION
+.PP
+Example usage: import { Path } from 'oro:path'
+.PP
+Notes \- URL\-aware joins: When the first component is a URL, subsequent components are applied to its pathname. An absolute component (starting with `/` or `\\\\` on Windows) resets the pathname to the origin root. Username/password/host are preserved. \- Windows specifics: \- Drive\-relative paths like `C:foo` are not absolute. \- Cross\-drive relative paths do not exist; `relative('C:\\\\a', 'D:\\\\b')` returns `D:\\\\b`. \- UNC roots (e.g., `\\\\\\\\server\\\\share`) are preserved by join/normalize/parse. \- Supported PathComponent inputs include strings, URL objects, and objects with `{ url }` or `{ pathname }`.
+.SH REFERENCE
+.TP
+\fBresolve(options, ...components)\fR
+The path.resolve() method resolves a sequence of paths or path segments into an absolute path.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIcomponents\fR (\&...PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBcwd(opts)\fR
+Computes current working directory for a path
+\fBParameters:\fR
+.br
+\fIopts\fR (object; optional)
+.br
+\fIopts.posix\fR (boolean; optional) Set to `true` to force POSIX style path
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBorigin()\fR
+Computed location origin. Defaults to `oro:///` if not available.
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBrelative(options, from, to)\fR
+Computes the relative path from `from` to `to`.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIfrom\fR (PathComponent; required)
+.br
+\fIto\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBjoin(options, ...components)\fR
+Joins path components. This function may not return an absolute path.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIcomponents\fR (\&...PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBdirname(options, path)\fR
+Computes directory name of path.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBbasename(options, path)\fR
+Computes base name of path.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBextname(options, path)\fR
+Computes extension name of path.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBnormalize(options, path)\fR
+Computes normalized path
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBformat(options, path)\fR
+Formats `Path` object into a string.
+\fBParameters:\fR
+.br
+\fIoptions\fR (object; required)
+.br
+\fIpath\fR (object \\| Path; required)
+\fBReturns:\fR
+.br
+\fIstring\fR
+.TP
+\fBparse(path)\fR
+Parses input `path` into a `Path` instance.
+\fBParameters:\fR
+.br
+\fIpath\fR (PathComponent; required)
+\fBReturns:\fR
+.br
+\fIobject\fR
+.TP
+\fBPath\fR
+A container for a parsed Path.
+.TP
+\fBfrom(input, cwd)\fR
+Creates a `Path` instance from `input` and optional `cwd`.
+\fBParameters:\fR
+.br
+\fIinput\fR (PathComponent; required)
+.br
+\fIcwd\fR (string; optional)
+.TP
+\fBconstructor(pathname, cwd)\fR
+`Path` class constructor.
+\fBParameters:\fR
+.br
+\fIpathname\fR (string; required)
+.br
+\fIcwd\fR (string; optional; default Path.cwd())
+.TP
+\fBisRelative()\fR
+`true` if the path is relative, otherwise `false.
+.TP
+\fBvalue()\fR
+The working value of this path.
+.TP
+\fBsource()\fR
+The original source, unresolved.
+.TP
+\fBparent()\fR
+Computed parent path.
+.TP
+\fBroot()\fR
+Computed root in path.
+.TP
+\fBdir()\fR
+Computed directory name in path.
+.TP
+\fBbase()\fR
+Computed base name in path.
+.TP
+\fBname()\fR
+Computed base name in path without path extension.
+.TP
+\fBext()\fR
+Computed extension name in path.
+.TP
+\fBdrive()\fR
+The computed drive, if given in the path.
+.TP
+\fBtoURL()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIURL\fR
+.TP
+\fBtoString()\fR
+Converts this `Path` instance to a string.
+\fBReturns:\fR
+.br
+\fIstring\fR

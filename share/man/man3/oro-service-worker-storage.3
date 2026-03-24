@@ -1,0 +1,351 @@
+.TH ORO-SERVICE-WORKER-STORAGE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:service\-worker/storage \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:service\-worker/storage'
+.fi
+.SH DESCRIPTION
+.PP
+oro:service\-worker/storage is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBIndexIterator\fR
+An iterator interface for an `Index` instance.
+.TP
+\fBdone()\fR
+`true` if the iterator is "done", otherwise `false`.
+.TP
+\fBnext()\fR
+Returns the next `IndexIteratorResult`.
+\fBReturns:\fR
+.br
+\fIIndexIteratorResult\fR
+.TP
+\fBreturn()\fR
+Mark `IndexIterator` as "done"
+\fBReturns:\fR
+.br
+\fIIndexIteratorResult\fR
+.TP
+\fBIndex\fR
+A container used by the `Provider` to index keys and values
+.TP
+\fBkeys()\fR
+A reference to the keys in this index.
+.TP
+\fBvalues()\fR
+A reference to the values in this index.
+.TP
+\fBlength()\fR
+The number of entries in this index.
+.TP
+\fBkey(index})\fR
+Returns the key at a given `index`, if it exists otherwise `null`.
+\fBParameters:\fR
+.br
+\fIindex}\fR (number; required)
+\fBReturns:\fR
+.br
+\fIstring?\fR
+.TP
+\fBvalue(index})\fR
+Returns the value at a given `index`, if it exists otherwise `null`.
+\fBParameters:\fR
+.br
+\fIindex}\fR (number; required)
+\fBReturns:\fR
+.br
+\fIstring?\fR
+.TP
+\fBinsert(key, value)\fR
+Inserts a value in the index.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (string; required)
+.TP
+\fBindexOf(key)\fR
+Computes the index of a key in this index.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBclear()\fR
+Clears all keys and values in the index.
+.TP
+\fBentry(index)\fR
+Returns an entry at `index` if it exists, otherwise `null`.
+\fBParameters:\fR
+.br
+\fIindex\fR (number; required)
+\fBReturns:\fR
+.br
+\fIstring[] \\| null\fR
+.TP
+\fBremove(index)\fR
+Removes entries at a given `index`.
+\fBParameters:\fR
+.br
+\fIindex\fR (number; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBentries()\fR
+Returns an array of computed entries in this index.
+\fBReturns:\fR
+.br
+\fIIndexIterator\fR
+.TP
+\fBProvider\fR
+A base class for a storage provider.
+.TP
+\fBconstructor()\fR
+`Provider` class constructor.
+.TP
+\fBerror()\fR
+An error currently associated with the provider, likely from an async operation.
+.TP
+\fBready()\fR
+A promise that resolves when the provider is ready.
+.TP
+\fBid()\fR
+A reference the service worker storage ID, which is the service worker registration ID.
+.TP
+\fBindex()\fR
+A reference to the provider `Index`
+.TP
+\fBlength()\fR
+The number of entries in the provider.
+.TP
+\fBhas(key})\fR
+Returns `true` if the provider has a value for a given `key`.
+\fBParameters:\fR
+.br
+\fIkey}\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBget(key)\fR
+Get a value by `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring?\fR
+.TP
+\fBset(key, value)\fR
+Sets a `value` by `key`
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (string; required)
+.TP
+\fBremove(key)\fR
+Removes a value by `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBclear()\fR
+Clear all keys and values.
+.TP
+\fBkeys()\fR
+The keys in the provider index.
+\fBReturns:\fR
+.br
+\fIstring[]\fR
+.TP
+\fBvalues()\fR
+The values in the provider index.
+\fBReturns:\fR
+.br
+\fIstring[]\fR
+.TP
+\fBkey(index)\fR
+Returns the key at a given `index`
+\fBParameters:\fR
+.br
+\fIindex\fR (number; required)
+\fBReturns:\fR
+.br
+\fIstring \\| null\fR
+.TP
+\fBload()\fR
+Loads the internal index with keys and values.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBMemoryStorageProvider (extends Provider)\fR
+An in\-memory storage provider. It just used the built\-in provider `Index` for storing key\-value entries.
+.TP
+\fBSessionStorageProvider (extends Provider)\fR
+A session storage provider that persists for the runtime of the application and through service worker restarts.
+.TP
+\fBget(key)\fR
+Get a value by `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring?\fR
+.TP
+\fBset(key, value)\fR
+Sets a `value` by `key`
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (string; required)
+.TP
+\fBremove(key)\fR
+Remove a value by `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring?\fR
+.TP
+\fBclear()\fR
+Clear all keys and values.
+.TP
+\fBload()\fR
+Loads the internal index with keys and values.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBLocalStorageProvider (extends Provider)\fR
+A local storage provider that persists until the data is cleared.
+.TP
+\fBget(key)\fR
+Get a value by `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring?\fR
+.TP
+\fBset(key, value)\fR
+Sets a `value` by `key`
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (string; required)
+.TP
+\fBremove(key)\fR
+Remove a value by `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBclear()\fR
+Clear all keys and values.
+.TP
+\fBload()\fR
+Loads the internal index with keys and values.
+\fBReturns:\fR
+.br
+\fIPromise\fR
+.TP
+\fBStorage\fR
+A generic interface for storage implementations
+.TP
+\fBcreate(token)\fR
+A factory for creating a `Storage` instance that is backed by a storage provider. Extending classes should define a `Provider` class that is statically available on the extended `Storage` class.
+\fBParameters:\fR
+.br
+\fItoken\fR (symbol; required)
+\fBReturns:\fR
+.br
+\fIPromise<Proxy<Storage>>\fR
+.TP
+\fBprovider()\fR
+A readonly reference to the storage provider.
+.TP
+\fBlength()\fR
+The number of entries in the storage.
+.TP
+\fBhasItem(key)\fR
+Returns `true` if the storage has a value for a given `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBclear()\fR
+Clears the storage of all entries
+.TP
+\fBkey(index)\fR
+Returns the key at a given `index`
+\fBParameters:\fR
+.br
+\fIindex\fR (number; required)
+\fBReturns:\fR
+.br
+\fIstring \\| null\fR
+.TP
+\fBgetItem(key)\fR
+Get a storage value item for a given `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+\fBReturns:\fR
+.br
+\fIstring \\| null\fR
+.TP
+\fBremoveItem((Position 0))\fR
+Removes a storage value entry for a given `key`.
+\fBParameters:\fR
+.br
+\fI(Position 0)\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBsetItem(key, value)\fR
+Sets a storage item `value` for a given `key`.
+\fBParameters:\fR
+.br
+\fIkey\fR (string; required)
+.br
+\fIvalue\fR (string; required)
+.TP
+\fBMemoryStorage (extends Storage)\fR
+An in\-memory `Storage` interface.
+.TP
+\fBLocalStorage (extends Storage)\fR
+A locally persisted `Storage` interface.
+.TP
+\fBSessionStorage (extends Storage)\fR
+A session `Storage` interface.
+.TP
+\fBcreateStorageInterface(type)\fR
+A factory for creating storage interfaces.
+\fBParameters:\fR
+.br
+\fItype\fR (\&'memoryStorage' \\| 'localStorage' \\| 'sessionStorage'; required)
+\fBReturns:\fR
+.br
+\fIPromise<Storage>\fR

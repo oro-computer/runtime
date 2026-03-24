@@ -1,0 +1,73 @@
+.TH ORO-FS-STATS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/stats \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/stats'
+.fi
+.SH DESCRIPTION
+.PP
+oro:fs/stats is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBStats\fR
+A container for various stats about a file or directory.
+.TP
+\fBfrom(stat, fromBigInt)\fR
+Creates a `Stats` instance from input, optionally with `BigInt` data types
+\fBParameters:\fR
+.br
+\fIstat\fR (object \\| Stats; optional)
+.br
+\fIfromBigInt\fR (fromBigInt; optional; default false)
+\fBReturns:\fR
+.br
+\fIStats\fR
+.TP
+\fBconstructor(stat)\fR
+`Stats` class constructor.
+\fBParameters:\fR
+.br
+\fIstat\fR (object \\| Stats; required)
+.TP
+\fBisDirectory()\fR
+Returns `true` if stats represents a directory.
+\fBReturns:\fR
+.br
+\fIBoolean\fR
+.TP
+\fBisFile()\fR
+Returns `true` if stats represents a file.
+\fBReturns:\fR
+.br
+\fIBoolean\fR
+.TP
+\fBisBlockDevice()\fR
+Returns `true` if stats represents a block device.
+\fBReturns:\fR
+.br
+\fIBoolean\fR
+.TP
+\fBisCharacterDevice()\fR
+Returns `true` if stats represents a character device.
+\fBReturns:\fR
+.br
+\fIBoolean\fR
+.TP
+\fBisSymbolicLink()\fR
+Returns `true` if stats represents a symbolic link.
+\fBReturns:\fR
+.br
+\fIBoolean\fR
+.TP
+\fBisFIFO()\fR
+Returns `true` if stats represents a FIFO.
+\fBReturns:\fR
+.br
+\fIBoolean\fR
+.TP
+\fBisSocket()\fR
+Returns `true` if stats represents a socket.
+\fBReturns:\fR
+.br
+\fIBoolean\fR

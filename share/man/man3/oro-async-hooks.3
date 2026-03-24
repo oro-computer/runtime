@@ -1,0 +1,44 @@
+.TH ORO-ASYNC-HOOKS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:async/hooks \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:async/hooks'
+.fi
+.SH DESCRIPTION
+.PP
+Primitives for hooks into async lifecycles such as `queueMicrotask`, `setTimeout`, `setInterval`, and `Promise` built\-ins as well as user defined async resources.
+.SH REFERENCE
+.TP
+\fBAsyncHook\fR
+A container for registering various callbacks for async resource hooks.
+.TP
+\fBconstructor(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (AsyncHookCallbacks; optional)
+.TP
+\fBenabled()\fR
+Documented method exposed by this module.
+.TP
+\fBenable()\fR
+Enable the async hook.
+\fBReturns:\fR
+.br
+\fIAsyncHook\fR
+.TP
+\fBdisable()\fR
+Disables the async hook
+\fBReturns:\fR
+.br
+\fIAsyncHook\fR
+.TP
+\fBcreateHook(callbacks)\fR
+Factory for creating a `AsyncHook` instance.
+\fBParameters:\fR
+.br
+\fIcallbacks\fR (AsyncHookCallbackOptions \\| AsyncHookCallbacks; optional)
+\fBReturns:\fR
+.br
+\fIAsyncHook\fR

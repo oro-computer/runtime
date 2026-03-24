@@ -1,0 +1,6 @@
+; Desktop always-running (default)
+; Merge this into oro.toml (or copy the sections if you prefer another file).
+
+[settings]
+; Default is true; explicit for clarity
+lifecycle_desktop_always_running = true

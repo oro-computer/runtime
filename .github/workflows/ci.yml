@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - dev
+      - 'jwerle/**'
+      - 'feature/**'
+      - 'fix/**'
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CI: true
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20.x
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install actionlint
+        shell: bash
+        run: |
+          export GOPATH="$RUNNER_TEMP/go"
+          export GOCACHE="$RUNNER_TEMP/go-cache"
+          export GOBIN="$RUNNER_TEMP/bin"
+          mkdir -p "$GOPATH" "$GOCACHE" "$GOBIN"
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
+          echo "$GOBIN" >> "$GITHUB_PATH"
+
+      - name: Install cpplint
+        run: python -m pip install cpplint
+
+      - name: Install dependencies
+        run: npm install --no-audit
+
+      - name: Lint GitHub Actions workflows
+        run: actionlint .github/workflows/ci.yml .github/workflows/release-artifacts.yml
+
+      - name: Lint
+        run: npm run test:lint:ci
+
+  test-desktop-runtime-core:
+    name: Desktop + runtime-core tests
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+        node: [18.x, 20.x]
+    env:
+      ORO_TEST_HEADLESS: '1'
+      ORO_TEST_SKIP_DESKTOP_EXTENSION: '1'
+      ORO_TEST_SKIP_TEST_EXTENSIONS: '1'
+      NO_ANDROID: '1'
+      NO_IOS: '1'
+      DEBUG: '1'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+      GDK_BACKEND: x11
+      GSK_RENDERER: cairo
+      XDG_RUNTIME_DIR: /tmp/oro-xdg-runtime
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang-18 \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            curl \
+            git \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libdbus-1-dev \
+            libsystemd-dev \
+            libsoup-3.0-dev
+
+      - name: Prepare Linux headless runtime dirs
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+
+      - name: Install root dependencies
+        run: npm install --no-audit
+
+      - name: Install test harness dependencies
+        run: |
+          cd test
+          npm install --no-audit
+
+      - name: Build Oro Runtime CLI (oroc)
+        run: |
+          VERBOSE=1 ./bin/install.sh
+
+      - name: Run desktop tests
+        run: npm test
+
+      - name: Run runtime-core tests
+        run: npm run test:runtime-core

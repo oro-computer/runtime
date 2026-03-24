@@ -1,0 +1,387 @@
+.TH ORO-HOOKS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:hooks \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:hooks'
+.fi
+.SH DESCRIPTION
+.PP
+An interface for registering callbacks for various hooks in the runtime.
+.PP
+Example usage: import hooks from 'oro:hooks'
+.PP
+hooks.onLoad(() => { // called when the runtime context has loaded, // but not ready or initialized })
+.PP
+hooks.onReady(() => { // called when the runtime is ready, but not initialized })
+.PP
+hooks.onInit(() => { // called when the runtime is initialized })
+.PP
+hooks.onError((event) => { // called when 'error', 'messageerror', and 'unhandledrejection' error // events are dispatched on the global object })
+.PP
+hooks.onData((event) => { // called when 'data' events are dispatched on the global object })
+.PP
+hooks.onMessage((event) => { // called when 'message' events are dispatched on the global object })
+.PP
+hooks.onOnline((event) => { // called when 'online' events are dispatched on the global object })
+.PP
+hooks.onOffline((event) => { // called when 'offline' events are dispatched on the global object })
+.PP
+hooks.onLanguageChange((event) => { // called when 'languagechange' events are dispatched on the global object })
+.PP
+hooks.onPermissionChange((event) => { // called when 'permissionchange' events are dispatched on the global object })
+.PP
+hooks.onNotificationResponse((event) => { // called when 'notificationresponse' events are dispatched on the global object })
+.PP
+hooks.onNotificationPresented((event) => { // called when 'notificationpresented' events are dispatched on the global object })
+.PP
+hooks.onApplicationURL((event) => { // called when 'applicationurl' events are dispatched on the global object })
+.PP
+hooks.onApplicationResume((event) => { // called when 'applicationresume' events are dispatched on the global object })
+.PP
+hooks.onApplicationPause((event) => { // called when 'applicationpause' events are dispatched on the global object })
+.SH REFERENCE
+.TP
+\fBRUNTIME_INIT_EVENT_NAME\fR
+This is an exported `VariableDeclaration` named `RUNTIME_INIT_EVENT_NAME`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBGLOBAL_EVENTS\fR
+This is an exported `VariableDeclaration` named `GLOBAL_EVENTS`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBInitEvent (extends Event)\fR
+An event dispatched when the runtime has been initialized.
+.TP
+\fBLoadEvent (extends Event)\fR
+An event dispatched when the runtime global has been loaded.
+.TP
+\fBReadyEvent (extends Event)\fR
+An event dispatched when the runtime is considered ready.
+.TP
+\fBRuntimeInitEvent (extends Event)\fR
+An event dispatched when the runtime has been initialized.
+.TP
+\fBHooks (extends EventTarget)\fR
+An interface for registering callbacks for various hooks in the runtime.
+.TP
+\fBglobalEvents()\fR
+An array of all global events listened to in various hooks
+.TP
+\fBglobal()\fR
+Reference to global object
+.TP
+\fBdocument()\fR
+Returns `document` in global.
+.TP
+\fBwindow()\fR
+Returns `document` in global.
+.TP
+\fBisDocumentReady()\fR
+Predicate for determining if the global document is ready.
+.TP
+\fBisGlobalReady()\fR
+Predicate for determining if the global object is ready.
+.TP
+\fBisRuntimeReady()\fR
+Predicate for determining if the runtime is ready.
+.TP
+\fBisReady()\fR
+Predicate for determining if everything is ready.
+.TP
+\fBisOnline()\fR
+Predicate for determining if the runtime is working online.
+.TP
+\fBisWorkerContext()\fR
+Predicate for determining if the runtime is in a Worker context.
+.TP
+\fBisWindowContext()\fR
+Predicate for determining if the runtime is in a Window context.
+.TP
+\fBwait(nameOrFunction, options)\fR
+Wait for a hook event to occur.
+\fBParameters:\fR
+.br
+\fInameOrFunction\fR (string \\| function; required)
+.br
+\fIoptions\fR (WaitOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<T>\fR
+.TP
+\fBonReady(callback)\fR
+Wait for the global Window, Document, and Runtime to be ready. The callback function is called exactly once.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonLoad(callback)\fR
+Wait for the global Window and Document to be ready. The callback function is called exactly once.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonInit(callback)\fR
+Wait for the runtime to be ready. The callback function is called exactly once.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonError(callback)\fR
+Calls callback when a global exception occurs. 'error', 'messageerror', and 'unhandledrejection' events are handled here.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonData(callback)\fR
+Subscribes to the global data pipe calling callback when new data is emitted on the global Window.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonMessage(callback)\fR
+Subscribes to global messages likely from an external `postMessage` invocation.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonOnline(callback)\fR
+Calls callback when runtime is working online.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonOffline(callback)\fR
+Calls callback when runtime is not working online.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonLanguageChange(callback)\fR
+Calls callback when runtime user preferred language has changed.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonPermissionChange(callback)\fR
+Calls callback when an application permission has changed.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonNotificationResponse(callback)\fR
+Calls callback in response to a displayed `Notification`.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonNotificationPresented(callback)\fR
+Calls callback when a `Notification` is presented.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonApplicationURL(callback)\fR
+Calls callback when a `ApplicationURL` is opened.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonApplicationPause(callback)\fR
+Calls callback when an `ApplicationPause` is dispatched.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonApplicationResume(callback)\fR
+Calls callback when an `ApplicationResume` is dispatched.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBwait(nameOrFunction)\fR
+Wait for a hook event to occur.
+\fBParameters:\fR
+.br
+\fInameOrFunction\fR (string \\| function; required)
+\fBReturns:\fR
+.br
+\fIPromise<T>\fR
+.TP
+\fBonReady(callback)\fR
+Wait for the global Window, Document, and Runtime to be ready. The callback function is called exactly once.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonLoad(callback)\fR
+Wait for the global Window and Document to be ready. The callback function is called exactly once.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonInit(callback)\fR
+Wait for the runtime to be ready. The callback function is called exactly once.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonError(callback)\fR
+Calls callback when a global exception occurs. 'error', 'messageerror', and 'unhandledrejection' events are handled here.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonData(callback)\fR
+Subscribes to the global data pipe calling callback when new data is emitted on the global Window.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonMessage(callback)\fR
+Subscribes to global messages likely from an external `postMessage` invocation.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonOnline(callback)\fR
+Calls callback when runtime is working online.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonOffline(callback)\fR
+Calls callback when runtime is not working online.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonLanguageChange(callback)\fR
+Calls callback when runtime user preferred language has changed.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonPermissionChange(callback)\fR
+Calls callback when an application permission has changed.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonNotificationResponse(callback)\fR
+Calls callback in response to a presented `Notification`.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonNotificationPresented(callback)\fR
+Calls callback when a `Notification` is presented.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonApplicationURL(callback)\fR
+Calls callback when a `ApplicationURL` is opened.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function(ApplicationURLEvent); required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonApplicationPause(callback)\fR
+Calls callback when a `ApplicationPause` is dispatched.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR
+.TP
+\fBonApplicationResume(callback)\fR
+Calls callback when a `ApplicationResume` is dispatched.
+\fBParameters:\fR
+.br
+\fIcallback\fR (function; required)
+\fBReturns:\fR
+.br
+\fIfunction\fR

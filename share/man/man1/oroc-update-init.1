@@ -1,0 +1,44 @@
+.TH OROC-UPDATE-INIT 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-update\-init \- Scaffold a minimal update manifest JSON file.
+.SH SYNOPSIS
+.nf
+oroc update init [options]
+.fi
+.SH DESCRIPTION
+.PP
+Scaffold a minimal update manifest JSON file.
+.SH OPTIONS
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml/oro.ini file when deriving defaults
+.TP
+\fB\-\-manifest\-name=<name>\fR
+filename for the manifest JSON (default: manifest.json or ORO_UPDATE_MANIFEST_FILENAME)
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.SH NOTES
+.PP
+The generated manifest includes these defaults.
+.IP \(bu 2
+schemaVersion = 1
+.IP \(bu 2
+appId derived from your oro.toml ([meta] bundle_identifier, falling back to "com.example.app")
+.IP \(bu 2
+generatedAt = current UTC timestamp
+.IP \(bu 2
+channels = [update_channel or "stable"]
+.IP \(bu 2
+updates = a single entry for the current version/channel (with an empty targets array)
+.PP
+Edit the generated file to add real targets, artifact metadata, or additional updates.
+.SH EXAMPLES
+.TP
+\fBoroc update init\fR
+create ./manifest.json using oro.toml metadata
+.TP
+\fBoroc update init \-\-manifest\-name app\-updates.json\fR
+create ./app\-updates.json instead of manifest.json
+.SH SEE ALSO
+oroc(1), oroc\-update(1)

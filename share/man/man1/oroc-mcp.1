@@ -1,0 +1,59 @@
+.TH OROC-MCP 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-mcp \- Run a Model Context Protocol (MCP) server for agent tooling.
+.SH SYNOPSIS
+.nf
+oroc mcp [options] [<workspace\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Run a Model Context Protocol (MCP) server for agent tooling. By default this subcommand speaks JSON\-RPC over stdio (stdout is reserved for MCP messages). Use \-\-http to run an HTTP/SSE transport.
+.SH OPTIONS
+.TP
+\fB\-\-stdio\fR
+use stdio transport (default)
+.TP
+\fB\-\-http\fR
+use HTTP/SSE transport
+.TP
+\fB\-\-host=<host>\fR
+HTTP bind host (default: 127.0.0.1)
+.TP
+\fB\-\-port=<port>\fR
+HTTP bind port (default: 0 for ephemeral)
+.TP
+\fB\-\-endpoint=<path>\fR
+HTTP endpoint path (default: /mcp; normalizes mcp,/mcp,/mcp/)
+.TP
+\fB\-\-token=<token>\fR
+require bearer token (default: disabled on loopback, auto\-generated otherwise)
+.TP
+\fB\-\-no\-auth\fR
+disable token auth (loopback only)
+.TP
+\fB\-\-workspace=<path>\fR
+explicit workspace root (default: current directory or <workspace\-dir>)
+.TP
+\fB\-\-config=<path>\fR
+workspace\-relative oro.toml/oro.ini path to use as the active project config
+.TP
+\fB\-\-read\-workspace\-only\fR
+restrict filesystem reads to the workspace root (disables read_file)
+.TP
+\fB\-\-allow\-read\-outside\-workspace\fR
+allow reading arbitrary files outside the workspace root (default)
+.TP
+\fB\-\-replace\-sse\-stream\fR
+allow a new SSE connection to replace an existing one for the same session id
+.SH NOTES
+.PP
+Stdio mode disables JSON logs and suppresses INFO output so stdout remains valid MCP JSON\-RPC. HTTP mode implements MCP Streamable HTTP (2025\-06\-18); clients must call initialize first and then include Mcp\-Session\-Id on subsequent requests. The server publishes descriptive MCP tool metadata, including standard titles, safety annotations, a custom metadata object, and structured tool results to help human and AI clients choose the right operation without shell parsing. Use the MCP `search_docs` tool for topic\-driven discovery across README, MCP, API, config, and manpage resources before falling back to manual resource walking. When \-\-config is omitted, the active config defaults to oro.toml and falls back to oro.ini when that is the only standard project config present in the workspace. resources/list includes the workspace root and, when present, the active config file, project\-local docs under conventional paths, and installed runtime\-doc:/ references for shipped API, CLI, config, MCP, README, llms.txt, and man1/man3/man7 docs when available. Prefer runtime\-doc:/ resources for runtime behavior and API contracts, and workspace:/ resources for the current app's config and local docs.
+.SH EXAMPLES
+.TP
+\fBoroc mcp \-\-stdio .\fR
+start an MCP server over stdio for the current workspace
+.TP
+\fBoroc mcp \-\-http \-\-host=127.0.0.1 \-\-port=8080 .\fR
+expose the MCP server over local HTTP/SSE
+.SH SEE ALSO
+oroc(1)

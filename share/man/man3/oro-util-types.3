@@ -1,0 +1,452 @@
+.TH ORO-UTIL-TYPES 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:util/types \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:util/types'
+.fi
+.SH DESCRIPTION
+.PP
+oro:util/types is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBisArray(input)\fR
+Returns `true` if input is an `Array`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisPlainObject(input)\fR
+Returns `true` if input is a plan `Object` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisAsyncFunction(input)\fR
+Returns `true` if input is an `AsyncFunction`
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisFunction(input)\fR
+Returns `true` if input is an `Function`
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisAsyncFunctionObject(input)\fR
+Returns `true` if input is an `AsyncFunction` object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisFunctionObject(input)\fR
+Returns `true` if input is an `Function` object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisExternal(_input)\fR
+Always returns `false`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisDate(input)\fR
+Returns `true` if input is a `Date` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisArgumentsObject(input)\fR
+Returns `true` if input is an `arguments` object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisBigIntObject(input)\fR
+Returns `true` if input is a `BigInt` object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisBooleanObject(input)\fR
+Returns `true` if input is a `Boolean` object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisNumberObject(input)\fR
+Returns `true` if input is a `Number` object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisStringObject(input)\fR
+Returns `true` if input is a `String` object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisSymbolObject(input)\fR
+Returns `true` if input is a `Symbol` object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisNativeError(input)\fR
+Returns `true` if input is native `Error` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisRegExp(input)\fR
+Returns `true` if input is a `RegExp` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisGeneratorFunction(input)\fR
+Returns `true` if input is a `GeneratorFunction`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisAsyncGeneratorFunction(input)\fR
+Returns `true` if input is an `AsyncGeneratorFunction`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisGeneratorObject(input)\fR
+Returns `true` if input is an instance of a `Generator`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisPromise(input)\fR
+Returns `true` if input is a `Promise` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisMap(input)\fR
+Returns `true` if input is a `Map` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisSet(input)\fR
+Returns `true` if input is a `Set` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisIterator(input)\fR
+Returns `true` if input is an instance of an `Iterator`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisAsyncIterator(input)\fR
+Returns `true` if input is an instance of an `AsyncIterator`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisMapIterator(input)\fR
+Returns `true` if input is an instance of a `MapIterator`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisSetIterator(input)\fR
+Returns `true` if input is an instance of a `SetIterator`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisWeakMap(input)\fR
+Returns `true` if input is a `WeakMap` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisWeakSet(input)\fR
+Returns `true` if input is a `WeakSet` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisArrayBuffer(input)\fR
+Returns `true` if input is an `ArrayBuffer` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisDataView(input)\fR
+Returns `true` if input is an `DataView` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisSharedArrayBuffer(input)\fR
+Returns `true` if input is a `SharedArrayBuffer`. This will always return `false` if a `SharedArrayBuffer` type is not available.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisProxy(_input)\fR
+Not supported. This function will return `false` always.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisModuleNamespaceObject(input)\fR
+Returns `true` if input looks like a module namespace object.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisAnyArrayBuffer(input)\fR
+Returns `true` if input is an `ArrayBuffer` of `SharedArrayBuffer`.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisBoxedPrimitive(input)\fR
+Returns `true` if input is a "boxed" primitive.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisArrayBufferView(input)\fR
+Returns `true` if input is an `ArrayBuffer` view.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisTypedArray(input)\fR
+Returns `true` if input is a `TypedArray` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisUint8Array(input)\fR
+Returns `true` if input is an `Uint8Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisUint8ClampedArray(input)\fR
+Returns `true` if input is an `Uint8ClampedArray` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisUint16Array(input)\fR
+Returns `true` if input is an `Uint16Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisUint32Array(input)\fR
+Returns `true` if input is an `Uint32Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisInt8Array(input)\fR
+Returns `true` if input is an Int8Array`` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisInt16Array(input)\fR
+Returns `true` if input is an `Int16Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisInt32Array(input)\fR
+Returns `true` if input is an `Int32Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisFloat32Array(input)\fR
+Returns `true` if input is an `Float32Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisFloat64Array(input)\fR
+Returns `true` if input is an `Float64Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisBigInt64Array(input)\fR
+Returns `true` if input is an `BigInt64Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisBigUint64Array(input)\fR
+Returns `true` if input is an `BigUint64Array` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBisCryptoKey(_input)\fR
+Returns `true` if input is a `CryptoKey` instance.
+\fBParameters:\fR
+.br
+\fIinput\fR (any; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR

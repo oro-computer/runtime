@@ -1,0 +1,127 @@
+.TH ORO-LATICA-PACKETS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:latica/packets \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:latica/packets'
+.fi
+.SH DESCRIPTION
+.PP
+oro:latica/packets is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBMAGIC_BYTES_PREFIX\fR
+The magic bytes prefixing every packet. They are the 2nd, 3rd, 5th, and 7th, prime numbers.
+.TP
+\fBVERSION\fR
+The version of the protocol.
+.TP
+\fBMAGIC_BYTES\fR
+The size in bytes of the prefix magic bytes.
+.TP
+\fBMESSAGE_BYTES\fR
+The maximum size of the user message.
+.TP
+\fBCACHE_TTL\fR
+The cache TTL in milliseconds.
+.TP
+\fBPACKET_SPEC\fR
+This is an exported `VariableDeclaration` named `PACKET_SPEC`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPACKET_BYTES\fR
+The size in bytes of the total packet frame and message.
+.TP
+\fBMAX_HOPS\fR
+The maximum distance that a packet can be replicated.
+.TP
+\fBvalidateMessage(o, constraints)\fR
+Documented variable exposed by this module.
+\fBParameters:\fR
+.br
+\fIo\fR (object; required)
+.br
+\fIconstraints\fR ({ [key: string]: constraint }; required)
+.TP
+\fBsha256\fR
+Computes a SHA\-256 hash of input returning a hex encoded string.
+.TP
+\fBdecode(buf)\fR
+Decodes `buf` into a `Packet`.
+\fBParameters:\fR
+.br
+\fIbuf\fR (Buffer; required)
+\fBReturns:\fR
+.br
+\fIPacket\fR
+.TP
+\fBgetTypeFromBytes\fR
+This is an exported `VariableDeclaration` named `getTypeFromBytes`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPacket\fR
+This is an exported `ClassDeclaration` named `Packet`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBempty()\fR
+Returns an empty `Packet` instance.
+\fBReturns:\fR
+.br
+\fIPacket\fR
+.TP
+\fBfrom(packet)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIpacket\fR (Packet \\| object; required)
+\fBReturns:\fR
+.br
+\fIPacket\fR
+.TP
+\fBcopy(packet)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIpacket\fR (Packet; required)
+\fBReturns:\fR
+.br
+\fIPacket\fR
+.TP
+\fBisPacket(packet)\fR
+Determines if input is a packet.
+\fBParameters:\fR
+.br
+\fIpacket\fR (Buffer \\| Uint8Array \\| number[] \\| object \\| Packet; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBconstructor(options)\fR
+`Packet` class constructor.
+\fBParameters:\fR
+.br
+\fIoptions\fR (Packet \\| object?; required)
+.TP
+\fBencode()\fR
+Documented method exposed by this module.
+.TP
+\fBPacketPing (extends Packet)\fR
+This is an exported `ClassDeclaration` named ``PacketPing` (extends `Packet`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPacketPong (extends Packet)\fR
+This is an exported `ClassDeclaration` named ``PacketPong` (extends `Packet`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPacketIntro (extends Packet)\fR
+This is an exported `ClassDeclaration` named ``PacketIntro` (extends `Packet`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPacketJoin (extends Packet)\fR
+This is an exported `ClassDeclaration` named ``PacketJoin` (extends `Packet`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPacketPublish (extends Packet)\fR
+This is an exported `ClassDeclaration` named ``PacketPublish` (extends `Packet`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPacketStream (extends Packet)\fR
+This is an exported `ClassDeclaration` named ``PacketStream` (extends `Packet`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPacketSync (extends Packet)\fR
+This is an exported `ClassDeclaration` named ``PacketSync` (extends `Packet`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBPacketQuery (extends Packet)\fR
+This is an exported `ClassDeclaration` named ``PacketQuery` (extends `Packet`)`, but it does not yet have a dedicated description in the generated reference.

@@ -1,0 +1,225 @@
+.TH ORO-DIAGNOSTICS-CHANNELS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:diagnostics/channels \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:diagnostics/channels'
+.fi
+.SH DESCRIPTION
+.PP
+oro:diagnostics/channels is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBChannel\fR
+A general interface for diagnostic channels that can be subscribed to.
+.TP
+\fBsubscribers()\fR
+Computed subscribers for all channels in this group.
+.TP
+\fBhasSubscribers()\fR
+Accessor for determining if channel has subscribers. This is always `false` for `Channel instances and `true` for `ActiveChannel` instances.
+.TP
+\fBlength()\fR
+Computed number of subscribers for this channel.
+.TP
+\fBreset(shouldOrphan)\fR
+Resets channel state.
+\fBParameters:\fR
+.br
+\fIshouldOrphan\fR (boolean; optional; default false)
+.TP
+\fBsubscribe()\fR
+Adds an `onMessage` subscription callback to the channel.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBunsubscribe(onMessage)\fR
+Removes an `onMessage` subscription callback from the channel.
+\fBParameters:\fR
+.br
+\fIonMessage\fR (function; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBpublish(name, message)\fR
+A no\-op for `Channel` instances. This function always returns `false`.
+\fBParameters:\fR
+.br
+\fIname\fR (string \\| object; required)
+.br
+\fImessage\fR (object; optional)
+.TP
+\fBActiveChannel (extends Channel)\fR
+An `ActiveChannel` is a prototype implementation for a `Channel` that provides an interface what is considered an "active" channel. The `hasSubscribers` accessor always returns `true` for this class.
+.TP
+\fBpublish(message)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImessage\fR (object \\| any; required)
+.TP
+\fBChannelGroup (extends Channel)\fR
+A container for a grouping of channels that are named and owned by this group. A `ChannelGroup` can also be a regular channel.
+.TP
+\fBconstructor(channels, name)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIchannels\fR (Array<Channel>; required)
+.br
+\fIname\fR (string; required)
+.TP
+\fBsubscribers()\fR
+Computed subscribers for all channels in this group.
+.TP
+\fBlength()\fR
+Number of channels in this group
+.TP
+\fBhasSubscribers()\fR
+`true` if any channel in this group has a subscriber, otherwise `false`.
+.TP
+\fBreset(shouldOrphanChannels)\fR
+Resets all channels in this group.
+\fBParameters:\fR
+.br
+\fIshouldOrphanChannels\fR (boolean; required; default false)
+.TP
+\fBsubscribe(name)\fR
+Subscribe to a channel or selection of channels in this group.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBunsubscribe(name)\fR
+Unsubscribe from a channel or selection of channels in this group.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBchannel(name)\fR
+Gets or creates a channel for this group.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIChannel\fR
+.TP
+\fBselect(keys, hasSubscribers)\fR
+Select a test of channels from this group. The following syntax is supported: \- One Channel: `group.channel` \- All Channels: `*` \- Many Channel: `group.*` \- Collections: `['group.a', 'group.b', 'group.c'] or `group.a,group.b,group.c`
+\fBParameters:\fR
+.br
+\fIkeys\fR (string \\| Array<string>; required)
+.br
+\fIhasSubscribers\fR (boolean; optional; default false) Enforce subscribers in selection
+\fBReturns:\fR
+.br
+\fIArray<{name: string, channel: Channel}>\fR
+.TP
+\fBpublish(name, message)\fR
+Publish a message to named subscribers in this group where `targets` is an object mapping channel names to messages.
+\fBParameters:\fR
+.br
+\fIname\fR (string \\| object; required)
+.br
+\fImessage\fR (object; optional)
+.TP
+\fBregistry\fR
+An object mapping of named channels to `WeakRef<Channel>` instances.
+.TP
+\fBsubscribe(name, onMessage)\fR
+Subscribes callback `onMessage` to channel of `name`.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIonMessage\fR (function; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBunsubscribe(name, onMessage)\fR
+Unsubscribes callback `onMessage` from channel of `name`.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIonMessage\fR (function; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBhasSubscribers(name)\fR
+Predicate to determine if a named channel has subscribers.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.TP
+\fBchannel(name)\fR
+Get or set a channel by `name`.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIChannel\fR
+.TP
+\fBgroup(name, channels)\fR
+Creates a `ChannelGroup` for a set of channels
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIchannels\fR (Array<string>; optional)
+\fBReturns:\fR
+.br
+\fIChannelGroup\fR
+.TP
+\fBget(name)\fR
+Get a channel by name. The name is normalized.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIChannel?\fR
+.TP
+\fBhas(name)\fR
+Checks if a channel is known by name. The name is normalized.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBset(name, channel)\fR
+Set a channel by name. The name is normalized.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIchannel\fR (Channel; required)
+\fBReturns:\fR
+.br
+\fIChannel?\fR
+.TP
+\fBremove()\fR
+Removes a channel by `name`
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBtoJSON()\fR
+Returns a JSON representation of the `ChannelRegistry`.
+\fBReturns:\fR
+.br
+\fIobject\fR

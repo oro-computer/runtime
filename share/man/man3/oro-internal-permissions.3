@@ -1,0 +1,58 @@
+.TH ORO-INTERNAL-PERMISSIONS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/permissions \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/permissions'
+.fi
+.SH DESCRIPTION
+.PP
+This module provides an API for querying and requesting permissions.
+.SH REFERENCE
+.TP
+\fBconstructor(name, initialState, options)\fR
+`PermissionStatus` class constructor.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIinitialState\fR (string; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.signal\fR (?AbortSignal; optional; default null)
+.TP
+\fBname()\fR
+The name of this permission this status is for.
+.TP
+\fBstate()\fR
+The current state of the permission status.
+.TP
+\fBonchange()\fR
+Level 0 event target 'change' event listener accessor
+.TP
+\fBquery(descriptor, options)\fR
+Query for a permission status.
+\fBParameters:\fR
+.br
+\fIdescriptor\fR (PermissionDescriptor; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.signal\fR (?AbortSignal; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<PermissionStatus>\fR
+.TP
+\fBrequest(descriptor, options)\fR
+Request a permission to be granted.
+\fBParameters:\fR
+.br
+\fIdescriptor\fR (PermissionDescriptor; required)
+.br
+\fIoptions\fR (object; optional)
+.br
+\fIoptions.signal\fR (?AbortSignal; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<PermissionStatus>\fR

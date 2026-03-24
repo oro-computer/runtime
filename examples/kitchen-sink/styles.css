@@ -1,0 +1,68 @@
+.kitchen-sink__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.kitchen-sink__actions button {
+  min-width: 120px;
+}
+
+.kitchen-sink__log {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  background: rgba(2, 6, 23, 0.78);
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 16px;
+  min-height: 200px;
+  max-height: 320px;
+  color: #dbeafe;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+
+.kitchen-sink__log::-webkit-scrollbar {
+  width: 10px;
+}
+
+.kitchen-sink__log::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.kitchen-sink__log-line + .kitchen-sink__log-line {
+  margin-top: 4px;
+}
+
+.kitchen-sink__status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kitchen-sink__status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kitchen-sink__status-label {
+  font-size: 0.82rem;
+  color: var(--ui-foreground-faint);
+}
+
+.kitchen-sink__status-value {
+  font-weight: 600;
+  color: var(--ui-foreground);
+}
+
+.kitchen-sink__aside-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kitchen-sink__aside-actions button {
+  width: 100%;
+}

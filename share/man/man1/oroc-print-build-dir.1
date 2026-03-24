@@ -1,0 +1,40 @@
+.TH OROC-PRINT-BUILD-DIR 1 "" "Oro Runtime 0.1.0" "Oro Runtime Manual"
+.SH NAME
+oroc\-print\-build\-dir \- Print the build directory path
+.SH SYNOPSIS
+.nf
+oroc print\-build\-dir [\-\-platform=<platform>] [\-\-prod] [\-\-root] [<project\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Print the build directory path
+.SH OPTIONS
+.TP
+\fB\-\-platform\fR
+platform to print build directory for (defaults to host):
+.br
+\(bu android
+.br
+\(bu android\-emulator
+.br
+\(bu ios
+.br
+\(bu ios\-simulator
+.TP
+\fB\-\-prod\fR
+indicate production build directory
+.TP
+\fB\-\-root\fR
+print the root build directory
+.SH NOTES
+.PP
+This is useful for scripts that need to locate packaged artifacts, intermediate bundles, or platform\-specific staging directories without reimplementing Oro's path logic.
+.SH EXAMPLES
+.TP
+\fBoroc print\-build\-dir .\fR
+print the host\-platform build directory for the current project
+.TP
+\fBoroc print\-build\-dir \-\-platform=ios \-\-prod .\fR
+print the production iOS build directory
+.SH SEE ALSO
+oroc(1)

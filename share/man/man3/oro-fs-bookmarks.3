@@ -1,0 +1,14 @@
+.TH ORO-FS-BOOKMARKS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:fs/bookmarks \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:fs/bookmarks'
+.fi
+.SH DESCRIPTION
+.PP
+oro:fs/bookmarks is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBtemporary\fR
+A map of known absolute file paths to file IDs that have been granted access outside of the sandbox. XXX(@jwerle): this is currently only used on linux, but values may be added for all platforms, likely from a file system picker dialog.

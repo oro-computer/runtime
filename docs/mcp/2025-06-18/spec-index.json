@@ -1,0 +1,217 @@
+{
+  "version": "2025-06-18",
+  "baseUrl": "https://modelcontextprotocol.io/specification/2025-06-18/",
+  "generatedAt": "2025-10-13T00:56:18.274Z",
+  "pages": [
+    {
+      "id": "overview",
+      "title": "Model Context Protocol Specification",
+      "category": "Overview",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18",
+      "local": "raw/index.html",
+      "status": "downloaded",
+      "bytes": 228089,
+      "error": null
+    },
+    {
+      "id": "key-changes",
+      "title": "Key Changes",
+      "category": "Overview",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/key-changes",
+      "local": "raw/key-changes.html",
+      "status": "downloaded",
+      "bytes": 142637,
+      "error": null
+    },
+    {
+      "id": "architecture",
+      "title": "Architecture",
+      "category": "Overview",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/architecture",
+      "local": "raw/architecture.html",
+      "status": "downloaded",
+      "bytes": 211339,
+      "error": null
+    },
+    {
+      "id": "base-overview",
+      "title": "Base Protocol Overview",
+      "category": "Base Protocol",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/basic",
+      "local": "raw/basic.html",
+      "status": "downloaded",
+      "bytes": 271818,
+      "error": null
+    },
+    {
+      "id": "base-lifecycle",
+      "title": "Lifecycle",
+      "category": "Base Protocol",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle",
+      "local": "raw/basic/lifecycle.html",
+      "status": "downloaded",
+      "bytes": 340379,
+      "error": null
+    },
+    {
+      "id": "base-transports",
+      "title": "Transports",
+      "category": "Base Protocol",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/basic/transports",
+      "local": "raw/basic/transports.html",
+      "status": "downloaded",
+      "bytes": 278739,
+      "error": null
+    },
+    {
+      "id": "base-authorization",
+      "title": "Authorization",
+      "category": "Base Protocol",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization",
+      "local": "raw/basic/authorization.html",
+      "status": "downloaded",
+      "bytes": 344873,
+      "error": null
+    },
+    {
+      "id": "base-security",
+      "title": "Security Best Practices",
+      "category": "Base Protocol",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security-best-practices",
+      "local": "raw/basic/security-best-practices.html",
+      "status": "downloaded",
+      "bytes": 143293,
+      "error": null
+    },
+    {
+      "id": "utility-cancellation",
+      "title": "Cancellation Utility",
+      "category": "Base Protocol Utilities",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/basic/utilities/cancellation",
+      "local": "raw/basic/utilities/cancellation.html",
+      "status": "downloaded",
+      "bytes": 214922,
+      "error": null
+    },
+    {
+      "id": "utility-ping",
+      "title": "Ping Utility",
+      "category": "Base Protocol Utilities",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/basic/utilities/ping",
+      "local": "raw/basic/utilities/ping.html",
+      "status": "downloaded",
+      "bytes": 218516,
+      "error": null
+    },
+    {
+      "id": "utility-progress",
+      "title": "Progress Utility",
+      "category": "Base Protocol Utilities",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/basic/utilities/progress",
+      "local": "raw/basic/utilities/progress.html",
+      "status": "downloaded",
+      "bytes": 232688,
+      "error": null
+    },
+    {
+      "id": "client-roots",
+      "title": "Roots",
+      "category": "Client Features",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/client/roots",
+      "local": "raw/client/roots.html",
+      "status": "downloaded",
+      "bytes": 313528,
+      "error": null
+    },
+    {
+      "id": "client-sampling",
+      "title": "Sampling",
+      "category": "Client Features",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/client/sampling",
+      "local": "raw/client/sampling.html",
+      "status": "downloaded",
+      "bytes": 365016,
+      "error": null
+    },
+    {
+      "id": "client-elicitation",
+      "title": "Elicitation",
+      "category": "Client Features",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation",
+      "local": "raw/client/elicitation.html",
+      "status": "downloaded",
+      "bytes": 498537,
+      "error": null
+    },
+    {
+      "id": "server-overview",
+      "title": "Server Features Overview",
+      "category": "Server Features",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/server",
+      "local": "raw/server.html",
+      "status": "downloaded",
+      "bytes": 187430,
+      "error": null
+    },
+    {
+      "id": "server-prompts",
+      "title": "Prompts",
+      "category": "Server Features",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/server/prompts",
+      "local": "raw/server/prompts.html",
+      "status": "downloaded",
+      "bytes": 406402,
+      "error": null
+    },
+    {
+      "id": "server-resources",
+      "title": "Resources",
+      "category": "Server Features",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/server/resources",
+      "local": "raw/server/resources.html",
+      "status": "downloaded",
+      "bytes": 539548,
+      "error": null
+    },
+    {
+      "id": "server-tools",
+      "title": "Tools",
+      "category": "Server Features",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/server/tools",
+      "local": "raw/server/tools.html",
+      "status": "downloaded",
+      "bytes": 583126,
+      "error": null
+    },
+    {
+      "id": "server-logging",
+      "title": "Logging Utility",
+      "category": "Server Utilities",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/logging",
+      "local": "raw/server/utilities/logging.html",
+      "status": "downloaded",
+      "bytes": 267261,
+      "error": null
+    },
+    {
+      "id": "server-completion",
+      "title": "Completion Utility",
+      "category": "Server Utilities",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/completion",
+      "local": "raw/server/utilities/completion.html",
+      "status": "downloaded",
+      "bytes": 332187,
+      "error": null
+    },
+    {
+      "id": "schema",
+      "title": "Schema Reference",
+      "category": "Schema",
+      "remote": "https://modelcontextprotocol.io/specification/2025-06-18/schema",
+      "local": "raw/schema.html",
+      "status": "downloaded",
+      "bytes": 2068761,
+      "error": null
+    }
+  ]
+}

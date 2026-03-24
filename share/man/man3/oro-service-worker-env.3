@@ -1,0 +1,70 @@
+.TH ORO-SERVICE-WORKER-ENV 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:service\-worker/env \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:service\-worker/env'
+.fi
+.SH DESCRIPTION
+.PP
+oro:service\-worker/env is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBEnvironmentEvent (extends Event)\fR
+An event dispatched when an environment value is updated (set, delete)
+.TP
+\fBconstructor(type, entry)\fR
+`EnvironmentEvent` class constructor.
+\fBParameters:\fR
+.br
+\fItype\fR (\&'set' \\| 'delete'; required)
+.br
+\fIentry\fR (object; optional; default null)
+.TP
+\fBEnvironment (extends EventTarget)\fR
+An environment context object with persistence and durability for service worker environments.
+.TP
+\fBopen(options)\fR
+Opens an environment for a particular scope.
+\fBParameters:\fR
+.br
+\fIoptions\fR (EnvironmentOptions; required)
+\fBReturns:\fR
+.br
+\fIEnvironment\fR
+.TP
+\fBdatabase()\fR
+A reference to the currently opened environment database.
+.TP
+\fBcontext()\fR
+A proxied object for reading and writing environment state. Values written to this object must be cloneable with respect to the structured clone algorithm.
+.TP
+\fBtype()\fR
+The environment type
+.TP
+\fBname()\fR
+The current environment name. This value is also used as the internal database name.
+.TP
+\fBreset()\fR
+Resets the current environment to an empty state.
+.TP
+\fBopen(options)\fR
+Opens an environment for a particular scope.
+\fBParameters:\fR
+.br
+\fIoptions\fR (EnvironmentOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<Environment>\fR
+.TP
+\fBclose()\fR
+Closes an active `Environment` instance, dropping the global instance reference.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBreset()\fR
+Resets an active `Environment` instance
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR

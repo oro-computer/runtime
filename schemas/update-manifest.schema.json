@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oro-runtime.dev/schemas/update-manifest.schema.json",
+  "title": "Oro Application Update Manifest",
+  "description": "Schema for manifest.json files used by the Oro Application Update Protocol.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "enum": [1],
+      "description": "Manifest schema version. Gates breaking changes in the manifest layout."
+    },
+    "appId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Application identifier (typically a reverse-DNS string, aligned with meta_bundle_identifier in oro.toml)."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp (ISO 8601) indicating when the manifest was generated."
+    },
+    "channels": {
+      "type": "array",
+      "description": "List of channel identifiers (for example, stable, beta).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "updates": {
+      "type": "array",
+      "description": "Available updates for the application.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Update identifier, often '<channel>-<version>'."
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Application version for this update (aligned with meta_version in oro.toml)."
+          },
+          "channel": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Channel name this update belongs to (for example, stable, beta)."
+          },
+          "minRuntimeVersion": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Minimum Oro runtime version required to apply this update."
+          },
+          "critical": {
+            "type": "boolean",
+            "description": "Marks this update as critical (for example, security fixes)."
+          },
+          "notesUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL pointing to human-readable release notes for this update."
+          },
+          "targets": {
+            "type": "array",
+            "description": "Per-platform targets for this update. May be empty for source-only flows.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "platform": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Target platform identifier (for example, darwin, win32, linux)."
+                },
+                "arch": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Target CPU architecture (for example, x64, arm64)."
+                },
+                "osVersionRange": {
+                  "type": "string",
+                  "description": "Optional OS version range for this target (for example, '>=11')."
+                },
+                "artifactUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "HTTP(S) URL where the update artifact can be fetched."
+                },
+                "length": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Length of the artifact in bytes."
+                },
+                "hashAlgorithm": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Hash algorithm used for 'hash' (for example, 'sha256')."
+                },
+                "hash": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Hex-encoded digest of the artifact."
+                },
+                "signatureAlgorithm": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Algorithm for 'artifactSignature' (for example, 'ed25519')."
+                },
+                "artifactSignature": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Optional detached signature for the artifact payload."
+                }
+              },
+              "required": [
+                "platform",
+                "arch",
+                "artifactUrl",
+                "length",
+                "hashAlgorithm",
+                "hash"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "channel",
+          "critical",
+          "targets"
+        ]
+      },
+      "minItems": 0
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "appId",
+    "generatedAt",
+    "channels",
+    "updates"
+  ]
+}
+
