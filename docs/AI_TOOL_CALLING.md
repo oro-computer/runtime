@@ -2,9 +2,8 @@
 
 The embedded LLaMA server exposes OpenAI-compatible chat endpoints over the internal `oro:` scheme. For safety, when a request requires a function/tool call, the runtime does not execute arbitrary tool code. Instead, it returns a minimal, deterministic stub that applications can interpret and emulate client-side.
 
-This is a frozen legacy limitation of this repository. Follow-up work belongs in
-the new Oro Runtime repository; see
-[Legacy Runtime Limitations](/home/werle/repos/oro-computer/legacy-runtime/docs/LEGACY_LIMITATIONS.md).
+This remains a documented runtime limitation; see
+[Runtime Limitations](./LEGACY_LIMITATIONS.md).
 
 ## When tool-calling stubs are used
 

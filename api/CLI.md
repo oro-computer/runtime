@@ -2,6 +2,8 @@
 These commands are available from the command line interface (CLI).
 
 ## oroc
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Foroc
+
 ### Usage
 ```bash
 oroc [SUBCOMMAND] [options] [<project-dir>]
@@ -80,6 +82,8 @@ oroc update extract          extract an update bundle tar archive into a directo
 oroc update validate         validate a manifest.json file against the update manifest schema shape
 
 ## oroc help
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fhelp
+
 Discover commands, options, and workflow entry points from the CLI help index.
 
 ### Usage
@@ -112,6 +116,8 @@ oroc help json --json
 return ranked JSON results for the query "json"
 
 ## oroc update
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate
+
 Update tooling for manifests, signatures, and bundles.
 
 ### Usage
@@ -154,6 +160,8 @@ oroc update info --http --app-id com.example.app --follow-manifest
 query an update server and fetch the referenced manifest
 
 ## oroc update-init
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Finit
+
 Scaffold a minimal update manifest JSON file.
 
 ### Usage
@@ -184,6 +192,8 @@ oroc update init --manifest-name app-updates.json
 create ./app-updates.json instead of manifest.json
 
 ## oroc update-server
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Fserver
+
 Run an update server that speaks the Oro Application Update Protocol.
 
 ### Usage
@@ -221,6 +231,8 @@ oroc update server --root ./updates --udp --port 9090
 run a UDP OUP server on port 9090
 
 ## oroc update-info
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Finfo
+
 Query update servers or static manifests over HTTP/TCP/UDP.
 
 ### Usage
@@ -275,6 +287,8 @@ oroc update info --tcp --host 127.0.0.1 --port 9000 --app-id com.example.app --f
 query a TCP update server using the binary OUP protocol
 
 ## oroc update-keygen
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Fkeygen
+
 Generate an Ed25519 keypair for signing update manifests.
 
 ### Usage
@@ -300,6 +314,8 @@ oroc update keygen --key-id pk-prod --out prod-key.json
 generate a named keypair for production use
 
 ## oroc update-sign
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Fsign
+
 Sign an update manifest and emit a detached manifest.sig file.
 
 ### Usage
@@ -330,6 +346,8 @@ oroc update sign --private-key <hex-private-key> --manifest manifest.json --out 
 sign a manifest using a raw hex private key
 
 ## oroc update-verify
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Fverify
+
 Verify a manifest + signature pair using an Ed25519 public key.
 
 ### Usage
@@ -359,6 +377,8 @@ oroc update verify --public-key <hex-public-key> --manifest manifest.json --sign
 verify using an explicit hex-encoded public key and signature file
 
 ## oroc update-validate
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Fvalidate
+
 Validate an update manifest JSON file against the expected schema shape.
 
 ### Usage
@@ -391,6 +411,8 @@ oroc update validate --manifest manifest.json --json
 print validation status as JSON for CI or agents
 
 ## oroc update-bundle
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Fbundle
+
 Build a tar archive containing the contents of a directory for use as an update artifact.
 
 ### Usage
@@ -430,6 +452,8 @@ oroc update bundle --input dist --output app-1.2.3.tar --manifest manifest.json 
 bundle a custom directory and attach it as a beta update in the manifest
 
 ## oroc update-extract
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fupdate%2Fextract
+
 Extract a tar archive produced by update-bundle into a destination directory.
 
 ### Usage
@@ -453,6 +477,8 @@ oroc update extract --bundle app-1.0.0.tar --dest ./update-staging
 extract the contents of app-1.0.0.tar into ./update-staging
 
 ## oroc build
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fbuild
+
 Build Oro application.
 Provide a project directory, HTML file, or JavaScript module. When no
 oro.toml is found, oroc infers a minimal configuration automatically.
@@ -541,6 +567,8 @@ oroc build --copy assets:assets .
 include an extra assets directory in the bundle for this build only
 
 ## oroc run
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Frun
+
 Run application.
 Provide a project directory, HTML file, or JavaScript module. When no
 oro.toml is found, oroc infers a minimal configuration automatically.
@@ -585,6 +613,8 @@ oroc run --headless --test=tests/smoke.js .
 execute a bundled test entrypoint in headless mode
 
 ## oroc list-devices
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Flist-devices
+
 Get the list of connected devices.
 
 ### Usage
@@ -618,6 +648,8 @@ oroc list-devices --platform=ios --json
 print connected iOS devices as JSON for scripts or agents
 
 ## oroc env
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fenv
+
 Print environment variables relevant to the Oro CLI and build configuration.
 
 ### Usage
@@ -646,6 +678,8 @@ oroc env --json
 print the effective environment inputs as JSON
 
 ## oroc mcp
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fmcp
+
 Run a Model Context Protocol (MCP) server for agent tooling.
 By default this subcommand speaks JSON-RPC over stdio (stdout is reserved for MCP messages).
 Use --http to run an HTTP/SSE transport.
@@ -695,6 +729,8 @@ oroc mcp --http --host=127.0.0.1 --port=8080 .
 expose the MCP server over local HTTP/SSE
 
 ## oroc init
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Finit
+
 Create a new project. If the path is not provided, the new project will be created in the current directory.
 
 ### Usage
@@ -720,6 +756,8 @@ oroc init --config
 write only the default oro.toml into the current directory
 
 ## oroc install-app
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Finstall-app
+
 Install the app to the device or host target.
 
 ### Usage
@@ -752,6 +790,8 @@ oroc install-app --platform=ios --device <udid>
 install the current iOS build onto a specific simulator or device
 
 ## oroc print-build-dir
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fprint-build-dir
+
 Print the build directory path
 
 ### Usage
@@ -777,6 +817,8 @@ oroc print-build-dir --platform=ios --prod .
 print the production iOS build directory
 
 ## oroc setup
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fsetup
+
 Setup build tools for host or target platform.
 
 ### Usage
@@ -801,6 +843,8 @@ oroc setup --platform=ios
 install or validate host tools needed for iOS/macOS builds
 
 ## oroc config
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fconfig
+
 Inspect configuration values.
 
 ### Usage
@@ -841,6 +885,8 @@ oroc config --format json
 print the merged effective configuration as JSON
 
 ## oroc versions
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fversions
+
 Print Oro CLI/runtime and dependency versions.
 
 ### Usage
@@ -871,6 +917,8 @@ oroc versions uv
 print only the libuv version
 
 ## oroc version
+Web docs: https://oro.computer/runtime/docs/?p=cli%2Fversion
+
 Inspect or bump the project version defined in your configuration file.
 
 ### Usage

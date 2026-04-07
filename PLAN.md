@@ -1,12 +1,12 @@
-**Legacy Archive Note**
+**Runtime Planning Note**
 
-This repository is no longer carrying an active roadmap.
+This repository now lives at `https://github.com/oro-computer/runtime`.
+Known platform and feature limitations are summarized in
+[docs/LEGACY_LIMITATIONS.md](docs/LEGACY_LIMITATIONS.md), which keeps its
+historical filename so older links continue to resolve after the rename.
 
-The remaining gaps in the final legacy runtime are now frozen limitations, not
-planned work in this repository. They are documented in
-[docs/LEGACY_LIMITATIONS.md](/home/werle/repos/oro-computer/legacy-runtime/docs/LEGACY_LIMITATIONS.md)
-so they can be triaged into project management for the new Oro Runtime
-repository.
+When linking to the project, use `https://github.com/oro-computer/runtime` for
+the source repository and `https://oro.computer/runtime` for the website.
 
 Historical implementation detail belongs in git history. Do not expand this
 file again.

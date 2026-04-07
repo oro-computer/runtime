@@ -6,7 +6,7 @@ Status: Experimental. Runtime TLS is implemented via a single built-in provider 
 - Windows desktop supports the built-in **Schannel** backend.
 - The **OpenSSL** backend is an optional build-time alternative for desktop builds when you provide the toolchain/linker flags it needs.
 - macOS, iOS, and Android do not currently have a built-in TLS provider in this repository.
-- Those targets still build successfully in the legacy runtime, but `oro:tls` and related TLS entry points return `NOT_IMPLEMENTED` when no provider is compiled in.
+- Those targets still build successfully, but `oro:tls` and related TLS entry points return `NOT_IMPLEMENTED` when no provider is compiled in.
 - **GnuTLS**, **SecureTransport**, and platform **Android** TLS providers are not implemented in this repository yet.
 
 ## Enabling TLS
@@ -16,7 +16,7 @@ Status: Experimental. Runtime TLS is implemented via a single built-in provider 
    - Windows desktop defaults to **Schannel** when TLS is enabled.
    - To build with **OpenSSL** instead, set `ORO_TLS_BUILD_PROVIDER=openssl` (or `ORO_TLS_ENABLE_OPENSSL=1`) when building the runtime.
    - `ORO_TLS_BUILD_PROVIDER=gnutls` is currently rejected because there is no backend implementation under `src/runtime/tls`.
-   - `ORO_TLS_BUILD_PROVIDER=securetransport` and `ORO_TLS_BUILD_PROVIDER=android` do not enable a provider in this legacy repository; builds continue without TLS support on those targets, and runtime TLS entry points return `NOT_IMPLEMENTED`.
+   - `ORO_TLS_BUILD_PROVIDER=securetransport` and `ORO_TLS_BUILD_PROVIDER=android` do not enable a provider in this repository; builds continue without TLS support on those targets, and runtime TLS entry points return `NOT_IMPLEMENTED`.
    - On macOS, iOS, and Android, `ORO_ENABLE_TLS=1` is treated as a request to keep the API surface available while building without a built-in provider.
 
 2. Runtime selection:

@@ -35,6 +35,7 @@ fi
 declare arch="$(host_arch)"
 declare args=()
 declare pids=()
+declare pid_labels=()
 declare force=0
 declare pass_force=""
 # pass_ignore_header_mtimes is set during arg parsing above; avoid re-declaring
@@ -160,6 +161,137 @@ function advice {
   local sudo="sudo ";
   [[ "$package_manager" = "brew install" ]] && sudo=""
   echo "$sudo""$package_manager $1"
+}
+
+declare _cmake_supports_fresh_cache=""
+declare _toolchain_supports_openmp_cache=""
+
+# Refresh staged CMake build trees when cached absolute paths no longer match.
+function _cmake_supports_fresh () {
+  if [[ -z "$_cmake_supports_fresh_cache" ]]; then
+    if cmake --help 2>/dev/null | grep -q -- '--fresh'; then
+      _cmake_supports_fresh_cache=1
+    else
+      _cmake_supports_fresh_cache=0
+    fi
+  fi
+
+  [[ "$_cmake_supports_fresh_cache" == "1" ]]
+}
+
+function _cmake_build_dir_needs_refresh () {
+  local source_dir="$1"
+  local build_dir="$2"
+  local cache_file="$build_dir/CMakeCache.txt"
+
+  if [[ ! -f "$cache_file" ]]; then
+    return 1
+  fi
+
+  local expected_source="$(cd "$source_dir" 2>/dev/null && pwd -P)"
+  local expected_build="$(mkdir -p "$build_dir" && cd "$build_dir" 2>/dev/null && pwd -P)"
+  if [[ -z "$expected_source" ]] || [[ -z "$expected_build" ]]; then
+    return 1
+  fi
+
+  local cached_source="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$cache_file" | tail -n 1)"
+  local cached_build="$(sed -n 's/^CMAKE_CACHEFILE_DIR:INTERNAL=//p' "$cache_file" | tail -n 1)"
+
+  if [[ -n "$cached_source" ]] && [[ "$cached_source" != "$expected_source" ]]; then
+    return 0
+  fi
+
+  if [[ -n "$cached_build" ]] && [[ "$cached_build" != "$expected_build" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+function _cmake_configure () {
+  local source_dir="$1"
+  local build_dir="$2"
+  shift 2
+
+  local refresh=0
+  if (( force )); then
+    refresh=1
+  elif _cmake_build_dir_needs_refresh "$source_dir" "$build_dir"; then
+    refresh=1
+  fi
+
+  if (( refresh )); then
+    if [[ -n "$VERBOSE" ]]; then
+      echo "# refreshing CMake build tree at $build_dir"
+    fi
+
+    if _cmake_supports_fresh; then
+      quiet cmake --fresh -S "$source_dir" -B "$build_dir" "$@"
+      return $?
+    fi
+
+    quiet cmake -E rm -f "$build_dir/CMakeCache.txt" || return $?
+    quiet cmake -E remove_directory "$build_dir/CMakeFiles" || return $?
+  fi
+
+  quiet cmake -S "$source_dir" -B "$build_dir" "$@"
+}
+
+function _autotools_configure_needed () {
+  local stage_dir="$1"
+  local expected_prefix="$2"
+  local makefile="$stage_dir/Makefile"
+  local config_status="$stage_dir/config.status"
+
+  if (( force )); then
+    return 0
+  fi
+
+  if [[ ! -f "$makefile" ]]; then
+    return 0
+  fi
+
+  if [[ -f "$config_status" ]] && ! grep -Fq "$expected_prefix" "$config_status"; then
+    return 0
+  fi
+
+  if ! grep -Fq "$expected_prefix" "$makefile"; then
+    return 0
+  fi
+
+  return 1
+}
+
+function _toolchain_supports_openmp () {
+  if [[ -z "$_toolchain_supports_openmp_cache" ]]; then
+    local source_file="$(mktemp "${TMPDIR:-/tmp}/oro-openmp-check.XXXXXX.c")"
+    local output_file="${source_file%.c}"
+
+    printf 'int main(void) { return 0; }\n' > "$source_file"
+    if "$CC" -fopenmp "$source_file" -o "$output_file" >/dev/null 2>&1; then
+      _toolchain_supports_openmp_cache=1
+    else
+      _toolchain_supports_openmp_cache=0
+    fi
+
+    quiet cmake -E rm -f "$source_file" "$output_file"
+  fi
+
+  [[ "$_toolchain_supports_openmp_cache" == "1" ]]
+}
+
+function _wait_for_pid_or_die () {
+  local pid="$1"
+  local message="$2"
+
+  if [[ -z "$pid" ]]; then
+    return 0
+  fi
+
+  wait "$pid" 2>/dev/null
+  local rc=$?
+  die $rc "$message"
+  return $rc
 }
 
 if [[ "$host" != "Win32" ]]; then
@@ -1575,15 +1707,20 @@ function _compile_llama {
     -DBUILD_SHARED_LIBS=OFF
   )
 
+  if [[ "$platform" == "desktop" ]] && ! _toolchain_supports_openmp; then
+    cmake_args+=(-DGGML_OPENMP=OFF -DGGML_OPENMP_ENABLED=OFF)
+  fi
+
   if [ "$platform" == "desktop" ]; then
     if [[ "$host" != "Win32" ]]; then
+      cmake_args+=(-DCMAKE_POSITION_INDEPENDENT_CODE=ON)
       quiet command -v cmake
       die $? "not ok - missing cmake, \"$(advice 'cmake')\""
       local cflags="-fPIC"
       export CFLAGS="$cflags"
       export CXXFLAGS="$cflags"
 
-      quiet cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" ${cmake_args[@]}
+      _cmake_configure . build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}"
       die $? "not ok - libllama.a (desktop)"
 
       quiet cmake --build build &&
@@ -1599,7 +1736,7 @@ function _compile_llama {
         cd "$STAGING_DIR/build/" || exit 1
         quiet command -v cmake
         die $? "not ok - missing cmake, \"$(advice 'cmake')\""
-        quiet cmake -S .. -B . ${cmake_args[@]}
+        _cmake_configure .. . "${cmake_args[@]}"
         quiet cmake --build . --config $config
         mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
         quiet echo "cp -up $STAGING_DIR/build/$config/llama.lib "$BUILD_DIR/$target-$platform/lib$d/llama.lib""
@@ -1634,7 +1771,7 @@ function _compile_llama {
     export CC="$cc"
     export SDKROOT="$PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
 
-    cmake -S . -B build -DCMAKE_SYSTEM_NAME="iOS" -DCMAKE_OSX_ARCHITECTURES="$target" -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" -DLLAMA_NATIVE=OFF -DGGML_ARM_DOTPROD=ON ${cmake_args[@]} &&
+    _cmake_configure . build -DCMAKE_SYSTEM_NAME="iOS" -DCMAKE_OSX_ARCHITECTURES="$target" -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" -DLLAMA_NATIVE=OFF -DGGML_ARM_DOTPROD=ON "${cmake_args[@]}" &&
     cmake --build build &&
     cmake --build build -- -j"$CPU_CORES" &&
     cmake --install build
@@ -1659,7 +1796,7 @@ function _compile_llama {
       cflags+="-march=x86-64"
     fi
 
-    cmake -S . -B build \
+    _cmake_configure . build \
       -DCMAKE_TOOLCHAIN_FILE="$android_ndk/build/cmake/android.toolchain.cmake" \
       -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" \
       -DCMAKE_SYSTEM_NAME=Android \
@@ -1674,7 +1811,7 @@ function _compile_llama {
       -DGGML_ARM_DOTPROD=ON \
       -DGGML_LLAMAFILE=OFF \
       -DGGML_OPENMP=OFF \
-      ${cmake_args[*]} &&
+      "${cmake_args[@]}" &&
     cmake --build build --config Release -j"$CPU_CORES" &&
     cmake --install build --config Release
 
@@ -1725,14 +1862,15 @@ function _compile_libuv {
 
   if [ "$platform" == "desktop" ]; then
     if [[ "$host" != "Win32" ]]; then
-      if ! test -f Makefile; then
-      if [[ "$host" == "Linux" ]]; then
-        CFLAGS="-fPIC" quiet ./configure --prefix="$BUILD_DIR/$target-$platform"
-        die $? "not ok - desktop configure"
-      else
-        quiet ./configure --prefix="$BUILD_DIR/$target-$platform"
-        die $? "not ok - desktop configure"
-      fi
+      local libuv_archive="$BUILD_DIR/$target-$platform/lib/libuv.a"
+      if _autotools_configure_needed "$STAGING_DIR" "$BUILD_DIR/$target-$platform" || ! test -f "$libuv_archive"; then
+        if [[ "$host" == "Linux" ]]; then
+          CFLAGS="-fPIC" quiet ./configure --prefix="$BUILD_DIR/$target-$platform"
+          die $? "not ok - desktop configure"
+        else
+          quiet ./configure --prefix="$BUILD_DIR/$target-$platform"
+          die $? "not ok - desktop configure"
+        fi
 
         quiet make
         die $? "not ok - libuv desktop make"
@@ -1836,11 +1974,16 @@ function _compile_whisper {
   )
 
   local ggml_dir="$BUILD_DIR/$target-$platform/lib/cmake/ggml"
-  if [[ -f "$ggml_dir/ggml-config.cmake" ]] || [[ -f "$ggml_dir/ggmlConfig.cmake" ]]; then
+  if _toolchain_supports_openmp && ([[ -f "$ggml_dir/ggml-config.cmake" ]] || [[ -f "$ggml_dir/ggmlConfig.cmake" ]]); then
     cmake_args+=(-DWHISPER_USE_SYSTEM_GGML=ON -Dggml_DIR="$ggml_dir")
   else
     cmake_args+=(-DWHISPER_USE_SYSTEM_GGML=OFF)
-    echo "warn - ggml cmake package not found for whisper ($ggml_dir); building with bundled ggml"
+    if ! _toolchain_supports_openmp; then
+      cmake_args+=(-DGGML_OPENMP=OFF)
+      echo "warn - disabling system ggml for whisper because the current toolchain cannot link OpenMP"
+    else
+      echo "warn - ggml cmake package not found for whisper ($ggml_dir); building with bundled ggml"
+    fi
   fi
 
   quiet command -v cmake
@@ -1848,11 +1991,12 @@ function _compile_whisper {
 
   if [ "$platform" == "desktop" ]; then
     if [[ "$host" != "Win32" ]]; then
+      cmake_args+=(-DCMAKE_POSITION_INDEPENDENT_CODE=ON)
       local cflags="-fPIC"
       export CFLAGS="$cflags"
       export CXXFLAGS="$cflags"
 
-      quiet cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}"
+      _cmake_configure . build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}"
       die $? "not ok - libwhisper.a (desktop) configure"
 
       quiet cmake --build build --config Release -- -j"$CPU_CORES"
@@ -1869,7 +2013,7 @@ function _compile_whisper {
 
         mkdir -p "$STAGING_DIR/build"
         cd "$STAGING_DIR/build" || exit 1
-        quiet cmake -S .. -B . "${cmake_args[@]}"
+        _cmake_configure .. . "${cmake_args[@]}"
         die $? "not ok - libwhisper.lib (desktop) configure"
 
         quiet cmake --build . --config $config
@@ -1918,7 +2062,7 @@ function _compile_whisper {
     export CFLAGS="$cflags"
     export CXXFLAGS="$cflags"
 
-    quiet cmake -S . -B build \
+    _cmake_configure . build \
       -DCMAKE_SYSTEM_NAME="iOS" \
       -DCMAKE_OSX_ARCHITECTURES="$target" \
       -DCMAKE_OSX_SYSROOT="$sdkroot" \
@@ -1960,7 +2104,7 @@ function _compile_whisper {
     export CFLAGS="$cflags"
     export CXXFLAGS="$cflags"
 
-    quiet cmake -S . -B build \
+    _cmake_configure . build \
       -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
       -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" \
       -DCMAKE_SYSTEM_NAME=Android \
@@ -2145,24 +2289,29 @@ function _compile_crsqlite_loadable {
       local cargo_home="${CARGO_HOME:-$HOME/.cargo}"
       local rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
       local rustup_write_test="$rustup_home/downloads/.oro-write-test"
+      local cargo_write_test="$cargo_home/bin/.oro-write-test"
 
       # Some build environments restrict writes outside the workspace (e.g. sandboxed CI),
       # so fall back to per-build caches under build/ when needed.
-      if ! mkdir -p "$(dirname "$rustup_write_test")" 2>/dev/null || ! : > "$rustup_write_test" 2>/dev/null; then
+      if ! mkdir -p "$(dirname "$rustup_write_test")" "$cargo_home/bin" 2>/dev/null || ! : > "$rustup_write_test" 2>/dev/null || ! : > "$cargo_write_test" 2>/dev/null; then
         cargo_home="$BUILD_DIR/.cargo"
         rustup_home="$BUILD_DIR/.rustup"
         export CARGO_HOME="$cargo_home"
         export RUSTUP_HOME="$rustup_home"
 
         rustup_write_test="$RUSTUP_HOME/downloads/.oro-write-test"
+        cargo_write_test="$CARGO_HOME/bin/.oro-write-test"
         mkdir -p "$(dirname "$rustup_write_test")" "$CARGO_HOME/bin"
         die $? "not ok - unable to initialize Rust toolchain caches at $RUSTUP_HOME"
 
         : > "$rustup_write_test" 2>/dev/null
         die $? "not ok - unable to write to Rust toolchain cache at $RUSTUP_HOME"
+
+        : > "$cargo_write_test" 2>/dev/null
+        die $? "not ok - unable to write to cargo bin cache at $CARGO_HOME/bin"
       fi
 
-      rm -f "$rustup_write_test" 2>/dev/null || true
+      quiet cmake -E rm -f "$rustup_write_test" "$cargo_write_test"
       export PATH="$cargo_home/bin:$PATH"
 
       if ! command -v rustup >/dev/null 2>&1; then
@@ -2281,15 +2430,16 @@ function _compile_libusb {
       fi
 
       if (( use_autotools )); then
-        if ! test -f Makefile; then
+        local libusb_archive="$BUILD_DIR/$target-$platform/lib/libusb-1.0.a"
+        if _autotools_configure_needed "$STAGING_DIR" "$BUILD_DIR/$target-$platform" || ! test -f "$libusb_archive"; then
           quiet ./configure --disable-shared --enable-shared=no --disable-udev --prefix="$BUILD_DIR/$target-$platform"
           die $? "not ok - libusb desktop configure"
-        fi
 
-        quiet make "-j$CPU_CORES"
-        die $? "not ok - libusb desktop make"
-        quiet make install
-        die $? "not ok - libusb desktop install"
+          quiet make "-j$CPU_CORES"
+          die $? "not ok - libusb desktop make"
+          quiet make install
+          die $? "not ok - libusb desktop install"
+        fi
 
         local libdir="$BUILD_DIR/$target-$platform/lib"
         mkdir -p "$libdir"
@@ -2410,7 +2560,7 @@ function _compile_libusb {
       -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"
     )
 
-    quiet cmake -S . -B build "${cmake_args[@]}"
+    _cmake_configure . build "${cmake_args[@]}"
     die $? "not ok - libusb cmake configure ($platform)"
 
     quiet cmake --build build --config Release -j"$CPU_CORES"
@@ -2572,7 +2722,7 @@ function _compile_zlib {
 
   if [[ "$platform" == "desktop" ]]; then
     if [[ "$host" != "Win32" ]]; then
-      quiet cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "${cmake_args[@]}"
+      _cmake_configure . build -DCMAKE_BUILD_TYPE=Release "${cmake_args[@]}"
       die $? "not ok - zlib configure ($platform)"
 
       quiet cmake --build build --config Release -- -j"$CPU_CORES"
@@ -2591,7 +2741,7 @@ function _compile_zlib {
       mkdir -p "$STAGING_DIR/build"
       cd "$STAGING_DIR/build" || exit 1
 
-      quiet cmake -S .. -B . "${cmake_args[@]}"
+      _cmake_configure .. . "${cmake_args[@]}"
       die $? "not ok - zlib cmake configure (Win32)"
 
       quiet cmake --build . --config "$config" -- -j"$CPU_CORES"
@@ -2674,7 +2824,7 @@ function _compile_zlib {
       -DCMAKE_OSX_SYSROOT="$sdk_path"
     )
 
-    quiet cmake -S . -B build "${ios_cmake_args[@]}"
+    _cmake_configure . build "${ios_cmake_args[@]}"
     die $? "not ok - zlib configure ($platform)"
 
     quiet cmake --build build --config Release -j"$CPU_CORES"
@@ -2703,7 +2853,7 @@ function _compile_zlib {
       -DSKIP_INSTALL_HEADERS=OFF
     )
 
-    quiet cmake -S . -B build "${android_cmake_args[@]}"
+    _cmake_configure . build "${android_cmake_args[@]}"
     die $? "not ok - zlib cmake configure (android $target)"
 
     quiet cmake --build build --config Release -j"$CPU_CORES"
@@ -2782,9 +2932,11 @@ function _compile_mbedtls {
   quiet command -v cmake
   die $? "not ok - missing cmake, \"$(advice 'cmake')\""
 
+  quiet cmake -E remove_directory "$STAGING_DIR/build"
+
   local pic_flags="-fPIC"
   CFLAGS="$pic_flags" CXXFLAGS="$pic_flags" \
-    quiet cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "${cmake_args[@]}"
+    _cmake_configure . build -DCMAKE_BUILD_TYPE=Release "${cmake_args[@]}"
   die $? "not ok - mbedtls configure (desktop)"
 
   quiet cmake --build build --config Release -- -j"$CPU_CORES"
@@ -2853,13 +3005,24 @@ function _compile_libusb_android {
     bootstrap_script="$STAGING_DIR/autogen.sh"
   fi
 
-  if [[ -n "$bootstrap_script" ]] && [[ ! -f "$STAGING_DIR/configure" ]]; then
+  if [[ ! -d "$STAGING_DIR/tests" ]]; then
+    mkdir -p "$STAGING_DIR/tests"
+    printf 'EXTRA_DIST =\n' > "$STAGING_DIR/tests/Makefile.am"
+  elif [[ ! -f "$STAGING_DIR/tests/Makefile.am" ]]; then
+    printf 'EXTRA_DIST =\n' > "$STAGING_DIR/tests/Makefile.am"
+  fi
+
+  if [[ -n "$bootstrap_script" ]] && ([[ ! -f "$STAGING_DIR/configure" ]] || [[ ! -f "$STAGING_DIR/Makefile.in" ]]); then
     quiet sh "$bootstrap_script"
     die $? "not ok - libusb bootstrap (android $target)"
   fi
 
   if [[ ! -f "$STAGING_DIR/configure" ]]; then
     die 1 "not ok - libusb configure script missing (android $target)"
+  fi
+
+  if [[ ! -f "$STAGING_DIR/Makefile.in" ]]; then
+    die 1 "not ok - libusb Makefile.in missing after bootstrap (android $target)"
   fi
 
   local host_arch="$(host_arch)"
@@ -2877,7 +3040,8 @@ function _compile_libusb_android {
 
   local cflags="-fPIC"
 
-  if ! test -f Makefile; then
+  local libusb_archive="$BUILD_DIR/$target-$platform/lib/libusb-1.0.a"
+  if _autotools_configure_needed "$STAGING_DIR" "$BUILD_DIR/$target-$platform" || ! test -f Makefile || ! test -f "$libusb_archive"; then
     env \
       CC="$cc" \
       AR="$ar" \
@@ -2942,16 +3106,17 @@ function _compile_libsodium {
     export CFLAGS="-O2 -fPIC"
     export CXXFLAGS="$CFLAGS"
 
-    if ! [ -f Makefile ]; then
+    local libsodium_archive="$BUILD_DIR/$target-$platform/lib/libsodium.a"
+    if _autotools_configure_needed "$STAGING_DIR" "$BUILD_DIR/$target-$platform" || ! [ -f "$libsodium_archive" ]; then
       quiet ./configure --enable-static --disable-shared --prefix="$BUILD_DIR/$target-$platform"
       die $? "not ok - libsodium configure ($platform)"
+
+      quiet make "-j$CPU_CORES"
+      die $? "not ok - libsodium make ($platform)"
+
+      quiet make install
+      die $? "not ok - libsodium install ($platform)"
     fi
-
-    quiet make "-j$CPU_CORES"
-    die $? "not ok - libsodium make ($platform)"
-
-    quiet make install
-    die $? "not ok - libsodium install ($platform)"
 
     rm -f "$BUILD_DIR/$target-$platform/lib"/*.{so,dylib,la}* 2>/dev/null || true
 
@@ -3267,6 +3432,8 @@ if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
   fi
 
   for pid in "${pids[@]}"; do wait "$pid"; done
+  pids=()
+  pid_labels=()
 
   die $? "not ok - unable to combine build artifacts"
   echo "ok - created fat library"
@@ -3279,39 +3446,39 @@ if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
 fi
 
 # Wait for background builds to finish before packaging assets.
-wait $_compile_whisper_pid
-wait $_compile_libuv_pid
-wait $_compile_libusb_pid
-if [[ -n "${_compile_libipfs_pid:-}" ]]; then
-  wait $_compile_libipfs_pid
-fi
-wait $_compile_libsodium_pid
-if [[ -n "${_compile_mbedtls_pid:-}" ]]; then
-  wait $_compile_mbedtls_pid
-fi
-if [[ -n "${_compile_zlib_pid:-}" ]]; then
-  wait $_compile_zlib_pid
-fi
+_wait_for_pid_or_die "${_compile_whisper_pid:-}" "not ok - libwhisper desktop build failed"
+_wait_for_pid_or_die "${_compile_libuv_pid:-}" "not ok - libuv desktop build failed"
+_wait_for_pid_or_die "${_compile_libusb_pid:-}" "not ok - libusb desktop build failed"
+_wait_for_pid_or_die "${_compile_libipfs_pid:-}" "not ok - libipfs desktop build failed"
+_wait_for_pid_or_die "${_compile_libsodium_pid:-}" "not ok - libsodium desktop build failed"
+_wait_for_pid_or_die "${_compile_mbedtls_pid:-}" "not ok - mbedtls desktop build failed"
+_wait_for_pid_or_die "${_compile_zlib_pid:-}" "not ok - zlib desktop build failed"
 
 if [[ -n "$BUILD_ANDROID" ]]; then
+  pid_labels=()
   for abi in $(android_supported_abis); do
-    _compile_libuv_android "$abi" & pids+=($!)
-    _compile_libusb_android "$abi" & pids+=($!)
-    _compile_libsodium_android "$abi" & pids+=($!)
-    _compile_zlib "$abi" android & pids+=($!)
+    _compile_libuv_android "$abi" & pids+=($!) && pid_labels+=("libuv android ($abi)")
+    _compile_libusb_android "$abi" & pids+=($!) && pid_labels+=("libusb android ($abi)")
+    _compile_libsodium_android "$abi" & pids+=($!) && pid_labels+=("libsodium android ($abi)")
+    _compile_zlib "$abi" android & pids+=($!) && pid_labels+=("zlib android ($abi)")
     _compile_llama "$abi" android
-    _compile_whisper "$abi" android & pids+=($!)
+    _compile_whisper "$abi" android & pids+=($!) && pid_labels+=("whisper android ($abi)")
     _compile_crsqlite_loadable android "$abi"
   done
 fi
 
 # Runtime compilation expects headers from the Android dependency builds (notably
 # libsodium) to be staged in build/<abi>-android/include.
-for pid in "${pids[@]}"; do
-  wait "$pid" 2>/dev/null
-  die $? "not ok - android dependency build failed"
+for index in "${!pids[@]}"; do
+  message="not ok - android dependency build failed"
+  if [[ -n "${pid_labels[$index]:-}" ]]; then
+    message="not ok - ${pid_labels[$index]} build failed"
+  fi
+
+  _wait_for_pid_or_die "${pids[$index]}" "$message"
 done
 pids=()
+pid_labels=()
 
 mkdir -p  "$ORO_HOME"/uv/{src/unix,include}
 cp -fr "$BUILD_DIR"/uv/LICENSE "$ORO_HOME"/uv/LICENSE

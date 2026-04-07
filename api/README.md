@@ -13,6 +13,7 @@ External docs: https://nodejs.org/api/events.html
 
 # application
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fapplication
 
 Provides Application level methods
 
@@ -442,6 +443,7 @@ The application's backend instance.
 
 # crypto
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fcrypto
 
 Some high-level methods around the `crypto.subtle` API for getting
 random bytes and hashing.
@@ -531,6 +533,7 @@ that works on strings and `ArrayBuffer` views (typed arrays)
 
 # dgram
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fdgram
 
 This module provides an implementation of UDP datagram sockets. It does
 not (yet) provide any of the multicast methods or properties.
@@ -891,6 +894,7 @@ Thrown when a bad port is given.
 
 # dns
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fdns
 
 This module enables name resolution. For example, use it to look up IP
 addresses of host names. Although named for the Domain Name System (DNS),
@@ -962,6 +966,7 @@ import { lookup } from 'oro:dns/promises'
 
 # fs
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Ffs
 
 This module enables interacting with the file system in a way modeled on
 standard POSIX functions.
@@ -2114,6 +2119,7 @@ Watch for changes at `path` calling `callback`
 
 # ipc
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fipc
 
 This is a low-level API that you don't need unless you are implementing
 a library on top of Oro Runtime. An Oro app has one or more processes.
@@ -2378,6 +2384,7 @@ Post a message to subscribers.
 
 # network
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fnetwork
 
 Provides a higher level API over the latica protocol.
 
@@ -2387,6 +2394,7 @@ Options:
 
 # os
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fos
 
 This module provides normalized system information from all the major
 operating systems.
@@ -2737,6 +2745,7 @@ Converts this `Path` instance to a string.
 
 # process
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fprocess
 
 Example usage:
 ```js
@@ -2821,6 +2830,7 @@ Returns an object describing the memory usage of the Node.js process measured in
 
 # test
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Ftest
 
 Provides a test runner for Oro Runtime.
 
@@ -3339,6 +3349,7 @@ fail: number
 
 # window
 
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fwindow
 
 Provides ApplicationWindow class and methods
 

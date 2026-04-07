@@ -1,7 +1,7 @@
 Name: oro-runtime
 Version: {{VERSION}}
 Description: Build and package lean, fast, native desktop and mobile applications using the web technologies you already know with the Oro Runtime.
-URL: https://github.com/oro-computer/legacy-runtime
+URL: https://github.com/oro-computer/runtime
 Requires: {{DEPENDENCIES}}
 Libs: -L{{LIB_DIRECTORY}} -loro-runtime -luv -lllama -lwhisper {{LDFLAGS}}
 Cflags: -I{{INCLUDE_DIRECTORY}} {{CFLAGS}}

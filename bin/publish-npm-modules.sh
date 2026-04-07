@@ -252,6 +252,7 @@ elif [[ "$(uname -s)" == *"MSYS_NT"* ]]; then
 fi
 
 declare ORO_HOME="$root/build/npm/$platform"
+declare global_prefix="${PREFIX:-"/usr/local"}"
 declare PREFIX="$ORO_HOME"
 
 while (( $# > 0 )); do
@@ -288,6 +289,11 @@ while (( $# > 0 )); do
 
   args+=("$arg")
 done
+
+if (( do_global_link )); then
+  # Keep staging under build/npm, but let install.sh recreate the global CLI symlink.
+  PREFIX="$global_prefix"
+fi
 
 if (( remove_oro_home )); then
   rm -rf "$ORO_HOME"

@@ -206,8 +206,23 @@ function formatModuleSpecifier (location, explicitModuleSpecifier) {
     .replace(/^api\//, '')
     .replace(/\.js$/, '')
     .replace(/\\/g, '/')
+    .replace(/\/index$/, '')
 
   return `oro:${relative}`
+}
+
+function formatWebsiteDocsUrl (path) {
+  return `https://oro.computer/runtime/docs/?p=${encodeURIComponent(path)}`
+}
+
+function getApiModuleWebsiteDocsUrl (moduleSpecifier) {
+  const moduleName = String(moduleSpecifier ?? '').replace(/^oro:/, '')
+
+  if (!moduleName || moduleName.includes('/')) {
+    return null
+  }
+
+  return formatWebsiteDocsUrl(`javascript/${moduleName}`)
 }
 
 function formatModuleManpageName (moduleSpecifier) {
@@ -490,7 +505,7 @@ function collectApiModuleDocs ({ src, location, moduleSpecifier }) {
 }
 
 export function generateApiModuleDoc (options) {
-  const { docs, header } = collectApiModuleDocs(options)
+  const { docs, header, moduleSpecifier } = collectApiModuleDocs(options)
 
   const createTableParams = (arr) => {
     if (!arr || !arr.length) return []
@@ -534,8 +549,13 @@ export function generateApiModuleDoc (options) {
 
     const title = `${h} ${doc.name}\n`
     const header = normalizeMarkdownText(doc.header.join('\n'))
+    const websiteDocUrl =
+      doc.type === 'Module'
+        ? getApiModuleWebsiteDocsUrl(moduleSpecifier)
+        : null
 
     content += title ? `${title}\n` : ''
+    content += websiteDocUrl ? `Web docs: ${websiteDocUrl}\n` : ''
     content += doc?.url ? `External docs: ${doc.url}\n` : ''
     content += header ? `\n${header}\n` : '\n'
     content += createTableParams(doc?.params)

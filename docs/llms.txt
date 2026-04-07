@@ -5,6 +5,17 @@ Purpose
 - It assumes you are working from an app workspace with an installed runtime, not from the runtime source repository.
 - Prefer the installed docs, manpages, CLI help, and MCP resources that ship with the runtime over guesses or source-tree assumptions.
 
+Canonical project links
+- Source repository: `https://github.com/oro-computer/runtime`
+- Project website: `https://oro.computer/runtime`
+- Top-level JavaScript module docs: `https://oro.computer/runtime/docs/?p=javascript%2F<module>`
+- CLI command docs: `https://oro.computer/runtime/docs/?p=cli%2F<path>`
+- Examples:
+  - `oro:application` -> `https://oro.computer/runtime/docs/?p=javascript%2Fapplication`
+  - `oroc` -> `https://oro.computer/runtime/docs/?p=cli%2Foroc`
+  - `oroc run` -> `https://oro.computer/runtime/docs/?p=cli%2Frun`
+- Nested JavaScript namespace modules do not have dedicated website URLs; use the installed/generated docs for those.
+
 What Oro Runtime ships downstream
 - `oroc` — the CLI for project setup, config inspection, build/package flows, updates, devices, and diagnostics.
 - Public JavaScript modules imported as `oro:<module>`.

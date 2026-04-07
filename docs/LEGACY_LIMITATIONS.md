@@ -1,11 +1,11 @@
-# Legacy Runtime Limitations
+# Runtime Limitations
 
-This repository is the final legacy snapshot of the runtime. Active feature
-development continues in the new Oro Runtime repository with a fresh history.
+This file keeps the historical `LEGACY_LIMITATIONS.md` path so older links keep
+working after the repository rename from `legacy-runtime` to `runtime`.
 
-Items listed here are frozen constraints of the legacy runtime. They are not an
-active roadmap for this repository. Use this document to triage follow-up work
-into project management for the new repository.
+Items listed here are current platform and feature limitations for Oro Runtime.
+Use this document to track compatibility gaps and follow-up work without
+reintroducing stale repository links elsewhere in the docs.
 
 ## Release / Validation Scope
 
@@ -20,7 +20,7 @@ into project management for the new repository.
   - Windows x64 desktop
 - Hosted runtime validation is still narrower than the packaging matrix. Mobile,
   macOS, and Windows release legs should be treated as partially validated
-  legacy targets unless proven otherwise by a dedicated release run.
+  targets unless proven otherwise by a dedicated release run.
 
 ## TLS
 
@@ -35,8 +35,8 @@ into project management for the new repository.
   repository.
 
 See also:
-- [TLS Quickstart](/home/werle/repos/oro-computer/legacy-runtime/docs/TLS_QUICKSTART.md)
-- [TLS Testing Guide](/home/werle/repos/oro-computer/legacy-runtime/docs/TLS_TESTING.md)
+- [TLS Quickstart](./TLS_QUICKSTART.md)
+- [TLS Testing Guide](./TLS_TESTING.md)
 
 ## USB / HID / Bluetooth
 
@@ -52,9 +52,9 @@ See also:
   device/integration coverage remains partial/manual.
 
 See also:
-- [WebUSB in Oro Runtime](/home/werle/repos/oro-computer/legacy-runtime/docs/webusb.md)
-- [WebHID Runtime Status](/home/werle/repos/oro-computer/legacy-runtime/docs/WEB_HID_STATUS.md)
-- [Web Bluetooth Status](/home/werle/repos/oro-computer/legacy-runtime/docs/WEB_BLUETOOTH_STATUS.md)
+- [WebUSB in Oro Runtime](./webusb.md)
+- [WebHID Runtime Status](./WEB_HID_STATUS.md)
+- [Web Bluetooth Status](./WEB_BLUETOOTH_STATUS.md)
 
 ## AI
 
@@ -62,15 +62,16 @@ See also:
   tool/function calling is intentionally stubbed. The runtime does not execute
   tool code or synthesize arbitrary arguments.
 - Whisper support is present, but Windows/mobile validation coverage should be
-  treated as incomplete legacy scope until verified in a dedicated release run.
+  treated as incomplete validation scope until verified in a dedicated release
+  run.
 
 See also:
-- [Tool-Calling (Stub) Behavior](/home/werle/repos/oro-computer/legacy-runtime/docs/AI_TOOL_CALLING.md)
-- [Whisper Speech Integration](/home/werle/repos/oro-computer/legacy-runtime/docs/AI_WHISPER.md)
+- [Tool-Calling (Stub) Behavior](./AI_TOOL_CALLING.md)
+- [Whisper Speech Integration](./AI_WHISPER.md)
 
-## Archival Guidance
+## Maintenance Guidance
 
-- Treat this file as the final hand-off list for follow-up work in the new Oro
-  Runtime repository.
-- Do not expand `PLAN.md` or `STATUS.md` with new roadmap detail in this legacy
-  repository.
+- Treat this file as the current summary list for runtime limitations and
+  follow-up work.
+- Keep `PLAN.md` and `STATUS.md` lean instead of duplicating detailed limitation
+  tracking there.

@@ -2,6 +2,58 @@ function toKebabCase (inputString) {
   return inputString.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
 }
 
+function formatWebsiteDocsUrl (path) {
+  return `https://oro.computer/runtime/docs/?p=${encodeURIComponent(path)}`
+}
+
+function getCliUsageCommandTokens (usageLines) {
+  if (!Array.isArray(usageLines)) {
+    return null
+  }
+
+  for (const line of usageLines) {
+    const tokens = String(line).trim().split(/\s+/).filter(Boolean)
+
+    if (tokens[0] !== 'oroc') {
+      continue
+    }
+
+    const commandTokens = []
+
+    for (const token of tokens) {
+      if (
+        token.startsWith('[') ||
+        token.startsWith('<') ||
+        token.startsWith('-') ||
+        /^[A-Z][A-Z0-9_-]*$/.test(token)
+      ) {
+        break
+      }
+
+      commandTokens.push(token)
+    }
+
+    if (commandTokens.length > 0) {
+      return commandTokens
+    }
+  }
+
+  return null
+}
+
+function getCliWebsiteDocsUrl (content) {
+  const commandTokens = getCliUsageCommandTokens(content?.usage)
+
+  if (!commandTokens?.length) {
+    return null
+  }
+
+  const path =
+    commandTokens.length === 1 ? 'oroc' : commandTokens.slice(1).join('/')
+
+  return formatWebsiteDocsUrl(`cli/${path}`)
+}
+
 function extractSectionSources (source) {
   const startMarker = /constexpr auto gHelpText(\S*) = R"TEXT\(/gm
   const endMarker = ')TEXT";'
@@ -104,6 +156,10 @@ function createCliMd (sections) {
   getSectionEntries(sections).forEach(({ title, content }) => {
     md += `## ${title}\n`
     const { description, usage, ...subsections } = content
+    const websiteDocUrl = getCliWebsiteDocsUrl(content)
+    if (websiteDocUrl) {
+      md += `Web docs: ${websiteDocUrl}\n\n`
+    }
     if (description?.length) {
       md += description.join('\n') + '\n\n'
     }

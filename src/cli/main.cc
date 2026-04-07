@@ -2153,6 +2153,25 @@ static inline void logError (const String& s) { logWithLevel(CliLogLevel::ERROR,
 static inline void logVerbose (const String& s) { logWithLevel(CliLogLevel::VERBOSE, s); }
 static inline void logDebug (const String& s) { logWithLevel(CliLogLevel::DEBUG, s); }
 
+static inline void logCapturedCommandOutput (const String& output) {
+  const auto trimmedOutput = trim(output);
+  if (trimmedOutput.empty()) {
+    return;
+  }
+
+  if (levelEnabled(CliLogLevel::VERBOSE)) {
+    logVerbose(trimmedOutput);
+  }
+}
+
+static inline String compilerOutputHint () {
+  if (levelEnabled(CliLogLevel::VERBOSE)) {
+    return " Review compiler output above for details.";
+  }
+
+  return " Re-run with '-V' or set ORO_VERBOSE=1 to view compiler output.";
+}
+
 inline String helpHint (const String& subcommand) {
   const String cliName(gCliDisplayName);
   String display = subcommand;
@@ -10126,11 +10145,8 @@ int main (int argc, char* argv[]) {
           logVerbose(command.str());
           auto result = exec(command.str().c_str());
           if (result.exitCode != 0) {
-            const String cliName(gCliDisplayName);
-            logError("failed to compile desktop runtime extension. Review compiler output above for details. Consider '" + cliName + " build -V'.");
-            if (flagVerboseMode) {
-              logDebug(result.output);
-            }
+            logCapturedCommandOutput(result.output);
+            logError("failed to compile desktop runtime extension." + compilerOutputHint());
             exit(1);
           }
 
@@ -11264,7 +11280,7 @@ int main (int argc, char* argv[]) {
 
               if (r.exitCode != 0) {
                 logError("Unable to build extension object (" + object.string() + ")");
-                logDebug(r.output);
+                logCapturedCommandOutput(r.output);
                 exit(r.exitCode);
               }
             } while (0);
@@ -11362,7 +11378,7 @@ int main (int argc, char* argv[]) {
 
               if (r.exitCode != 0) {
                 logError("Unable to build WASM extension (" + extension + ")");
-                logDebug(r.output);
+                logCapturedCommandOutput(r.output);
                 exit(r.exitCode);
               }
             } while (0);
@@ -11496,7 +11512,7 @@ int main (int argc, char* argv[]) {
 
             if (r.exitCode != 0) {
               logError("Unable to build extension (" + extension + ")");
-              logDebug(r.output);
+              logCapturedCommandOutput(r.output);
               exit(r.exitCode);
             }
           } while (0);
@@ -11551,7 +11567,7 @@ int main (int argc, char* argv[]) {
 
       if (r.exitCode != 0) {
         logError("Unable to build");
-        logDebug(r.output);
+        logCapturedCommandOutput(r.output);
         exit(r.exitCode);
       }
 

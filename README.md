@@ -4,9 +4,17 @@ Oro Runtime is the cross-platform runtime and CLI toolchain for Oro applications
 
 These docs assume you are using an installed runtime from an app workspace. They do not assume you are inside the runtime source repository.
 
-This repository is the final legacy snapshot of the runtime. Active forward
-development continues in the new Oro Runtime repository; this tree is being
-preserved as the last legacy reference point.
+This repository is the active Oro Runtime source tree. The project previously
+used the `oro-computer/legacy-runtime` repository name; use the renamed
+repository and website URLs below when linking to the project or its docs.
+
+## Canonical Links
+
+- Source repository: https://github.com/oro-computer/runtime
+- Project website: https://oro.computer/runtime
+- Top-level JavaScript module docs live under `https://oro.computer/runtime/docs/?p=javascript%2F<module>` (for example, `oro:application` maps to `https://oro.computer/runtime/docs/?p=javascript%2Fapplication`).
+- CLI command docs live under `https://oro.computer/runtime/docs/?p=cli%2F<path>` where `oroc` maps to `cli/oroc`, `oroc run` maps to `cli/run`, and nested commands map by path segments such as `oroc update init` -> `cli/update/init`.
+- Nested JavaScript namespace modules do not have their own website URLs; use the installed/generated docs and manpages for those entries.
 
 ## Installed Surface
 
@@ -51,4 +59,4 @@ preserved as the last legacy reference point.
 - Do not assume a default service-worker mode. Respect the project config and the installed runtime docs.
 - Autoindex is opt-in.
 - The runtime does not guarantee `SharedArrayBuffer` or `Atomics.wait`; code that depends on shared memory needs a safe fallback.
-- For frozen platform gaps and archive-era caveats, see [Legacy Runtime Limitations](/home/werle/repos/oro-computer/legacy-runtime/docs/LEGACY_LIMITATIONS.md).
+- For current platform gaps and compatibility caveats, see [Runtime Limitations](docs/LEGACY_LIMITATIONS.md).

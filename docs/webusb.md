@@ -2,9 +2,8 @@
 
 Oro Runtime (formerly Socket) provides a WebUSB scaffold that exposes a `navigator.usb` API mirroring the browser specification. It bridges to the native libusb backend for enumeration, permission checks, hotplug events, and bulk/control transfers.
 
-This document describes the final legacy runtime behavior. Remaining gaps are
-frozen limitations for triage in the new Oro Runtime repository; see
-[Legacy Runtime Limitations](/home/werle/repos/oro-computer/legacy-runtime/docs/LEGACY_LIMITATIONS.md).
+This document describes current runtime behavior. Remaining gaps are documented
+in [Runtime Limitations](./LEGACY_LIMITATIONS.md).
 
 ## Installing navigator.usb
 

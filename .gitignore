@@ -63,3 +63,5 @@ tmp/
 api/index.tmp.d.ts
 /audit/
 .npm-cache/
+./.codex
+.codex
