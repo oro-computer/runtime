@@ -9,6 +9,13 @@
 #include <optional>
 
 namespace oro::runtime::core {
+  using types::Atomic;
+  using types::Map;
+  using types::Mutex;
+  using types::Path;
+  using types::String;
+  using types::Vector;
+
   class StateManager {
     public:
       struct Entry {

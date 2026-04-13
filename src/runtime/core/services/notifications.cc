@@ -424,8 +424,8 @@ namespace oro::runtime::core::services {
             }
 
             const auto object = entry.as<JSON::Object>();
-            const auto identifier = object.get("action", "");
-            const auto title = object.get("title", "");
+            const auto identifier = object.has("action") ? object.get("action").str() : String("");
+            const auto title = object.has("title") ? object.get("title").str() : String("");
 
             if (identifier.size() == 0 || title.size() == 0) {
               continue;

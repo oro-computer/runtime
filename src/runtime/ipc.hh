@@ -17,6 +17,13 @@ namespace oro::runtime::bridge {
 }
 
 namespace oro::runtime::ipc {
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   /**
    * A `Client` represents a unique caller of the IPC channel in a webview
    * or the runtime.

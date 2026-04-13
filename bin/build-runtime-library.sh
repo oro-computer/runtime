@@ -279,10 +279,6 @@ if (( has_asn1c_sources )); then
   cflags+=("-I$root/build/asn1c/libasn1fix")
   cflags+=("-I$root/build/asn1c/libasn1compiler")
   cflags+=("-I$root/build/asn1c/libasn1print")
-  cflags+=("-include" "$root/src/runtime/asn1c/include/compat.h")
-  if [[ "$host" != "Win32" ]]; then
-    cflags+=("-D_POSIX_C_SOURCE=200809L")
-  fi
   cflags+=("-DHAVE_CONFIG_H")
   cflags+=("-DORO_RUNTIME_HAVE_ASN1C=1")
 else
@@ -424,8 +420,13 @@ function main () {
         done
         compile_flags+=("-std=c17")
         if [[ "$source" == "$root/build/asn1c/"* ]]; then
+          compile_flags+=("-include" "$root/src/runtime/asn1c/include/compat.h")
           compile_flags+=("-D_GNU_SOURCE")
-          compile_flags+=("-D_POSIX_C_SOURCE=200809L")
+          if [[ "$host" == "Darwin" ]]; then
+            compile_flags+=("-D_DARWIN_C_SOURCE")
+          elif [[ "$host" != "Win32" ]]; then
+            compile_flags+=("-D_POSIX_C_SOURCE=200809L")
+          fi
           compile_flags+=("-Dtypeof=__typeof__")
         fi
       fi

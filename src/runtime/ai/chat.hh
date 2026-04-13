@@ -8,6 +8,13 @@
 #include "llm.hh"
 
 namespace oro::runtime::ai::chat {
+  using types::Atomic;
+  using types::Function;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   using ID = uint64_t;
 
   struct Message {

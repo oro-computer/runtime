@@ -4,6 +4,10 @@
 #include "../platform.hh"
 
 namespace oro::runtime::background {
+  using types::Map;
+  using types::String;
+  using types::Vector;
+
   enum class TriggerKind {
     None,
     Interval,

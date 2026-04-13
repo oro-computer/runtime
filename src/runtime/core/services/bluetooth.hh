@@ -4,6 +4,14 @@
 #include "../../core.hh"
 
 namespace oro::runtime::core::services {
+  using types::Atomic;
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::String;
+  using types::UniquePointer;
+  using types::Vector;
+
   class Bluetooth : public core::Service {
     public:
       using DeviceID = String;

@@ -425,6 +425,31 @@ function android_host_arch_dir() {
   esac
 }
 
+function android_prebuilt_toolchain_dir() {
+  local ANDROID_HOME=$1
+  local NDK_VERSION=$2
+  local host=$3
+  local host_arch=$4
+  local platform="$(android_host_platform "$host")"
+  local arch_dir="$(android_host_arch_dir "$host_arch")"
+  local preferred="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/$platform-$arch_dir"
+
+  if [[ -d "$preferred" ]]; then
+    echo "$preferred"
+    return
+  fi
+
+  if [[ "$platform" == "darwin" && "$arch_dir" == "arm64" ]]; then
+    local rosetta_fallback="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/$platform-x86_64"
+    if [[ -d "$rosetta_fallback" ]]; then
+      echo "$rosetta_fallback"
+      return
+    fi
+  fi
+
+  echo "$preferred"
+}
+
 function android_machine_arch() {
   local arch=$1
   case $arch in
@@ -453,7 +478,8 @@ function android_clang () {
   local host=$3
   local host_arch=$4
   local plusplus=$5
-  echo "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/$(android_host_platform "$host")-$(android_host_arch_dir "$host_arch")/bin/clang$plusplus"
+  local prebuilt="$(android_prebuilt_toolchain_dir "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
+  echo "$prebuilt/bin/clang$plusplus"
 }
 
 function android_clang_target () {
@@ -468,7 +494,8 @@ function android_ar() {
   local NDK_VERSION=$2
   local host=$3
   local host_arch=$4
-  echo "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/$(android_host_platform "$host")-$(android_host_arch_dir "$host_arch")/bin/llvm-ar"
+  local prebuilt="$(android_prebuilt_toolchain_dir "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
+  echo "$prebuilt/bin/llvm-ar"
 }
 
 function android_arch_includes() {
@@ -476,7 +503,7 @@ function android_arch_includes() {
   local arch=$1
   local host="$(host_os)"
   local host_arch="$(host_arch)"
-  local prebuilt="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/$(android_host_platform "$host")-$(android_host_arch_dir "$host_arch")"
+  local prebuilt="$(android_prebuilt_toolchain_dir "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
   local sysroot="$prebuilt/sysroot"
 
   local triple="$(android_arch "$arch")-linux-android$(android_eabi "$arch")"

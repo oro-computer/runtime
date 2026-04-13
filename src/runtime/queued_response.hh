@@ -6,6 +6,11 @@
 #include "platform.hh"
 
 namespace oro::runtime {
+  using types::Function;
+  using types::Map;
+  using types::SharedPointer;
+  using types::String;
+
   /**
    * QueuedResponse represents a response object that is typically
    * queued for sending back to a client. It may hold simple data or

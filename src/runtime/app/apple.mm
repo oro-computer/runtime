@@ -36,7 +36,7 @@ static dispatch_queue_t queue = dispatch_queue_create(
     for (const auto& window : self.app->runtime.windowManager.windows) {
       if (window != nullptr) {
         if (!window->webview.isHidden) {
-          window->evalDomFocusThrottled();
+          window->dispatchDomFocus();
         }
       }
     }
@@ -49,7 +49,7 @@ static dispatch_queue_t queue = dispatch_queue_create(
     self.app->pause();
     for (const auto& window : self.app->runtime.windowManager.windows) {
       if (window != nullptr) {
-        window->evalDomBlurThrottled();
+        window->dispatchDomBlur();
       }
     }
   });

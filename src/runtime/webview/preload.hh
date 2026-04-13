@@ -7,6 +7,9 @@
 
 namespace oro::runtime::webview {
   using Headers = http::Headers;
+  using types::Map;
+  using types::String;
+  using types::Vector;
 
   /**
    * `Preload` is a container for state to compile a "preload script" attached

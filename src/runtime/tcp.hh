@@ -8,6 +8,12 @@
 struct addrinfo;
 
 namespace oro::runtime::tcp {
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+
   class SocketManager;
 
   enum socket_state_t {

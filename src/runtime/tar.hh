@@ -4,6 +4,11 @@
 #include "platform.hh"
 
 namespace oro::runtime::tar {
+  using types::Map;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   struct SparseRegion {
     uint64_t offset = 0;
     uint64_t length = 0;

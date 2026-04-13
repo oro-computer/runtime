@@ -84,7 +84,7 @@ didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge*) challenge
     return;
   }
 
-  auto navigator = this->navigator;
+  auto navigator = self.navigator;
   if (!navigator) {
     completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
     return;

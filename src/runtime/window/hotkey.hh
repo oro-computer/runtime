@@ -8,6 +8,11 @@ namespace oro::runtime::window {
   class Window;
   class HotKeyContext;
 
+  using types::Map;
+  using types::Mutex;
+  using types::String;
+  using types::Vector;
+
   class HotKeyCodeMap {
     public:
       using Code = unsigned int;

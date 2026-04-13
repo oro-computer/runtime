@@ -10,6 +10,14 @@
 struct Network_;
 
 namespace oro::runtime::ann {
+  using types::Map;
+  using types::Mutex;
+  using types::Path;
+  using types::SharedPointer;
+  using types::String;
+  using types::UniquePointer;
+  using types::Vector;
+
   using ID = uint64_t;
 
   struct LayerConfig {

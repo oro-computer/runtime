@@ -6,6 +6,10 @@
 #include "url.hh"
 
 namespace oro::runtime::http {
+  using types::Map;
+  using types::String;
+  using types::Vector;
+
   struct Status {
     int code = 200;
     String text = "OK";

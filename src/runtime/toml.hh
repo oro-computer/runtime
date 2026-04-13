@@ -8,6 +8,11 @@
 #include <variant>
 
 namespace oro::runtime::TOML {
+  using types::Map;
+  using types::Path;
+  using types::String;
+  using types::Vector;
+
   enum class Type {
     Empty,
     Boolean,

@@ -42,22 +42,22 @@ namespace oro::runtime::crypto {
       unsigned char output[SHA1_DIGEST_SIZE] = {0};
 
       SHA1 ();
-      SHA1 (const String&);
-      SHA1 (const SharedPointer<unsigned char[]>&, size_t);
+      SHA1 (const types::String&);
+      SHA1 (const types::SharedPointer<unsigned char[]>&, size_t);
       SHA1 (const unsigned char *, size_t);
 
       SHA1& update (const unsigned char *, size_t);
-      SHA1& update (const String&);
+      SHA1& update (const types::String&);
       bool finalized () const;
-      Vector<uint8_t> finalize ();
-      String str ();
+      types::Vector<uint8_t> finalize ();
+      types::String str ();
       inline size_t size () const {
         return SHA1_DIGEST_SIZE;
       }
   };
 
-  const String sha1 (const String&);
-  const String sha1 (const SharedPointer<unsigned char[]>&, size_t);
-  const String sha1 (const unsigned char *, size_t);
+  const types::String sha1 (const types::String&);
+  const types::String sha1 (const types::SharedPointer<unsigned char[]>&, size_t);
+  const types::String sha1 (const unsigned char *, size_t);
 }
 #endif

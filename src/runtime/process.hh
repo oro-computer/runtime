@@ -21,6 +21,17 @@
 #endif
 
 namespace oro::runtime::process {
+  using types::Array;
+  using types::Atomic;
+  using types::Function;
+  using types::MessageCallback;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Thread;
+  using types::UniquePointer;
+  using types::Vector;
+
   struct ExecOutput {
     String output;
     int exitCode = 0;

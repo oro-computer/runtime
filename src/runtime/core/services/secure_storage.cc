@@ -17,6 +17,8 @@
 #  include <vector>
 
   namespace {
+    using oro::runtime::String;
+
     CFStringRef createCFString (const String& input) {
       return CFStringCreateWithCString(
         kCFAllocatorDefault,

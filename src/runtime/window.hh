@@ -74,6 +74,16 @@ namespace oro::runtime::window {
   class DragDrop;
 #endif
 
+  using types::Atomic;
+  using types::ExitCallback;
+  using types::Function;
+  using types::Map;
+  using types::MessageCallback;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   using Client = webview::Client;
 
   enum {
@@ -349,6 +359,8 @@ namespace oro::runtime::window {
 
       // Accessor for read-only window options
       inline const Window::Options& getOptions () const noexcept { return this->options; }
+      inline bool dispatchDomFocus () { return this->evalDomFocusThrottled(); }
+      inline bool dispatchDomBlur () { return this->evalDomBlurThrottled(); }
 
     protected:
       std::weak_ptr<Window> weakSelf;

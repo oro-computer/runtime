@@ -8,6 +8,15 @@
 #include <optional>
 
 namespace oro::runtime::mcp {
+  using types::Atomic;
+  using types::ConditionVariableAny;
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   inline constexpr const char* kProtocolVersion = "2025-06-18";
   inline constexpr const char* kJsonRpcVersion = "2.0";
 

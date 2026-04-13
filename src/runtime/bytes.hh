@@ -9,6 +9,13 @@ namespace oro::runtime::bytes {
   class BufferQueue;
   class ArrayBuffer;
 
+  using types::Atomic;
+  using types::Array;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   using size_type = signed long int; // we're just explicit here
 
   template <size_t size>
@@ -63,7 +70,7 @@ namespace oro::runtime::bytes {
 
   class ArrayBuffer {
     public:
-      using SharedPointer = SharedPointer<unsigned char[]>;
+      using SharedPointer = types::SharedPointer<unsigned char[]>;
       using size_type = bytes::size_type;
 
       mutable Mutex mutex;

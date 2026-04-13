@@ -5439,6 +5439,48 @@ static String getCxxFlags () {
   return flags.size() > 0 ? " " + flags : "";
 }
 
+static bool macCompilerSupportsOpenMP () {
+  static std::optional<bool> cached;
+
+  if (cached.has_value()) {
+    return *cached;
+  }
+
+  try {
+    auto compiler = env::get("CXX");
+    if (compiler.empty()) {
+      compiler = "/usr/bin/clang++";
+    }
+
+    const auto token = std::to_string(
+      duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count()
+    );
+    const auto sourcePath = fs::temp_directory_path() / ("oroc-openmp-check-" + token + ".cc");
+    const auto outputPath = fs::temp_directory_path() / ("oroc-openmp-check-" + token);
+
+    {
+      std::ofstream source(sourcePath);
+      source << "int main() { return 0; }\n";
+    }
+
+    const auto command =
+      compiler +
+      " -fopenmp \"" + sourcePath.string() +
+      "\" -o \"" + outputPath.string() +
+      "\" >/dev/null 2>&1";
+
+    cached = exec(command.c_str()).exitCode == 0;
+
+    std::error_code ec;
+    fs::remove(sourcePath, ec);
+    fs::remove(outputPath, ec);
+  } catch (const fs::filesystem_error&) {
+    cached = false;
+  }
+
+  return *cached;
+}
+
 inline String getCfgUtilPath () {
   const bool hasCfgUtilInPath = exec("command -v cfgutil").exitCode == 0;
   if (hasCfgUtilInPath) {
@@ -8069,7 +8111,8 @@ int main (int argc, char* argv[]) {
       logInfo("preparing build for mac");
 
       flags = "-std=c++2a -ObjC++ -v";
-      if (!flagCodeSign) {
+      const bool enableOpenMP = !flagCodeSign && macCompilerSupportsOpenMP();
+      if (enableOpenMP) {
         flags += " -fopenmp";
       }
       flags += " -framework UniformTypeIdentifiers";
@@ -8082,7 +8125,12 @@ int main (int argc, char* argv[]) {
       flags += " -framework Accelerate";
       flags += " -framework Carbon";
       flags += " -framework Cocoa";
+      flags += " -framework CoreFoundation";
+      flags += " -framework Foundation";
+      flags += " -framework IOKit";
       flags += " -framework OSLog";
+      flags += " -framework Security";
+      flags += " -framework SystemConfiguration";
       flags += " -DMACOS=1";
       if (flagCodeSign) {
         flags += " -DORO_RUNTIME_PLATFORM_SANDBOXED=1";
@@ -8099,7 +8147,9 @@ int main (int argc, char* argv[]) {
       }
       flags += " -fPIC";
       flags += " " + runtimeLinkFlag();
-      flags += " -lomp";
+      if (enableOpenMP) {
+        flags += " -lomp";
+      }
       flags += " -luv";
       flags += " -lllama";
       flags += " -lggml";
@@ -8107,8 +8157,21 @@ int main (int argc, char* argv[]) {
       flags += " -lggml-blas";
       flags += " -lggml-cpu";
       flags += " -lggml-metal";
+      if (fs::exists(prefixPath("lib/" + platform.arch + "-desktop/libsodium.a"))) {
+        flags += " -lsodium";
+      }
+      if (fs::exists(prefixPath("lib/" + platform.arch + "-desktop/libusb-1.0.a"))) {
+        flags += " -lusb-1.0";
+      }
+      if (fs::exists(prefixPath("lib/" + platform.arch + "-desktop/libwhisper.a"))) {
+        flags += " -lwhisper";
+      }
+      if (fs::exists(prefixPath("lib/" + platform.arch + "-desktop/liboro_iroh.a"))) {
+        flags += " -loro_iroh";
+      }
 #if ORO_RUNTIME_HAVE_LIBIPFS
       flags += " -lipfs";
+      flags += " -lresolv";
 #endif
       appendTLSFlags(flags);
       files += prefixFile("objects/" + platform.arch + "-desktop/desktop/main.o");
@@ -8256,11 +8319,32 @@ int main (int argc, char* argv[]) {
       writeFile(paths.pathResourcesRelativeToUserBuild / "Credits.html", credits);
 
       fs::create_directories(paths.pathPackage / pathBase / "MacOS");
-      fs::copy(
-        prefixPath("lib/" + platform.arch + "-desktop/codesign/libomp.dylib"),
-        paths.pathPackage / pathBase / "MacOS" / "libomp.dylib",
-        fs::copy_options::overwrite_existing
-       );
+
+      if (macCompilerSupportsOpenMP()) {
+        const auto runtimeLibompPath = prefixPath("lib/" + platform.arch + "-desktop/codesign/libomp.dylib");
+        const auto bundledLibompPath = paths.pathPackage / pathBase / "MacOS" / "libomp.dylib";
+
+        if (!fs::exists(runtimeLibompPath)) {
+          logError("missing bundled OpenMP runtime for macOS build: " + runtimeLibompPath.string());
+          logError("Install an LLVM package (preferred) or the libomp package, then rebuild or relink the runtime before building this app.");
+          logError("If you are using the runtime repo locally, rerun 'pnpm relink' or 'npm run relink' after installing libomp.");
+          exit(1);
+        }
+
+        try {
+          fs::copy(
+            runtimeLibompPath,
+            bundledLibompPath,
+            fs::copy_options::overwrite_existing
+          );
+        } catch (const fs::filesystem_error& e) {
+          logError("failed to stage bundled OpenMP runtime for macOS build");
+          logError("source: " + runtimeLibompPath.string());
+          logError("destination: " + bundledLibompPath.string());
+          logError(e.what());
+          exit(1);
+        }
+      }
     }
 
     if (platform.mac && isForDesktop) {

@@ -8,6 +8,14 @@
 #include "../crypto.hh"
 
 namespace oro::runtime::ai::llm {
+  using types::Atomic;
+  using types::Map;
+  using types::Mutex;
+  using types::Path;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   // forward
   class Context;
 

@@ -45,6 +45,10 @@ extern "C" {
 }
 
 namespace oro::runtime::config {
+  using types::Map;
+  using types::String;
+  using types::Vector;
+
   const Map<String, String> getUserConfig ();
   bool isDebugEnabled ();
   const String getDevHost ();

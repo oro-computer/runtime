@@ -1,4 +1,4 @@
-#if ORO_RUNTIME_PLATFORM_APPLE
+#if defined(__APPLE__)
 
 #import <xpc/xpc.h>
 #import <dispatch/dispatch.h>
@@ -529,18 +529,6 @@ namespace oro::runtime::core::services {
         std::atomic<ConnectionID> nextConnectionId {1};
         std::atomic<XPC::MessageID> nextMessageId {1};
 
-        bool addPendingMessage(const PendingMessage& pending);
-        void schedulePendingTimeout(XPC::MessageID id, ConnectionID connectionId, dispatch_queue_t queue, std::chrono::milliseconds timeout);
-        void handlePendingTimeout(XPC::MessageID id, ConnectionID connectionId);
-        void resolvePendingWithError(const PendingMessage& pending, const char* type, const String& reason);
-        void emitMessageTimeout(ConnectionID id, XPC::MessageID messageId, const String& reason);
-        void emitMessageDropped(ConnectionID id, const String& reason);
-        void sendImmediateErrorResponse(const std::shared_ptr<Connection>& connection, xpc_object_t message, const char* reason);
-        bool parseRawJson(const JSON::Any& input, JSON::Any& output, String& error) const;
-        void collectConnectionAndChildrenLocked(ConnectionID id, std::vector<std::shared_ptr<Connection>>& out);
-        std::vector<std::shared_ptr<Connection>> closeConnection(const std::shared_ptr<Connection>& connection);
-        void tearDownConnectionResources(const std::shared_ptr<Connection>& connection);
-
         void shutdown() {
           std::vector<std::shared_ptr<Connection>> toClose;
           {
@@ -915,7 +903,7 @@ namespace oro::runtime::core::services {
           } else if (errorObject == XPC_ERROR_TERMINATION_IMMINENT) {
             reason = "Termination imminent";
           } else if (xpc_get_type(errorObject) == XPC_TYPE_DICTIONARY) {
-            const char* description = xpc_dictionary_get_string(errorObject, XPC_ERROR_DESCRIPTION);
+            const char* description = xpc_dictionary_get_string(errorObject, XPC_ERROR_KEY_DESCRIPTION);
             if (description) {
               reason = description;
             }
@@ -1126,7 +1114,7 @@ namespace oro::runtime::core::services {
           const auto type = xpc_get_type(value);
 
           if (type == XPC_TYPE_DICTIONARY) {
-            JSON::Object::Entries entries;
+            __block JSON::Object::Entries entries;
             xpc_dictionary_apply(value, ^bool(const char* key, xpc_object_t val) {
               entries.emplace(String(key), this->encodeAny(val));
               return true;
@@ -1150,7 +1138,7 @@ namespace oro::runtime::core::services {
             };
           }
 
-          return this->encodeAny(value);
+          return this->encodeAny(value).template as<JSON::Object>();
         }
 
         JSON::Any encodeAny(xpc_object_t value) const {
@@ -1368,7 +1356,7 @@ namespace oro::runtime::core::services {
           }
 
           if (type == "null") {
-            return XPC_NULL;
+            return xpc_null_create();
           }
 
           error = "Unsupported XPC value type";
@@ -1406,9 +1394,10 @@ namespace oro::runtime::core::services {
         }
     };
 
-    std::shared_ptr<XPC::Backend> makeXPCBackend(XPC& svc) {
-      return std::make_shared<AppleXPCBackend>(svc);
-    }
+  }
+
+  std::shared_ptr<XPC::Backend> makeXPCBackend(XPC& svc) {
+    return std::make_shared<AppleXPCBackend>(svc);
   }
 }
 

@@ -59,6 +59,24 @@ function _publish () {
   fi
 }
 
+function resolve_global_prefix() {
+  if [[ -n "${PREFIX:-}" ]]; then
+    printf '%s' "$PREFIX"
+    return 0
+  fi
+
+  if command -v npm >/dev/null 2>&1; then
+    local detected_prefix
+    detected_prefix="$(npm prefix -g 2>/dev/null | tr -d '\r')"
+    if [[ -n "$detected_prefix" ]] && [[ "$detected_prefix" != "undefined" ]] && [[ "$detected_prefix" != "null" ]]; then
+      printf '%s' "$detected_prefix"
+      return 0
+    fi
+  fi
+
+  printf '%s' "/usr/local"
+}
+
 declare -a CLI_PACKAGE_SPECS=(
   "@orocomputer:runtime"
 )
@@ -252,7 +270,7 @@ elif [[ "$(uname -s)" == *"MSYS_NT"* ]]; then
 fi
 
 declare ORO_HOME="$root/build/npm/$platform"
-declare global_prefix="${PREFIX:-"/usr/local"}"
+declare global_prefix="$(resolve_global_prefix)"
 declare PREFIX="$ORO_HOME"
 
 while (( $# > 0 )); do

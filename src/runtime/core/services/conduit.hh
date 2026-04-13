@@ -6,6 +6,15 @@
 #include "../../bytes.hh"
 
 namespace oro::runtime::core::services {
+  using types::Atomic;
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::UnorderedMap;
+  using types::Vector;
+
   class Conduit : public core::Service {
     public:
       using StartCallback = Function<void()>;

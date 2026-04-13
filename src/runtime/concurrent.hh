@@ -4,6 +4,15 @@
 #include "crypto.hh"
 
 namespace oro::runtime::concurrent {
+  using types::Atomic;
+  using types::ConditionVariableAny;
+  using types::Function;
+  using types::Mutex;
+  using types::Semaphore;
+  using types::SharedPointer;
+  using types::Thread;
+  using types::Vector;
+
   class Queue {
     public:
       using ID = uint64_t;

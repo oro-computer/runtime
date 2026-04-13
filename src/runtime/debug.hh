@@ -72,6 +72,13 @@ static os_log_t ORO_RUNTIME_OS_LOG_DEBUG = nullptr;
 #endif // `debug`
 
 namespace oro::runtime::debug {
+  using types::Atomic;
+  using types::Map;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   /**
    * The `Tracer` class manages multiple `Tracer::Span` instances, allowing
    * spans to be created and tracked across multiple threads.

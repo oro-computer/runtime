@@ -6,6 +6,15 @@
 #include "core.hh"
 
 namespace oro::runtime::filesystem {
+  using types::Atomic;
+  using types::AtomicBool;
+  using types::Map;
+  using types::Path;
+  using types::Set;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   class Resource : public oro::runtime::Resource {
     public:
       struct Cache {

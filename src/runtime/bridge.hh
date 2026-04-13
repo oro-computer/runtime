@@ -13,6 +13,13 @@
 #include "core/services.hh"
 
 namespace oro::runtime::bridge {
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   using Client = ipc::Client;
 
   /**

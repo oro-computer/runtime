@@ -5,6 +5,12 @@
 #include "options.hh"
 
 namespace oro::runtime::loop {
+  using types::Atomic;
+  using types::Function;
+  using types::Mutex;
+  using types::Queue;
+  using types::Thread;
+
   class Loop {
     public:
       using DispatchCallback = Function<void()>;

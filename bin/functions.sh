@@ -43,6 +43,23 @@ function latest_mtime() {
   echo "$latest"
 }
 
+function copy_if_newer() {
+  local source="$1"
+  local destination="$2"
+
+  if [[ -z "$source" ]] || [[ -z "$destination" ]]; then
+    return 1
+  fi
+
+  if [[ ! -e "$source" ]]; then
+    return 1
+  fi
+
+  if [[ ! -e "$destination" ]] || (( $(stat_mtime "$source") > $(stat_mtime "$destination") )); then
+    cp -fp "$source" "$destination"
+  fi
+}
+
 function stat_size () {
   stat $stat_format_arg $stat_size_spec "$1" 2>/dev/null
 }
@@ -163,10 +180,23 @@ function onsignal () {
 function set_cpu_cores() {
   if [[ -z "$CPU_CORES" ]]; then
     if [[ "Darwin" = "$(uname -s)" ]]; then
-      CPU_CORES=$(sysctl -a | grep machdep.cpu.core_count | cut -f2 -d' ')
+      CPU_CORES="$(sysctl -n hw.logicalcpu 2>/dev/null)"
+      [[ -z "$CPU_CORES" ]] && CPU_CORES="$(sysctl -n hw.ncpu 2>/dev/null)"
+      [[ -z "$CPU_CORES" ]] && CPU_CORES="$(sysctl -a 2>/dev/null | grep machdep.cpu.core_count | cut -f2 -d' ' | head -n 1)"
     else
-      CPU_CORES=$(grep 'processor' /proc/cpuinfo | wc -l)
+      CPU_CORES="$(grep 'processor' /proc/cpuinfo 2>/dev/null | wc -l)"
     fi
+  fi
+
+  if [[ -z "$CPU_CORES" ]] || ! [[ "$CPU_CORES" =~ ^[0-9]+$ ]] || (( CPU_CORES < 1 )); then
+    CPU_CORES=1
+  fi
+
+  # GNU Make 3.81 on macOS does not support synchronized parallel output,
+  # so verbose logs captured to a file become unreadable when multiple jobs
+  # interleave diagnostics into the same stream.
+  if [[ -n "$VERBOSE" ]] && [[ ! -t 1 ]]; then
+    CPU_CORES=1
   fi
 
   echo $CPU_CORES

@@ -6,6 +6,9 @@
 #include "url.hh"
 
 namespace oro::runtime {
+  using types::Atomic;
+  using types::String;
+
   class Resource {
     public:
       Atomic<bool> accessing = false;

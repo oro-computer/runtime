@@ -14,38 +14,38 @@ namespace oro::runtime::webview {
 
 #if ORO_RUNTIME_PLATFORM_APPLE
 @interface ORONavigationDelegate : NSObject<WKNavigationDelegate>
-@property (nonatomic) oro::runtime::webview::Navigator* navigator;
--    (void) webView: (WKWebView*) webView
-  didFailNavigation: (WKNavigation*) navigation
-          withError: (NSError*) error;
+@property (nonatomic) oro::runtime::webview::Navigator* _Nullable navigator;
+-    (void) webView: (WKWebView* _Nonnull) webView
+  didFailNavigation: (WKNavigation* _Nullable) navigation
+          withError: (NSError* _Nonnull) error;
 
--               (void) webView: (WKWebView*) webView
-  didFailProvisionalNavigation: (WKNavigation*) navigation
-                     withError: (NSError*) error;
+-               (void) webView: (WKWebView* _Nonnull) webView
+  didFailProvisionalNavigation: (WKNavigation* _Nullable) navigation
+                     withError: (NSError* _Nonnull) error;
 
--                  (void) webView: (WKWebView*) webview
-  decidePolicyForNavigationAction: (WKNavigationAction*) navigationAction
-                  decisionHandler: (void (^)(WKNavigationActionPolicy)) decisionHandler;
+-                  (void) webView: (WKWebView* _Nonnull) webview
+  decidePolicyForNavigationAction: (WKNavigationAction* _Nonnull) navigationAction
+                  decisionHandler: (void (^ _Nonnull)(WKNavigationActionPolicy)) decisionHandler;
 
--                    (void) webView: (WKWebView*) webView
-  decidePolicyForNavigationResponse: (WKNavigationResponse*) navigationResponse
-                    decisionHandler: (void (^)(WKNavigationResponsePolicy)) decisionHandler;
+-                    (void) webView: (WKWebView* _Nonnull) webView
+  decidePolicyForNavigationResponse: (WKNavigationResponse* _Nonnull) navigationResponse
+                    decisionHandler: (void (^ _Nonnull)(WKNavigationResponsePolicy)) decisionHandler;
 
--      (void) webView: (WKWebView*) webView
-  didFinishNavigation: (WKNavigation*) navigation;
+-      (void) webView: (WKWebView* _Nonnull) webView
+  didFinishNavigation: (WKNavigation* _Nullable) navigation;
 
-- (void) webView: (WKWebView*) webView
-didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge*) challenge
- completionHandler: (void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential* _Nullable credential)) completionHandler;
+- (void) webView: (WKWebView* _Nonnull) webView
+didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge* _Nonnull) challenge
+ completionHandler: (void (^ _Nonnull)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential* _Nullable credential)) completionHandler;
 @end
 @interface OROWebView :
 #if ORO_RUNTIME_PLATFORM_IOS
   WKWebView<WKUIDelegate>
-  @property (strong, nonatomic) NSLayoutConstraint* keyboardHeightConstraint;
-  @property (strong, nonatomic) UIRefreshControl* refreshControl;
-  - (void) handlePullToRefresh: (UIRefreshControl*) refreshControl;
-  - (instancetype) initWithFrame: (CGRect) frame
-                   configuration: (WKWebViewConfiguration*) configuration
+  @property (strong, nonatomic) NSLayoutConstraint* _Nullable keyboardHeightConstraint;
+  @property (strong, nonatomic) UIRefreshControl* _Nullable refreshControl;
+  - (void) handlePullToRefresh: (UIRefreshControl* _Nonnull) refreshControl;
+  - (instancetype _Nonnull) initWithFrame: (CGRect) frame
+                   configuration: (WKWebViewConfiguration* _Nonnull) configuration
        withRefreshControlEnabled: (BOOL) refreshControlEnabled;
 #else
   WKWebView<
@@ -71,46 +71,46 @@ didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge*) challenge
   -   (NSDragOperation) draggingSession: (NSDraggingSession *) session
   sourceOperationMaskForDraggingContext: (NSDraggingContext) context;
 
-  -             (void) webView: (WKWebView*) webView
-    runOpenPanelWithParameters: (WKOpenPanelParameters*) parameters
-              initiatedByFrame: (WKFrameInfo*) frame
-             completionHandler: (void (^)(NSArray<NSURL*>*)) completionHandler;
+  -             (void) webView: (WKWebView* _Nonnull) webView
+    runOpenPanelWithParameters: (WKOpenPanelParameters* _Nonnull) parameters
+              initiatedByFrame: (WKFrameInfo* _Nonnull) frame
+             completionHandler: (void (^ _Nonnull)(NSArray<NSURL*>* _Nullable)) completionHandler;
 #endif
 
 #if ORO_RUNTIME_PLATFORM_MACOS || (ORO_RUNTIME_PLATFORM_IOS && __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15)
 
-  -                                      (void) webView: (WKWebView*) webView
-   requestDeviceOrientationAndMotionPermissionForOrigin: (WKSecurityOrigin*) origin
-                                       initiatedByFrame: (WKFrameInfo*) frame
-                                        decisionHandler: (void (^)(WKPermissionDecision decision)) decisionHandler;
+  -                                      (void) webView: (WKWebView* _Nonnull) webView
+   requestDeviceOrientationAndMotionPermissionForOrigin: (WKSecurityOrigin* _Nonnull) origin
+                                       initiatedByFrame: (WKFrameInfo* _Nonnull) frame
+                                        decisionHandler: (void (^ _Nonnull)(WKPermissionDecision decision)) decisionHandler;
 
-  -                        (void) webView: (WKWebView*) webView
-   requestMediaCapturePermissionForOrigin: (WKSecurityOrigin*) origin
-                         initiatedByFrame: (WKFrameInfo*) frame
+  -                        (void) webView: (WKWebView* _Nonnull) webView
+   requestMediaCapturePermissionForOrigin: (WKSecurityOrigin* _Nonnull) origin
+                         initiatedByFrame: (WKFrameInfo* _Nonnull) frame
                                      type: (WKMediaCaptureType) type
-                          decisionHandler: (void (^)(WKPermissionDecision decision)) decisionHandler;
+                          decisionHandler: (void (^ _Nonnull)(WKPermissionDecision decision)) decisionHandler;
 #endif
 
-  -                     (void) webView: (WKWebView*) webView
-    runJavaScriptAlertPanelWithMessage: (NSString*) message
-                      initiatedByFrame: (WKFrameInfo*) frame
-                     completionHandler: (void (^)(void)) completionHandler;
+  -                     (void) webView: (WKWebView* _Nonnull) webView
+    runJavaScriptAlertPanelWithMessage: (NSString* _Nonnull) message
+                      initiatedByFrame: (WKFrameInfo* _Nonnull) frame
+                     completionHandler: (void (^ _Nonnull)(void)) completionHandler;
 
-  -                       (void) webView: (WKWebView*) webView
-    runJavaScriptConfirmPanelWithMessage: (NSString*) message
-                        initiatedByFrame: (WKFrameInfo*) frame
-                       completionHandler: (void (^)(BOOL result)) completionHandler;
+  -                       (void) webView: (WKWebView* _Nonnull) webView
+    runJavaScriptConfirmPanelWithMessage: (NSString* _Nonnull) message
+                        initiatedByFrame: (WKFrameInfo* _Nonnull) frame
+                       completionHandler: (void (^ _Nonnull)(BOOL result)) completionHandler;
 @end
 
 #if ORO_RUNTIME_PLATFORM_IOS
 @interface OROWebViewController : UIViewController<UIGestureRecognizerDelegate>
-  @property (nonatomic, strong) OROWebView* webview;
+  @property (nonatomic, strong) OROWebView* _Nullable webview;
 
--                         (BOOL) gestureRecognizer: (UIGestureRecognizer*) gestureRecognizer
-shouldRecognizeSimultaneouslyWithGestureRecognizer: (UIGestureRecognizer*) otherGestureRecognizer;
+-                         (BOOL) gestureRecognizer: (UIGestureRecognizer* _Nonnull) gestureRecognizer
+shouldRecognizeSimultaneouslyWithGestureRecognizer: (UIGestureRecognizer* _Nonnull) otherGestureRecognizer;
 
-- (BOOL) gestureRecognizer: (UIGestureRecognizer*) gestureRecognizer
-        shouldReceiveTouch: (UITouch*) touch;
+- (BOOL) gestureRecognizer: (UIGestureRecognizer* _Nonnull) gestureRecognizer
+        shouldReceiveTouch: (UITouch* _Nonnull) touch;
 @end
 
 #endif

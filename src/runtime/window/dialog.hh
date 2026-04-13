@@ -33,6 +33,10 @@ namespace oro::runtime::window {
 #endif
 
 namespace oro::runtime::window {
+  using types::Function;
+  using types::String;
+  using types::Vector;
+
   class Dialog {
     public:
       struct FileSystemPickerOptions {

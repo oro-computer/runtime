@@ -89,7 +89,7 @@ namespace oro::runtime::core::services::hid {
     }
 
     bool isOutputElement(IOHIDElementType type) {
-      return type == kIOHIDElementTypeOutput || type == kIOHIDElementTypeOutput_Misc;
+      return type == kIOHIDElementTypeOutput;
     }
 
     bool isFeatureElement(IOHIDElementType type) {
@@ -152,7 +152,6 @@ namespace oro::runtime::core::services::hid {
       info.usesInputReportId = usesInputReportId;
       info.usesOutputReportId = usesOutputReportId;
       info.usesFeatureReportId = usesFeatureReportId;
-      info.children = {};
       return info;
     }
 
@@ -224,7 +223,7 @@ namespace oro::runtime::core::services::hid {
           return this->manager != nullptr;
         }
 
-        void getDevices(const String& seq, const Callback cb) override {
+        void getDevices(const String& seq, const HID::Callback cb) override {
           this->enumerateDevices([=](const EnumerateResult& result) {
             if (!result.ok) {
               cb(seq, result.error, QueuedResponse{});
@@ -244,7 +243,7 @@ namespace oro::runtime::core::services::hid {
           });
         }
 
-        void requestDevice(const String& seq, const HID::RequestDeviceOptions& options, const Callback cb) override {
+        void requestDevice(const String& seq, const HID::RequestDeviceOptions& options, const HID::Callback cb) override {
           this->enumerateDevices([=](const EnumerateResult& result) {
             if (!result.ok) {
               cb(seq, result.error, QueuedResponse{});
@@ -299,7 +298,7 @@ namespace oro::runtime::core::services::hid {
           });
         }
 
-        void chooseDevice(const String& seq, const DeviceSelection& selection, const Callback cb) override {
+        void chooseDevice(const String& seq, const HID::DeviceSelection& selection, const HID::Callback cb) override {
           RequestState state;
           {
             Lock lock(this->mutex);
@@ -326,7 +325,7 @@ namespace oro::runtime::core::services::hid {
           cb(seq, this->makeDeviceResponse(descriptor), QueuedResponse{});
         }
 
-        void cancelRequest(const String& seq, const Callback cb) override {
+        void cancelRequest(const String& seq, const HID::Callback cb) override {
           {
             Lock lock(this->mutex);
             this->pendingRequest.reset();
@@ -334,7 +333,7 @@ namespace oro::runtime::core::services::hid {
           cb(seq, makeOk(), QueuedResponse{});
         }
 
-        void forgetDevice(const String& seq, const String& deviceId, const Callback cb) override {
+        void forgetDevice(const String& seq, const String& deviceId, const HID::Callback cb) override {
           this->revokeDevice(deviceId);
           {
             Lock lock(this->mutex);
@@ -348,7 +347,7 @@ namespace oro::runtime::core::services::hid {
           cb(seq, makeOk(), QueuedResponse{});
         }
 
-        void open(const String& seq, const String& deviceId, const Callback cb) override {
+        void open(const String& seq, const String& deviceId, const HID::Callback cb) override {
           JSON::Object error;
           HID::Backend::DeviceDescriptor descriptor;
           if (!this->openDevice(deviceId, descriptor, error)) {
@@ -358,7 +357,7 @@ namespace oro::runtime::core::services::hid {
           cb(seq, this->makeDeviceResponse(descriptor), QueuedResponse{});
         }
 
-        void close(const String& seq, const String& deviceId, const Callback cb) override {
+        void close(const String& seq, const String& deviceId, const HID::Callback cb) override {
           HID::Backend::DeviceDescriptor descriptor;
           {
             Lock lock(this->mutex);
@@ -378,7 +377,7 @@ namespace oro::runtime::core::services::hid {
           cb(seq, this->makeDeviceResponse(descriptor), QueuedResponse{});
         }
 
-        void sendReport(const String& seq, const String& deviceId, uint8_t reportId, const bytes::Buffer& data, const Callback cb) override {
+        void sendReport(const String& seq, const String& deviceId, uint8_t reportId, const bytes::Buffer& data, const HID::Callback cb) override {
           JSON::Object error;
           if (!this->sendReportInternal(deviceId, reportId, data, kIOHIDReportTypeOutput, error)) {
             cb(seq, error, QueuedResponse{});
@@ -387,7 +386,7 @@ namespace oro::runtime::core::services::hid {
           cb(seq, makeOk(), QueuedResponse{});
         }
 
-        void sendFeatureReport(const String& seq, const String& deviceId, uint8_t reportId, const bytes::Buffer& data, const Callback cb) override {
+        void sendFeatureReport(const String& seq, const String& deviceId, uint8_t reportId, const bytes::Buffer& data, const HID::Callback cb) override {
           JSON::Object error;
           if (!this->sendReportInternal(deviceId, reportId, data, kIOHIDReportTypeFeature, error)) {
             cb(seq, error, QueuedResponse{});
@@ -396,7 +395,7 @@ namespace oro::runtime::core::services::hid {
           cb(seq, makeOk(), QueuedResponse{});
         }
 
-        void receiveFeatureReport(const String& seq, const String& deviceId, uint8_t reportId, uint16_t length, const Callback cb) override {
+        void receiveFeatureReport(const String& seq, const String& deviceId, uint8_t reportId, uint16_t length, const HID::Callback cb) override {
           JSON::Object error;
           JSON::Object response = this->receiveReportInternal(deviceId, reportId, length, error);
           if (error.has("err")) {
@@ -449,10 +448,11 @@ namespace oro::runtime::core::services::hid {
 
           Vector<DeviceRecord> records;
           const CFIndex count = CFSetGetCount(set);
-          std::vector<IOHIDDeviceRef> devicesVec(static_cast<size_t>(count));
-          CFSetGetValues(set, reinterpret_cast<const void**>(devicesVec.data()));
+          Vector<const void*> deviceValues(static_cast<size_t>(count));
+          CFSetGetValues(set, deviceValues.data());
 
-          for (IOHIDDeviceRef device : devicesVec) {
+          for (const void* value : deviceValues) {
+            auto device = static_cast<IOHIDDeviceRef>(const_cast<void*>(value));
             if (!device) continue;
             DeviceRecord record;
             record.device = CFDevice(device);
@@ -728,7 +728,7 @@ namespace oro::runtime::core::services::hid {
             device = it->second.device.ref;
             if (type == kIOHIDReportTypeFeature) {
               usesReportId = it->second.usesFeatureReportId;
-            } else if (type == kIOHIDReportTypeOutput || type == kIOHIDReportTypeOutput_Misc) {
+            } else if (type == kIOHIDReportTypeOutput) {
               usesReportId = it->second.usesOutputReportId;
             }
           }
@@ -801,7 +801,7 @@ namespace oro::runtime::core::services::hid {
             {"data", JSON::Object::Entries {{
               {"reportId", static_cast<uint32_t>(resolvedId)},
               {"encoding", String("base64")},
-              {"data", bytes::base64::encode(payload)}
+              {"data", payload.str(bytes::Buffer::Encoding::BASE64)}
             }}}
           }};
           return json;
@@ -832,7 +832,7 @@ namespace oro::runtime::core::services::hid {
             {"deviceId", deviceId},
             {"reportId", static_cast<uint32_t>(reportId)},
             {"encoding", String("base64")},
-            {"data", bytes::base64::encode(payload)}
+            {"data", payload.str(bytes::Buffer::Encoding::BASE64)}
           }};
 
           const String serialized = event.str();

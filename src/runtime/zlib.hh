@@ -5,6 +5,8 @@
 #include "deps.hh"
 
 namespace oro::runtime::compression {
+  using types::Vector;
+
   enum class Mode {
     Deflate,
     Inflate
@@ -128,4 +130,3 @@ namespace oro::runtime::compression {
 }
 
 #endif
-

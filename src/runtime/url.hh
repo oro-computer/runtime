@@ -5,6 +5,10 @@
 #include "debug.hh"
 
 namespace oro::runtime::url {
+  using types::Map;
+  using types::String;
+  using types::Vector;
+
   struct PathComponents {
     using Iterator = Vector<String>::const_iterator;
     using const_iterator = Vector<String>::const_iterator;

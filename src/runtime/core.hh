@@ -8,6 +8,13 @@
 #include "loop.hh"
 
 namespace oro::runtime::core {
+  using types::Atomic;
+  using types::Function;
+  using types::Lock;
+  using types::Mutex;
+  using types::String;
+  using types::Vector;
+
   class Services;
 
   struct DispatchContext : public context::DispatchContext {

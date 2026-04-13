@@ -27,6 +27,14 @@ namespace oro::runtime::webview {
   class Navigator;
 
   using ID = uint64_t;
+  using types::Atomic;
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::Path;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
 
   class Origin : public URL {
     public:

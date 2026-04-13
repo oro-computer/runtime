@@ -5,6 +5,9 @@
 #include "string.hh"
 
 namespace oro::runtime::semver {
+  using types::String;
+  using types::Vector;
+
   struct Version {
     int64_t major = 0;
     int64_t minor = 0;
@@ -143,4 +146,3 @@ namespace oro::runtime::semver {
 }
 
 #endif
-

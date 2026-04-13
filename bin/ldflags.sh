@@ -98,6 +98,9 @@ if [[ "$host" = "Darwin" ]]; then
   if (( !TARGET_OS_IPHONE && !TARGET_IPHONE_SIMULATOR )); then
     ldflags+=("-framework" "Cocoa")
     ldflags+=("-framework" "Carbon")
+    ldflags+=("-framework" "IOKit")
+    ldflags+=("-framework" "Security")
+    ldflags+=("-framework" "SystemConfiguration")
   fi
 
   if (( TARGET_OS_IPHONE )) || (( TARGET_IPHONE_SIMULATOR )); then
@@ -135,8 +138,14 @@ if [[ "$host" = "Darwin" ]]; then
     fi
   fi
   if !(( TARGET_OS_IPHONE )) && !(( TARGET_IPHONE_SIMULATOR )); then
-    ldflags+=("-L$(brew --prefix llvm)/lib/c++")
-    ldflags+=("-L$(brew --prefix llvm)/lib")
+    llvm_prefix=""
+    if command -v brew >/dev/null 2>&1; then
+      llvm_prefix="$(brew --prefix llvm 2>/dev/null || true)"
+    fi
+    if [[ -n "$llvm_prefix" ]]; then
+      ldflags+=("-L$llvm_prefix/lib/c++")
+      ldflags+=("-L$llvm_prefix/lib")
+    fi
   fi
   # Optional developer sanitizers (desktop only)
   if [[ -n "$ORO_ENABLE_SANITIZERS" ]] && (( !TARGET_OS_IPHONE && !TARGET_IPHONE_SIMULATOR )); then
@@ -255,6 +264,9 @@ fi
 
 if (( have_libipfs )); then
   ldflags+=("-lipfs")
+  if [[ "$host" = "Darwin" ]] && (( !TARGET_OS_IPHONE && !TARGET_IPHONE_SIMULATOR )); then
+    ldflags+=("-lresolv")
+  fi
 fi
 
 # TLS provider detection and linkage

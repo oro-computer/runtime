@@ -1,6 +1,7 @@
 #ifndef ORO_RUNTIME_MCP_HTTP_SERVER_H
 #define ORO_RUNTIME_MCP_HTTP_SERVER_H
 
+#include "protocol.hh"
 #include "../platform/types.hh"
 #include "../core.hh"
 #include "../bytes.hh"

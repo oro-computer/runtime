@@ -12,6 +12,12 @@
 #define CONVERT_TO_STRING(value) _CONVERT_TO_STRING(value)
 
 namespace oro::runtime::string {
+  using types::Map;
+  using types::Set;
+  using types::String;
+  using types::Vector;
+  using types::WString;
+
   // transform
   String replace (const String& source, const String& regex, const String& value);
   String replace (const String& source, const std::regex& regex, const String& value);

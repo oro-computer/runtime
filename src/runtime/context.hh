@@ -10,6 +10,11 @@ namespace oro::runtime {
 }
 
 namespace oro::runtime::context {
+  using types::Atomic;
+  using types::Function;
+  using types::Mutex;
+  using types::String;
+
   #if ORO_RUNTIME_PLATFORM_ANDROID
   struct AndroidContext {
     android::BuildInformation buildInformation;

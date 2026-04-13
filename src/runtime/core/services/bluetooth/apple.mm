@@ -18,6 +18,11 @@
 #include <vector>
 
 using oro::runtime::core::services::Bluetooth;
+using oro::runtime::types::Map;
+using oro::runtime::types::String;
+using oro::runtime::types::Vector;
+namespace JSON = oro::runtime::JSON;
+namespace bytes = oro::runtime::bytes;
 
 @interface OROBluetoothCentral : NSObject<CBCentralManagerDelegate, CBPeripheralDelegate>
 @property (nonatomic, strong) CBCentralManager* central;
@@ -523,8 +528,9 @@ namespace {
     void gattGetPrimaryService(const std::string& seq, const Bluetooth::DeviceID& deviceId, const std::string& serviceUuid, const oro::runtime::core::Service::Callback cb) override {
       // Use getPrimaryServices then filter; return ok if present
       this->gattGetPrimaryServices(seq, deviceId, serviceUuid, [cb, serviceUuid](auto s, auto json, auto qr){
-        if (json.has("err")) return cb(s, json, qr);
-        auto services = json.get("data").get("services");
+        const auto& jsonObject = json.template as<JSON::Object>();
+        if (jsonObject.has("err")) return cb(s, json, qr);
+        const auto& services = jsonObject.get("data").template as<JSON::Object>().get("services").template as<JSON::Array>();
         bool found = false;
         for (size_t i = 0; i < services.size(); ++i) { if (services[i].str() == serviceUuid) { found = true; break; } }
         if (!found) {
@@ -607,8 +613,9 @@ namespace {
     }
     void serviceGetCharacteristic(const std::string& seq, const Bluetooth::DeviceID& deviceId, const std::string& serviceUuid, const std::string& charUuid, const oro::runtime::core::Service::Callback cb) override {
       this->serviceGetCharacteristics(seq, deviceId, serviceUuid, "", [cb, charUuid](auto s, auto json, auto qr){
-        if (json.has("err")) return cb(s, json, qr);
-        auto chars = json.get("data").get("characteristics");
+        const auto& jsonObject = json.template as<JSON::Object>();
+        if (jsonObject.has("err")) return cb(s, json, qr);
+        const auto& chars = jsonObject.get("data").template as<JSON::Object>().get("characteristics").template as<JSON::Array>();
         bool found = false; for (size_t i = 0; i < chars.size(); ++i) { if (chars[i].str() == charUuid) { found = true; break; } }
         if (!found) {
           JSON::Object err = JSON::Object::Entries {{"type","NotFoundError"},{"message","Characteristic not found"}};
@@ -643,6 +650,7 @@ namespace {
               String uuid = String([[c.UUID UUIDString] UTF8String]);
               arr.push(uuid);
               auto flags = (int) c.properties;
+              const bool hasExtendedProperties = (flags & CBCharacteristicPropertyExtendedProperties) != 0;
               JSON::Object props = JSON::Object::Entries {{
                 {"broadcast", (bool) (flags & CBCharacteristicPropertyBroadcast)},
                 {"read", (bool) (flags & CBCharacteristicPropertyRead)},
@@ -651,8 +659,8 @@ namespace {
                 {"notify", (bool) (flags & CBCharacteristicPropertyNotify)},
                 {"indicate", (bool) (flags & CBCharacteristicPropertyIndicate)},
                 {"authenticatedSignedWrites", (bool) (flags & CBCharacteristicPropertyAuthenticatedSignedWrites)},
-                {"reliableWrite", (bool) (flags & CBCharacteristicPropertyReliableWrites)},
-                {"writableAuxiliaries", (bool) (flags & CBCharacteristicPropertyExtendedProperties)}
+                {"reliableWrite", hasExtendedProperties},
+                {"writableAuxiliaries", hasExtendedProperties}
               }};
               propsMap.set(uuid, props);
             }
@@ -718,7 +726,7 @@ namespace {
           size_t n = data.length;
           bytes::Buffer bd(n);
           if (n > 0) memcpy(bd.data(), data.bytes, n);
-          http::Headers hdr; hdr.set("content-type", "application/octet-stream"); hdr.set("content-length", (uint64_t)n);
+          oro::runtime::http::Headers hdr; hdr.set("content-type", "application/octet-stream"); hdr.set("content-length", (uint64_t)n);
           cb(seq, JSON::Object {}, oro::runtime::QueuedResponse{ oro::runtime::crypto::rand64(), 0, bd.shared(), bd.size(), hdr.str() });
         }
       };
@@ -808,7 +816,8 @@ namespace oro::runtime::core::services {
   }
 }
 
-// (moved) endif at EOF to keep ObjC methods within Apple block
+@implementation OROBluetoothCentral (PeripheralCallbacks)
+
 - (void) peripheral:(CBPeripheral *)peripheral didDiscoverServices:(NSError *)error {
   NSString* dev = peripheral.identifier.UUIDString;
   void (^cb)(NSError*, NSArray<CBService*>*) = self.onServices[dev];
@@ -842,5 +851,7 @@ namespace oro::runtime::core::services {
   void (^cb)(NSError*) = self.onWrite[chr];
   if (cb) { [self.onWrite removeObjectForKey:chr]; cb(error); }
 }
+
+@end
 
 #endif // __APPLE__

@@ -17,6 +17,14 @@ namespace oro::runtime::bridge {
 }
 
 namespace oro::runtime::serviceworker {
+  using types::Atomic;
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   // forward
   class Fetch;
   class Manager;

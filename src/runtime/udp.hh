@@ -7,6 +7,13 @@
 #include "loop.hh"
 
 namespace oro::runtime::udp {
+  using types::Function;
+  using types::Map;
+  using types::Mutex;
+  using types::SharedPointer;
+  using types::String;
+  using types::Vector;
+
   class SocketManager;
   typedef enum {
     SOCKET_TYPE_NONE = 0,

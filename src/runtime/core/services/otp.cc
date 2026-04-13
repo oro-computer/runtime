@@ -640,11 +640,20 @@ namespace oro::runtime::core::services {
 
 #if ORO_RUNTIME_PLATFORM_APPLE
   bool OTP::startAppleRequest (Request& request) {
+  #if ORO_RUNTIME_PLATFORM_IOS
     return startIOSOTPRequest(request.id, *this, request.timeoutMs, request.host);
+  #else
+    (void) request;
+    return false;
+  #endif
   }
 
   void OTP::stopAppleRequest (const Request& request) {
+  #if ORO_RUNTIME_PLATFORM_IOS
     stopIOSOTPRequest(request.id);
+  #else
+    (void) request;
+  #endif
   }
 #endif
 }

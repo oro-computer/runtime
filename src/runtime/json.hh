@@ -5,6 +5,15 @@
 #include "crypto.hh"
 
 namespace oro::runtime::JSON {
+  using types::Atomic;
+  using types::SharedPointer;
+  template <typename K = types::String, typename V = types::String>
+  using RuntimeMap = types::Map<K, V>;
+  using RuntimePath = types::Path;
+  using RuntimeString = types::String;
+  template <typename T>
+  using RuntimeVector = types::Vector<T>;
+
   // forward
   class Any;
   class Raw;
@@ -15,8 +24,8 @@ namespace oro::runtime::JSON {
   class Number;
   class String;
 
-  using ObjectEntries = Map<runtime::String, Any>;
-  using ArrayEntries = Vector<Any>;
+  using ObjectEntries = RuntimeMap<RuntimeString, Any>;
+  using ArrayEntries = RuntimeVector<Any>;
 
   enum class Type {
     Empty = -1,
@@ -41,7 +50,7 @@ namespace oro::runtime::JSON {
 
       operator bool () const;
 
-      const runtime::String typeof () const;
+      const RuntimeString typeof () const;
       bool isError () const;
       bool isRaw () const;
       bool isArray () const;
@@ -55,7 +64,7 @@ namespace oro::runtime::JSON {
       const ID getEntityID ();
       virtual Type getEntityType () const = 0;
       virtual bool getEntityBooleanValue () const = 0;
-      virtual const runtime::String str () const = 0;
+      virtual const RuntimeString str () const = 0;
   };
 
   class SharedEntityPointer {
@@ -111,32 +120,32 @@ namespace oro::runtime::JSON {
       }
   };
 
-  class Error : public std::invalid_argument, public Value<runtime::String, Type::Error> {
+  class Error : public std::invalid_argument, public Value<RuntimeString, Type::Error> {
     public:
       static Type valueType;
       int code = 0;
-      runtime::String name;
-      runtime::String message;
-      runtime::String location;
+      RuntimeString name;
+      RuntimeString message;
+      RuntimeString location;
 
       Error ();
-      Error (const runtime::String& message);
+      Error (const RuntimeString& message);
       Error (const Error&);
       Error (Error*);
       Error (
-        const runtime::String& name,
-        const runtime::String& message,
+        const RuntimeString& name,
+        const RuntimeString& message,
         int code = 0
       );
       Error (
-        const runtime::String& name,
-        const runtime::String& message,
-        const runtime::String& location
+        const RuntimeString& name,
+        const RuntimeString& message,
+        const RuntimeString& location
       );
 
-      const runtime::String value () const override;
+      const RuntimeString value () const override;
       const char* what () const noexcept override;
-      const runtime::String str () const override;
+      const RuntimeString str () const override;
   };
 
   class Null : public Value<std::nullptr_t, Type::Null> {
@@ -145,7 +154,7 @@ namespace oro::runtime::JSON {
       Null () = default;
       Null (std::nullptr_t);
       const std::nullptr_t value () const override;
-      const runtime::String str () const override;
+      const RuntimeString str () const override;
   };
 
   class Any : public Value<SharedEntityPointer, Type::Any> {
@@ -185,22 +194,22 @@ namespace oro::runtime::JSON {
       Any (const char);
       Any (const char *);
 
-      Any (const runtime::String&);
-      Any (const runtime::Path&);
-      Any (const runtime::Map<runtime::String, runtime::String>&);
-      Any (const runtime::Map<runtime::String, std::nullptr_t>&);
-      Any (const runtime::Map<runtime::String, const Null>&);
-      Any (const runtime::Map<runtime::String, bool>&);
-      Any (const runtime::Map<runtime::String, int64_t>&);
-      Any (const runtime::Map<runtime::String, uint64_t>&);
-      Any (const runtime::Map<runtime::String, uint32_t>&);
-      Any (const runtime::Map<runtime::String, int32_t>&);
-      Any (const runtime::Map<runtime::String, double>&);
+      Any (const RuntimeString&);
+      Any (const RuntimePath&);
+      Any (const RuntimeMap<RuntimeString, RuntimeString>&);
+      Any (const RuntimeMap<RuntimeString, std::nullptr_t>&);
+      Any (const RuntimeMap<RuntimeString, const Null>&);
+      Any (const RuntimeMap<RuntimeString, bool>&);
+      Any (const RuntimeMap<RuntimeString, int64_t>&);
+      Any (const RuntimeMap<RuntimeString, uint64_t>&);
+      Any (const RuntimeMap<RuntimeString, uint32_t>&);
+      Any (const RuntimeMap<RuntimeString, int32_t>&);
+      Any (const RuntimeMap<RuntimeString, double>&);
     #if ORO_RUNTIME_PLATFORM_APPLE
-      Any (const runtime::Map<runtime::String, size_t>&);
-      Any (const runtime::Map<runtime::String, ssize_t>&);
+      Any (const RuntimeMap<RuntimeString, size_t>&);
+      Any (const RuntimeMap<RuntimeString, ssize_t>&);
     #elif !ORO_RUNTIME_PLATFORM_WINDOWS
-      Any (const runtime::Map<runtime::String, long long>&);
+      Any (const RuntimeMap<RuntimeString, long long>&);
     #endif
 
       Any (const Boolean&);
@@ -228,20 +237,20 @@ namespace oro::runtime::JSON {
       Any& operator = (Any&&);
 
       Any& operator[] (const char*);
-      Any& operator[] (const runtime::String&);
+      Any& operator[] (const RuntimeString&);
       Any& operator[] (const unsigned int);
 
       bool operator == (const Any&) const;
       bool operator != (const Any&) const;
 
       template <typename T> T& as () const;
-      Any& at (const runtime::String&);
+      Any& at (const RuntimeString&);
       Any& at (const unsigned int);
       const SharedEntityPointer value () const override;
-      const runtime::String str () const override;
+      const RuntimeString str () const override;
   };
 
-  class Raw : public Value<runtime::String, Type::Raw> {
+  class Raw : public Value<RuntimeString, Type::Raw> {
     public:
       static Type valueType;
       Raw () = default;
@@ -249,11 +258,11 @@ namespace oro::runtime::JSON {
       Raw (Raw&&);
       Raw (const Raw*);
       Raw (const Any&);
-      Raw (const runtime::String&);
+      Raw (const RuntimeString&);
       Raw& operator = (const Raw&);
       Raw& operator = (Raw&&);
-      const runtime::String value () const override;
-      const runtime::String str () const override;
+      const RuntimeString value () const override;
+      const RuntimeString str () const override;
   };
 
   class Object : public Value<ObjectEntries, Type::Object> {
@@ -266,36 +275,36 @@ namespace oro::runtime::JSON {
     #if ORO_RUNTIME_PLATFORM_LINUX && !ORO_RUNTIME_PLATFORM_ANDROID
       Object (JSCValue*);
     #endif
-      Object (const Map<runtime::String, runtime::String>& entries);
+      Object (const RuntimeMap<RuntimeString, RuntimeString>& entries);
       Object (const Object::Entries& entries);
-      Object (const runtime::Map<runtime::String, std::nullptr_t>&);
-      Object (const runtime::Map<runtime::String, const Null>&);
-      Object (const runtime::Map<runtime::String, bool>&);
-      Object (const runtime::Map<runtime::String, int64_t>&);
-      Object (const runtime::Map<runtime::String, uint64_t>&);
-      Object (const runtime::Map<runtime::String, uint32_t>&);
-      Object (const runtime::Map<runtime::String, int32_t>&);
-      Object (const runtime::Map<runtime::String, double>&);
+      Object (const RuntimeMap<RuntimeString, std::nullptr_t>&);
+      Object (const RuntimeMap<RuntimeString, const Null>&);
+      Object (const RuntimeMap<RuntimeString, bool>&);
+      Object (const RuntimeMap<RuntimeString, int64_t>&);
+      Object (const RuntimeMap<RuntimeString, uint64_t>&);
+      Object (const RuntimeMap<RuntimeString, uint32_t>&);
+      Object (const RuntimeMap<RuntimeString, int32_t>&);
+      Object (const RuntimeMap<RuntimeString, double>&);
     #if ORO_RUNTIME_PLATFORM_APPLE
-      Object (const runtime::Map<runtime::String, size_t>&);
-      Object (const runtime::Map<runtime::String, ssize_t>&);
+      Object (const RuntimeMap<RuntimeString, size_t>&);
+      Object (const RuntimeMap<RuntimeString, ssize_t>&);
     #elif !ORO_RUNTIME_PLATFORM_WINDOWS
-      Object (const runtime::Map<runtime::String, long long>&);
+      Object (const RuntimeMap<RuntimeString, long long>&);
     #endif
       Object (const Object&);
       Object (const Error&);
 
       Any& operator[] (const char*);
-      Any& operator[] (const runtime::String&);
+      Any& operator[] (const RuntimeString&);
 
-      const runtime::String str () const override;
+      const RuntimeString str () const override;
       const Object::Entries value () const override;
-      const Any& get (const runtime::String&) const;
-      const Any& get (const runtime::String&);
-      Any& at (const runtime::String&);
-      void set (const runtime::String&, const Any&);
-      bool has (const runtime::String&) const;
-      bool contains (const runtime::String&) const;
+      const Any& get (const RuntimeString&) const;
+      const Any& get (const RuntimeString&);
+      Any& at (const RuntimeString&);
+      void set (const RuntimeString&, const Any&);
+      bool has (const RuntimeString&) const;
+      bool contains (const RuntimeString&) const;
       Entries::size_type size () const;
       const const_iterator begin () const noexcept;
       const const_iterator end () const noexcept;
@@ -319,7 +328,7 @@ namespace oro::runtime::JSON {
       Any& operator[] (const unsigned int);
       const Any& operator[] (const unsigned int) const;
 
-      const runtime::String str () const override;
+      const RuntimeString str () const override;
       const Array::Entries value () const override;
       bool has (const unsigned int) const;
       Entries::size_type size () const;
@@ -344,10 +353,10 @@ namespace oro::runtime::JSON {
       Boolean (int64_t);
       Boolean (double);
       Boolean (void*);
-      Boolean (const runtime::String&);
+      Boolean (const RuntimeString&);
 
       const bool value () const override;
-      const runtime::String str () const override;
+      const RuntimeString str () const override;
   };
 
   class Number : public Value<double, Type::Number> {
@@ -362,18 +371,18 @@ namespace oro::runtime::JSON {
       Number (uint32_t);
       Number (uint64_t);
       Number (bool);
-      Number (const String&);
+      Number (const RuntimeString&);
 
       const double value () const override;
-      const runtime::String str () const override;
+      const RuntimeString str () const override;
   };
 
-  class String : public Value<runtime::String, Type::String> {
+  class String : public Value<::oro::runtime::types::String, Type::String> {
     public:
       static Type valueType;
       String () = default;
       String (const String&);
-      String (const runtime::String&);
+      String (const ::oro::runtime::types::String&);
       String (const char);
       String (const char*);
       String (const Any&);
@@ -381,28 +390,28 @@ namespace oro::runtime::JSON {
       String (const Boolean&);
       String (const Error&);
 
-      const runtime::String str () const override;
-      const runtime::String value () const override;
-      runtime::String::size_type size () const;
+      const ::oro::runtime::types::String str () const override;
+      const ::oro::runtime::types::String value () const override;
+      ::oro::runtime::types::String::size_type size () const;
   };
 
   extern const Null null;
   extern const Any nullAny;
 
-  Any parse (const runtime::String& source);
+  Any parse (const RuntimeString& source);
   Any parse (const char* source);
 
   // Serialize a JSON value to its canonical string form.
-  inline runtime::String stringify (const Any& any) {
+  inline RuntimeString stringify (const Any& any) {
     return any.str();
   }
 
   // Convenience overloads for concrete types.
-  inline runtime::String stringify (const Object& object) {
+  inline RuntimeString stringify (const Object& object) {
     return object.str();
   }
 
-  inline runtime::String stringify (const Array& array) {
+  inline RuntimeString stringify (const Array& array) {
     return array.str();
   }
 

@@ -5,6 +5,12 @@
 #include "timers.hh"
 
 namespace oro::runtime::core::services {
+  using types::Map;
+  using types::Mutex;
+  using types::String;
+  using types::UnorderedMap;
+  using types::Vector;
+
   class OTP : public core::Service {
     public:
       struct Request {

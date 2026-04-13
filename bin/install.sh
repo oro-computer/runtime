@@ -237,6 +237,18 @@ function _cmake_configure () {
   quiet cmake -S "$source_dir" -B "$build_dir" "$@"
 }
 
+function _darwin_third_party_warning_flags () {
+  if [[ "$host" != "Darwin" ]]; then
+    return 0
+  fi
+
+  # Third-party native deps pull in Apple SDK headers that emit tens of thousands
+  # of warnings under current Xcode/CLT releases. Use a single compiler-wide
+  # suppression flag here so CMake propagates it reliably across C, C++, ObjC,
+  # and ObjC++ compilation units.
+  printf '%s' "-w"
+}
+
 function _autotools_configure_needed () {
   local stage_dir="$1"
   local expected_prefix="$2"
@@ -278,6 +290,54 @@ function _toolchain_supports_openmp () {
   fi
 
   [[ "$_toolchain_supports_openmp_cache" == "1" ]]
+}
+
+function _resolve_darwin_libomp () {
+  local -a llvms=()
+  local libomp_path=""
+
+  if compgen -G "/opt/homebrew/opt/llvm*" >/dev/null; then
+    llvms+=(/opt/homebrew/opt/llvm*)
+  fi
+
+  if compgen -G "/usr/local/opt/llvm*" >/dev/null; then
+    llvms+=(/usr/local/opt/llvm*)
+  fi
+
+  if [[ -n "${LLVM_PATHS:-}" ]]; then
+    while IFS= read -r path; do
+      if [[ -n "$path" ]]; then
+        llvms+=("$path")
+      fi
+    done < <(printf '%s' "$LLVM_PATHS" | tr ':' '\n')
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    local brew_llvm_prefix="$(brew --prefix llvm 2>/dev/null || true)"
+    if [[ -n "$brew_llvm_prefix" ]]; then
+      llvms+=("$brew_llvm_prefix")
+    fi
+  fi
+
+  for path in "${llvms[@]}"; do
+    local libomp="$(find -L "$path" -path '*/lib/libomp.dylib' 2>/dev/null | head -n1)"
+    if [[ -n "$libomp" ]] && [[ -f "$libomp" ]]; then
+      libomp_path="$libomp"
+      break
+    fi
+  done
+
+  if [[ -z "$libomp_path" ]] || [[ ! -f "$libomp_path" ]]; then
+    local fallback_prefix=""
+    if command -v brew >/dev/null 2>&1; then
+      fallback_prefix="$(brew --prefix libomp 2>/dev/null || true)"
+    fi
+    if [[ -n "$fallback_prefix" ]] && [[ -f "$fallback_prefix/lib/libomp.dylib" ]]; then
+      libomp_path="$fallback_prefix/lib/libomp.dylib"
+    fi
+  fi
+
+  printf '%s' "$libomp_path"
 }
 
 function _wait_for_pid_or_die () {
@@ -368,19 +428,22 @@ function _build_cli {
   # Expansion won't work under _NT
   # uv found by -L
   # referenced directly below
-  # local libs=(-luv -llama "$runtime_link_flag")
+  # local libs=(-luv -lllama "$runtime_link_flag")
   local -a libs=()
 
   if [[ "$(uname -s)" != *"_NT"* ]]; then
     #
     # Add libuv and the runtime archive; on macOS we also link
-    # against llama via -llama. On Linux, the CLI already links
+    # against llama via -lllama. On Linux, the CLI already links
     # libllama via the explicit static archive group below, so we
-    # avoid an extra -llama here to keep the linker happy in dev
+    # avoid an extra -lllama here to keep the linker happy in dev
     # environments where pkg-config/lib paths may not be fully set.
     #
     if [[ "$(uname -s)" == "Darwin" ]]; then
-      libs=(-luv -llama "$runtime_link_flag")
+      libs=(-luv -lllama "$runtime_link_flag")
+      if [[ -f "$BUILD_DIR/$arch-$platform/lib/libusb-1.0.a" ]]; then
+        libs+=("-lusb-1.0")
+      fi
     else
       libs=(-luv "$runtime_link_flag")
     fi
@@ -483,7 +546,11 @@ function _build_cli {
     static_libs+=("$BUILD_DIR/$arch-$platform/lib/${canonical_runtime_lib}.a")
     static_libs+=("-Wl,--end-group")
   elif [[ "$(uname -s)" == "Darwin" ]]; then
-    cflags+=("-fopenmp")
+    if _toolchain_supports_openmp; then
+      cflags+=("-fopenmp")
+    else
+      echo "warn - skipping OpenMP for the macOS CLI link step because the current toolchain does not support -fopenmp"
+    fi
     if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]] && [[ -f "$libipfs_archive" ]]; then
       static_libs+=("$libipfs_archive")
     fi
@@ -1154,30 +1221,15 @@ function _install {
       if [[ "$host" == "Darwin" ]]; then
         if [[ "$platform" == "desktop" ]]; then
           echo "# locating 'libomp.dylib...'"
-          local llvms=()
-          local libomp_path=""
+          local libomp_path="$(_resolve_darwin_libomp)"
 
-          llvms+=($(find /opt/homebrew/opt/llvm* 2>/dev/null))
-          llvms+=($(echo $LLVM_PATHS | tr ':' ' '))
+          if [[ -z "$libomp_path" ]] || [[ ! -f "$libomp_path" ]]; then
+            die 1 "not ok - could not locate 'libomp.dylib'. Install an LLVM package (preferred) or the libomp package, then rerun relink. Examples: \"$(advice "llvm")\" or \"$(advice "libomp")\""
+          fi
 
-          for path in ${llvms[@]}; do
-            local libomp="$(find -L "$path" -path '*/lib/libomp.dylib' 2>/dev/null | head -n1)"
-            if [ -n "$libomp" ] && [ -f "$libomp" ]; then
-              libomp_path="$libomp"
-              echo "# found LLVM libomp at: '$libomp_path'"
-              break
-            fi
-          done
-
-          if [ -z "$libomp_path" ] || ! [ -f "$libomp_path" ]; then
-            # Fallback: try to locate a libomp from the standalone libomp package via Homebrew
-            local fallback_prefix=$(brew --prefix libomp 2>/dev/null || true)
-            if [ -n "$fallback_prefix" ] && [ -f "$fallback_prefix/lib/libomp.dylib" ]; then
-              libomp_path="$fallback_prefix/lib/libomp.dylib"
-              echo "# found standalone libomp at: '$libomp_path'"
-            else
-              die 1 "not ok - could not locate 'libomp.dylib'. Please install an LLVM package (preferred) or the libomp package: \"$(advice "libomp")\""
-            fi
+          echo "# found libomp at: '$libomp_path'"
+          if ! _toolchain_supports_openmp; then
+            echo "warn - staging libomp.dylib for macOS app packaging even though the current toolchain does not support -fopenmp"
           fi
 
           mkdir -p "$ORO_HOME/lib/$arch-desktop/codesign"
@@ -1711,21 +1763,38 @@ function _compile_llama {
     cmake_args+=(-DGGML_OPENMP=OFF -DGGML_OPENMP_ENABLED=OFF)
   fi
 
+  if [[ "$platform" == "desktop" && "$host" == "Darwin" ]]; then
+    local darwin_warning_flags="$(_darwin_third_party_warning_flags)"
+    cmake_args+=(
+      -DCMAKE_C_FLAGS="$darwin_warning_flags"
+      -DCMAKE_CXX_FLAGS="$darwin_warning_flags"
+      -DCMAKE_OBJC_FLAGS="$darwin_warning_flags"
+      -DCMAKE_OBJCXX_FLAGS="$darwin_warning_flags"
+    )
+  fi
+
   if [ "$platform" == "desktop" ]; then
     if [[ "$host" != "Win32" ]]; then
       cmake_args+=(-DCMAKE_POSITION_INDEPENDENT_CODE=ON)
       quiet command -v cmake
       die $? "not ok - missing cmake, \"$(advice 'cmake')\""
       local cflags="-fPIC"
+      if [[ "$host" == "Darwin" ]]; then
+        cflags+=" $(_darwin_third_party_warning_flags)"
+      fi
       export CFLAGS="$cflags"
       export CXXFLAGS="$cflags"
+      export OBJCFLAGS="$cflags"
+      export OBJCXXFLAGS="$cflags"
 
       _cmake_configure . build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}"
       die $? "not ok - libllama.a (desktop)"
 
       quiet cmake --build build &&
-      quiet cmake --build build -- -j"$CPU_CORES" &&
-      quiet cmake --install build
+      quiet cmake --build build -- -j"$CPU_CORES"
+      die $? "not ok - libllama.a (desktop)"
+
+      _stage_llama_desktop_outputs "$STAGING_DIR" "$BUILD_DIR/$target-$platform"
       die $? "not ok - libllama.a (desktop)"
     else
       if ! test -f "$BUILD_DIR/$target-$platform/lib$d/llama.lib"; then
@@ -1739,10 +1808,10 @@ function _compile_llama {
         _cmake_configure .. . "${cmake_args[@]}"
         quiet cmake --build . --config $config
         mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
-        quiet echo "cp -up $STAGING_DIR/build/$config/llama.lib "$BUILD_DIR/$target-$platform/lib$d/llama.lib""
-        cp -up "$STAGING_DIR/build/$config/llama.lib" "$BUILD_DIR/$target-$platform/lib$d/llama.lib"
+        quiet echo "copy_if_newer $STAGING_DIR/build/$config/llama.lib "$BUILD_DIR/$target-$platform/lib$d/llama.lib""
+        copy_if_newer "$STAGING_DIR/build/$config/llama.lib" "$BUILD_DIR/$target-$platform/lib$d/llama.lib"
         if [[ -n "$DEBUG" ]]; then
-          cp -up "$STAGING_DIR"/build/$config/llama_a.pdb "$BUILD_DIR/$target-$platform/lib$d/llama_a.pdb"
+          copy_if_newer "$STAGING_DIR"/build/$config/llama_a.pdb "$BUILD_DIR/$target-$platform/lib$d/llama_a.pdb"
         fi;
       fi
     fi
@@ -1833,6 +1902,38 @@ function _compile_llama {
   return 0
 }
 
+function _stage_llama_desktop_outputs {
+  local staging_dir=$1
+  local install_prefix=$2
+  local libdir="$install_prefix/lib"
+  local includedir="$install_prefix/include"
+
+  mkdir -p "$libdir" "$includedir"
+
+  local archives=(
+    "$staging_dir/build/src/libllama.a"
+    "$staging_dir/build/ggml/src/libggml.a"
+    "$staging_dir/build/ggml/src/libggml-base.a"
+    "$staging_dir/build/ggml/src/libggml-cpu.a"
+    "$staging_dir/build/ggml/src/ggml-blas/libggml-blas.a"
+    "$staging_dir/build/ggml/src/ggml-metal/libggml-metal.a"
+  )
+
+  local archive=""
+  for archive in "${archives[@]}"; do
+    if [[ -f "$archive" ]]; then
+      copy_if_newer "$archive" "$libdir/$(basename "$archive")"
+    fi
+  done
+
+  local header=""
+  for header in "$staging_dir/include/"*.h "$staging_dir/ggml/include/"*.h; do
+    if [[ -f "$header" ]]; then
+      copy_if_newer "$header" "$includedir/$(basename "$header")"
+    fi
+  done
+}
+
 function _compile_libuv {
   local target=$1
   local hosttarget=$1
@@ -1894,10 +1995,10 @@ function _compile_libuv {
         quiet cmake --build "$STAGING_DIR/build/" --config $config
         die $? "not ok - libuv cmake build (Win32)"
         mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
-        quiet echo "cp -up $STAGING_DIR/build/$config/libuv.lib "$BUILD_DIR/$target-$platform/lib$d/libuv.lib""
-        cp -up "$STAGING_DIR/build/$config/libuv.lib" "$BUILD_DIR/$target-$platform/lib$d/libuv.lib"
+        quiet echo "copy_if_newer $STAGING_DIR/build/$config/libuv.lib "$BUILD_DIR/$target-$platform/lib$d/libuv.lib""
+        copy_if_newer "$STAGING_DIR/build/$config/libuv.lib" "$BUILD_DIR/$target-$platform/lib$d/libuv.lib"
         if [[ -n "$DEBUG" ]]; then
-          cp -up "$STAGING_DIR"/build/$config/uv_a.pdb "$BUILD_DIR/$target-$platform/lib$d/uv_a.pdb"
+          copy_if_newer "$STAGING_DIR"/build/$config/uv_a.pdb "$BUILD_DIR/$target-$platform/lib$d/uv_a.pdb"
         fi;
       fi
     fi
@@ -1986,6 +2087,16 @@ function _compile_whisper {
     fi
   fi
 
+  if [[ "$platform" == "desktop" && "$host" == "Darwin" ]]; then
+    local darwin_warning_flags="$(_darwin_third_party_warning_flags)"
+    cmake_args+=(
+      -DCMAKE_C_FLAGS="$darwin_warning_flags"
+      -DCMAKE_CXX_FLAGS="$darwin_warning_flags"
+      -DCMAKE_OBJC_FLAGS="$darwin_warning_flags"
+      -DCMAKE_OBJCXX_FLAGS="$darwin_warning_flags"
+    )
+  fi
+
   quiet command -v cmake
   die $? "not ok - missing cmake, \"$(advice 'cmake')\""
 
@@ -1993,8 +2104,13 @@ function _compile_whisper {
     if [[ "$host" != "Win32" ]]; then
       cmake_args+=(-DCMAKE_POSITION_INDEPENDENT_CODE=ON)
       local cflags="-fPIC"
+      if [[ "$host" == "Darwin" ]]; then
+        cflags+=" $(_darwin_third_party_warning_flags)"
+      fi
       export CFLAGS="$cflags"
       export CXXFLAGS="$cflags"
+      export OBJCFLAGS="$cflags"
+      export OBJCXXFLAGS="$cflags"
 
       _cmake_configure . build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}"
       die $? "not ok - libwhisper.a (desktop) configure"
@@ -2020,10 +2136,10 @@ function _compile_whisper {
         die $? "not ok - libwhisper.lib (desktop) build"
 
         mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
-        cp -up "$STAGING_DIR/build/$config/whisper.lib" "$BUILD_DIR/$target-$platform/lib$d/whisper.lib"
+        copy_if_newer "$STAGING_DIR/build/$config/whisper.lib" "$BUILD_DIR/$target-$platform/lib$d/whisper.lib"
         if [[ -n "$DEBUG" ]]; then
           if [ -f "$STAGING_DIR/build/$config/whisper.pdb" ]; then
-            cp -up "$STAGING_DIR/build/$config/whisper.pdb" "$BUILD_DIR/$target-$platform/lib$d/whisper.pdb"
+            copy_if_newer "$STAGING_DIR/build/$config/whisper.pdb" "$BUILD_DIR/$target-$platform/lib$d/whisper.pdb"
           fi
         fi
       fi
@@ -2176,7 +2292,7 @@ function _compile_iroh_ffi {
   for oro_lib in "${oro_libs[@]}"; do
     local source="$release_dir/$oro_lib"
     if [[ -f "$source" ]]; then
-      cp -up "$source" "$BUILD_DIR/$arch-$platform/lib/$oro_lib"
+      copy_if_newer "$source" "$BUILD_DIR/$arch-$platform/lib/$oro_lib"
       copied=1
     fi
   done
@@ -2188,7 +2304,7 @@ function _compile_iroh_ffi {
 
   for header in oro_iroh socket_iroh; do
     if [[ -f "$root/include/iroh/$header.h" ]]; then
-      cp -up "$root/include/iroh/$header.h" "$BUILD_DIR/include/iroh/$header.h"
+      copy_if_newer "$root/include/iroh/$header.h" "$BUILD_DIR/include/iroh/$header.h"
     fi
   done
 
@@ -2230,7 +2346,7 @@ function _compile_crsqlite_loadable {
       fi
 
       mkdir -p "$BUILD_DIR/$arch-$platform/extensions"
-      cp -up "$built" "$BUILD_DIR/$arch-$platform/extensions/"
+      copy_if_newer "$built" "$BUILD_DIR/$arch-$platform/extensions/$(basename "$built")"
       echo "ok - built cr-sqlite loadable extension for $platform ($arch)"
       ;;
 
@@ -2257,13 +2373,13 @@ function _compile_crsqlite_loadable {
 
       # Stage iOS device extension for arm64 iPhoneOS
       mkdir -p "$BUILD_DIR/arm64-iPhoneOS/extensions"
-      cp -up "$device_dylib" "$BUILD_DIR/arm64-iPhoneOS/extensions/crsqlite.dylib"
+      copy_if_newer "$device_dylib" "$BUILD_DIR/arm64-iPhoneOS/extensions/crsqlite.dylib"
 
       # Stage iOS simulator extension for x86_64 and arm64 simulators
       mkdir -p "$BUILD_DIR/x86_64-iPhoneSimulator/extensions"
       mkdir -p "$BUILD_DIR/arm64-iPhoneSimulator/extensions"
-      cp -up "$sim_universal" "$BUILD_DIR/x86_64-iPhoneSimulator/extensions/crsqlite.dylib"
-      cp -up "$sim_universal" "$BUILD_DIR/arm64-iPhoneSimulator/extensions/crsqlite.dylib"
+      copy_if_newer "$sim_universal" "$BUILD_DIR/x86_64-iPhoneSimulator/extensions/crsqlite.dylib"
+      copy_if_newer "$sim_universal" "$BUILD_DIR/arm64-iPhoneSimulator/extensions/crsqlite.dylib"
 
       echo "ok - staged cr-sqlite iOS extensions for arm64 iPhoneOS and simulators"
       ;;
@@ -2371,7 +2487,7 @@ function _compile_crsqlite_loadable {
       local dest_arch="$target"
       local dest_platform="android"
       mkdir -p "$BUILD_DIR/$dest_arch-$dest_platform/extensions"
-      cp -up "$built_android" "$BUILD_DIR/$dest_arch-$dest_platform/extensions/crsqlite.so"
+      copy_if_newer "$built_android" "$BUILD_DIR/$dest_arch-$dest_platform/extensions/crsqlite.so"
       echo "ok - built cr-sqlite loadable extension for android ($target)"
       ;;
 
@@ -2444,7 +2560,7 @@ function _compile_libusb {
         local libdir="$BUILD_DIR/$target-$platform/lib"
         mkdir -p "$libdir"
         if [ ! -f "$libdir/libusb-1.0.a" ] && [ -f "$STAGING_DIR/libusb/.libs/libusb-1.0.a" ]; then
-          cp -up "$STAGING_DIR/libusb/.libs/libusb-1.0.a" "$libdir/"
+          copy_if_newer "$STAGING_DIR/libusb/.libs/libusb-1.0.a" "$libdir/libusb-1.0.a"
         fi
       else
         quiet command -v cmake
@@ -2472,7 +2588,7 @@ function _compile_libusb {
 
         if [ -f "$libdir/libusb-1.0.a" ]; then
           mkdir -p "$BUILD_DIR/$target-$platform/lib"
-          cp -up "$libdir/libusb-1.0.a" "$BUILD_DIR/$target-$platform/lib/"
+          copy_if_newer "$libdir/libusb-1.0.a" "$BUILD_DIR/$target-$platform/lib/libusb-1.0.a"
         else
           die 1 "not ok - libusb static archive not found after cmake install ($platform)"
         fi
@@ -2510,7 +2626,7 @@ function _compile_libusb {
           staged_lib="$STAGING_DIR/build/libusb-1.0.lib"
         fi
         if [[ -f "$staged_lib" ]]; then
-          cp -up "$staged_lib" "$output_lib"
+          copy_if_newer "$staged_lib" "$output_lib"
         else
           die 1 "not ok - libusb lib not found after build (Win32)"
         fi
@@ -2518,7 +2634,7 @@ function _compile_libusb {
         if [[ -n "$DEBUG" ]]; then
           local staged_pdb="$STAGING_DIR/build/$config/libusb-1.0.pdb"
           if [[ -f "$staged_pdb" ]]; then
-            cp -up "$staged_pdb" "$BUILD_DIR/$target-$platform/lib$suffix/libusb-1.0.pdb"
+            copy_if_newer "$staged_pdb" "$BUILD_DIR/$target-$platform/lib$suffix/libusb-1.0.pdb"
           fi
         fi
       fi
@@ -2785,15 +2901,15 @@ function _compile_zlib {
         die 1 "not ok - zlib lib not found after build (Win32)"
       fi
 
-      cp -up "$staged_lib" "$output_libdir/z.lib"
-      cp -up "$staged_lib" "$output_libdir/zlib.lib"
+      copy_if_newer "$staged_lib" "$output_libdir/z.lib"
+      copy_if_newer "$staged_lib" "$output_libdir/zlib.lib"
 
       # Also ensure a non-suffixed lib directory has a copy so feature
       # detection in bin/cflags.sh can find the archive.
       if [[ "$suffix" != "" ]]; then
         mkdir -p "$BUILD_DIR/$target-$platform/lib"
-        cp -up "$staged_lib" "$BUILD_DIR/$target-$platform/lib/z.lib"
-        cp -up "$staged_lib" "$BUILD_DIR/$target-$platform/lib/zlib.lib"
+        copy_if_newer "$staged_lib" "$BUILD_DIR/$target-$platform/lib/z.lib"
+        copy_if_newer "$staged_lib" "$BUILD_DIR/$target-$platform/lib/zlib.lib"
       fi
 
       cd "$STAGING_DIR" || exit 1
@@ -3026,7 +3142,7 @@ function _compile_libusb_android {
   fi
 
   local host_arch="$(host_arch)"
-  local prebuilt="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/$(android_host_platform "$host")-$(android_host_arch_dir "$host_arch")"
+  local prebuilt="$(android_prebuilt_toolchain_dir "$ANDROID_HOME" "$NDK_VERSION" "$host" "$host_arch")"
   local toolchain_bin="$prebuilt/bin"
   local host_compiler="$(android_arch "$target")-linux-android$(android_eabi "$target")"
   local api="$ANDROID_PLATFORM"
@@ -3065,7 +3181,7 @@ function _compile_libusb_android {
   local libdir="$BUILD_DIR/$target-$platform/lib"
   mkdir -p "$libdir"
   if [ ! -f "$libdir/libusb-1.0.a" ] && [ -f "$STAGING_DIR/libusb/.libs/libusb-1.0.a" ]; then
-    cp -up "$STAGING_DIR/libusb/.libs/libusb-1.0.a" "$libdir/"
+    copy_if_newer "$STAGING_DIR/libusb/.libs/libusb-1.0.a" "$libdir/libusb-1.0.a"
   fi
 
   rm -f "$root/build/$target-$platform/lib"/*.{so,la,dylib}* 2>/dev/null || true
@@ -3273,7 +3389,7 @@ function _compile_libsodium_android {
   rm -rf "$dest_include_dir"
   mkdir -p "$dest_include_dir"
 
-  cp -up "$output_lib" "$dest_lib_dir/"
+  copy_if_newer "$output_lib" "$dest_lib_dir/$(basename "$output_lib")"
   die $? "not ok - libsodium android archive copy ($target)"
 
   cp -rfp "$prefix_dir/include/"* "$dest_include_dir/"
