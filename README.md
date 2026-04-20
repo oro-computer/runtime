@@ -1,12 +1,11 @@
-# Oro Runtime
+Oro Runtime
+===========
 
 Oro Runtime is the cross-platform runtime and CLI toolchain for Oro applications. A built distribution gives you the `oroc` CLI, the public `oro:*` JavaScript modules, generated API/config/CLI references, and installed manpages for downstream application development.
 
 These docs assume you are using an installed runtime from an app workspace. They do not assume you are inside the runtime source repository.
 
-This repository is the active Oro Runtime source tree. The project previously
-used the `oro-computer/legacy-runtime` repository name; use the renamed
-repository and website URLs below when linking to the project or its docs.
+This repository is the active Oro Runtime source tree.
 
 ## Canonical Links
 
@@ -60,3 +59,7 @@ repository and website URLs below when linking to the project or its docs.
 - Autoindex is opt-in.
 - The runtime does not guarantee `SharedArrayBuffer` or `Atomics.wait`; code that depends on shared memory needs a safe fallback.
 - For current platform gaps and compatibility caveats, see [Runtime Limitations](docs/LEGACY_LIMITATIONS.md).
+
+## License
+
+MIT

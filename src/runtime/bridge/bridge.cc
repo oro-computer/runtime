@@ -45,9 +45,9 @@ namespace oro::runtime::bridge {
   static constexpr auto ESM_IMPORT_PROXY_TEMPLATE_WITH_DEFAULT_EXPORT = R"S(
 /**
  * This module exists to provide a proxy to a canonical URL for a module
- * so `{{protocol}}:{{specifier}}` and `{{protocol}}://{bundle_identifier}/legacy-runtime/{{pathname}}`
+ * so `{{protocol}}:{{specifier}}` and `{{protocol}}://{bundle_identifier}/runtime/{{pathname}}`
  * resolve to the exact same module instance.
- * @see {@link https://github.com/oro-computer/legacy-runtime/blob/{{commit}}/api{{pathname}}}
+ * @see {@link https://github.com/oro-computer/runtime/blob/{{commit}}/api{{pathname}}}
  */
 import module from '{{url}}'
 export * from '{{url}}'
@@ -57,9 +57,9 @@ export default module
   static constexpr auto ESM_IMPORT_PROXY_TEMPLATE_WITHOUT_DEFAULT_EXPORT = R"S(
 /**
  * This module exists to provide a proxy to a canonical URL for a module
- * so `{{protocol}}:{{specifier}}` and `{{protocol}}://{bundle_identifier}/legacy-runtime/{{pathname}}`
+ * so `{{protocol}}:{{specifier}}` and `{{protocol}}://{bundle_identifier}/runtime/{{pathname}}`
  * resolve to the exact same module instance.
- * @see {@link https://github.com/oro-computer/legacy-runtime/blob/{{commit}}/api{{pathname}}}
+ * @see {@link https://github.com/oro-computer/runtime/blob/{{commit}}/api{{pathname}}}
  */
 export * from '{{url}}'
 )S";

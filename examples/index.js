@@ -330,7 +330,7 @@ function useHeroActions () {
       },
       {
         label: 'View source on GitHub',
-        href: 'https://github.com/oro-computer/legacy-runtime',
+        href: 'https://github.com/oro-computer/runtime',
         variant: 'ghost'
       }
     ],

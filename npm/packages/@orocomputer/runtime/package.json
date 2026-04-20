@@ -21,7 +21,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oro-computer/legacy-runtime.git"
+    "url": "git+https://github.com/oro-computer/runtime.git"
   },
   "keywords": [
     "oro",
@@ -35,7 +35,7 @@
   "author": "Oro Runtime Maintainers <maintainers@oro.computer>",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/oro-computer/legacy-runtime/issues"
+    "url": "https://github.com/oro-computer/runtime/issues"
   },
   "homepage": "https://oro.computer/runtime",
   "optionalDependencies": {
