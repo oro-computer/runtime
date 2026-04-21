@@ -332,7 +332,11 @@ extern "C" {
       .features = features
     });
 
-    app.run();
+    // The web extension is initialized while WebKit is still constructing the
+    // WebProcess. Entering GTK's main loop here can run pending WebKit work
+    // before ServiceWorkerProvider is installed, which WebKitGTK 2.52 rejects
+    // when worker clients register with the service worker subsystem.
+    app.isStarted = true;
   }
 
   const unsigned char* oro_runtime_init_get_user_config_bytes () {
