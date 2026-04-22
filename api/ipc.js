@@ -1220,7 +1220,7 @@ export function sendSync (command, value = '', options = null, buffer = null) {
 
   if (
     typeof globalThis.__global_ipc_extension_handler === 'function' &&
-    (options?.useExtensionIPCIfAvailable || command.startsWith('fs.'))
+    options?.useExtensionIPCIfAvailable === true
   ) {
     if (!(command.startsWith('fs.') && isFileSystemBookmark({ params }))) {
       let response = null

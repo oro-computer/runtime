@@ -169,7 +169,7 @@ namespace oro::runtime::ipc {
     }
 
     if (context.async) {
-      return this->dispatcher.dispatch([
+      auto invokeRoute = [
         this,
         context = std::move(context),
         callback = std::move(callback),
@@ -182,7 +182,13 @@ namespace oro::runtime::ipc {
             callback(result);
           }
         });
-      });
+      };
+
+      if (this->bridge.dispatchRouterCallbacksWithBridge) {
+        return this->bridge.dispatch(std::move(invokeRoute));
+      }
+
+      return this->dispatcher.dispatch(std::move(invokeRoute));
     }
 
     context.callback(incomingMessage, this, [

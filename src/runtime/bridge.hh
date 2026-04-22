@@ -46,6 +46,7 @@ namespace oro::runtime::bridge {
       const core::services::Notifications::NotificationPresentedObserver notificationPresentedObserver;
 
       DispatchHandler dispatchHandler = nullptr;
+      bool dispatchRouterCallbacksWithBridge = false;
       webview::SchemeHandlers schemeHandlers;
       webview::Navigator navigator;
       ipc::Router router;

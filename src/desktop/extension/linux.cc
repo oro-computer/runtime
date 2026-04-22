@@ -4,6 +4,9 @@
 
 #include "../extension.hh"
 
+#include <chrono>
+#include <memory>
+
 using namespace oro;
 using namespace oro::desktop;
 using namespace oro::runtime::types;
@@ -25,20 +28,110 @@ extern "C" {
 
   static SharedPointer<Bridge> sharedBridge = nullptr;
   static WebExtensionContext sharedContext;
+  static GMainContext* sharedMainContext = nullptr;
+  static JSCContext* sharedJSCContext = nullptr;
   static Mutex sharedMutex;
+
+  struct SyncRouteState {
+    BinarySemaphore semaphore {0};
+    Mutex mutex;
+    bool completed = false;
+    ipc::Result result;
+  };
+
+  static void setSharedMainContext (GMainContext* context) {
+    Lock lock(sharedMutex);
+    if (context == nullptr) {
+      context = g_main_context_default();
+    }
+
+    if (sharedMainContext == context) {
+      return;
+    }
+
+    if (sharedMainContext != nullptr) {
+      g_main_context_unref(sharedMainContext);
+    }
+
+    sharedMainContext = g_main_context_ref(context);
+  }
+
+  static GMainContext* getSharedMainContext () {
+    Lock lock(sharedMutex);
+    if (sharedMainContext == nullptr) {
+      sharedMainContext = g_main_context_ref(g_main_context_default());
+    }
+
+    return g_main_context_ref(sharedMainContext);
+  }
+
+  static void setSharedJSCContext (JSCContext* context) {
+    Lock lock(sharedMutex);
+    if (sharedJSCContext == context) {
+      return;
+    }
+
+    if (sharedJSCContext != nullptr) {
+      g_object_unref(sharedJSCContext);
+    }
+
+    sharedJSCContext = context;
+    if (sharedJSCContext != nullptr) {
+      g_object_ref(sharedJSCContext);
+    }
+  }
+
+  static JSCContext* getSharedJSCContext () {
+    Lock lock(sharedMutex);
+    if (sharedJSCContext != nullptr) {
+      g_object_ref(sharedJSCContext);
+    }
+
+    return sharedJSCContext;
+  }
+
+  static void dispatchToWebExtensionContext (Function<void()> callback) {
+    if (callback == nullptr) {
+      return;
+    }
+
+    auto context = getSharedMainContext();
+    g_main_context_invoke_full(
+      context,
+      G_PRIORITY_DEFAULT,
+      +[](gpointer userData) -> gboolean {
+        auto callback = reinterpret_cast<Function<void()>*>(userData);
+        (*callback)();
+        return G_SOURCE_REMOVE;
+      },
+      new Function<void()>(std::move(callback)),
+      +[](gpointer userData) {
+        delete reinterpret_cast<Function<void()>*>(userData);
+      }
+    );
+    g_main_context_unref(context);
+  }
 
   static SharedPointer<Bridge> getSharedBridge (JSCContext* context) {
     static auto app = App::sharedApplication();
     Lock lock(sharedMutex);
 
+    setSharedJSCContext(context);
+
     if (sharedBridge == nullptr) {
-      g_object_ref(context);
       sharedBridge = app->runtime.bridgeManager.get(0, {});
       sharedBridge->userConfig = getUserConfig();
       sharedBridge->dispatchHandler = [](auto callback) { callback(); };
-      sharedBridge->evaluateJavaScriptHandler = [context] (const auto source) {
-        app->dispatch([=] () {
-          auto _ = jsc_context_evaluate(context, source.c_str(), source.size());
+      sharedBridge->dispatchRouterCallbacksWithBridge = true;
+      sharedBridge->evaluateJavaScriptHandler = [] (const auto source) {
+        dispatchToWebExtensionContext([source] () {
+          auto context = getSharedJSCContext();
+          if (context == nullptr) {
+            return;
+          }
+
+          (void) jsc_context_evaluate(context, source.c_str(), source.size());
+          g_object_unref(context);
         });
       };
       sharedBridge->init();
@@ -54,10 +147,13 @@ extern "C" {
   ) {
     auto context = jsc_value_get_context(resolve);
     auto bridge = getSharedBridge(context);
-    auto app = App::sharedApplication();
+
+    g_object_ref(context);
+    g_object_ref(resolve);
+    g_object_ref(reject);
 
     auto routed = bridge->route(message->str(), message->buffer, [=](auto result) {
-      app->dispatch([=] () {
+      dispatchToWebExtensionContext([=] () {
         if (result.queuedResponse.body != nullptr) {
           auto array = jsc_value_new_typed_array(
             context,
@@ -93,11 +189,7 @@ extern "C" {
       });
     });
 
-    if (routed) {
-      g_object_ref(context);
-      g_object_ref(resolve);
-      g_object_ref(reject);
-    } else {
+    if (!routed) {
       const auto json = JSON::Object::Entries {
         {"err", JSON::Object::Entries {
           {"message", "Not found"},
@@ -112,6 +204,10 @@ extern "C" {
         jsc_value_new_string(context, JSON::Object(json).str().c_str()),
         G_TYPE_NONE
       );
+
+      g_object_unref(context);
+      g_object_unref(resolve);
+      g_object_unref(reject);
     }
 
     delete message;
@@ -122,34 +218,63 @@ extern "C" {
     auto Promise = jsc_context_get_value(context, "Promise");
     auto message = new ipc::Message(source);
 
-    if (jsc_value_is_typed_array(value)) {
+    if (value != nullptr && jsc_value_is_typed_array(value)) {
       size_t size = 0;
       auto bytes = jsc_value_typed_array_get_data(value, &size);
-      message->buffer.set(reinterpret_cast<const char*>(bytes), 0, size);
+      if (bytes != nullptr && size > 0) {
+        message->buffer.push(reinterpret_cast<const char*>(bytes), size);
+      }
     }
 
     if (message->get("__sync__") == "true") {
       auto bridge = getSharedBridge(context);
-      auto app = App::sharedApplication();
-      auto semaphore = new BinarySemaphore(0);
-
-      ipc::Result returnResult;
+      auto state = std::make_shared<SyncRouteState>();
 
       const auto routed = bridge->route(
         message->str(),
         message->buffer,
-        [&returnResult, &semaphore] (auto result) mutable {
-          returnResult = std::move(result);
-          semaphore->release();
+        [state] (auto result) mutable {
+          bool shouldRelease = false;
+          {
+            Lock lock(state->mutex);
+            if (!state->completed) {
+              state->result = std::move(result);
+              state->completed = true;
+              shouldRelease = true;
+            }
+          }
+
+          if (shouldRelease) {
+            state->semaphore.release();
+          }
         }
       );
 
-      semaphore->acquire();
-
-      delete semaphore;
       delete message;
 
       if (routed) {
+        const auto completed = state->semaphore.try_acquire_for(
+          std::chrono::seconds(30)
+        );
+
+        if (!completed) {
+          const auto json = JSON::Object::Entries {
+            {"err", JSON::Object::Entries {
+              {"message", "Desktop Linux extension IPC timed out"},
+              {"type", "TimeoutError"},
+              {"source", source}
+            }}
+          };
+
+          return jsc_value_new_string(context, JSON::Object(json).str().c_str());
+        }
+
+        ipc::Result returnResult;
+        {
+          Lock lock(state->mutex);
+          returnResult = std::move(state->result);
+        }
+
         if (returnResult.queuedResponse.body != nullptr) {
           auto array = jsc_value_new_typed_array(
             context,
@@ -228,6 +353,12 @@ extern "C" {
       frame,
       webkit_script_world_get_default()
     );
+    auto mainContext = g_main_context_ref_thread_default();
+    setSharedMainContext(mainContext);
+    if (mainContext != nullptr) {
+      g_main_context_unref(mainContext);
+    }
+
     auto __global_ipc_extension_handler = jsc_value_new_function(
       context,
       "__global_ipc_extension_handler",

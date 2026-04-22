@@ -4,8 +4,8 @@
 namespace oro::runtime::JSON {
   Type Number::valueType = Type::Number;
 
-  Number::Number (const String& string) {
-    this->data = std::stod(string.data);
+  Number::Number (const RuntimeString& string) {
+    this->data = std::stod(string);
   }
 
   Number::Number (const Number& number) {
