@@ -5,6 +5,39 @@
 using oro::runtime::crypto::rand64;
 
 namespace oro::runtime::core::services {
+  struct TimerToken {
+    Timers* timers = nullptr;
+    Timers::ID id = 0;
+  };
+
+  static void closeTimerOnLoop (SharedPointer<Timers::Timer> handle) {
+    if (handle == nullptr || !handle->initialized) {
+      return;
+    }
+
+    auto timer = &handle->timer;
+    auto uvHandle = reinterpret_cast<uv_handle_t*>(timer);
+    if (uv_is_closing(uvHandle)) {
+      return;
+    }
+
+    uv_timer_stop(timer);
+    uv_close(uvHandle, [](uv_handle_t* h) {
+      auto token = static_cast<TimerToken*>(uv_handle_get_data(h));
+      if (token != nullptr) {
+        auto timers = token->timers;
+        const auto id = token->id;
+        if (timers != nullptr) {
+          Lock lock(timers->mutex);
+          timers->handles.erase(id);
+        }
+
+        delete token;
+        uv_handle_set_data(h, nullptr);
+      }
+    });
+  }
+
   bool Timers::stop () {
   #if ORO_RUNTIME_PLATFORM_LINUX
     // Non-blocking on Linux to avoid deadlocks with GTK-driven loop pumping.
@@ -18,7 +51,29 @@ namespace oro::runtime::core::services {
         }
       }
       for (const auto id : ids) {
-        this->cancelTimer(id);
+        SharedPointer<Timer> handle = nullptr;
+        {
+          Lock lock(this->mutex);
+          auto it = this->handles.find(id);
+          if (it == this->handles.end()) {
+            continue;
+          }
+
+          handle = it->second;
+          if (handle == nullptr || !handle->initialized) {
+            this->handles.erase(it);
+            continue;
+          }
+
+          handle->cancelled = true;
+          if (handle->closing) {
+            continue;
+          }
+
+          handle->closing = true;
+        }
+
+        closeTimerOnLoop(handle);
       }
     });
     return true;
@@ -36,7 +91,29 @@ namespace oro::runtime::core::services {
         }
       }
       for (const auto id : ids) {
-        this->cancelTimer(id);
+        SharedPointer<Timer> handle = nullptr;
+        {
+          Lock lock(this->mutex);
+          auto it = this->handles.find(id);
+          if (it == this->handles.end()) {
+            continue;
+          }
+
+          handle = it->second;
+          if (handle == nullptr || !handle->initialized) {
+            this->handles.erase(it);
+            continue;
+          }
+
+          handle->cancelled = true;
+          if (handle->closing) {
+            continue;
+          }
+
+          handle->closing = true;
+        }
+
+        closeTimerOnLoop(handle);
       }
       done->set_value();
     });
@@ -44,10 +121,6 @@ namespace oro::runtime::core::services {
     return true;
   #endif
   }
-  struct TimerToken {
-    Timers* timers = nullptr;
-    Timers::ID id = 0;
-  };
 
   Timers::Timer::Timer (Timers* timers, ID id, Callback callback)
     : timers(timers),
@@ -74,18 +147,25 @@ namespace oro::runtime::core::services {
 
     this->loop.dispatch([=, this]() {
       // Initialize and start the timer on the loop thread
-      if (!this->handles.contains(id)) {
-        return;
-      }
+      SharedPointer<Timer> handle = nullptr;
+      {
+        Lock lock(this->mutex);
+        auto it = this->handles.find(id);
+        if (it == this->handles.end()) {
+          return;
+        }
 
-      auto handle = this->handles.at(id);
-      if (handle == nullptr) {
-        return;
-      }
+        handle = it->second;
+        if (handle == nullptr || handle->cancelled) {
+          this->handles.erase(it);
+          return;
+        }
 
-      const auto token = new TimerToken{ this, id };
-      uv_timer_init(loop, &handle->timer);
-      uv_handle_set_data(reinterpret_cast<uv_handle_t*>(&handle->timer), reinterpret_cast<void*>(token));
+        const auto token = new TimerToken{ this, id };
+        uv_timer_init(loop, &handle->timer);
+        uv_handle_set_data(reinterpret_cast<uv_handle_t*>(&handle->timer), reinterpret_cast<void*>(token));
+        handle->initialized = true;
+      }
 
       uv_timer_start(
         &handle->timer,
@@ -93,93 +173,117 @@ namespace oro::runtime::core::services {
           auto token = static_cast<TimerToken*>(uv_handle_get_data(reinterpret_cast<uv_handle_t*>(timer)));
 
           if (token == nullptr) {
-            // Defensive: stop and close if somehow missing token
-            uv_timer_stop(timer);
-            uv_close(reinterpret_cast<uv_handle_t*>(timer), [](uv_handle_t* /*h*/) {
-            });
+            auto handle = reinterpret_cast<uv_handle_t*>(timer);
+            if (!uv_is_closing(handle)) {
+              uv_timer_stop(timer);
+              uv_close(handle, [](uv_handle_t* h) {
+                uv_handle_set_data(h, nullptr);
+              });
+            }
             return;
           }
 
           Timers* timers = token->timers;
           Timers::ID id = token->id;
 
-          std::shared_ptr<Timer> handle;
+          SharedPointer<Timer> handle;
           {
             Lock lock(timers->mutex);
-            if (!timers->handles.contains(id)) {
-              // Was cancelled; ensure handle is closed and token released
-              uv_timer_stop(timer);
-              uv_close(reinterpret_cast<uv_handle_t*>(timer), [](uv_handle_t* h) {
-                auto t = static_cast<TimerToken*>(uv_handle_get_data(h));
-                if (t) {
-                  delete t;
-                  uv_handle_set_data(h, nullptr);
-                }
-              });
+            auto it = timers->handles.find(id);
+            if (it == timers->handles.end()) {
               return;
             }
-            handle = timers->handles.at(id);
+
+            handle = it->second;
+            if (handle == nullptr) {
+              timers->handles.erase(it);
+              return;
+            }
+
+            if (handle->cancelled || handle->closing) {
+              return;
+            }
           }
 
           if (handle == nullptr) {
-            uv_timer_stop(timer);
-            uv_close(reinterpret_cast<uv_handle_t*>(timer), [](uv_handle_t* h) {
-              auto t = static_cast<TimerToken*>(uv_handle_get_data(h));
-              if (t) {
-                delete t;
-                uv_handle_set_data(h, nullptr);
-              }
-            });
             return;
           }
 
-          // Provide cancel function to the user callback
+          // Provide cancel function to the user callback.
           handle->callback([timers, id]() {
             timers->cancelTimer(id);
           });
 
-          // For one-shot timers, cancel after execution if not already
-          if (!handle->repeat && !handle->cancelled) {
+          bool shouldCancel = false;
+          {
+            Lock lock(timers->mutex);
+            auto it = timers->handles.find(id);
+            if (it != timers->handles.end() && it->second != nullptr) {
+              shouldCancel = !it->second->repeat && !it->second->cancelled;
+            }
+          }
+
+          if (shouldCancel) {
             timers->cancelTimer(id);
           }
         },
         timeout,
         interval
       );
+
+      bool shouldClose = false;
+      {
+        Lock lock(this->mutex);
+        auto it = this->handles.find(id);
+        if (it != this->handles.end() && it->second != nullptr && it->second->cancelled) {
+          if (!it->second->closing) {
+            it->second->closing = true;
+            shouldClose = true;
+          }
+        }
+      }
+
+      if (shouldClose) {
+        closeTimerOnLoop(handle);
+      }
     });
 
     return id;
   }
 
   bool Timers::cancelTimer (const ID id) {
-    Lock lock(this->mutex);
+    SharedPointer<Timer> handle = nullptr;
 
-    if (!this->handles.contains(id)) {
-      return false;
-    }
+    {
+      Lock lock(this->mutex);
 
-    auto handle = this->handles.at(id);
-    if (handle == nullptr) {
-      this->handles.erase(id);
-      return true;
-    }
-
-    handle->cancelled = true;
-    uv_timer_stop(&handle->timer);
-
-    // Close the handle; free token and erase on close
-    uv_close(reinterpret_cast<uv_handle_t*>(&handle->timer), [](uv_handle_t* h) {
-      auto token = static_cast<TimerToken*>(uv_handle_get_data(h));
-      if (token) {
-        auto timers = token->timers;
-        const auto id = token->id;
-        {
-          Lock lock(timers->mutex);
-          timers->handles.erase(id);
-        }
-        delete token;
-        uv_handle_set_data(h, nullptr);
+      auto it = this->handles.find(id);
+      if (it == this->handles.end()) {
+        return false;
       }
+
+      handle = it->second;
+      if (handle == nullptr) {
+        this->handles.erase(it);
+        return true;
+      }
+
+      handle->cancelled = true;
+
+      if (!handle->initialized) {
+        this->handles.erase(it);
+        return true;
+      }
+
+      if (handle->closing) {
+        return true;
+      }
+
+      handle->closing = true;
+    }
+
+    this->loop.dispatch([handle]() {
+      closeTimerOnLoop(handle);
     });
 
     return true;

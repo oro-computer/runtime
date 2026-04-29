@@ -74,14 +74,41 @@ using Task = id<WKURLSchemeTask>;
   return task != nullptr && tasks.contains(task);
 }
 
+- (bool) getRequestID: (uint64_t*) id
+              forTask: (Task) task {
+  if (id == nullptr || task == nullptr) {
+    return false;
+  }
+
+  Lock lock(mutex);
+  auto it = tasks.find(task);
+  if (it == tasks.end()) {
+    return false;
+  }
+
+  *id = it->second;
+  return true;
+}
+
 - (void) webView: (OROWebView*) webview
   stopURLSchemeTask: (Task) task {
-  if (tasks.contains(task)) {
-    const auto id = tasks[task];
+  uint64_t id = 0;
+  if ([self getRequestID: &id forTask: task] && self.handlers != nullptr) {
     if (self.handlers->isRequestActive(id)) {
-      auto request = self.handlers->activeRequests[id];
-      request->cancelled = true;
-      if (request->callbacks.cancel != nullptr) {
+      SharedPointer<SchemeHandlers::Request> request = nullptr;
+      {
+        Lock lock(self.handlers->mutex);
+        auto it = self.handlers->activeRequests.find(id);
+        if (it != self.handlers->activeRequests.end()) {
+          request = it->second;
+        }
+      }
+
+      if (request != nullptr) {
+        request->cancelled = true;
+      }
+
+      if (request != nullptr && request->callbacks.cancel != nullptr) {
         request->callbacks.cancel();
       }
     }
@@ -93,10 +120,7 @@ using Task = id<WKURLSchemeTask>;
 - (void) webView: (OROWebView*) webview
   startURLSchemeTask: (Task) task {
   if (self.handlers == nullptr) {
-    auto& userConfig = self.handlers->bridge.userConfig;
-    const auto bundleIdentifier = userConfig.contains("meta_bundle_identifier")
-      ? userConfig.at("meta_bundle_identifier")
-      : "";
+    const auto bundleIdentifier = String("oro.runtime");
 
     [task didFailWithError: [NSError
          errorWithDomain: @(bundleIdentifier.c_str())

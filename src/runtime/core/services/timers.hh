@@ -21,8 +21,10 @@ namespace oro::runtime::core::services {
         Callback callback = nullptr;
         bool repeat = false;
         bool cancelled = false;
-        uv_timer_t timer;
-        Type type;
+        bool initialized = false;
+        bool closing = false;
+        uv_timer_t timer = {};
+        Type type = Type::Timeout;
         Timer (Timers* timers, ID id, Callback callback);
       };
 
