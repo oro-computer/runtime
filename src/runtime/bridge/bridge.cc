@@ -130,6 +130,8 @@ export * from '{{url}}'
   }
 
   Bridge::~Bridge () {
+    this->schemeHandlers.close();
+
     auto app = App::sharedApplication();
     if (app) {
       auto &svc = app->runtime.services.bluetooth;

@@ -30,10 +30,20 @@ static dispatch_queue_t queue = dispatch_queue_create(
 }
 
 - (void) applicationWillBecomeActive: (NSNotification*) notification {
+  auto app = self.app;
+  if (app == nullptr || app->shouldExit.load(std::memory_order_acquire) || app->stopped()) {
+    return;
+  }
+
   // Propagate lifecycle only and mirror DOM focus
   dispatch_async(queue, ^{
-    self.app->resume();
-    for (const auto& window : self.app->runtime.windowManager.windows) {
+    auto app = self.app;
+    if (app == nullptr || app->shouldExit.load(std::memory_order_acquire) || app->stopped()) {
+      return;
+    }
+
+    app->resume();
+    for (const auto& window : app->runtime.windowManager.windows) {
       if (window != nullptr) {
         if (!window->webview.isHidden) {
           window->dispatchDomFocus();
@@ -44,10 +54,20 @@ static dispatch_queue_t queue = dispatch_queue_create(
 }
 
 - (void) applicationWillResignActive: (NSNotification*) notification {
+  auto app = self.app;
+  if (app == nullptr || app->shouldExit.load(std::memory_order_acquire) || app->stopped()) {
+    return;
+  }
+
   // Propagate lifecycle only and mirror DOM blur
   dispatch_async(queue, ^{
-    self.app->pause();
-    for (const auto& window : self.app->runtime.windowManager.windows) {
+    auto app = self.app;
+    if (app == nullptr || app->shouldExit.load(std::memory_order_acquire) || app->stopped()) {
+      return;
+    }
+
+    app->pause();
+    for (const auto& window : app->runtime.windowManager.windows) {
       if (window != nullptr) {
         window->dispatchDomBlur();
       }
@@ -56,18 +76,24 @@ static dispatch_queue_t queue = dispatch_queue_create(
 }
 
 - (NSApplicationTerminateReply) applicationShouldTerminate: (NSApplication*) sender {
-  // Ensure graceful teardown prior to process exit
-  dispatch_async(queue, ^{
-    self.app->stop();
-  });
+  auto app = self.app;
+  if (app != nullptr && !app->stopped()) {
+    app->shouldExit.store(true, std::memory_order_release);
+    app->stop();
+  }
+
   return NSTerminateNow;
 }
 
 - (void) applicationWillTerminate: (NSNotification*) notification {
-  // Redundant safety; stop is idempotent
-  dispatch_async(queue, ^{
-    self.app->stop();
-  });
+  auto app = self.app;
+  if (app != nullptr) {
+    app->shouldExit.store(true, std::memory_order_release);
+    if (!app->stopped()) {
+      app->stop();
+    }
+  }
+  self.app = nullptr;
 }
 
 - (void) menuWillOpen: (NSMenu*) menu {
@@ -302,11 +328,21 @@ didFailToContinueUserActivityWithType: (NSString*) userActivityType
 }
 
 - (void) applicationDidEnterBackground: (UIApplication*) application {
+  auto app = self.app;
+  if (app == nullptr || app->shouldExit.load(std::memory_order_acquire) || app->stopped()) {
+    return;
+  }
+
   dispatch_async(queue, ^{
-    self.app->pause();
+    auto app = self.app;
+    if (app == nullptr || app->shouldExit.load(std::memory_order_acquire) || app->stopped()) {
+      return;
+    }
+
+    app->pause();
   });
 
-  for (const auto& window : self.app->runtime.windowManager.windows) {
+  for (const auto& window : app->runtime.windowManager.windows) {
     if (window != nullptr) {
       window->eval("window.blur()");
     }
@@ -314,11 +350,21 @@ didFailToContinueUserActivityWithType: (NSString*) userActivityType
 }
 
 - (void) applicationWillEnterForeground: (UIApplication*) application {
+  auto app = self.app;
+  if (app == nullptr || app->shouldExit.load(std::memory_order_acquire) || app->stopped()) {
+    return;
+  }
+
   dispatch_async(queue, ^{
-    self.app->resume();
+    auto app = self.app;
+    if (app == nullptr || app->shouldExit.load(std::memory_order_acquire) || app->stopped()) {
+      return;
+    }
+
+    app->resume();
   });
 
-  for (const auto& window : self.app->runtime.windowManager.windows) {
+  for (const auto& window : app->runtime.windowManager.windows) {
     if (window != nullptr) {
       if (!window->webview.isHidden) {
         window->eval("window.focus()");
@@ -328,10 +374,14 @@ didFailToContinueUserActivityWithType: (NSString*) userActivityType
 }
 
 - (void) applicationWillTerminate: (UIApplication*) application {
-  dispatch_async(queue, ^{
-    // Gracefully tear down runtime before process exit
-    self.app->stop();
-  });
+  auto app = self.app;
+  if (app != nullptr) {
+    app->shouldExit.store(true, std::memory_order_release);
+    if (!app->stopped()) {
+      app->stop();
+    }
+  }
+  self.app = nullptr;
 }
 
 - (void) applicationDidBecomeActive: (UIApplication*) application {

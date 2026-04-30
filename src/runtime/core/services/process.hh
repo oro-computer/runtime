@@ -44,6 +44,7 @@ namespace oro::runtime::core::services {
           timers(options)
       {}
 
+      bool start () override;
       bool stop () override;
       void shutdown ();
       void exec (const ipc::Message::Seq&, ID, const Vector<String>, const ExecOptions, const Callback);

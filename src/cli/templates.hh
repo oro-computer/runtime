@@ -994,10 +994,10 @@ constexpr auto gMacOSInfoPList = R"XML(<?xml version="1.0" encoding="UTF-8"?>
 <dict>
   <!--- Metadata -->
   <key>CFBundleDisplayName</key>
-  <string>{{build_name}}</string>
+  <string>{{meta_title}}</string>
 
   <key>CFBundleName</key>
-  <string>{{build_name}}</string>
+  <string>{{meta_title}}</string>
 
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
@@ -1301,7 +1301,7 @@ constexpr auto gDesktopManifest = R"INI(
 [Desktop Entry]
 Encoding=UTF-8
 Version=v{{meta_version}}
-Name={{build_name}}
+Name={{meta_title}}
 Terminal=false
 Type=Application
 Exec={{linux_executable_path}} %U

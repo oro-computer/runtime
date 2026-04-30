@@ -85,7 +85,7 @@ namespace oro::runtime::loop {
       Atomic<State> state = State::None;
       UV uv;
 
-      Loop () = default;
+      Loop ();
       Loop (const Options&);
       Loop (const Loop&) = delete;
       Loop (Loop&&) = delete;

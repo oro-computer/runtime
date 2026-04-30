@@ -24,7 +24,9 @@ namespace oro::runtime {
   }
 
   Runtime::~Runtime() {
-    this->destroy();
+    if (!this->destroyed.load(std::memory_order_acquire)) {
+      this->destroy();
+    }
 #if ORO_RUNTIME_PLATFORM_LINUX
     if (this->pauseThread.joinable()) {
       this->pauseThread.join();
@@ -47,7 +49,21 @@ namespace oro::runtime {
       debug("Runtime::stop(): begin alive=%d paused=%d stopped=%d", this->loop.alive(), this->loop.paused(), this->loop.stopped());
     #endif
 
-    if (!this->pause() || !this->loop.stop()) {
+#if ORO_RUNTIME_PLATFORM_LINUX
+    if (this->pauseThread.joinable()) {
+      this->pauseThread.join();
+    }
+#endif
+    if (this->loop.paused() && !this->loop.resume()) {
+      #if defined(DEBUG)
+        debug("Runtime::stop(): failed to resume loop for service shutdown");
+      #endif
+      return false;
+    }
+
+    const bool servicesStopped = this->services.stop();
+    const bool loopStopped = this->loop.stop();
+    if (!servicesStopped || !loopStopped) {
       #if defined(DEBUG)
         debug("Runtime::stop(): failed alive=%d paused=%d stopped=%d", this->loop.alive(), this->loop.paused(), this->loop.stopped());
       #endif
@@ -171,7 +187,17 @@ namespace oro::runtime {
   }
 
   bool Runtime::dispatch (const DispatchCallback& callback) {
-    return this->dispatcher.dispatch(callback);
+    if (callback == nullptr || this->destroyed.load(std::memory_order_acquire)) {
+      return false;
+    }
+
+    return this->dispatcher.dispatch([this, callback]() {
+      if (this->destroyed.load(std::memory_order_acquire)) {
+        return;
+      }
+
+      callback();
+    });
   }
 
   bool Runtime::stopped () const {

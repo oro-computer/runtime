@@ -81,11 +81,21 @@ namespace oro::runtime::bytes {
   }
 
   const unsigned char* ArrayBuffer::data () const {
-    return this->bytes.get() + this->byteOffset;
+    const auto bytes = this->bytes.get();
+    if (bytes == nullptr) {
+      return nullptr;
+    }
+
+    return bytes + this->byteOffset;
   }
 
   unsigned char* ArrayBuffer::data () {
-    return this->bytes.get() + this->byteOffset;
+    const auto bytes = this->bytes.get();
+    if (bytes == nullptr) {
+      return nullptr;
+    }
+
+    return bytes + this->byteOffset;
   }
 
   const ArrayBuffer::SharedPointer ArrayBuffer::shared () const {
@@ -556,11 +566,21 @@ namespace oro::runtime::bytes {
   }
 
   const unsigned char* Buffer::data () const {
-    return this->buffer.data() + this->byteOffset;
+    const auto bytes = this->buffer.data();
+    if (bytes == nullptr) {
+      return nullptr;
+    }
+
+    return bytes + this->byteOffset;
   }
 
   unsigned char* Buffer::data () {
-    return this->buffer.data() + this->byteOffset;
+    const auto bytes = this->buffer.data();
+    if (bytes == nullptr) {
+      return nullptr;
+    }
+
+    return bytes + this->byteOffset;
   }
 
   const Buffer Buffer::slice (size_type begin, size_type end, bool copy) const {
@@ -619,17 +639,21 @@ namespace oro::runtime::bytes {
   }
 
   const ArrayBuffer::SharedPointer Buffer::shared () const {
-    return ArrayBuffer::SharedPointer(
-      this->buffer.shared(),
-      this->buffer.shared().get() + this->byteOffset
-    );
+    const auto bytes = this->buffer.shared();
+    if (bytes == nullptr) {
+      return nullptr;
+    }
+
+    return ArrayBuffer::SharedPointer(bytes, bytes.get() + this->byteOffset);
   }
 
   ArrayBuffer::SharedPointer Buffer::shared () {
-    return ArrayBuffer::SharedPointer(
-      this->buffer.shared(),
-      this->buffer.shared().get() + this->byteOffset
-    );
+    const auto bytes = this->buffer.shared();
+    if (bytes == nullptr) {
+      return nullptr;
+    }
+
+    return ArrayBuffer::SharedPointer(bytes, bytes.get() + this->byteOffset);
   }
 
   const Buffer::const_iterator Buffer::begin () const noexcept {

@@ -182,15 +182,16 @@ namespace oro::runtime::window {
         window->close();
 
         this->windows[index] = nullptr;
-        static_cast<runtime::Runtime&>(this->context).services.cdp.onWindowDestroyed(index);
+        auto* runtime = &static_cast<runtime::Runtime&>(this->context);
+        runtime->services.cdp.onWindowDestroyed(index);
         if (window->getOptions().shouldExitApplicationOnClose) {
-          static_cast<runtime::Runtime&>(this->context).dispatch([this, index, window]() {
+          runtime->dispatcher.dispatch([runtime, index, window]() {
             window->exit(0);
-            static_cast<runtime::Runtime&>(this->context).bridgeManager.remove(index);
+            runtime->bridgeManager.remove(index);
           });
         } else {
           window->kill();
-          static_cast<runtime::Runtime&>(this->context).bridgeManager.remove(index);
+          runtime->bridgeManager.remove(index);
         }
       }
     }

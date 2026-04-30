@@ -285,9 +285,10 @@ MAIN {
   gtk_init(&argc, &argv);
 #endif
 
-  // Singletons should be static to remove some possible race conditions in
-  // their instantiation and destruction.
-  static App app({
+  // Keep the desktop application alive until process exit. Shutdown is handled
+  // explicitly through App::stop(); running the full C++ destructor graph from
+  // exit() can re-enter already closed runtime services.
+  static App& app = *new App({
     .instanceId = instanceId,
     .userConfig = getUserConfig()
   });
@@ -523,7 +524,10 @@ MAIN {
 
   if (appProtocol.size() > 0) {
     GError* error = nullptr;
-    auto appName = app.runtime.userConfig["build_name"];
+    auto appName = app.runtime.userConfig["meta_title"];
+    if (appName.size() == 0) {
+      appName = app.runtime.userConfig["build_name"];
+    }
     auto appDescription = app.runtime.userConfig["meta_description"];
     auto appContentType = String("x-scheme-handler/") + appProtocol;
     auto appinfo = g_app_info_create_from_commandline(

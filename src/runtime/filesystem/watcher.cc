@@ -231,15 +231,23 @@ namespace oro::runtime::filesystem {
     return true;
   }
 
-  bool Watcher::stop () {
+  bool Watcher::stop (SharedPointer<Watcher> retain) {
     if (!this->isRunning) {
       return false;
     }
 
     this->isRunning = false;
 
-    struct CloseToken { std::shared_ptr<std::atomic<int>> pending; };
+    struct CloseToken {
+      std::shared_ptr<std::atomic<int>> pending;
+      SharedPointer<Watcher> retain;
+    };
+
     auto pending = std::make_shared<std::atomic<int>>(0);
+    auto releasePending = [pending]() {
+      --(*pending);
+    };
+
     for (const auto& path : this->watchedPaths) {
       if (this->handles.contains(path)) {
         const auto isDirectory = std::filesystem::is_directory(path);
@@ -270,37 +278,45 @@ namespace oro::runtime::filesystem {
         // close handles on the loop thread to release OS resources
         if (handle->eventInitialized.load()) {
           ++(*pending);
-          auto token = new CloseToken{ pending };
-          this->loop->dispatch([h = &handle->event, token]() {
+          auto token = new CloseToken{ pending, retain };
+          const bool dispatched = this->loop->dispatch([h = &handle->event, token]() {
             uv_handle_set_data(reinterpret_cast<uv_handle_t*>(h), token);
             uv_close(reinterpret_cast<uv_handle_t*>(h), [](uv_handle_t* uvh) {
               auto token = static_cast<CloseToken*>(uv_handle_get_data(uvh));
               if (token && token->pending) {
                 --(*token->pending);
               }
-              delete token;
               uv_handle_set_data(uvh, nullptr);
+              delete token;
               debug("Watcher: uv_fs_event handle closed");
             });
           });
+          if (!dispatched) {
+            delete token;
+            releasePending();
+          }
           handle->eventInitialized = false;
         }
 
         if (!isDirectory && handle->pollInitialized.load()) {
           ++(*pending);
-          auto token = new CloseToken{ pending };
-          this->loop->dispatch([h = &handle->poll, token]() {
+          auto token = new CloseToken{ pending, retain };
+          const bool dispatched = this->loop->dispatch([h = &handle->poll, token]() {
             uv_handle_set_data(reinterpret_cast<uv_handle_t*>(h), token);
             uv_close(reinterpret_cast<uv_handle_t*>(h), [](uv_handle_t* uvh) {
               auto token = static_cast<CloseToken*>(uv_handle_get_data(uvh));
               if (token && token->pending) {
                 --(*token->pending);
               }
-              delete token;
               uv_handle_set_data(uvh, nullptr);
+              delete token;
               debug("Watcher: uv_fs_poll handle closed");
             });
           });
+          if (!dispatched) {
+            delete token;
+            releasePending();
+          }
           handle->pollInitialized = false;
         }
       }

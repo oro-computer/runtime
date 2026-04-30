@@ -96,6 +96,21 @@ namespace oro::runtime::app {
   }
 
   App::~App () {
+    this->shouldExit.store(true, std::memory_order_release);
+
+  #if ORO_RUNTIME_PLATFORM_APPLE
+    if (this->delegate != nullptr) {
+      [NSNotificationCenter.defaultCenter removeObserver: this->delegate];
+    #if ORO_RUNTIME_PLATFORM_MACOS
+      if (NSApplication.sharedApplication.delegate == this->delegate) {
+        NSApplication.sharedApplication.delegate = nil;
+      }
+    #endif
+      this->delegate.app = nullptr;
+      this->delegate = nullptr;
+    }
+  #endif
+
     if (sharedApplicationInstance.get() == this) {
       sharedApplicationInstance.reset();
     }
@@ -177,6 +192,10 @@ namespace oro::runtime::app {
   }
 
   void App::resume () {
+    if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+      return;
+    }
+
     // Debounce duplicate resume emits across all platforms
     const auto tnow = now_ms();
     if (tnow - this->lastResumeEmitMs.load(std::memory_order_relaxed) < 100) {
@@ -201,6 +220,10 @@ namespace oro::runtime::app {
       this->runtime.windowManager.emit("applicationresume");
 
       this->dispatch([this]() {
+        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+          return;
+        }
+
         this->runtime.resume();
       });
     }
@@ -210,6 +233,10 @@ namespace oro::runtime::app {
       this->isPaused = false;
       this->runtime.windowManager.emit("applicationresume");
       this->dispatch([this]() {
+        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+          return;
+        }
+
         this->runtime.resume();
       });
     }
@@ -217,6 +244,10 @@ namespace oro::runtime::app {
   }
 
   void App::pause () {
+    if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+      return;
+    }
+
     // Debounce duplicate pause emits across all platforms
     const auto tnow = now_ms();
     if (tnow - this->lastPauseEmitMs.load(std::memory_order_relaxed) < 100) {
@@ -247,6 +278,10 @@ namespace oro::runtime::app {
       this->runtime.windowManager.emit("applicationpause");
 
       this->dispatch([this]() {
+        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+          return;
+        }
+
         this->runtime.pause();
       });
     }
@@ -256,6 +291,10 @@ namespace oro::runtime::app {
       this->isPaused = true;
       this->runtime.windowManager.emit("applicationpause");
       this->dispatch([this]() {
+        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+          return;
+        }
+
         this->runtime.pause();
       });
     }
@@ -263,12 +302,13 @@ namespace oro::runtime::app {
   }
 
   void App::stop () {
-    if (this->stopped()) {
+    bool expected = false;
+    if (!this->isStopped.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
       return;
     }
 
+    const bool wasExiting = this->shouldExit.exchange(true, std::memory_order_acq_rel);
     this->isStarted = false;
-    this->isStopped = true;
 
     // Debounce duplicate stop emits
     {
@@ -280,9 +320,7 @@ namespace oro::runtime::app {
       }
     }
     msleep(256);
-    this->pause();
 
-    this->shouldExit = true;
     this->isPaused = false;
 
     this->runtime.destroy();
@@ -292,7 +330,7 @@ namespace oro::runtime::app {
   #elif ORO_RUNTIME_PLATFORM_MACOS
     // if not launched from the cli, just use `terminate()`
     // exit code status will not be captured
-    if (this->launchSource == App::LaunchSource::Platform) {
+    if (this->launchSource == App::LaunchSource::Platform && !wasExiting) {
       [NSApp terminate: nil];
     }
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
@@ -317,6 +355,10 @@ namespace oro::runtime::app {
   }
 
   void App::dispatch (Function<void()> callback) {
+    if (callback == nullptr || this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+      return;
+    }
+
     this->runtime.dispatch(callback);
   }
 }

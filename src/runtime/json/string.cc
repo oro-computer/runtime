@@ -24,7 +24,7 @@ namespace oro::runtime::JSON {
   }
 
   String::String (const char *data) {
-    this->data = runtime::String(data);
+    this->data = data != nullptr ? runtime::String(data) : runtime::String("");
   }
 
   String::String (const Any& any) {

@@ -389,6 +389,8 @@ namespace oro::runtime::webview {
       SchemeHandlers& operator= (SchemeHandlers&&) = delete;
 
       void init ();
+      void close ();
+      bool isAlive () const;
       void configure (const Configuration& configuration);
       bool hasHandlerForScheme (const String& scheme);
       bool registerSchemeHandler (const String& scheme, const Handler& handler);

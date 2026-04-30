@@ -48,7 +48,7 @@ namespace oro::runtime::core::services {
       #endif
       this->loop.dispatch([list = std::move(list)]() mutable {
         for (const auto &w : list) {
-          if (w) w->stop();
+          if (w) w->stop(w);
         }
       });
     } else {
@@ -72,7 +72,7 @@ namespace oro::runtime::core::services {
       }
 
       for (const auto &w : list) {
-        if (w) w->stop();
+        if (w) w->stop(w);
       }
       done->set_value();
     });
@@ -1815,7 +1815,7 @@ namespace oro::runtime::core::services {
     #else
       auto watcher = this->watchers[id];
       if (watcher != nullptr) {
-        watcher->stop();
+        watcher->stop(watcher);
         this->watchers.erase(id);
         auto json = JSON::Object::Entries {
           {"source", "fs.stopWatch"},

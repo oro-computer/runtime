@@ -38,6 +38,14 @@ using oro::runtime::app::App;
 #if ORO_RUNTIME_PLATFORM_APPLE
 using Task = id<WKURLSchemeTask>;
 
+static inline String stringFromNSString (NSString* value) {
+  if (value == nil || value.UTF8String == nullptr) {
+    return "";
+  }
+
+  return String(value.UTF8String);
+}
+
 @class OROWebView;
 @interface OROInternalWKURLSchemeHandler : NSObject<WKURLSchemeHandler>
 @property (nonatomic) oro::runtime::webview::SchemeHandlers* handlers;
@@ -130,8 +138,13 @@ using Task = id<WKURLSchemeTask>;
     return;
   }
 
+  auto method = stringFromNSString(task.request.HTTPMethod);
+  if (method.size() == 0) {
+    method = "GET";
+  }
+
   auto request = SchemeHandlers::Request::Builder(self.handlers, task)
-    .setMethod(toUpperCase(task.request.HTTPMethod.UTF8String))
+    .setMethod(toUpperCase(method))
     // copies all headers
     .setHeaders(task.request.allHTTPHeaderFields)
     // copies request body
@@ -311,6 +324,7 @@ namespace oro::runtime::webview {
   class SchemeHandlersInternals {
     public:
       SchemeHandlers* handlers = nullptr;
+      SharedPointer<Atomic<bool>> alive = std::make_shared<Atomic<bool>>(true);
     #if ORO_RUNTIME_PLATFORM_APPLE
       OROInternalWKURLSchemeHandler* schemeHandler = nullptr;
     #endif
@@ -543,10 +557,37 @@ namespace oro::runtime::webview {
     this->internals = new SchemeHandlersInternals(this);
   }
 
-  SchemeHandlers::~SchemeHandlers () {
+  void SchemeHandlers::close () {
+    if (this->internals != nullptr && this->internals->alive != nullptr) {
+      this->internals->alive->exchange(false, std::memory_order_acq_rel);
+    }
+
   #if ORO_RUNTIME_PLATFORM_APPLE
     this->configuration.webview = nullptr;
+    if (this->internals != nullptr && this->internals->schemeHandler != nullptr) {
+      this->internals->schemeHandler.handlers = nullptr;
+    }
   #endif
+
+    {
+      Lock lock(this->mutex);
+      for (auto& entry : this->activeRequests) {
+        if (entry.second != nullptr) {
+          entry.second->cancelled = true;
+          entry.second->callbacks.cancel = nullptr;
+          entry.second->callbacks.finish = nullptr;
+          entry.second->callbacks.fail = nullptr;
+          entry.second->handlers = nullptr;
+          entry.second->platformRequest = nullptr;
+        }
+      }
+      this->activeRequests.clear();
+      this->handlers.clear();
+    }
+  }
+
+  SchemeHandlers::~SchemeHandlers () {
+    this->close();
 
     if (this->internals != nullptr) {
       delete this->internals;
@@ -556,17 +597,33 @@ namespace oro::runtime::webview {
 
   void SchemeHandlers::init () {}
 
+  bool SchemeHandlers::isAlive () const {
+    return (
+      this->internals != nullptr &&
+      this->internals->alive != nullptr &&
+      this->internals->alive->load(std::memory_order_acquire)
+    );
+  }
+
   void SchemeHandlers::configure (const Configuration& configuration) {
     static const auto devHost = getDevHost();
     this->configuration = configuration;
   }
 
   bool SchemeHandlers::hasHandlerForScheme (const String& scheme) {
+    if (!this->isAlive()) {
+      return false;
+    }
+
     Lock lock(this->mutex);
     return this->handlers.contains(scheme);
   }
 
   SchemeHandlers::Handler SchemeHandlers::getHandlerForScheme (const String& scheme) {
+    if (!this->isAlive()) {
+      return SchemeHandlers::Handler {};
+    }
+
     Lock lock(this->mutex);
     return this->handlers.contains(scheme)
       ? this->handlers.at(scheme)
@@ -574,6 +631,10 @@ namespace oro::runtime::webview {
   }
 
   bool SchemeHandlers::registerSchemeHandler (const String& scheme, const Handler& handler) {
+    if (!this->isAlive()) {
+      return false;
+    }
+
     if (scheme.size() == 0 || this->hasHandlerForScheme(scheme)) {
       return false;
     }
@@ -710,6 +771,10 @@ namespace oro::runtime::webview {
     SharedPointer<Request> request,
     const HandlerCallback callback
   ) {
+    if (!this->isAlive()) {
+      return false;
+    }
+
     // request was not finalized, likely not from a `Request::Builder`
     if (request == nullptr || !request->finalized) {
       return false;
@@ -883,7 +948,12 @@ namespace oro::runtime::webview {
 
     auto span = request->tracer.span("handler");
 
-    auto complete = [this, id, span, request, callback](SchemeHandlers::Response& response) mutable {
+    auto alive = this->internals != nullptr ? this->internals->alive : nullptr;
+    auto complete = [this, id, span, request, callback, alive](SchemeHandlers::Response& response) mutable {
+      if (alive == nullptr || !alive->load(std::memory_order_acquire)) {
+        return;
+      }
+
       span->end();
 
       // notify finished
@@ -905,7 +975,7 @@ namespace oro::runtime::webview {
       }
     };
 
-    // Network.setBlockedURLs (best-effort for runtime-handled scheme requests).
+    // Network.setBlockedURLs applies to runtime-handled scheme requests.
     {
       auto runtime = this->bridge.getRuntime();
       if (
@@ -951,8 +1021,16 @@ namespace oro::runtime::webview {
         const bool registered = runtime->services.cdp.registerFetchRequest(
           windowIndex,
           request->cdpRequestId,
-          [this, handler, request, complete, windowIndex](const JSON::Any& decision) mutable {
+          [this, handler, request, complete, windowIndex, alive](const JSON::Any& decision) mutable {
+            if (alive == nullptr || !alive->load(std::memory_order_acquire)) {
+              return;
+            }
+
             this->bridge.dispatch([=, this]() mutable {
+              if (alive == nullptr || !alive->load(std::memory_order_acquire)) {
+                return;
+              }
+
               if (request == nullptr || !request->isActive() || request->isCancelled()) {
                 return;
               }
@@ -1101,11 +1179,19 @@ namespace oro::runtime::webview {
   }
 
   bool SchemeHandlers::isRequestActive (uint64_t id) {
+    if (!this->isAlive()) {
+      return false;
+    }
+
     Lock lock(this->mutex);
     return this->activeRequests.contains(id);
   }
 
   bool SchemeHandlers::isRequestCancelled (uint64_t id) {
+    if (!this->isAlive()) {
+      return true;
+    }
+
     Lock lock(this->mutex);
     return (
       id > 0 &&
@@ -1131,7 +1217,13 @@ namespace oro::runtime::webview {
       : "";
 
   #if ORO_RUNTIME_PLATFORM_APPLE
-    this->absoluteURL = platformRequest.request.URL.absoluteString.UTF8String;
+    if (
+      platformRequest != nullptr &&
+      platformRequest.request != nullptr &&
+      platformRequest.request.URL != nullptr
+    ) {
+      this->absoluteURL = stringFromNSString(platformRequest.request.URL.absoluteString);
+    }
   #elif ORO_RUNTIME_PLATFORM_LINUX
     this->absoluteURL = webkit_uri_scheme_request_get_uri(platformRequest);
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
@@ -1255,8 +1347,10 @@ namespace oro::runtime::webview {
 
     for (NSString* key in headers) {
       const auto value = [headers objectForKey: key];
-      if (value != nullptr) {
-        this->request->headers.set(key.UTF8String, value.UTF8String);
+      const auto keyString = stringFromNSString(key);
+      const auto valueString = stringFromNSString(value);
+      if (keyString.size() > 0) {
+        this->request->headers.set(keyString, valueString);
       }
     }
 
@@ -1623,6 +1717,11 @@ namespace oro::runtime::webview {
     if (this->handlers == nullptr) {
       return false;
     }
+
+    if (app == nullptr) {
+      return false;
+    }
+
     auto window = app->runtime.windowManager.getWindowForBridge(&this->handlers->bridge);
 
     // only a scheme handler owned by this bridge and attached to a
@@ -1637,6 +1736,10 @@ namespace oro::runtime::webview {
 
   bool SchemeHandlers::Request::isCancelled () const {
     auto app = app::App::sharedApplication();
+    if (app == nullptr || this->handlers == nullptr) {
+      return true;
+    }
+
     auto window = app->runtime.windowManager.getWindowForBridge(&this->handlers->bridge);
 
     if (window != nullptr && this->handlers != nullptr) {
@@ -2368,10 +2471,16 @@ namespace oro::runtime::webview {
 
   bool SchemeHandlers::Response::fail (const Error* error) {
   #if ORO_RUNTIME_PLATFORM_APPLE
-    if (error.localizedDescription != nullptr) {
-      return this->fail(error.localizedDescription.UTF8String);
-    } else if (error.localizedFailureReason != nullptr) {
-      return this->fail(error.localizedFailureReason.UTF8String);
+    if (error != nullptr) {
+      const auto description = stringFromNSString(error.localizedDescription);
+      if (description.size() > 0) {
+        return this->fail(description);
+      }
+
+      const auto reason = stringFromNSString(error.localizedFailureReason);
+      if (reason.size() > 0) {
+        return this->fail(reason);
+      }
     }
   #elif ORO_RUNTIME_PLATFORM_LINUX
     if (error != nullptr && error->message != nullptr) {

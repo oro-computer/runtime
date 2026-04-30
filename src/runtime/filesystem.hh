@@ -274,7 +274,7 @@ namespace oro::runtime::filesystem {
       Watcher (const Vector<String>& paths);
       ~Watcher ();
       bool start (EventCallback callback);
-      bool stop ();
+      bool stop (SharedPointer<Watcher> retain = nullptr);
   };
 
   const Map<String, int32_t>& constants ();

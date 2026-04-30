@@ -11,7 +11,34 @@ using oro::runtime::url::encodeURIComponent;
 using oro::runtime::crypto::rand64;
 
 namespace oro::runtime::core::services {
+  namespace {
+    Mutex processStoppingStatesMutex;
+    Map<const Process*, SharedPointer<Atomic<bool>>> processStoppingStates;
+
+    SharedPointer<Atomic<bool>> processStoppingStateFor (const Process* process) {
+      Lock lock(processStoppingStatesMutex);
+      auto iterator = processStoppingStates.find(process);
+      if (iterator != processStoppingStates.end()) {
+        return iterator->second;
+      }
+
+      auto state = std::make_shared<Atomic<bool>>(true);
+      processStoppingStates.emplace(process, state);
+      return state;
+    }
+
+    void setProcessStopping (const Process* process, bool stopping) {
+      processStoppingStateFor(process)->store(stopping, std::memory_order_release);
+    }
+  }
+
+  bool Process::start () {
+    setProcessStopping(this, false);
+    return core::Service::start();
+  }
+
   bool Process::stop () {
+    setProcessStopping(this, true);
   #if !ORO_RUNTIME_PLATFORM_IOS
     // Terminate any outstanding processes and wait for them
     this->shutdown();
@@ -99,6 +126,7 @@ namespace oro::runtime::core::services {
     };
     return callback(seq, json, QueuedResponse{});
   #else
+    auto stopping = processStoppingStateFor(this);
     this->loop.dispatch([=, this] {
       Lock lock(this->mutex);
 
@@ -117,7 +145,7 @@ namespace oro::runtime::core::services {
       }
 
       SharedPointer<runtime::Process> process = nullptr;
-      Timers::ID timer;
+      Timers::ID timer = 0;
 
       const auto command = args.size() > 0 ? args.at(0) : String("");
       const auto argv = join(
@@ -127,8 +155,11 @@ namespace oro::runtime::core::services {
         (char) 0x01
       );
 
-      auto stdoutBuffer = new StringStream;
-      auto stderrBuffer = new StringStream;
+      auto stdoutBuffer = std::make_shared<StringStream>();
+      auto stderrBuffer = std::make_shared<StringStream>();
+      auto outputMutex = std::make_shared<Mutex>();
+      auto completed = std::make_shared<Atomic<bool>>(false);
+      auto timeoutId = std::make_shared<Atomic<Timers::ID>>(0);
 
       const auto onStdout = [=](const String& output) mutable {
         if (!options.allowStdout || output.size() == 0) {
@@ -136,6 +167,7 @@ namespace oro::runtime::core::services {
         }
 
         if (stdoutBuffer != nullptr) {
+          Lock lock(*outputMutex);
           *stdoutBuffer << String(output);
         }
       };
@@ -146,44 +178,67 @@ namespace oro::runtime::core::services {
         }
 
         if (stderrBuffer != nullptr) {
+          Lock lock(*outputMutex);
           *stderrBuffer << String(output);
         }
       };
 
       const auto onExit = [=, this](const String& output) mutable {
-        if (timer > 0) {
-          this->timers.clearTimeout(timer);
+        if (completed->exchange(true, std::memory_order_acq_rel)) {
+          return;
+        }
+
+        const auto idToClear = timeoutId->exchange(0, std::memory_order_acq_rel);
+        if (idToClear > 0) {
+          this->timers.clearTimeout(idToClear);
         }
 
         this->loop.dispatch([=, this] () mutable {
-          Lock lock(this->mutex);
-          if (this->handles.contains(id)) {
-            auto process = this->handles.at(id);
-            const auto pid = process->id;
-            const auto code = process->wait();
-            const auto json = JSON::Object::Entries {
-              {"source", "child_process.exec"},
-              {"data", JSON::Object::Entries {
-                {"id", std::to_string(id)},
-                {"pid", std::to_string(pid)},
-                {"stdout", encodeURIComponent(stdoutBuffer->str())},
-                {"stderr", encodeURIComponent(stderrBuffer->str())},
-                {"code", code}
-              }}
-            };
-
-            delete stdoutBuffer;
-            delete stderrBuffer;
-
-            stdoutBuffer = nullptr;
-            stderrBuffer = nullptr;
-
-            this->loop.dispatch([=, this] () {
-              callback(seq, json, QueuedResponse{});
-            });
-
-            this->handles.erase(id);
+          if (stopping->load(std::memory_order_acquire)) {
+            return;
           }
+
+          SharedPointer<runtime::Process> process = nullptr;
+          String stdout;
+          String stderr;
+          int pid = 0;
+          int code = 0;
+
+          Lock lock(this->mutex);
+          if (!this->handles.contains(id)) {
+            return;
+          }
+
+          process = this->handles.at(id);
+          if (process != nullptr) {
+            pid = process->id;
+            code = process->wait();
+          }
+
+          {
+            Lock outputLock(*outputMutex);
+            stdout = stdoutBuffer != nullptr ? stdoutBuffer->str() : "";
+            stderr = stderrBuffer != nullptr ? stderrBuffer->str() : "";
+          }
+
+          this->handles.erase(id);
+
+          const auto json = JSON::Object::Entries {
+            {"source", "child_process.exec"},
+            {"data", JSON::Object::Entries {
+              {"id", std::to_string(id)},
+              {"pid", std::to_string(pid)},
+              {"stdout", encodeURIComponent(stdout)},
+              {"stderr", encodeURIComponent(stderr)},
+              {"code", code}
+            }}
+          };
+
+          this->loop.dispatch([=, this] () {
+            if (!stopping->load(std::memory_order_acquire)) {
+              callback(seq, json, QueuedResponse{});
+            }
+          });
         });
       };
 
@@ -204,36 +259,61 @@ namespace oro::runtime::core::services {
 
       if (options.timeout > 0) {
         timer = this->timers.setTimeout(options.timeout, [=, this] () mutable {
-          Lock lock(this->mutex);
+          if (completed->exchange(true, std::memory_order_acq_rel)) {
+            return;
+          }
+
+          timeoutId->store(0, std::memory_order_release);
+
+          SharedPointer<runtime::Process> processToKill = nullptr;
+          String stdout;
+          String stderr;
+
+          {
+            Lock lock(this->mutex);
+            if (this->handles.contains(id)) {
+              processToKill = this->handles.at(id);
+              this->handles.erase(id);
+            }
+          }
+
+          {
+            Lock outputLock(*outputMutex);
+            stdout = stdoutBuffer != nullptr ? stdoutBuffer->str() : "";
+            stderr = stderrBuffer != nullptr ? stderrBuffer->str() : "";
+          }
+
           const auto json = JSON::Object::Entries {
             {"source", "child_process.exec"},
             {"err", JSON::Object::Entries {
               {"id", std::to_string(id)},
               {"pid", std::to_string(pid)},
-              {"stdout", encodeURIComponent(stdoutBuffer->str())},
-              {"stderr", encodeURIComponent(stderrBuffer->str())},
+              {"stdout", encodeURIComponent(stdout)},
+              {"stderr", encodeURIComponent(stderr)},
               {"code", "ETIMEDOUT"}
             }}
           };
 
           this->loop.dispatch([=, this] {
-            callback(seq, json, QueuedResponse{});
+            if (!stopping->load(std::memory_order_acquire)) {
+              callback(seq, json, QueuedResponse{});
+            }
           });
 
+          if (processToKill == nullptr) {
+            return;
+          }
+
         #if ORO_RUNTIME_PLATFORM_WINDOWS
-          process->kill();
+          processToKill->kill();
         #else
-          ::kill(-process->id, options.killSignal);
+          const auto killSignal = options.killSignal != 0 ? options.killSignal : SIGTERM;
+          ::kill(-processToKill->id, killSignal);
         #endif
 
-          delete stdoutBuffer;
-          delete stderrBuffer;
-
-          stdoutBuffer = nullptr;
-          stderrBuffer = nullptr;
-
-          this->handles.erase(id);
+          processToKill->wait();
         });
+        timeoutId->store(timer, std::memory_order_release);
       }
     });
   #endif
@@ -256,6 +336,7 @@ namespace oro::runtime::core::services {
     };
     return callback(seq, json, QueuedResponse{});
   #else
+    auto stopping = processStoppingStateFor(this);
     this->loop.dispatch([=, this] {
       Lock lock(this->mutex);
 
@@ -282,8 +363,12 @@ namespace oro::runtime::core::services {
         (char) 0x01
         );
 
-      const auto onStdout = [=](const String& output) {
-        if (!options.allowStdout || output.size() == 0) {
+      const auto onStdout = [=, this](const String& output) {
+        if (
+          stopping->load(std::memory_order_acquire) ||
+          !options.allowStdout ||
+          output.size() == 0
+        ) {
           return;
         }
 
@@ -312,8 +397,12 @@ namespace oro::runtime::core::services {
         callback("-1", json, post);
       };
 
-      const auto onStderr = [=](const String& output) {
-        if (!options.allowStderr || output.size() == 0) {
+      const auto onStderr = [=, this](const String& output) {
+        if (
+          stopping->load(std::memory_order_acquire) ||
+          !options.allowStderr ||
+          output.size() == 0
+        ) {
           return;
         }
 
@@ -343,6 +432,10 @@ namespace oro::runtime::core::services {
       };
 
       const auto onExit = [=, this](const String& output) {
+        if (stopping->load(std::memory_order_acquire)) {
+          return;
+        }
+
         const auto code = output.size() > 0 ? std::stoi(output) : 0;
         const auto json = JSON::Object::Entries {
           {"source", "child_process.spawn"},
@@ -356,6 +449,10 @@ namespace oro::runtime::core::services {
         callback("-1", json, QueuedResponse{});
 
         this->loop.dispatch([=, this] {
+          if (stopping->load(std::memory_order_acquire)) {
+            return;
+          }
+
           SharedPointer<runtime::Process> process = nullptr;
           do {
             Lock lock(this->mutex);
@@ -369,6 +466,10 @@ namespace oro::runtime::core::services {
           const auto code = process->wait();
 
           this->loop.dispatch([=, this] {
+            if (stopping->load(std::memory_order_acquire)) {
+              return;
+            }
+
             const auto json = JSON::Object::Entries {
               {"source", "child_process.spawn"},
               {"data", JSON::Object::Entries {
@@ -409,7 +510,9 @@ namespace oro::runtime::core::services {
       };
 
       return this->loop.dispatch([=, this] () {
-        callback(seq, json, QueuedResponse{});
+        if (!stopping->load(std::memory_order_acquire)) {
+          callback(seq, json, QueuedResponse{});
+        }
       });
     });
   #endif

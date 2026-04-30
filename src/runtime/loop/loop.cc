@@ -15,6 +15,42 @@ namespace oro::runtime::loop {
   // in milliseconds
   constexpr int EVENT_LOOP_POLL_TIMEOUT = 32;
 
+#if ORO_RUNTIME_PLATFORM_APPLE
+  static const char LoopDispatchQueueKey = 0;
+
+  static void configureDispatchQueue (Loop* loop) {
+    dispatch_queue_set_specific(
+      loop->dispatchQueue,
+      &LoopDispatchQueueKey,
+      loop,
+      nullptr
+    );
+  }
+
+  static bool isOnDispatchQueue (Loop* loop) {
+    return dispatch_get_specific(&LoopDispatchQueueKey) == static_cast<void*>(loop);
+  }
+
+  static void stopOnDispatchQueue (Loop* loop, Loop::State state) {
+    if (isOnDispatchQueue(loop)) {
+      loop->state = state;
+      uv_stop(loop->get());
+      return;
+    }
+
+    {
+      Lock lock(loop->mutex);
+      loop->queue.push([loop, state]() {
+        loop->state = state;
+        uv_stop(loop->get());
+      });
+    }
+
+    uv_async_send(&loop->uv.async);
+    dispatch_sync(loop->dispatchQueue, ^{});
+  }
+#endif
+
   // async work is dispatched here which will cause the loop state
   // to transitions to `State::Polling` while in a dequeue loop and
   // then finally back to `State::Idle`
@@ -182,9 +218,18 @@ namespace oro::runtime::loop {
     return false;
   }
 
+  Loop::Loop () {
+  #if ORO_RUNTIME_PLATFORM_APPLE
+    configureDispatchQueue(this);
+  #endif
+  }
+
   Loop::Loop (const Options& options)
-    : options(options)
-  {}
+    : options(options) {
+  #if ORO_RUNTIME_PLATFORM_APPLE
+    configureDispatchQueue(this);
+  #endif
+  }
 
   bool Loop::init () {
     if (this->state == State::None) {
@@ -308,6 +353,14 @@ namespace oro::runtime::loop {
       return false;
     }
 
+#if ORO_RUNTIME_PLATFORM_APPLE
+    if (this->state == State::Paused) {
+      this->state = State::Stopped;
+      return true;
+    }
+
+    stopOnDispatchQueue(this, State::Stopped);
+#else
     this->state = State::Stopped;
     this->uv.stop();
 
@@ -317,6 +370,7 @@ namespace oro::runtime::loop {
         this->thread.join();
       }
     }
+#endif
 
     return this->state == State::Stopped;
   }
@@ -342,6 +396,9 @@ namespace oro::runtime::loop {
       return false;
     }
 
+#if ORO_RUNTIME_PLATFORM_APPLE
+    stopOnDispatchQueue(this, State::Paused);
+#else
     this->state = State::Paused;
     this->uv.stop();
 
@@ -352,6 +409,7 @@ namespace oro::runtime::loop {
         this->thread.join();
       }
     }
+#endif
 
     return this->state == State::Paused;
   }
@@ -378,7 +436,17 @@ namespace oro::runtime::loop {
     if (this->state > State::None && this->state < State::Shutdown) {
       if (this->stop()) {
         this->state = State::Shutdown;
+#if ORO_RUNTIME_PLATFORM_APPLE
+        if (isOnDispatchQueue(this)) {
+          this->uv.close();
+        } else {
+          dispatch_sync(this->dispatchQueue, ^{
+            this->uv.close();
+          });
+        }
+#else
         this->uv.close();
+#endif
         return true;
       }
 
@@ -403,7 +471,7 @@ namespace oro::runtime::loop {
   }
 
   bool Loop::started () const {
-    return this->state > State::Init && this->state < State::Shutdown;
+    return this->state > State::Init && this->state < State::Paused;
   }
 
   bool Loop::stopped () const {

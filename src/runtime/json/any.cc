@@ -220,10 +220,24 @@ namespace oro::runtime::JSON {
 #if ORO_RUNTIME_PLATFORM_APPLE
   Any::Any (const NSError* error) {
     this->type = Type::Error;
+    const auto domain = (
+      error != nullptr &&
+      error.domain != nullptr &&
+      error.domain.UTF8String != nullptr
+    )
+      ? error.domain.UTF8String
+      : "";
+    const auto message = (
+      error != nullptr &&
+      error.localizedDescription != nullptr &&
+      error.localizedDescription.UTF8String != nullptr
+    )
+      ? error.localizedDescription.UTF8String
+      : "";
     this->data = JSON::make_shared<Error>(
-      error.domain.UTF8String,
-      error.localizedDescription.UTF8String,
-      error.code
+      domain,
+      message,
+      error != nullptr ? static_cast<int>(error.code) : 0
     );
   }
 #elif ORO_RUNTIME_PLATFORM_LINUX
