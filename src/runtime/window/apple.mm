@@ -958,9 +958,16 @@ namespace oro::runtime::window {
   }
 
   void Window::eval (const String& source, const EvalCallback callback) {
-    App::sharedApplication()->dispatch([=, this]() {
-      if (this->webview != nullptr) {
-        [this->webview
+    const auto app = App::sharedApplication();
+    if (app == nullptr) {
+      return;
+    }
+
+    const auto weak = this->getWeakSelf();
+    app->dispatch([weak, source, callback]() {
+      const auto window = weak.lock();
+      if (window != nullptr && window->webview != nullptr) {
+        [window->webview
           evaluateJavaScript: @(source.c_str())
            completionHandler: ^(id result, NSError *error)
         {
@@ -1026,18 +1033,29 @@ namespace oro::runtime::window {
   }
 
   void Window::navigate (const String& value) {
-    App::sharedApplication()->dispatch([=, this]() {
+    const auto app = App::sharedApplication();
+    if (app == nullptr) {
+      return;
+    }
+
+    const auto weak = this->getWeakSelf();
+    app->dispatch([weak, value]() {
+      const auto window = weak.lock();
+      if (window == nullptr || window->webview == nullptr) {
+        return;
+      }
+
       const auto url = [NSURL URLWithString: @(value.c_str())];
 
-      if (url != nullptr && this->webview != nullptr) {
+      if (url != nullptr) {
         if (String(url.scheme.UTF8String) == "file") {
           static const auto resourcesPath = filesystem::Resource::getResourcesPath();
-          [this->webview loadFileURL: url
+          [window->webview loadFileURL: url
             allowingReadAccessToURL: [NSURL fileURLWithPath: @(resourcesPath.string().c_str())]
           ];
         } else {
           auto request = [NSMutableURLRequest requestWithURL: url];
-          [this->webview loadRequest: request];
+          [window->webview loadRequest: request];
         }
       }
     });
