@@ -696,7 +696,7 @@ export async function setTlsPins (pins, options = {}) {
   validateTlsPinsConfigValue(value, 'TLS pins')
 
   const result =
-    value && value.length > 1024
+    value && (value.length > 1024 || value.includes('\n'))
       ? await ipc.write('tls.setPins', { mode }, value)
       : await ipc.request('tls.setPins', { value, mode })
 
@@ -1289,7 +1289,7 @@ export async function setWebViewTlsPins (pins, options = {}) {
   validateTlsPinsConfigValue(value, 'WebView TLS pins')
 
   const result =
-    value && value.length > 1024
+    value && (value.length > 1024 || value.includes('\n'))
       ? await ipc.write('application.setWebviewTlsPins', { mode }, value)
       : await ipc.request('application.setWebviewTlsPins', { value, mode })
 

@@ -1,5 +1,7 @@
 #include "tests.hh"
 #include "src/core/codec.hh"
+#include "src/runtime/ipc.hh"
+#include "src/runtime/javascript.hh"
 
 namespace oro::Tests {
   void codec (Harness& t) {
@@ -28,6 +30,52 @@ namespace oro::Tests {
         decoded,
         "a % encoded string with foo@bar.com, $100, & #tag",
         "decoded value is correct"
+      );
+    });
+
+    t.test("oro::runtime::ipc::Message preserves query value payloads", [](auto t) {
+      using oro::runtime::ipc::Message;
+
+      const auto encoded = Message(
+        "ipc://test?seq=R1&value=%20line1%0Aline2%0A%20&empty=&raw=a=b%3Dc",
+        true
+      );
+
+      t.equals(
+        encoded.get("value"),
+        " line1\nline2\n ",
+        "percent-encoded multiline values preserve whitespace"
+      );
+      t.assert(encoded.has("empty"), "empty query values are retained");
+      t.equals(encoded.get("empty"), "", "empty query values decode to empty strings");
+      t.equals(encoded.get("raw"), "a=b=c", "raw equals signs are preserved in values");
+
+      const auto raw = Message("ipc://test?value= line1\nline2\n ", true);
+      t.equals(
+        raw.get("value"),
+        " line1\nline2\n ",
+        "raw multiline values preserve leading and trailing whitespace"
+      );
+    });
+
+    t.test("oro::runtime::javascript resolve payload is a safe string literal", [](auto t) {
+      const auto source = oro::runtime::javascript::getResolveToRenderProcessJavaScript(
+        "R1",
+        "0",
+        "{\"data\":\"line1\\nline2's\"}"
+      );
+
+      t.assert(
+        source.find("const value = \"") != oro::runtime::String::npos,
+        "resolve payload is emitted as a JSON string literal"
+      );
+      t.assert(
+        source.find("const value = '") == oro::runtime::String::npos,
+        "resolve payload is not emitted as an unescaped single-quoted literal"
+      );
+      t.assert(
+        source.find("line1\\\\nline2's") != oro::runtime::String::npos,
+        "resolve payload preserves escaped newlines and single quotes"
       );
     });
 

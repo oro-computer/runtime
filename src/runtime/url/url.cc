@@ -339,10 +339,10 @@ namespace oro::runtime::url {
 
     if (this->query.size() > 0) {
       for (const auto& entry : split(this->query, '&')) {
-        const auto parts = split(entry, '=');
-        if (parts.size() == 2) {
-          const auto key = trim(parts[0]);
-          const auto value = trim(parts[1]);
+        const auto equals = entry.find('=');
+        if (equals != String::npos) {
+          const auto key = trim(entry.substr(0, equals));
+          const auto value = entry.substr(equals + 1);
           this->searchParams.set(key, value);
         }
       }

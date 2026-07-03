@@ -174,9 +174,11 @@ namespace oro::runtime::javascript {
     const String& state,
     const String& value
   ) {
+    const auto jsonValue = JSON::Any(value).str();
+
     return createJavaScript("resolve-to-render-process.js",
       "const seq = String('" + seq + "');                                    \n"
-      "const value = '" + value + "';                                        \n"
+      "const value = " + jsonValue + ";                                      \n"
       "const index = globalThis.__args.index;                                \n"
       "const state = Number('" + state + "');                                \n"
       "const eventName = `resolve-${index}-${seq}`;                          \n"
