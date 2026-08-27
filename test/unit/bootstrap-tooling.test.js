@@ -903,10 +903,15 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     /Restore Android emulator cache[\s\S]*system-images\/android-37\.0\/google_apis\/x86_64[\s\S]*~\/\.android\/avd/,
     'the Android test lane should cache its emulator image and AVD separately'
   )
+  assert.match(
+    workflow,
+    /ACTIONLINT_VERSION: [\d.]+[\s\S]*ACTIONLINT_SHA256: [0-9a-f]{64}[\s\S]*sha256sum --check --status/,
+    'lint should verify the pinned actionlint release checksum'
+  )
   assert.doesNotMatch(
     workflow,
-    /setup-go|go install github\.com\/rhysd\/actionlint/,
-    'lint should use the checksum-verified actionlint release instead of compiling it on every run'
+    /go install github\.com\/rhysd\/actionlint/,
+    'lint should download the pinned actionlint release instead of compiling it on every run'
   )
   assert.match(
     workflow,

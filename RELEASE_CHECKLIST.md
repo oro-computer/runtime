@@ -34,6 +34,9 @@ uncommitted working tree.
 
 ## Security and provenance
 
+- [ ] Run `gitleaks git --redact --no-banner .` from the repository root. Review every finding and
+      every exact fingerprint in `.gitleaksignore`; the command must finish with no new or
+      unreviewed findings. Never replace exact fingerprints with broad file or rule exemptions.
 - [ ] Review dependency updates and `THIRD_PARTY_NOTICES.md`; confirm every distributed dependency
       has an applicable license.
 - [ ] Confirm dependency sources use HTTPS and immutable revisions or checksums.
@@ -68,13 +71,25 @@ uncommitted working tree.
 - [ ] If the package tarballs require human inspection before publication, configure a required
       reviewer on `npm-publish`. Download and inspect all seven tarballs while the signed-tag run is
       waiting for environment approval.
-- [ ] Merge the reviewed release commit and wait for required CI checks on that exact commit.
-- [ ] Create an annotated, signed `v<version>` tag on that commit and push the tag.
+- [ ] Merge the reviewed release commit and require the complete push/PR CI matrix to pass on that
+      exact commit: lint, Node compatibility, Linux x64 integration, Linux arm64, Android, Intel
+      macOS/iOS, Apple Silicon macOS/iOS, and Windows. The signed-tag workflow does not rerun this
+      complete matrix.
+- [ ] Create an annotated, signed `v<version>` tag on that exact commit. Run
+      `git tag -v v<version>` locally and confirm the signature, tagger identity, and target commit
+      before pushing only the tag.
+- [ ] After pushing the tag, confirm GitHub marks its signature **Verified** and starts the
+      `Release Artifacts` workflow for the intended commit and version.
 - [ ] Let `Release Artifacts` build all supported targets and package tarballs. If the
       `npm-publish` environment requires a reviewer, approve its deployment after inspecting the
       completed build legs. With no reviewer rule, the chain continues automatically.
-- [ ] Confirm the release run's reusable CI gate passed lint, generated-output validation, and every
-      Linux, Android, Apple, iOS Simulator, and Windows matrix leg before packaging began.
+- [ ] Confirm the release run's reusable CI gate passed its focused source checks: lint,
+      generated-output validation, Node 22 tooling tests, and Linux x64 integration. It calls
+      `ci.yml` with `run_cross_platform: false` because the exact release artifact jobs provide the
+      platform build coverage without duplicating the complete push/PR test matrix.
+- [ ] Confirm all eight exact release artifact jobs built and validated their intended desktop,
+      Android, iOS device, and iOS Simulator targets and passed their staged CLI/package smoke
+      checks.
 - [ ] Confirm the complete exact archive/checksum/SPDX set passed verification before the protected
       npm publication job started.
 - [ ] Confirm every native runner installed its exact platform, Node-adapter, and meta-package
