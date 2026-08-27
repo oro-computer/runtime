@@ -661,8 +661,12 @@ function _get_web_view2() {
 
   local arch="$(host_arch)"
   local platform="desktop"
+  local webview2_license_dir="$BUILD_DIR/webview2"
 
-  if [ -z "$FORCE_WEBVIEW2_DOWNLOAD" ] && test -f "$BUILD_DIR/$arch-$platform/lib$d/WebView2LoaderStatic.lib"; then
+  if [ -z "$FORCE_WEBVIEW2_DOWNLOAD" ] && \
+    test -f "$BUILD_DIR/$arch-$platform/lib$d/WebView2LoaderStatic.lib" && \
+    test -f "$webview2_license_dir/LICENSE.txt" && \
+    test -f "$webview2_license_dir/NOTICE.txt"; then
     echo "$BUILD_DIR/$arch-$platform/lib$d/WebView2LoaderStatic.lib exists."
     return
   fi
@@ -689,10 +693,13 @@ function _get_web_view2() {
   unzip -q "$tmp/webview2.zip"
   mkdir -p "$BUILD_DIR/include"
   mkdir -p "$BUILD_DIR/$arch-$platform/lib$d"/
+  mkdir -p "$webview2_license_dir"
 
   cp -pf build/native/include/WebView2.h "$BUILD_DIR/include/WebView2.h"
   cp -pf build/native/include/WebView2EnvironmentOptions.h "$BUILD_DIR/include/WebView2EnvironmentOptions.h"
   cp -pf build/native/x64/WebView2LoaderStatic.lib "$BUILD_DIR/$arch-$platform/lib$d/WebView2LoaderStatic.lib"
+  cp -pf LICENSE.txt "$webview2_license_dir/LICENSE.txt"
+  cp -pf NOTICE.txt "$webview2_license_dir/NOTICE.txt"
 
   cd "$pwd"
 
@@ -1609,6 +1616,8 @@ function _install {
       "llama.cpp-LICENSE-linenoise:$BUILD_DIR/llama/licenses/LICENSE-linenoise"
       "mbedtls-LICENSE:$BUILD_DIR/mbedtls/LICENSE"
       "mbedtls-framework-LICENSE:$BUILD_DIR/mbedtls/framework/LICENSE"
+      "Microsoft-WebView2-LICENSE:$BUILD_DIR/webview2/LICENSE.txt"
+      "Microsoft-WebView2-NOTICE:$BUILD_DIR/webview2/NOTICE.txt"
       "whisper.cpp-LICENSE:$BUILD_DIR/whisper.cpp/LICENSE"
       "zlib-LICENSE:$BUILD_DIR/zlib/LICENSE"
     )

@@ -924,12 +924,15 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     'architecture-only lanes should build and smoke test without installing the integration harness'
   )
   assert.equal(
-    (workflow.match(/run: npm run test:mcp$/gm) || []).length,
+    (workflow.match(/run: (?:dbus-run-session -- )?npm run test:mcp$/gm) || [])
+      .length,
     1,
     'the platform-independent MCP suite should run only on the comprehensive Linux lane'
   )
   assert.equal(
-    (workflow.match(/run: npm run test:runtime-core$/gm) || []).length,
+    (workflow.match(
+      /run: (?:dbus-run-session -- )?npm run test:runtime-core$/gm
+    ) || []).length,
     1,
     'the runtime-core suite should run only on the comprehensive Linux lane'
   )
