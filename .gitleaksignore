@@ -1,0 +1,27 @@
+# Reviewed with Gitleaks 8.30.1 on 2026-08-27.
+#
+# These are exact fingerprints from the initial import. Keep this baseline
+# commit-specific so new findings in these files or rules still fail scans.
+# The duplicate libsodium findings share one fingerprint.
+
+# Minified libsodium symbol names, MIME names, and Cargo dependency names.
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:api/external/libsodium/index.js:generic-api-key:63
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:api/mime/application.json:generic-api-key:260
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:rust/oro-iroh/Cargo.lock:generic-api-key:624
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:rust/oro-iroh/Cargo.lock:generic-api-key:640
+
+# Public, non-production demonstration key documented in examples/updates/README.md.
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:examples/updates/keys.json:generic-api-key:4
+
+# Public TLS example and test fixtures documented in their adjacent README files.
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:examples/tls/ca-key.pem:private-key:1
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:examples/tls/client-key.pem:private-key:1
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:examples/tls/server-key.pem:private-key:1
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:test/fixtures/tls/client-key-pass.pem:private-key:1
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:test/fixtures/tls/client-key.pem:private-key:1
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:test/fixtures/tls/server-key-pass.pem:private-key:1
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:test/fixtures/tls/server-key.pem:private-key:1
+
+# PEM delimiter strings used by the Windows TLS parser; no key bytes are embedded.
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:src/runtime/tls/schannel_util_windows.hh:private-key:55
+afba937b4edcb4720e76f3194ec1a2e85184e1d5:src/runtime/tls/schannel_util_windows.hh:private-key:57

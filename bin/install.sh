@@ -1817,7 +1817,8 @@ function _compile_libuv_android {
   local -a android_includes=()
   android_includes=($(android_arch_includes "$arch"))
 
-  local cflags=("$clang_target" -std=gnu89 -g -pedantic -I"$root"/build/uv/include -I"$root"/build/uv/src -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -fPIC -Wall -Wextra -Wno-pedantic -Wno-sign-compare -Wno-unused-parameter -Wno-implicit-function-declaration)
+  # Match libuv's required C11 mode with compiler extensions enabled.
+  local cflags=("$clang_target" -std=gnu11 -g -pedantic -I"$root"/build/uv/include -I"$root"/build/uv/src -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -fPIC -Wall -Wextra -Wno-pedantic -Wno-sign-compare -Wno-unused-parameter -Wno-implicit-function-declaration)
   cflags+=("${android_includes[@]}")
   local objects=()
   local sources=("unix/async.c" "unix/core.c" "unix/dl.c" "unix/fs.c" "unix/getaddrinfo.c" "unix/getnameinfo.c" "unix/linux.c" "unix/loop.c" "unix/loop-watcher.c" "unix/pipe.c" "unix/poll.c" "unix/process.c" "unix/proctitle.c" "unix/random-devurandom.c" "unix/random-getentropy.c" "unix/random-getrandom.c" "unix/random-sysctl-linux.c" "unix/signal.c" "unix/stream.c" "unix/tcp.c" "unix/thread.c" "unix/tty.c" "unix/udp.c" fs-poll.c idna.c inet.c random.c strscpy.c strtok.c threadpool.c timer.c uv-common.c uv-data-getter-setters.c version.c)
@@ -1828,18 +1829,28 @@ function _compile_libuv_android {
   local src_directory="$root/build/uv/src"
 
   trap onsignal INT TERM
-  local i=0
   local max_concurrency=$CPU_CORES
+  if (( max_concurrency < 1 )); then
+    max_concurrency=1
+  fi
+  local -a compile_pids=()
+  local compile_pid=""
+  local compile_status=0
+  local compile_rc=0
+  local archive_rc=0
   local build_static=0
   local base_lib="libuv"
   local static_library="$root/build/$arch-$platform/lib/$base_lib.a"
 
   for source in "${sources[@]}"; do
-    if (( i++ > max_concurrency )); then
-      for pid in "${pids[@]}"; do
-        wait "$pid" 2>/dev/null
-      done
-      i=0
+    if (( ${#compile_pids[@]} >= max_concurrency )); then
+      compile_pid="${compile_pids[0]}"
+      wait "$compile_pid" 2>/dev/null
+      compile_rc=$?
+      if (( compile_rc != 0 )); then
+        compile_status=1
+      fi
+      compile_pids=("${compile_pids[@]:1}")
     fi
 
     declare object="${source/.c/.o}"
@@ -1850,17 +1861,26 @@ function _compile_libuv_android {
       if (( force )) || ! test -f "$output_directory/$object" || (( $(stat_mtime "$src_directory/$source") > $(stat_mtime "$output_directory/$object") )); then
         mkdir -p "$(dirname "$object")"
         echo "# compiling object ($arch-$platform) $(basename "$source")"
-        quiet $clang "${cflags[@]}" -c "$src_directory/$source" -o "$output_directory/$object" || onsignal
+        quiet "$clang" "${cflags[@]}" -c "$src_directory/$source" -o "$output_directory/$object" || exit 1
         echo "ok - built $source -> $object ($arch-$platform)"
         # Can't write back to variable in block, remove final library to force rebuild
         rm "$static_library" 2>/dev/null
       fi
-    } & pids+=($!)
+    } & compile_pids+=("$!")
   done
 
-  for pid in "${pids[@]}"; do
-    wait "$pid" 2>/dev/null
+  for compile_pid in "${compile_pids[@]}"; do
+    wait "$compile_pid" 2>/dev/null
+    compile_rc=$?
+    if (( compile_rc != 0 )); then
+      compile_status=1
+    fi
   done
+
+  if (( compile_status != 0 )); then
+    echo >&2 "not ok - failed to compile libuv objects ($arch-$platform)"
+    return 1
+  fi
 
   if [ ! -f "$static_library" ]; then
     build_static=1
@@ -1868,7 +1888,13 @@ function _compile_libuv_android {
   mkdir -p "$(dirname "$static_library")"
 
   if (( build_static )); then
-    quiet $ar crs "$static_library" "${objects[@]}"
+    quiet "$ar" crs "$static_library" "${objects[@]}"
+    archive_rc=$?
+    if (( archive_rc != 0 )); then
+      echo >&2 "not ok - failed to archive $static_library"
+      return 1
+    fi
+
     if [ -f "$static_library" ]; then
       echo "ok - built $base_lib ($arch-$platform): $(basename "$static_library")"
     else
@@ -1924,9 +1950,17 @@ function _compile_llama_metal {
   mkdir -p "$STAGING_DIR/build/"
   mkdir -p ../lib
 
-  xcrun -sdk $sdk metal -O3 -c ggml/src/ggml-metal/ggml-metal.metal -o ggml-metal.air
-  xcrun -sdk $sdk metallib ggml-metal.air -o ../lib/default.metallib
-  rm *.air
+  xcrun -sdk "$sdk" metal \
+    -O3 \
+    -I ggml/src \
+    -c ggml/src/ggml-metal/ggml-metal.metal \
+    -o ggml-metal.air
+  die $? "not ok - unable to compile Metal source for $platform"
+
+  xcrun -sdk "$sdk" metallib ggml-metal.air -o ../lib/default.metallib
+  die $? "not ok - unable to create Metal library for $platform"
+
+  rm -f ggml-metal.air
 
   echo "ok - metal built for $platform"
 }
@@ -1935,6 +1969,7 @@ function _compile_llama {
   local target=$1
   local hosttarget=$1
   local platform=$2
+  local rc=0
 
   if [ -z "$target" ]; then
     target="$(host_arch)"
@@ -1989,17 +2024,18 @@ function _compile_llama {
       if [[ "$host" == "Darwin" ]]; then
         cflags+=" $(_darwin_third_party_warning_flags)"
       fi
-      export CFLAGS="$cflags"
-      export CXXFLAGS="$cflags"
-      export OBJCFLAGS="$cflags"
-      export OBJCXXFLAGS="$cflags"
+      (
+        export CFLAGS="$cflags"
+        export CXXFLAGS="$cflags"
+        export OBJCFLAGS="$cflags"
+        export OBJCXXFLAGS="$cflags"
 
-      _cmake_configure . build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}"
-      die $? "not ok - libllama.a (desktop)"
-
-      quiet cmake --build build &&
-      quiet cmake --build build -- -j"$CPU_CORES"
-      die $? "not ok - libllama.a (desktop)"
+        _cmake_configure . build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}" &&
+        quiet cmake --build build &&
+        quiet cmake --build build -- -j"$CPU_CORES"
+      )
+      rc=$?
+      die $rc "not ok - libllama.a (desktop)"
 
       _stage_llama_desktop_outputs "$STAGING_DIR" "$BUILD_DIR/$target-$platform"
       die $? "not ok - libllama.a (desktop)"
@@ -2040,21 +2076,22 @@ function _compile_llama {
       cflags+="-march=x86-64 --target=x86-apple-ios-simulator"
     fi
 
-    export AR="$ar"
-    export CFLAGS="$cflags"
-    export CXXFLAGS="$cflags"
-    export CXX="$cxx"
-    export CC="$cc"
-    export SDKROOT="$PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
+    local sdkroot="$PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
+    (
+      export AR="$ar"
+      export CFLAGS="$cflags"
+      export CXXFLAGS="$cflags"
+      export CXX="$cxx"
+      export CC="$cc"
+      export SDKROOT="$sdkroot"
 
-    _cmake_configure . build -DCMAKE_SYSTEM_NAME="iOS" -DCMAKE_OSX_ARCHITECTURES="$target" -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" -DLLAMA_NATIVE=OFF -DGGML_ARM_DOTPROD=ON "${cmake_args[@]}" &&
-    cmake --build build &&
-    cmake --build build -- -j"$CPU_CORES" &&
-    cmake --install build
-
-    if (( $? != 0 )); then
-      die $? "not ok - Unable to compile libllama for '$platform'"
-    fi
+      _cmake_configure . build -DCMAKE_SYSTEM_NAME="iOS" -DCMAKE_OSX_ARCHITECTURES="$target" -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" -DLLAMA_NATIVE=OFF -DGGML_ARM_DOTPROD=ON "${cmake_args[@]}" &&
+      cmake --build build &&
+      cmake --build build -- -j"$CPU_CORES" &&
+      cmake --install build
+    )
+    rc=$?
+    die $rc "not ok - Unable to compile libllama for '$platform'"
 
     return
   elif [ "$platform" == "android" ]; then
@@ -2091,9 +2128,8 @@ function _compile_llama {
     cmake --build build --config Release -j"$CPU_CORES" &&
     cmake --install build --config Release
 
-    if (( $? != 0 )); then
-      die $? "not ok - Unable to compile libllama for '$platform'"
-    fi
+    rc=$?
+    die $rc "not ok - Unable to compile libllama for '$platform'"
 
     return
   fi
@@ -2570,10 +2606,18 @@ function _compile_crsqlite_loadable {
       if [[ "$host" != "Darwin" ]]; then
         die 1 "not ok - cr-sqlite iOS build requested on non-Darwin host"
       fi
+
+      # bindgen 0.68.1 maps Rust's aarch64 iOS Simulator target to
+      # arm64-apple-ios-sim, which Apple Clang rejects. A target-specific
+      # argument prevents bindgen from adding that invalid implicit target.
+      local simulator_bindgen_args="--target=arm64-apple-ios-simulator ${BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim:-}"
+
       echo "# building cr-sqlite iOS loadable variants..."
       (
         cd "$BUILD_DIR/cr-sqlite/core" &&
-        CARGO_TARGET_DIR="$crsqlite_cargo_target_dir" ./all-ios-loadable.sh
+        BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="$simulator_bindgen_args" \
+        CARGO_TARGET_DIR="$crsqlite_cargo_target_dir" \
+        bash -e ./all-ios-loadable.sh
       )
       local rc=$?
       die $rc "not ok - cr-sqlite iOS loadable build"
@@ -2874,48 +2918,8 @@ function _compile_libusb {
     rm -f "$root/build/$target-$platform/lib$d"/*.{so,la,dylib}* 2>/dev/null || true
     return
   elif [ "$platform" == "iPhoneOS" ] || [ "$platform" == "iPhoneSimulator" ]; then
-    local sdk="iphoneos"
-    [[ "$platform" == "iPhoneSimulator" ]] && sdk="iphonesimulator"
-
-    quiet command -v cmake
-    die $? "not ok - missing cmake, \"$(advice 'cmake')\""
-
-    local cc="$(xcrun -sdk $sdk -find clang)"
-    local cxx="$(xcrun -sdk $sdk -find clang++)"
-    local ar="$(xcrun -sdk $sdk -find ar)"
-    local ranlib="$(xcrun -sdk $sdk -find ranlib)"
-    local strip="$(xcrun -sdk $sdk -find strip)"
-    local sdk_path="$(xcrun --sdk $sdk --show-sdk-path)"
-
-    export CC="$cc"
-    export CXX="$cxx"
-    export AR="$ar"
-    export RANLIB="$ranlib"
-    export STRIP="$strip"
-    export SDKROOT="$sdk_path"
-
-    local cmake_args=(
-      -DLIBUSB_BUILD_SHARED_LIBS=OFF
-      -DBUILD_SHARED_LIBS=OFF
-      -DLIBUSB_BUILD_TESTING=OFF
-      -DLIBUSB_BUILD_EXAMPLES=OFF
-      -DCMAKE_SYSTEM_NAME=iOS
-      -DCMAKE_OSX_ARCHITECTURES="$target"
-      -DCMAKE_OSX_SYSROOT="$sdk_path"
-      -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"
-    )
-
-    _cmake_configure . build "${cmake_args[@]}"
-    die $? "not ok - libusb cmake configure ($platform)"
-
-    quiet cmake --build build --config Release -j"$CPU_CORES"
-    die $? "not ok - libusb cmake build ($platform)"
-
-    quiet cmake --install build --config Release
-    die $? "not ok - libusb cmake install ($platform)"
-
-    rm -f "$root/build/$target-$platform/lib$d"/*.{so,la,dylib}* 2>/dev/null || true
-    return
+    echo "warn - skipping libusb for $platform because upstream libusb does not support iOS"
+    return 0
   fi
 
   echo "warn - libusb build for $platform not implemented; skipping"
@@ -2960,6 +2964,10 @@ function _compile_libipfs {
   if [ ! -f "$source/libipfs.go" ]; then
     echo "warn - libipfs entrypoint libipfs.go missing; skipping"
     return 0
+  fi
+
+  if ! command -v go >/dev/null 2>&1; then
+    die 1 "not ok - Go 1.23.2 or newer is required to build libipfs. Install Go or set ORO_SKIP_LIBIPFS=1 to disable libipfs."
   fi
 
   mkdir -p "$source/bin"
@@ -3752,42 +3760,48 @@ if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
 
   _setSDKVersion iPhoneOS
 
-  _compile_libuv arm64 iPhoneOS & pids+=($!)
-  _compile_libusb arm64 iPhoneOS & pids+=($!)
-  _compile_libsodium arm64 iPhoneOS & pids+=($!)
-  _compile_zlib arm64 iPhoneOS & pids+=($!)
+  _compile_libuv arm64 iPhoneOS & pids+=($!) && pid_labels+=("libuv (arm64 iPhoneOS)")
+  _compile_libusb arm64 iPhoneOS & pids+=($!) && pid_labels+=("libusb (arm64 iPhoneOS)")
+  _compile_libsodium arm64 iPhoneOS & pids+=($!) && pid_labels+=("libsodium (arm64 iPhoneOS)")
+  _compile_zlib arm64 iPhoneOS & pids+=($!) && pid_labels+=("zlib (arm64 iPhoneOS)")
   _compile_llama arm64 iPhoneOS
-  _compile_whisper arm64 iPhoneOS & pids+=($!)
+  _compile_whisper arm64 iPhoneOS & pids+=($!) && pid_labels+=("whisper (arm64 iPhoneOS)")
   _compile_crsqlite_loadable ios
 
-  _compile_libuv x86_64 iPhoneSimulator & pids+=($!)
-  _compile_libusb x86_64 iPhoneSimulator & pids+=($!)
-  _compile_libsodium x86_64 iPhoneSimulator & pids+=($!)
-  _compile_zlib x86_64 iPhoneSimulator & pids+=($!)
+  _compile_libuv x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("libuv (x86_64 iPhoneSimulator)")
+  _compile_libusb x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("libusb (x86_64 iPhoneSimulator)")
+  _compile_libsodium x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("libsodium (x86_64 iPhoneSimulator)")
+  _compile_zlib x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("zlib (x86_64 iPhoneSimulator)")
   _compile_llama x86_64 iPhoneSimulator
-  _compile_whisper x86_64 iPhoneSimulator & pids+=($!)
+  _compile_whisper x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("whisper (x86_64 iPhoneSimulator)")
 
   if [[ "$arch" = "arm64" ]]; then
-    _compile_libuv arm64 iPhoneSimulator & pids+=($!)
-    _compile_libusb arm64 iPhoneSimulator & pids+=($!)
-    _compile_libsodium arm64 iPhoneSimulator & pids+=($!)
-    _compile_zlib arm64 iPhoneSimulator & pids+=($!)
+    _compile_libuv arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("libuv (arm64 iPhoneSimulator)")
+    _compile_libusb arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("libusb (arm64 iPhoneSimulator)")
+    _compile_libsodium arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("libsodium (arm64 iPhoneSimulator)")
+    _compile_zlib arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("zlib (arm64 iPhoneSimulator)")
     _compile_llama arm64 iPhoneSimulator
-    _compile_whisper arm64 iPhoneSimulator & pids+=($!)
+    _compile_whisper arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("whisper (arm64 iPhoneSimulator)")
   fi
 
-  for pid in "${pids[@]}"; do wait "$pid"; done
+  declare ios_dependency_status=0
+  declare ios_dependency_rc=0
+  for index in "${!pids[@]}"; do
+    wait "${pids[$index]}"
+    ios_dependency_rc=$?
+    if (( ios_dependency_rc != 0 )); then
+      echo >&2 "not ok - ${pid_labels[$index]} build failed"
+      ios_dependency_status=1
+    fi
+  done
   pids=()
   pid_labels=()
 
-  die $? "not ok - unable to combine build artifacts"
-  echo "ok - created fat library"
+  die "$ios_dependency_status" "not ok - iOS dependency build failed"
+  echo "ok - built iOS dependency libraries"
 
-  unset PLATFORM CC STRIP LD CPP CFLAGS AR RANLIB \
-    CPPFLAGS LDFLAGS IPHONEOS_DEPLOYMENT_TARGET
-
-  die $? "not ok - could not copy fat library"
-  echo "ok - copied fat library"
+  unset PLATFORM CC CXX STRIP LD CPP CFLAGS CXXFLAGS AR RANLIB \
+    CPPFLAGS LDFLAGS SDKROOT IPHONEOS_DEPLOYMENT_TARGET
 fi
 
 # Wait for background builds to finish before packaging assets.

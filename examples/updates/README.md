@@ -4,6 +4,13 @@ This example shows how to generate a signing key, produce a signed update
 manifest, and verify it using the same primitives that the Oro runtime uses
 internally.
 
+> [!WARNING]
+> The checked-in `keys.json` and `manifest.json.sig` files are public,
+> deterministic demonstration fixtures. The private key in `keys.json` is
+> intentionally disclosed so the example can be reproduced; it cannot protect
+> a real release. Never reuse this key or trust its signature outside this
+> example. Generate and securely store a new key for every real application.
+
 All paths below are relative to the repository root.
 
 ## 1. Generate an Ed25519 keypair

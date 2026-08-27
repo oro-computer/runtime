@@ -130,6 +130,46 @@ function Call-VCVars() {
   }
 }
 
+# Git Bash prepends /usr/bin, where the coreutils link.exe shadows MSVC's
+# linker. Pass Cargo an absolute linker path before starting Git Bash.
+function Set-RustLinker() {
+  $cargo_linker_env = "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER"
+  $configured_linker = [Environment]::GetEnvironmentVariable($cargo_linker_env)
+  if (-not [string]::IsNullOrWhiteSpace($configured_linker)) {
+    Write-Log "v" "# Using configured Rust linker '$configured_linker'."
+    return
+  }
+
+  $linker_path = $null
+  if (-not [string]::IsNullOrWhiteSpace($env:VCToolsInstallDir)) {
+    $vc_tools_linker = Join-Path $env:VCToolsInstallDir "bin\Hostx64\x64\link.exe"
+    if (Test-Path $vc_tools_linker -PathType Leaf) {
+      $linker_path = $vc_tools_linker
+    }
+  }
+
+  if ([string]::IsNullOrWhiteSpace($linker_path)) {
+    $linker = @(Get-Command "link.exe" -CommandType Application -ErrorAction SilentlyContinue)[0]
+    if ($null -ne $linker) {
+      $linker_path = $linker.Source
+    }
+  }
+
+  $linker_missing = [string]::IsNullOrWhiteSpace($linker_path)
+  if (-not $linker_missing) {
+    $linker_missing = -not (Test-Path $linker_path -PathType Leaf)
+  }
+  $linker_is_git_utility = -not $linker_missing -and $linker_path -like "*\Git\usr\bin\link.exe"
+
+  if ($linker_missing -or $linker_is_git_utility) {
+    $global:install_errors += "not ok - MSVC link.exe not found; Rust Windows builds require the Visual C++ x64 build tools."
+    return
+  }
+
+  [Environment]::SetEnvironmentVariable($cargo_linker_env, $linker_path)
+  Write-Log "v" "# Using Rust linker '$linker_path'."
+}
+
 # type: 
 # d - debug / console / file
 # v - verbose / console / file
@@ -1138,6 +1178,11 @@ Download size: 5.5GB, Installed size: 10.2GB y/[N]"
 }
 
 Install-Requirements
+
+if ($shbuild) {
+  Set-RustLinker
+  Exit-IfErrors
+}
 
 $valid_clang = $(Test-CommandVersion("clang++", $targetClangVersion))
 
