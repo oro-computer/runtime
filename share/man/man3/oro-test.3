@@ -55,6 +55,16 @@ Documented method exposed by this module.
 .br
 \fImsg\fR (string; optional)
 .TP
+\fBsame(actual, expected, msg)\fR
+Assert that two values are deeply equivalent.
+\fBParameters:\fR
+.br
+\fIactual\fR (T; required)
+.br
+\fIexpected\fR (T; required)
+.br
+\fImsg\fR (string; optional)
+.TP
 \fBnotDeepEqual(actual, expected, msg)\fR
 Documented method exposed by this module.
 \fBParameters:\fR
@@ -99,8 +109,32 @@ Documented method exposed by this module.
 .br
 \fImsg\fR (string; optional)
 .TP
+\fBnotOk(actual, msg)\fR
+Assert that a value is falsy.
+\fBParameters:\fR
+.br
+\fIactual\fR (unknown; required)
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBmatch(actual, expected, msg)\fR
+Assert that a value matches a regular expression.
+\fBParameters:\fR
+.br
+\fIactual\fR (unknown; required)
+.br
+\fIexpected\fR (RegExp; required)
+.br
+\fImsg\fR (string; optional)
+.TP
 \fBpass(msg)\fR
 Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fImsg\fR (string; optional)
+.TP
+\fBskip(msg)\fR
+Mark the current test as skipped.
 \fBParameters:\fR
 .br
 \fImsg\fR (string; optional)
@@ -122,6 +156,19 @@ Documented method exposed by this module.
 \fIexpected\fR (RegExp \\| any; optional)
 .br
 \fImessage\fR (string; optional)
+.TP
+\fBrejects(input, expected, message)\fR
+Assert that a promise or async function rejects.
+\fBParameters:\fR
+.br
+\fIinput\fR (PromiseLike<any> \\| (() => any); required)
+.br
+\fIexpected\fR (RegExp \\| ((error: Error) => boolean); optional)
+.br
+\fImessage\fR (string; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
 .TP
 \fBsleep(ms, msg)\fR
 Sleep for ms with an optional msg

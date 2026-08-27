@@ -169,7 +169,7 @@ export class CacheCollection {
  * instances in the application context, including windows and workers.
  */
 export class Cache {
-    [x: number]: () => gc.Finalizer;
+    [x: number]: () => import("../gc.js").Finalizer;
     /**
      * A globally shared type mapping for the cache to use when
      * derserializing a value.

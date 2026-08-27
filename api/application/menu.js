@@ -103,7 +103,7 @@ export class Menu extends EventTarget {
 
   /**
    * Level 1 'menuitem'` event listener.
-   * @type {function(menuitemEvent)?}
+   * @type {function(MenuItemEvent)?}
    */
   get onmenuitem () {
     return this.#onmenuitem ?? null
@@ -354,7 +354,7 @@ export class MenuContainer extends EventTarget {
 
   /**
    * Level 1 'menuitem'` event listener.
-   * @type {function(menuitemEvent)?}
+   * @type {function(MenuItemEvent)?}
    */
   get onmenuitem () {
     return this.#onmenuitem ?? null

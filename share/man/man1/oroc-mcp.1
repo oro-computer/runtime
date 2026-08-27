@@ -26,7 +26,7 @@ HTTP bind port (default: 0 for ephemeral)
 HTTP endpoint path (default: /mcp; normalizes mcp,/mcp,/mcp/)
 .TP
 \fB\-\-token=<token>\fR
-require bearer token (default: disabled on loopback, auto\-generated otherwise)
+require this bearer token (default: auto\-generated in HTTP mode)
 .TP
 \fB\-\-no\-auth\fR
 disable token auth (loopback only)
@@ -38,16 +38,16 @@ explicit workspace root (default: current directory or <workspace\-dir>)
 workspace\-relative oro.toml/oro.ini path to use as the active project config
 .TP
 \fB\-\-read\-workspace\-only\fR
-restrict filesystem reads to the workspace root (disables read_file)
+restrict filesystem reads to the workspace root (default; compatibility flag)
 .TP
 \fB\-\-allow\-read\-outside\-workspace\fR
-allow reading arbitrary files outside the workspace root (default)
+explicitly allow reading arbitrary files outside the workspace root
 .TP
 \fB\-\-replace\-sse\-stream\fR
 allow a new SSE connection to replace an existing one for the same session id
 .SH NOTES
 .PP
-Stdio mode disables JSON logs and suppresses INFO output so stdout remains valid MCP JSON\-RPC. HTTP mode implements MCP Streamable HTTP (2025\-06\-18); clients must call initialize first and then include Mcp\-Session\-Id on subsequent requests. The server publishes descriptive MCP tool metadata, including standard titles, safety annotations, a custom metadata object, and structured tool results to help human and AI clients choose the right operation without shell parsing. Use the MCP `search_docs` tool for topic\-driven discovery across README, MCP, API, config, and manpage resources before falling back to manual resource walking. When \-\-config is omitted, the active config defaults to oro.toml and falls back to oro.ini when that is the only standard project config present in the workspace. resources/list includes the workspace root and, when present, the active config file, project\-local docs under conventional paths, and installed runtime\-doc:/ references for shipped API, CLI, config, MCP, README, llms.txt, and man1/man3/man7 docs when available. Prefer runtime\-doc:/ resources for runtime behavior and API contracts, and workspace:/ resources for the current app's config and local docs.
+Stdio mode disables JSON logs and suppresses INFO output so stdout remains valid MCP JSON\-RPC. HTTP mode supports modern MCP 2026\-07\-28 requests and legacy MCP 2025\-11\-25 and 2025\-06\-18 sessions. Modern clients call server/discover, send per\-request metadata and routing headers, and use a long\-lived subscriptions/listen POST for notifications; they do not initialize or send a session header. Legacy clients initialize first and then include Mcp\-Session\-Id on subsequent requests. HTTP bearer authentication is enabled by default. The server publishes descriptive MCP tool metadata, including standard titles, safety annotations, extension data under _meta, and structured tool results to help human and AI clients choose the right operation without shell parsing. Use the MCP `search_docs` tool for topic\-driven discovery across README, source\-build environment, MCP, API, config, and manpage resources before falling back to manual resource walking. When \-\-config is omitted, the active config defaults to oro.toml and falls back to oro.ini when that is the only standard project config present in the workspace. resources/list includes the workspace root and, when present, the active config file, project\-local docs under conventional paths, and installed runtime\-doc:/ references for shipped API, CLI, config, MCP, README, BUILD_ENVIRONMENT.md, llms.txt, and man1/man3/man7 docs when available. Use runtime\-doc:/BUILD_ENVIRONMENT.md for the independent, presence\-based NO_ANDROID and NO_IOS source\-bootstrap controls; neither variable selects an application build target. Prefer runtime\-doc:/ resources for runtime behavior and API contracts, and workspace:/ resources for the current app's config and local docs.
 .SH EXAMPLES
 .TP
 \fBoroc mcp \-\-stdio .\fR

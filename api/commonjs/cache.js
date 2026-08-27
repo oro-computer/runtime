@@ -860,7 +860,7 @@ export class Cache {
 
   /**
    * Implements `gc.finalizer` for gc'd resource cleanup.
-   * @return {gc.Finalizer}
+   * @return {import('../gc.js').Finalizer}
    * @ignore
    */
   [gc.finalizer] () {

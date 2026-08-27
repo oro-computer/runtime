@@ -138,6 +138,16 @@ export class Test {
      */
     deepEqual<T>(actual: T, expected: T, msg?: string): void;
     /**
+     * Assert that two values are deeply equivalent.
+     *
+     * @template T
+     * @param {T} actual
+     * @param {T} expected
+     * @param {string} [msg]
+     * @returns {void}
+     */
+    same<T>(actual: T, expected: T, msg?: string): void;
+    /**
      * @template T
      * @param {T} actual
      * @param {T} expected
@@ -172,10 +182,34 @@ export class Test {
      */
     ok(actual: unknown, msg?: string): void;
     /**
+     * Assert that a value is falsy.
+     *
+     * @param {unknown} actual
+     * @param {string} [msg]
+     * @returns {void}
+     */
+    notOk(actual: unknown, msg?: string): void;
+    /**
+     * Assert that a value matches a regular expression.
+     *
+     * @param {unknown} actual
+     * @param {RegExp} expected
+     * @param {string} [msg]
+     * @returns {void}
+     */
+    match(actual: unknown, expected: RegExp, msg?: string): void;
+    /**
      * @param {string} [msg]
      * @returns {void}
      */
     pass(msg?: string): void;
+    /**
+     * Mark the current test as skipped.
+     *
+     * @param {string} [msg]
+     * @returns {void}
+     */
+    skip(msg?: string): void;
     /**
      * @param {Error | null | undefined} err
      * @param {string} [msg]
@@ -189,6 +223,14 @@ export class Test {
      * @returns {void}
      */
     throws(fn: Function, expected?: RegExp | any, message?: string): void;
+    /**
+     * Assert that a promise or async function rejects.
+     * @param {PromiseLike<any>|(() => any)} input
+     * @param {RegExp|((error: Error) => boolean)} [expected]
+     * @param {string} [message]
+     * @returns {Promise<void>}
+     */
+    rejects(input: PromiseLike<any> | (() => any), expected?: RegExp | ((error: Error) => boolean), message?: string): Promise<void>;
     /**
      * Sleep for ms with an optional msg
      *

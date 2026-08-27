@@ -81,6 +81,7 @@ export function availableMemory(): any;
 /**
  * The host operating system. This value can be one of:
  * - android
+ * - androidos
  * - android-emulator
  * - iphoneos
  * - iphone-simulator
@@ -90,9 +91,9 @@ export function availableMemory(): any;
  * - unknown
  * - win32
  * @ignore
- * @return {'android'|'android-emulator'|'iphoneos'|iphone-simulator'|'linux'|'macosx'|unix'|unknown'|win32'}
+ * @return {'android'|'androidos'|'android-emulator'|'iphoneos'|'iphone-simulator'|'linux'|'macosx'|'unix'|'unknown'|'win32'}
  */
-export function host(): "android" | "android-emulator" | "iphoneos" | iphone;
+export function host(): "android" | "androidos" | "android-emulator" | "iphoneos" | "iphone-simulator" | "linux" | "macosx" | "unix" | "unknown" | "win32";
 /**
  * Returns the home directory of the current user.
  * @return {string}

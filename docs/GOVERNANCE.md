@@ -1,8 +1,8 @@
 # Oro Runtime Governance Overview
 
-This document explains how Oro Runtime is governed: who maintains the project, how decisions are made, and how to escalate when changes have broad impact (such as the Socket → Oro rebrand).
-
-It complements the contribution guidelines in `CONTRIBUTING.md` and the rebrand policy documents in `docs/ORO_REBRAND.md`, `docs/ORO_REBRAND_TIMELINE.md`, and `docs/REBRAND_POLICY.md`.
+This document explains how Oro Runtime is governed: who maintains the project, how decisions are
+made, and how to escalate changes with broad API, architecture, security, or ecosystem impact. It
+complements `CONTRIBUTING.md`, `SECURITY.md`, and `RELEASE_CHECKLIST.md`.
 
 ## Roles
 
@@ -23,7 +23,7 @@ It complements the contribution guidelines in `CONTRIBUTING.md` and the rebrand 
 
 - **Release captain (per release)**
   - Coordinates tagging, changelogs, and release announcements.
-  - Ensures the release checklist is followed (`RELEASE_CHECKLIST.md`, `docs/ORO_REBRAND_TIMELINE.md`).
+  - Ensures the release checklist and release automation guide are followed.
   - Acts as the tie‑breaker when release‑blocking decisions need a prompt resolution.
 
 - **Technical steering (TSC‑style group)**
@@ -47,13 +47,14 @@ Oro Runtime uses a **lazy consensus** model:
 Use a GitHub Discussion or dedicated design issue when:
 
 - A change affects **documented public APIs** (JS APIs, CLI commands, config fields).
-- Backward compatibility guarantees in `docs/ORO_REBRAND.md` or `RUNTIME_ARCHITECTURE.md` may be impacted.
+- Compatibility guarantees or the architecture documented in
+  [`RUNTIME_ARCHITECTURE.md`](RUNTIME_ARCHITECTURE.md) may be impacted.
 - Governance, security, or release policy documents need substantial edits.
 
 In these cases:
 
 - Capture the problem, constraints, and proposed approach concisely.
-- Link related Linear tickets (e.g., Socket → Oro rebrand work items).
+- Link related public issues, discussions, and pull requests.
 - Give stakeholders time to respond before landing implementation PRs, unless the change is clearly low‑risk and time‑sensitive.
 
 ## Review expectations
@@ -62,8 +63,10 @@ New contributors should have clear expectations about how reviews work:
 
 - For most changes, one maintainer or reviewer approval plus passing checks is sufficient, provided there has been a reasonable opportunity for others to comment.
 - Documentation-only or low-risk changes are typically merged after a single maintainer approval.
-- Runtime, API, or policy changes that affect compatibility guarantees (for example, items documented in `docs/ORO_REBRAND.md` or `RUNTIME_ARCHITECTURE.md`) may require explicit sign-off from the relevant maintainers or the TSC group.
-- Maintainers aim to provide an initial response to new issues and PRs within a few business days. If you have not received feedback, it is appropriate to ping the thread or ask in the Matrix/Discord `#oro-runtime` channels.
+- Runtime, API, or policy changes that affect compatibility guarantees or
+  [`RUNTIME_ARCHITECTURE.md`](RUNTIME_ARCHITECTURE.md) may require explicit sign-off from the
+  relevant maintainers or the TSC group.
+- Maintainers aim to provide an initial response to new issues and PRs within a few business days. If you have not received feedback, it is appropriate to ping the thread or open a GitHub Discussion.
 - Contributors are encouraged to keep PRs focused; large cross-cutting work should be broken into smaller pieces or preceded by a design/RFC discussion so reviews remain tractable.
 
 ## Escalation paths
@@ -86,9 +89,10 @@ Security‑sensitive reports should always follow the security process in `SECUR
 
 The Oro Runtime roadmap and releases are visible through a few sources:
 
-- Near-term technical priorities and status live in `STATUS.md` in this repository.
-- Release notes and concrete version history live in `CHANGELOG.md` and under `docs/release/` (for example, `docs/release/oro-runtime-0.6.0.md`).
-- Larger project arcs are tracked in Linear projects and via GitHub Projects/Discussions referenced from those tickets.
+- Near-term technical priorities and status live in [`STATUS.md`](../STATUS.md).
+- Release notes and concrete version history live in `CHANGELOG.md`; release mechanics live under
+  `docs/release/`.
+- Larger project arcs are tracked in public GitHub Projects and Discussions when available.
 
 Oro Runtime does not mandate a strict calendar-based release cadence. Instead:
 
@@ -101,7 +105,7 @@ To propose a change to Oro Runtime (code, APIs, docs, or policy):
 
 1. **Open an issue**
    - Describe the problem, motivation, and rough proposal.
-   - Link any relevant Linear tickets if you are working off a scoped project.
+   - Link any relevant public issues, discussions, or projects.
 2. **Decide whether an RFC/discussion is needed**
    - For routine fixes or small features, a PR referencing the issue is usually enough.
    - For cross‑repo work, open a Discussion and link it from the issue.

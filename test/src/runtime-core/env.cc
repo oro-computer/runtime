@@ -1,4 +1,5 @@
 #include "tests.hh"
+#include "src/runtime/env.hh"
 
 #include <cstdlib>
 
@@ -37,9 +38,9 @@ namespace {
 
 namespace oro::Tests {
   void env (Harness& t) {
-    t.test("oro::Env::get()", [](auto t) {
-        const auto TEST_INJECTED_VARIABLE = oro::Env::get("TEST_INJECTED_VARIABLE");
-        const auto HOME = oro::Env::get("HOME");
+    t.test("oro::runtime::env::get()", [](auto t) {
+        const auto TEST_INJECTED_VARIABLE = runtime::env::get("TEST_INJECTED_VARIABLE");
+        const auto HOME = runtime::env::get("HOME");
         t.equals(
           TEST_INJECTED_VARIABLE,
           "TEST_INJECTED_VARIABLE",
@@ -50,15 +51,15 @@ namespace oro::Tests {
     });
 
 
-    t.test("oro::Env::set()", [](auto t) {
+    t.test("oro::runtime::env::set()", [](auto t) {
         const auto name = "ORO_TEST_ENV_ROUND_TRIP";
         const auto snapshot = snapshotEnv(name);
 
-        oro::Env::set(name, "ok");
+        runtime::env::set(name, "ok");
         t.equals(
-          oro::Env::get(name),
+          runtime::env::get(name),
           "ok",
-          "returns value set via oro::Env::set"
+          "returns value set via oro::runtime::env::set"
         );
 
         restoreEnv(snapshot);

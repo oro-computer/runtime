@@ -74,8 +74,14 @@ The `examples/navigator-mounts` demo scaffolds a mount at `$HOST_HOME/.oro/navig
 
 Build the examples bundle and run the `navigator-mounts` entry to try it out:
 
+If `npm run relink` must rebuild the runtime, its target exclusions are
+independent: non-empty `NO_ANDROID` disables only Android bootstrap/artifacts,
+and non-empty `NO_IOS` disables only iOS/iOS Simulator work on macOS. Use both
+for desktop-only relinking; `0`/`false` still disable the named target. See
+[Source-build environment](BUILD_ENVIRONMENT.md).
+
 ```bash
-npm run relink
+NO_ANDROID=1 NO_IOS=1 npm run relink
 oroc build examples
 oroc run examples --entry navigator-mounts/index.html
 ```

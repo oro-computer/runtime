@@ -48,13 +48,17 @@ export function detectESMSource (source) {
  */
 
 /**
- * {import('./loader.js').RequestOptions & {
+ * @typedef {import('./loader.js').RequestOptions & {
  *   load?: boolean,
  *   type?: 'commonjs' | 'module',
  *   browser?: boolean,
  *   children?: string[]
  *   extensions?: string[] | Set<string>
  * }} PackageResolveOptions
+ */
+
+/**
+ * @typedef {ParsedPackageName} NameOptions
  */
 
 /**
@@ -73,7 +77,6 @@ export function detectESMSource (source) {
  * @typedef {{
  *   require?: string | string[],
  *   import?: string | string[],
- *   default?: string | string[],
  *   default?: string | string[],
  *   worker?: string | string[],
  *   browser?: string | string[]

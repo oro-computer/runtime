@@ -1,4 +1,7 @@
 {
+  "name": "oro-runtime-workspace",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "clean": "./bin/clean.sh",
@@ -6,6 +9,11 @@
     "gen:docs": "node ./bin/generate-docs.js",
     "gen:tsc": "./bin/generate-typescript-typings.sh",
     "test": "node ./test/scripts/run.js desktop",
+    "test:unit": "node --test test/unit/*.test.js",
+    "test:child-process": "node ./test/scripts/run.js desktop --entry child_process/index.js --quick --headless",
+    "test:mcp": "npm run test:mcp:basic && npm run test:mcp:protocol",
+    "test:mcp:basic": "node ./test/scripts/run.js desktop --entry mcp/basic.js --quick --headless",
+    "test:mcp:protocol": "node ./test/scripts/run.js desktop --entry mcp/protocol.js --quick --headless",
     "test:runtime-core": "node ./test/scripts/run.js runtime-core",
     "test:lint": "npm run lint",
     "test:lint:ci": "npm run lint:ci",
@@ -15,28 +23,31 @@
     "test:clean": "cd test && rm -rf dist",
     "update-network-protocol": "./bin/update-network-protocol.sh",
     "relink": "./bin/publish-npm-modules.sh --link",
+    "release:bootstrap-npm": "node ./bin/bootstrap-npm-packages.js",
     "docs:diagrams": "node ./bin/render-diagrams.mjs",
     "docs:diagrams:png": "node ./bin/render-diagrams.mjs --format=png",
     "lint:standard": "standard .",
     "lint:standard:fix": "standard . --fix",
     "lint:types": "npm run gen:tsc",
-    "lint:deps": "node ./bin/check-dependency-urls.js",
+    "lint:deps": "node ./bin/check-dependency-urls.js && node ./bin/update-network-protocol.js --check",
+    "lint:build-env": "node ./bin/check-build-environment-docs.js",
+    "lint:release": "node ./bin/check-release-version.js",
     "lint:cpp": "python3 -m cpplint --recursive src include/oro include/iroh",
     "lint:oxlint": "oxlint .",
     "lint:oxlint:fix": "oxlint api/ test/ --fix",
     "lint:prettier": "prettier --check .",
     "lint:prettier:fix": "prettier --write .",
-    "lint": "npm run lint:standard && npm run lint:types && npm run lint:deps && npm run lint:oxlint && npm run lint:prettier && npm run lint:cpp",
+    "lint": "npm run lint:standard && npm run lint:types && npm run lint:deps && npm run lint:build-env && npm run lint:release && npm run lint:oxlint && npm run lint:prettier && npm run lint:cpp",
     "lint:ci": "XDG_CACHE_HOME=.cache npm run lint",
     "lint:fix": "npm run lint:standard:fix && npm run lint:types && npm run lint:oxlint:fix && npm run lint:prettier:fix"
   },
-  "private": true,
+  "packageManager": "pnpm@11.24.0",
   "devDependencies": {
-    "@mermaid-js/mermaid-cli": "^11.12.0",
+    "@mermaid-js/mermaid-cli": "^11.16.0",
     "@virtualstate/navigation": "^1.0.1-alpha.206",
     "acorn": "8.15.0",
     "acorn-walk": "8.3.4",
-    "esbuild": "0.27.0",
+    "esbuild": "0.28.2",
     "oxlint": "^1.29.0",
     "prettier": "^3.6.2",
     "puppeteer": "^24.31.0",
@@ -46,9 +57,6 @@
     "web-streams-polyfill": "^4.0.0",
     "whatwg-fetch": "^3.6.20",
     "whatwg-url": "^15.1.0"
-  },
-  "optionalDependencies": {
-    "@orocomputer/latica": "^0.1.0"
   },
   "standard": {
     "ignore": [
@@ -60,11 +68,10 @@
       "/api/url/url/url.js",
       "/api/fetch/fetch.js",
       "/api/internal/streams/web.js",
-      "/npm/packages/@orocomputer/runtime-node/index.cjs"
+      "/npm/packages/@oro-computer/runtime-node/index.cjs"
     ]
   },
   "workspaces": [
-    "npm/packages/@orocomputer/runtime-node"
-  ],
-  "version": "0.0.0"
+    "npm/packages/@oro-computer/runtime-node"
+  ]
 }

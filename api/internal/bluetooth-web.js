@@ -464,6 +464,13 @@ class BluetoothRemoteGATTServer extends EventTarget {
 }
 
 class BluetoothDevice extends EventTarget {
+  /**
+   * @param {object} [options]
+   * @param {string} [options.id]
+   * @param {string} [options.name]
+   * @param {string[]} [options.services]
+   * @param {any} [options.manufacturerData]
+   */
   constructor ({ id = '', name = '', services = [], manufacturerData } = {}) {
     super()
     this.id = String(id)

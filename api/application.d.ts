@@ -46,7 +46,7 @@ export function getCurrentWindowIndex(): number;
  * @param {boolean=} [opts.frameless=false] - whether the window is frameless
  * @param {boolean=} [opts.utility=false] - whether the window is utility (macOS only)
  * @param {boolean=} [opts.shouldExitApplicationOnClose=false] - whether the window can exit the app
- * @param {boolean=} [opts.headless=false] - whether the window will be headless or not (no frame)
+ * @param {boolean=} opts.headless - overrides the project headless setting for this window
  * @param {string=} [opts.userScript=null] - A user script that will be injected into the window (desktop only)
  * @param {string[]=} [opts.protocolHandlers] - An array of protocol handler schemes to register with the new window (requires service worker)
  * @param {Record<string, string|number|boolean|(string|number|boolean)[]>=} [opts.config] - additional configuration key/value pairs
@@ -218,10 +218,10 @@ export function setSystemMenu(options: ApplicationMenuOptions): Promise<ipc.Resu
 export function setTrayMenu(options: ApplicationMenuOptions): Promise<ipc.Result>;
 /**
  * Set the enabled state of the system menu.
- * @param {object} value - an options object
+ * @param {ApplicationMenuItemEnabledOptions} value - an options object
  * @return {Promise<ipc.Result>}
  */
-export function setSystemMenuItemEnabled(value: object): Promise<ipc.Result>;
+export function setSystemMenuItemEnabled(value: ApplicationMenuItemEnabledOptions): Promise<ipc.Result>;
 /**
  * Predicate function to determine if application is in a "paused" state.
  * @return {boolean}
@@ -239,6 +239,13 @@ export function isPaused(): boolean;
  * @property {string} value - Menu layout expressed with the native menu DSL.
  * @property {number=} [index] - Window index to target when the menu is
  * window-scoped on the active platform.
+ */
+/**
+ * Options for `setSystemMenuItemEnabled()`.
+ * @typedef {object} ApplicationMenuItemEnabledOptions
+ * @property {boolean} enabled - Whether the menu item is enabled.
+ * @property {number} indexMain - Zero-based top-level menu index.
+ * @property {number} indexSub - Zero-based submenu item index.
  */
 /**
  * Maximum number of concurrently tracked application windows.
@@ -388,6 +395,23 @@ export type ApplicationMenuOptions = {
      * window-scoped on the active platform.
      */
     index?: number | undefined;
+};
+/**
+ * Options for `setSystemMenuItemEnabled()`.
+ */
+export type ApplicationMenuItemEnabledOptions = {
+    /**
+     * - Whether the menu item is enabled.
+     */
+    enabled: boolean;
+    /**
+     * - Zero-based top-level menu index.
+     */
+    indexMain: number;
+    /**
+     * - Zero-based submenu item index.
+     */
+    indexSub: number;
 };
 import { ApplicationURLEvent } from './internal/events.js';
 import ApplicationWindow from './window.js';

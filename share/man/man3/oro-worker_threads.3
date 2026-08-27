@@ -77,6 +77,9 @@ This is an exported `ClassDeclaration` named ``Worker` (extends `EventEmitter`)`
 \fBid()\fR
 The unique ID for this `Worker` thread instance.
 .TP
+\fBonline()\fR
+`true` after the worker has loaded and can receive application messages.
+.TP
 \fBstdin()\fR
 A `Writable` standard input stream if `{ stdin: true }` was set when creating this `Worker` instance.
 .TP

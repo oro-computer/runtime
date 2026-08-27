@@ -42,6 +42,7 @@ function stage_runtime_compat_archives() {
 declare args=()
 declare pids=()
 declare force=0
+declare ignore_header_mtimes=0
 declare d=""
 
 declare arch="$(host_arch)"
@@ -99,6 +100,10 @@ while (( $# > 0 )); do
   if [[ "$arg" = "--force" ]] || [[ "$arg" = "-f" ]]; then
     pass_force="$arg"
     force=1; continue
+  fi
+
+  if [[ "$arg" = "--ignore-header-mtimes" ]]; then
+    ignore_header_mtimes=1; continue
   fi
 
   if [[ "$arg" = "--platform" ]]; then
@@ -288,6 +293,20 @@ fi
 declare output_directory="$root/build/$arch-$platform"
 mkdir -p "$output_directory"
 
+declare newest_header_mtime=0
+if (( ! ignore_header_mtimes )); then
+  while IFS= read -r header; do
+    header_mtime="$(stat_mtime "$header")"
+    if (( header_mtime > newest_header_mtime )); then
+      newest_header_mtime=$header_mtime
+    fi
+  done < <(
+    find "$root/src" "$root/include" -type f \
+      \( -name '*.h' -o -name '*.hh' -o -name '*.hpp' -o -name '*.inc' \) \
+      2>/dev/null
+  )
+fi
+
 cd "$(dirname "$output_directory")"
 
 echo "# building runtime static libary ($arch-$platform)"
@@ -363,7 +382,12 @@ function build_linux_desktop_extension_object () {
 
   mkdir -p "$(dirname "$destination")"
 
-  if ! test -f "$object" || (( $(stat_mtime "$source") > $(stat_mtime "$destination") )); then
+  if
+    (( force )) ||
+    ! test -f "$destination" ||
+    (( newest_header_mtime > $(stat_mtime "$destination") )) ||
+    (( $(stat_mtime "$source") > $(stat_mtime "$destination") ));
+  then
     quiet $clang "${cflags[@]}" -DORO_RUNTIME_DESKTOP_EXTENSION=1 -c "$source"  -o "$destination" || onsignal
     return $?
   fi
@@ -395,13 +419,10 @@ function main () {
     {
       declare src_directory="$root/src"
       declare object="${source/.cc/$d.o}"
-      declare header="${source/.cc/.hh}"
       declare build_dir="$root/build"
 
       object="${object/.cpp/$d.o}"
       object="${object/.c/$d.o}"
-      header="${header/.cpp/.h}"
-      header="${header/.c/.h}"
 
       declare source_ext="${source##*.}"
       declare compiler="$clang"
@@ -441,17 +462,13 @@ function main () {
         (( force )) ||
         ! test -f "$object" ||
         (( $(stat_mtime "$source") > $(stat_mtime "$object") )) ||
-        (( $(stat_mtime "$header") > $(stat_mtime "$source") ));
+        (( newest_header_mtime > $(stat_mtime "$object") ));
       then
         mkdir -p "$(dirname "$object")"
 
         echo "# compiling object ($arch-$platform) $(basename "$source")"
         quiet "$compiler" "${compile_flags[@]}" -c "$source" -o "$object" || onsignal
         echo "ok - built ${source/$src_directory\//} -> ${object/$output_directory\//} ($arch-$platform)"
-
-        if (( $(stat_mtime "$header") > $(stat_mtime "$source") )); then
-          touch "$source"
-        fi
       fi
     } & pids+=($!)
   done

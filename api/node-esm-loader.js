@@ -2,7 +2,7 @@ const { ORO_MODULES_DIR = 'node_modules', ORO_RUNTIME_PACKAGE_SCOPE } =
   process.env
 
 const runtimePackageCandidates = Array.from(
-  new Set([ORO_RUNTIME_PACKAGE_SCOPE, '@orocomputer/runtime'].filter(Boolean))
+  new Set([ORO_RUNTIME_PACKAGE_SCOPE, '@oro-computer/runtime'].filter(Boolean))
 )
 
 function isModuleNotFound (err) {

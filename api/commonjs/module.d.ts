@@ -27,6 +27,9 @@ export function createRequire(url: string | URL, options?: ModuleOptions | undef
  * @typedef {import('./package.js').PackageOptions} PackageOptions
  */
 /**
+ * @typedef {import('./require.js').RequireOptions} RequireOptions
+ */
+/**
  * @typedef {{
  *   prefix?: string,
  *   request?: import('./loader.js').RequestOptions,
@@ -390,6 +393,7 @@ export default Module;
 export type ModuleResolver = (arg0: string, arg1: Module, arg2: (arg0: string) => any) => any;
 export type RequireFunction = import("./require.js").RequireFunction;
 export type PackageOptions = import("./package.js").PackageOptions;
+export type RequireOptions = import("./require.js").RequireOptions;
 export type CreateRequireOptions = {
     prefix?: string;
     request?: import("./loader.js").RequestOptions;

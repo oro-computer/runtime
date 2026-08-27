@@ -18,6 +18,12 @@ supports:
 - **iOS** (`iPhoneOS`/`iPhoneSimulator`) – uses `xcrun` clang/bitcode.
 - **Android** (NDK) – static `libwhisper.a` per ABI.
 
+Runtime source target exclusions are independent: any non-empty `NO_ANDROID`
+disables only the Android whisper/dependency/artifact path, while any non-empty
+`NO_IOS` disables only the iOS and iOS Simulator paths on macOS. Neither
+disables desktop whisper, and `0`/`false` still count as set. See
+[Source-build environment](BUILD_ENVIRONMENT.md).
+
 > Pending: run platform-specific builds in CI to confirm toolchains and linking.
 
 ## IPC Routes

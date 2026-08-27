@@ -48,7 +48,7 @@ function isModuleNotFound (err) {
 export async function load () {
   const platform = os.platform()
   const arch = os.arch()
-  const candidates = [`@orocomputer/runtime-${platform}-${arch}`]
+  const candidates = [`@oro-computer/runtime-${platform}-${arch}`]
 
   let lastError
   for (const specifier of candidates) {
@@ -102,7 +102,7 @@ export async function run () {
   child.once('exit', (code) => {
     if (!exiting) {
       exiting = true
-      process.exit(code)
+      process.exit(code ?? 1)
     }
   })
 

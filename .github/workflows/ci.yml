@@ -1,14 +1,19 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches:
+      - master
       - dev
       - 'jwerle/**'
       - 'feature/**'
       - 'fix/**'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   CI: true
@@ -25,21 +30,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 20.x
+          node-version: 24.x
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: '1.25'
           cache: false
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.x'
 
@@ -54,46 +59,152 @@ jobs:
           echo "$GOBIN" >> "$GITHUB_PATH"
 
       - name: Install cpplint
-        run: python -m pip install cpplint
+        run: python -m pip install cpplint==2.0.2
+
+      - name: Enable pnpm
+        run: corepack enable
 
       - name: Install dependencies
-        run: npm install --no-audit
+        run: pnpm install --frozen-lockfile
 
       - name: Lint GitHub Actions workflows
-        run: actionlint .github/workflows/ci.yml .github/workflows/release-artifacts.yml
+        run: actionlint .github/workflows/ci.yml .github/workflows/publish-npm.yml .github/workflows/release-artifacts.yml
+
+      - name: Run tooling unit tests
+        run: npm run test:unit
 
       - name: Lint
         run: npm run test:lint:ci
 
-  test-desktop-runtime-core:
-    name: Desktop + runtime-core tests
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+      - name: Validate generated documentation and declarations are committed
+        run: |
+          npm run gen
+          git diff --exit-code
+
+  test-platform:
+    name: Test ${{ matrix.name }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04]
-        node: [18.x, 20.x]
+        include:
+          - name: Linux x64 / Node 22
+            id: linux-x64-node22
+            runs_on: ubuntu-24.04
+            node: 22.x
+            release_support: desktop
+            build_android: false
+            exclude_android: true
+            exclude_ios: true
+            test_desktop: true
+            test_android: false
+            test_ios: false
+            windows: false
+          - name: Linux x64 / Node 24
+            id: linux-x64-node24
+            runs_on: ubuntu-24.04
+            node: 24.x
+            release_support: desktop
+            build_android: false
+            exclude_android: true
+            exclude_ios: true
+            test_desktop: true
+            test_android: false
+            test_ios: false
+            windows: false
+          - name: Linux arm64
+            id: linux-arm64
+            runs_on: ubuntu-24.04-arm
+            node: 24.x
+            release_support: desktop
+            build_android: false
+            exclude_android: true
+            exclude_ios: true
+            test_desktop: true
+            test_android: false
+            test_ios: false
+            windows: false
+          - name: Android x86_64 + arm64-v8a
+            id: android-ubuntu-x64
+            runs_on: ubuntu-24.04
+            node: 24.x
+            release_support: android
+            build_android: true
+            exclude_android: false
+            exclude_ios: true
+            test_desktop: false
+            test_android: true
+            test_ios: false
+            windows: false
+          - name: macOS + iOS x64
+            id: macos-ios-x64
+            runs_on: macos-15-intel
+            node: 24.x
+            release_support: ios
+            build_android: false
+            exclude_android: true
+            exclude_ios: false
+            test_desktop: true
+            test_android: false
+            test_ios: true
+            windows: false
+          - name: macOS + iOS arm64
+            id: macos-ios-arm64
+            runs_on: macos-14
+            node: 24.x
+            release_support: ios
+            build_android: false
+            exclude_android: true
+            exclude_ios: false
+            test_desktop: true
+            test_android: false
+            test_ios: true
+            windows: false
+          - name: Windows x64
+            id: windows-x64
+            runs_on: windows-2022
+            node: 24.x
+            release_support: desktop
+            build_android: false
+            exclude_android: true
+            exclude_ios: true
+            test_desktop: true
+            test_android: false
+            test_ios: false
+            windows: true
     env:
+      BUILD_ANDROID: ${{ matrix.build_android }}
+      EXCLUDE_ANDROID: ${{ matrix.exclude_android }}
+      EXCLUDE_IOS: ${{ matrix.exclude_ios }}
+      ORO_CI_ID: ${{ matrix.id }}
+      RELEASE_SUPPORT: ${{ matrix.release_support }}
       ORO_TEST_HEADLESS: '1'
       ORO_TEST_SKIP_DESKTOP_EXTENSION: '1'
       ORO_TEST_SKIP_TEST_EXTENSIONS: '1'
-      NO_ANDROID: '1'
-      NO_IOS: '1'
       DEBUG: '1'
+      VERBOSE: '1'
       LIBGL_ALWAYS_SOFTWARE: '1'
       WEBKIT_DISABLE_COMPOSITING_MODE: '1'
       GDK_BACKEND: x11
       GSK_RENDERER: cairo
       XDG_RUNTIME_DIR: /tmp/oro-xdg-runtime
+      ORO_SKIP_PATH_PROMPT: '1'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: ${{ matrix.node }}
+
+      - name: Setup Java for Android
+        if: matrix.build_android
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '20.0.2'
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -114,26 +225,191 @@ jobs:
             libsystemd-dev \
             libsoup-3.0-dev
 
+      - name: Install macOS system dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install automake libtool pkg-config
+
       - name: Prepare Linux headless runtime dirs
         if: runner.os == 'Linux'
         run: |
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
 
+      - name: Configure source-build target families
+        shell: bash
+        run: |
+          echo "ORO_HOME=$RUNNER_TEMP/oro-ci-$ORO_CI_ID" >> "$GITHUB_ENV"
+          echo "PREFIX=$RUNNER_TEMP/oro-ci-$ORO_CI_ID" >> "$GITHUB_ENV"
+
+          if [[ "$EXCLUDE_ANDROID" == "true" ]]; then
+            echo "NO_ANDROID=1" >> "$GITHUB_ENV"
+          else
+            echo "NO_ANDROID=" >> "$GITHUB_ENV"
+          fi
+
+          if [[ "$EXCLUDE_IOS" == "true" ]]; then
+            echo "NO_IOS=1" >> "$GITHUB_ENV"
+          else
+            echo "NO_IOS=" >> "$GITHUB_ENV"
+          fi
+
+          if [[ "$BUILD_ANDROID" == "true" ]]; then
+            echo "ORO_ANDROID_CI=1" >> "$GITHUB_ENV"
+            echo "ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes" >> "$GITHUB_ENV"
+          fi
+
+      - name: Report host toolchain and disk
+        shell: bash
+        run: |
+          uname -a || true
+          node --version
+          pnpm --version || true
+          df -h . || true
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            xcodebuild -version
+            xcrun --sdk iphoneos --show-sdk-path
+            xcrun --sdk iphonesimulator --show-sdk-path
+          fi
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            cmd.exe /c ver
+          fi
+
+      - name: Enable pnpm
+        run: corepack enable
+
       - name: Install root dependencies
-        run: npm install --no-audit
+        run: pnpm install --frozen-lockfile
 
       - name: Install test harness dependencies
         run: |
           cd test
-          npm install --no-audit
+          npm ci --no-audit
 
-      - name: Build Oro Runtime CLI (oroc)
+      - name: Build Oro Runtime CLI (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ./bin/install.sh --yes-deps
+
+      - name: Build Oro Runtime CLI (Windows)
+        if: matrix.windows
+        shell: pwsh
+        run: .\bin\install.ps1 -yesdeps -verbose
+
+      - name: Validate staged target families
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
-          VERBOSE=1 ./bin/install.sh
+          shopt -s nullglob
+          android_targets=("$ORO_HOME"/lib/*-android)
+          ios_targets=("$ORO_HOME"/lib/*-iPhoneOS "$ORO_HOME"/lib/*-iPhoneSimulator "$ORO_HOME"/lib/*-ios "$ORO_HOME"/lib/*-ios-simulator)
+          case "$RELEASE_SUPPORT" in
+            desktop)
+              (( ${#android_targets[@]} == 0 && ${#ios_targets[@]} == 0 ))
+              ;;
+            android)
+              if (( ${#ios_targets[@]} != 0 )); then
+                echo >&2 "Android CI unexpectedly contains an Apple-mobile target directory"
+                exit 1
+              fi
+              for target in arm64-v8a-android x86_64-android; do
+                if [[ ! -d "$ORO_HOME/lib/$target" ]]; then
+                  echo >&2 "Android CI is missing required ABI target: $target"
+                  exit 1
+                fi
+              done
+              ;;
+            ios)
+              if (( ${#android_targets[@]} != 0 )); then
+                echo >&2 "Apple CI unexpectedly contains an Android target directory"
+                exit 1
+              fi
+              required_ios_targets=(arm64-iPhoneOS x86_64-iPhoneSimulator)
+              if [[ "$RUNNER_ARCH" == "ARM64" ]]; then
+                required_ios_targets+=(arm64-iPhoneSimulator)
+              fi
+              for target in "${required_ios_targets[@]}"; do
+                if [[ ! -d "$ORO_HOME/lib/$target" ]]; then
+                  echo >&2 "Apple CI is missing required iOS target: $target"
+                  exit 1
+                fi
+              done
+              ;;
+            *)
+              echo >&2 "Unknown platform family: $RELEASE_SUPPORT"
+              exit 1
+              ;;
+          esac
+
+      - name: Validate staged target families (Windows)
+        if: matrix.windows
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_SUPPORT -ne 'desktop') {
+            throw "Windows CI has unsupported target family: $env:RELEASE_SUPPORT"
+          }
+          $libRoot = Join-Path $env:ORO_HOME 'lib'
+          $targets = if (Test-Path $libRoot) { @(Get-ChildItem -Path $libRoot -Directory) } else { @() }
+          $mobileTargets = @($targets | Where-Object {
+            $_.Name -like '*-android' -or $_.Name -match '-(iPhoneOS|iPhoneSimulator|ios|ios-simulator)$'
+          })
+          if ($mobileTargets.Count -ne 0) {
+            throw 'Windows desktop build unexpectedly contains a mobile target directory'
+          }
+
+      - name: Smoke test staged CLI
+        run: |
+          node -e "const { spawnSync } = require('node:child_process'); const path = require('node:path'); const cli = path.join(process.env.ORO_HOME, 'bin', process.platform === 'win32' ? 'oroc.exe' : 'oroc'); const result = spawnSync(cli, ['--version'], { stdio: 'inherit' }); process.exit(result.status ?? 1)"
+          node -e "const { spawnSync } = require('node:child_process'); const path = require('node:path'); const cli = path.join(process.env.ORO_HOME, 'bin', process.platform === 'win32' ? 'oroc.exe' : 'oroc'); const result = spawnSync(cli, ['help'], { stdio: 'inherit' }); process.exit(result.status ?? 1)"
 
       - name: Run desktop tests
+        if: matrix.test_desktop
         run: npm test
 
+      - name: Run child process integration tests
+        if: matrix.test_desktop
+        run: npm run test:child-process
+
+      - name: Run MCP integration tests
+        if: matrix.test_desktop
+        run: npm run test:mcp
+
       - name: Run runtime-core tests
+        if: matrix.test_desktop
         run: npm run test:runtime-core
+
+      - name: Boot iOS Simulator and run tests
+        if: matrix.test_ios
+        shell: bash
+        run: |
+          simulator_udid="$(python3 - <<'PY'
+          import json
+          import subprocess
+
+          devices = json.loads(subprocess.check_output([
+              'xcrun', 'simctl', 'list', 'devices', 'available', '--json'
+          ]))['devices']
+          for runtime_devices in devices.values():
+              for device in runtime_devices:
+                  if device.get('isAvailable') and device.get('name', '').startswith('iPhone'):
+                      print(device['udid'])
+                      raise SystemExit(0)
+          raise SystemExit('No available iPhone simulator was found')
+          PY
+          )"
+          trap 'xcrun simctl shutdown "$simulator_udid" || true' EXIT
+          xcrun simctl boot "$simulator_udid" || true
+          xcrun simctl bootstatus "$simulator_udid" -b
+          npm run test:ios-simulator
+
+      - name: Run Android emulator tests
+        if: matrix.test_android
+        shell: bash
+        run: npm run test:android-emulator
+
+      - name: Report final disk usage
+        if: always()
+        shell: bash
+        run: df -h . || true

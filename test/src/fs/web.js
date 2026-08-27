@@ -4,18 +4,14 @@ import { test } from 'oro:test'
 import path from 'oro:path'
 import mime from 'oro:mime'
 import fs from 'oro:fs/promises'
-import os from 'oro:os'
+import fsCallbacks from 'oro:fs'
+import FIXTURES from '../fixtures.js'
 
 import {
   createFile,
   createFileSystemFileHandle,
   createFileSystemDirectoryHandle
 } from 'oro:fs/web'
-
-const TMPDIR = `${os.tmpdir()}${path.sep}`
-const FIXTURES = /android/i.test(os.platform())
-  ? '/data/local/tmp/oro-test-fixtures/'
-  : `${TMPDIR}oro-test-fixtures${path.sep}`
 
 test('createFile - simple', async (t) => {
   const filename = FIXTURES + 'data.bin'
@@ -35,6 +31,7 @@ test('createFile - simple', async (t) => {
   t.equal(file.name, path.basename(filename), 'file.name')
   t.equal(file.size, stats.size, 'file.size')
   t.equal(file.type, type, 'file.type')
+  await fd.close()
 })
 
 test('createFile - File.prototype.arrayBuffer()', async (t) => {
@@ -91,9 +88,32 @@ test('createFileSystemFileHandle', async (t) => {
     handle && handle instanceof globalThis.FileSystemFileHandle,
     'FileSystemFileHandle instance created'
   )
-  t.equal(file, handle.getFile(), 'handle.getFile()')
+  t.equal(file, await handle.getFile(), 'handle.getFile()')
   t.equal(handle.kind, 'file', 'handle.kind')
   t.equal(handle.name, path.basename(filename), 'handle.name')
+
+  const stats = await new Promise((resolve, reject) => {
+    fsCallbacks.stat(handle, (err, value) =>
+      err ? reject(err) : resolve(value)
+    )
+  })
+  t.equal(stats.size, file.size, 'fs.stat supports a FileSystemFileHandle')
+
+  const copyPath = `./web-copy-${Math.random().toString(16).slice(2)}.bin`
+  try {
+    await new Promise((resolve, reject) => {
+      fsCallbacks.copyFile(handle, copyPath, (err) =>
+        err ? reject(err) : resolve()
+      )
+    })
+    t.equal(
+      compareBuffers(await fs.readFile(copyPath), await fs.readFile(filename)),
+      0,
+      'fs.copyFile supports a FileSystemFileHandle'
+    )
+  } finally {
+    await fs.rm(copyPath, { force: true })
+  }
 
   t.ok(
     await handle.isSameEntry(handle),
@@ -113,6 +133,13 @@ test('createFileSystemDirectoryHandle', async (t) => {
   )
   t.equal(handle.kind, 'directory', 'handle.kind')
   t.equal(handle.name, path.basename(dirname), 'handle.name')
+
+  const stats = await new Promise((resolve, reject) => {
+    fsCallbacks.stat(handle, (err, value) =>
+      err ? reject(err) : resolve(value)
+    )
+  })
+  t.ok(stats.isDirectory(), 'fs.stat supports a FileSystemDirectoryHandle')
 
   t.ok(
     await handle.isSameEntry(handle),

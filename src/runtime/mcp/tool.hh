@@ -3,9 +3,12 @@
 
 #include "protocol.hh"
 
+#include <memory>
 #include <vector>
 
 namespace oro::runtime::mcp {
+  struct CompiledJSONSchema;
+
   enum class ParameterKind {
     String,
     Number,
@@ -25,15 +28,36 @@ namespace oro::runtime::mcp {
     JSON::Object toJSON() const;
   };
 
+  struct ToolHeader {
+    String name;
+    String value;
+    bool present = false;
+    bool integer = false;
+  };
+
   struct Tool {
     String name;
     String title;
     String description;
-    JSON::Object inputSchema = JSON::Object(JSON::Object::Entries{});
+    JSON::Object inputSchema = JSON::Object(JSON::Object::Entries {
+      {"type", JSON::String("object")}
+    });
+    JSON::Any outputSchema = JSON::Null();
+    JSON::Any icons = JSON::Null();
     JSON::Any annotations = JSON::Null();
     JSON::Any metadata = JSON::Null();
+    std::shared_ptr<const CompiledJSONSchema> compiledInputSchema;
+    std::shared_ptr<const CompiledJSONSchema> compiledOutputSchema;
 
-    JSON::Object toJSON() const;
+    JSON::Object toJSON(bool modern = true) const;
+    bool prepareSchemas(String& error);
+    bool validateArguments(const String& value, String& error) const;
+    bool validateResult(const String& value, String& error) const;
+    bool getExpectedHTTPHeaders(
+      const String& arguments,
+      Vector<ToolHeader>& headers,
+      String& error
+    ) const;
   };
 
   class ToolBuilder {
@@ -43,11 +67,15 @@ namespace oro::runtime::mcp {
       ToolBuilder& title(const String& value);
       ToolBuilder& description(const String& value);
       ToolBuilder& addString(const String& name, const String& description, bool required = true);
+      ToolBuilder& addStringMaxLength(const String& name, const String& description, size_t maximum, bool required = true);
       ToolBuilder& addNumber(const String& name, const String& description, bool required = true);
       ToolBuilder& addInteger(const String& name, const String& description, bool required = true);
+      ToolBuilder& addIntegerRange(const String& name, const String& description, int64_t minimum, int64_t maximum, bool required = true);
       ToolBuilder& addBoolean(const String& name, const String& description, bool required = true);
       ToolBuilder& addObject(const String& name, const String& description, const JSON::Any& schema = JSON::Null(), bool required = true);
       ToolBuilder& addArray(const String& name, const String& description, const JSON::Any& items = JSON::Null(), bool required = true);
+      ToolBuilder& outputSchema(const JSON::Any& value);
+      ToolBuilder& icons(const JSON::Any& value);
       ToolBuilder& annotations(const JSON::Any& value);
       ToolBuilder& metadata(const JSON::Any& value);
 
@@ -58,6 +86,8 @@ namespace oro::runtime::mcp {
       String titleValue;
       String descriptionValue;
       Vector<ToolParameter> parameters;
+      JSON::Any outputSchemaValue = JSON::Null();
+      JSON::Any iconsValue = JSON::Null();
       JSON::Any annotationsValue = JSON::Null();
       JSON::Any metadataValue = JSON::Null();
 

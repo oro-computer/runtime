@@ -35,11 +35,11 @@ namespace oro::Tests {
 
       auto value = manager.getString(scope, "token");
       t.assert(value.has_value(), "retrieves stored value");
-      t.equals(value.value(), "value-1", "value matches stored data");
+      t.equals(value.value_or(""), "value-1", "value matches stored data");
 
       t.assert(manager.putString(scope, "token", "value-2"), "updates existing value");
       auto updated = manager.getString(scope, "token");
-      t.equals(updated.value(), "value-2", "update persists");
+      t.equals(updated.value_or(""), "value-2", "update persists");
 
       t.assert(manager.putString(scope, "refresh", "value-3"), "stores second key");
       const auto keys = manager.listKeys(scope);

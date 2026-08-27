@@ -26,6 +26,10 @@ import fs from '../fs.js'
  */
 
 /**
+ * @typedef {import('./require.js').RequireOptions} RequireOptions
+ */
+
+/**
  * @typedef {{
  *   prefix?: string,
  *   request?: import('./loader.js').RequestOptions,

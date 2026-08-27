@@ -1,6 +1,9 @@
 #include "tests.hh"
+#include "src/runtime/json.hh"
 
 namespace oro::Tests {
+  namespace JSON = runtime::JSON;
+
   void json (Harness& t) {
     t.test("oro::JSON::Any", [](auto t) {
       t.comment("TODO");

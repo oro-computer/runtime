@@ -48,6 +48,12 @@ export default new (class FileDescriptorsMap {
     }
 
     if (!this.has(id)) {
+      const existingId = this.ids.get(fd)
+      if (existingId !== undefined && existingId !== id) {
+        this.fds.delete(existingId)
+        this.types.delete(existingId)
+      }
+
       dc.channel('fd').publish({ fd })
 
       this.fds.set(id, fd)
@@ -89,19 +95,19 @@ export default new (class FileDescriptorsMap {
     id = this.ids.get(id) || id
 
     const fd = this.fds.get(id)
+    const ownsFd = this.ids.get(fd) === id
 
     if (fd) {
       dc.channel('fd.release').publish({ fd })
     }
 
     this.fds.delete(id)
-    this.fds.delete(fd)
-
-    this.ids.delete(fd)
-    this.ids.delete(id)
-
     this.types.delete(id)
-    this.types.delete(fd)
+
+    if (ownsFd) {
+      this.ids.delete(fd)
+      this.types.delete(fd)
+    }
 
     if (closeDescriptor !== false) {
       result = await ipc.send('fs.closeOpenDescriptor', { id: String(id) })

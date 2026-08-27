@@ -216,10 +216,10 @@ export class Reference {
     /**
      * Predicate function to determine if a `value` is an internal or external
      * script reference value.
-     * @param {amy} value
+     * @param {any} value
      * @return {boolean}
      */
-    static isReference(value: amy): boolean;
+    static isReference(value: any): boolean;
     /**
      * `Reference` class constructor.
      * @param {string} id

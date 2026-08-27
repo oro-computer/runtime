@@ -44,6 +44,17 @@ namespace oro::runtime::process {
     // Set to true to inherit file descriptors from parent process. Default is false.
     // On Windows: has no effect unless readStdout==nullptr, readStderr==nullptr and openStdin==false.
     bool inheritFDs = false;
+    // Pass argv as 0x01-delimited argument values without invoking a shell.
+    bool useDirectArguments = false;
+    // Number of encoded arguments. This distinguishes no arguments from one
+    // empty argument when useDirectArguments is true.
+    size_t argumentCount = 0;
+    // Deliver stdout and stderr callbacks as exact byte chunks instead of
+    // line-buffering stdout. This is required for stream-compatible APIs.
+    bool rawOutput = false;
+    // Replace the inherited environment with env instead of applying env as
+    // overrides. This matches child-process API semantics.
+    bool replaceEnvironment = false;
 
     // On Windows only: controls how the process is started, mimics STARTUPINFO's wShowWindow.
     // See: https://docs.microsoft.com/en-us/windows/desktop/api/processthreadsapi/ns-processthreadsapi-startupinfoa
@@ -228,7 +239,9 @@ namespace oro::runtime::process {
     void closeStdin () noexcept;
     PID open () noexcept {
       if (this->command.size() == 0) return 0;
-      auto str = string::trim(this->command + " " + this->argv);
+      const auto str = this->config.useDirectArguments
+        ? this->command
+        : string::trim(this->command + " " + this->argv);
       auto pid = open(str, this->path);
       read();
       return pid;

@@ -7,9 +7,63 @@
 #include <algorithm>
 #include <chrono>
 #include <future>
+#include <limits>
 
 namespace oro::runtime::core::services {
   namespace {
+    static constexpr size_t kMaxPendingMcpRequests = 1024;
+
+    thread_local bool suppressSynchronousTransportSend = false;
+
+    struct SynchronousResponseGuard {
+      bool previous = false;
+
+      SynchronousResponseGuard ()
+        : previous(suppressSynchronousTransportSend) {
+        suppressSynchronousTransportSend = true;
+      }
+
+      ~SynchronousResponseGuard() {
+        suppressSynchronousTransportSend = this->previous;
+      }
+    };
+
+    bool isModernRequest(const nlohmann::json& request) {
+      if (!request.is_object() || !request.contains("params") || !request["params"].is_object()) {
+        return false;
+      }
+      const auto& params = request["params"];
+      if (!params.contains("_meta") || !params["_meta"].is_object()) {
+        return false;
+      }
+      const auto version = params["_meta"].find("io.modelcontextprotocol/protocolVersion");
+      return version != params["_meta"].end() &&
+        version->is_string() &&
+        mcp::isModernProtocolVersion(version->get<String>());
+    }
+
+    void finalizeModernResponse(nlohmann::json& response, const nlohmann::json& request) {
+      if (!response.is_object() || !response.contains("result") || !response["result"].is_object()) {
+        return;
+      }
+      response["result"]["resultType"] = "complete";
+      if (!response["result"].contains("_meta") || !response["result"]["_meta"].is_object()) {
+        response["result"]["_meta"] = nlohmann::json::object();
+      }
+      response["result"]["_meta"]["io.modelcontextprotocol/serverInfo"] = {
+        {"name", "oro.runtime"},
+        {"version", runtime::version::VERSION_STRING}
+      };
+      const auto method = request.value("method", "");
+      if (method == "tools/list" ||
+          method == "resources/list" ||
+          method == "resources/read" ||
+          method == "prompts/list") {
+        response["result"]["ttlMs"] = 5000;
+        response["result"]["cacheScope"] = "private";
+      }
+    }
+
     template <typename Counter>
     uint64_t nextIdentifier(Counter& counter) {
       auto value = counter.fetch_add(1, std::memory_order_relaxed);
@@ -17,6 +71,10 @@ namespace oro::runtime::core::services {
         value = counter.fetch_add(1, std::memory_order_relaxed);
       }
       return value;
+    }
+
+    String requestIdentifier(const nlohmann::json& id) {
+      return id.is_string() ? id.get<String>() : id.dump();
     }
   }
 
@@ -33,7 +91,7 @@ namespace oro::runtime::core::services {
       if (timeoutIt != userConfig.end()) {
         try {
           const auto parsed = std::stoul(timeoutIt->second);
-          if (parsed > 0) {
+          if (parsed > 0 && parsed <= std::numeric_limits<uint32_t>::max()) {
             this->authorizationTimeoutMs = static_cast<uint32_t>(parsed);
           }
         } catch (...) {}
@@ -65,6 +123,7 @@ namespace oro::runtime::core::services {
       this->sessionState.clear();
       this->resourceSubscriptions.clear();
       this->sessionSubscriptions.clear();
+      this->modernSubscriptions.clear();
     }
 
     return core::Service::stop();
@@ -82,23 +141,38 @@ namespace oro::runtime::core::services {
       this->toolRegistry[tool.name] = toolEntry;
     }
 
+    this->notifyModernListChange("toolsListChanged", "notifications/tools/list_changed");
+
     return toolEntry->id;
   }
 
   bool MCP::unregisterTool(const String& name) {
     bool removed = false;
+    Vector<String> pendingIds;
     {
       Lock lock(this->mutex);
       removed = this->toolRegistry.erase(name) > 0;
 
-      auto it = this->pendingInvocations.begin();
-      while (it != this->pendingInvocations.end()) {
-        if (it->second && it->second->toolName == name) {
-          it = this->pendingInvocations.erase(it);
-        } else {
-          ++it;
+      if (removed) {
+        for (const auto& entry : this->pendingInvocations) {
+          if (entry.second && entry.second->toolName == name) {
+            pendingIds.push_back(entry.first);
+          }
         }
       }
+    }
+
+    if (removed) {
+      for (const auto& id : pendingIds) {
+        this->rejectInvocation(
+          id,
+          mcp::Error(
+            mcp::ErrorCode::InternalError,
+            "Tool was unregistered before its invocation completed"
+          )
+        );
+      }
+      this->notifyModernListChange("toolsListChanged", "notifications/tools/list_changed");
     }
 
     return removed;
@@ -127,21 +201,128 @@ namespace oro::runtime::core::services {
       this->resourceRegistry[descriptor.uri] = resourceEntry;
     }
 
+    this->notifyModernListChange("resourcesListChanged", "notifications/resources/list_changed");
+
     return resourceEntry->id;
   }
 
   bool MCP::unregisterResource(const String& uri) {
-    Lock lock(this->mutex);
-    const bool removed = this->resourceRegistry.erase(uri) > 0;
-    if (removed) {
-      auto it = this->pendingResourceReads.begin();
-      while (it != this->pendingResourceReads.end()) {
-        if (it->second && it->second->resourceUri == uri) {
-          it = this->pendingResourceReads.erase(it);
-        } else {
-          ++it;
+    bool removed = false;
+    SharedPointer<RegisteredResource> removedResource = nullptr;
+    Vector<String> pendingIds;
+    Vector<SharedPointer<ResourceSubscription>> removedSubscriptions;
+    Vector<std::pair<String, nlohmann::json>> removedModernSubscriptions;
+    {
+      Lock lock(this->mutex);
+      const auto resourceIt = this->resourceRegistry.find(uri);
+      if (resourceIt != this->resourceRegistry.end()) {
+        removedResource = resourceIt->second;
+        this->resourceRegistry.erase(resourceIt);
+        removed = true;
+      }
+      if (removed) {
+        for (const auto& entry : this->pendingResourceReads) {
+          if (entry.second && entry.second->resourceUri == uri) {
+            pendingIds.push_back(entry.first);
+          }
+        }
+
+        for (auto it = this->resourceSubscriptions.begin();
+             it != this->resourceSubscriptions.end();) {
+          if (it->second && it->second->resourceUri == uri) {
+            removedSubscriptions.push_back(it->second);
+            it = this->resourceSubscriptions.erase(it);
+          } else {
+            ++it;
+          }
+        }
+        for (auto it = this->sessionSubscriptions.begin();
+             it != this->sessionSubscriptions.end();) {
+          auto& ids = it->second;
+          ids.erase(
+            std::remove_if(ids.begin(), ids.end(), [&removedSubscriptions](const String& id) {
+              return std::any_of(
+                removedSubscriptions.begin(),
+                removedSubscriptions.end(),
+                [&id](const auto& subscription) {
+                  return subscription && subscription->id == id;
+                }
+              );
+            }),
+            ids.end()
+          );
+          if (ids.empty()) {
+            it = this->sessionSubscriptions.erase(it);
+          } else {
+            ++it;
+          }
+        }
+
+        for (const auto& entry : this->modernSubscriptions) {
+          const auto& subscription = entry.second;
+          if (!subscription) {
+            continue;
+          }
+          const auto resourceIt = std::find(
+            subscription->resourceUris.begin(),
+            subscription->resourceUris.end(),
+            uri
+          );
+          if (resourceIt == subscription->resourceUris.end()) {
+            continue;
+          }
+          if (subscription->started) {
+            removedModernSubscriptions.push_back({entry.first, subscription->requestId});
+          }
+          subscription->resourceUris.erase(resourceIt);
+          subscription->accepted["resourceSubscriptions"] = subscription->resourceUris;
         }
       }
+    }
+    if (removed) {
+      for (const auto& id : pendingIds) {
+        this->rejectResourceRead(
+          id,
+          mcp::Error(
+            mcp::ErrorCode::InternalError,
+            "Resource was unregistered before its read completed"
+          )
+        );
+      }
+
+      if (removedResource && removedResource->callback) {
+        const auto notifyUnsubscribed = [&removedResource, &uri](
+          const String& id,
+          const String& sessionId
+        ) {
+          nlohmann::json paramsJson {
+            {"reason", "resource-unregistered"}
+          };
+          removedResource->callback("-1", JSON::Object(JSON::Object::Entries {
+            {"source", "mcp.resource.unsubscribe"},
+            {"data", JSON::Object(JSON::Object::Entries {
+              {"id", JSON::String(id)},
+              {"resource", JSON::String(uri)},
+              {"sessionId", JSON::String(sessionId)},
+              {"descriptor", removedResource->descriptor.toJSON()},
+              {"params", JSON::String(paramsJson.dump())}
+            })}
+          }), QueuedResponse{});
+        };
+
+        for (const auto& subscription : removedSubscriptions) {
+          if (subscription) {
+            notifyUnsubscribed(subscription->id, subscription->sessionId);
+          }
+        }
+        for (const auto& subscription : removedModernSubscriptions) {
+          notifyUnsubscribed(
+            requestIdentifier(subscription.second),
+            subscription.first
+          );
+        }
+      }
+      this->notifyModernListChange("resourcesListChanged", "notifications/resources/list_changed");
     }
     return removed;
   }
@@ -189,6 +370,7 @@ namespace oro::runtime::core::services {
     const String& name,
     const String& sessionId,
     const String& argumentsJson,
+    bool modern,
     const Callback& reply
   ) {
     auto tool = this->getTool(name);
@@ -214,17 +396,46 @@ namespace oro::runtime::core::services {
       return false;
     }
 
+    String validationError;
+    if (!tool->definition.validateArguments(argumentsJson, validationError)) {
+      auto json = JSON::Object::Entries {
+        {"err", JSON::Object::Entries {
+          {"type", "TypeError"},
+          {"message", validationError}
+        }}
+      };
+      reply(seq, JSON::Object(json), QueuedResponse{});
+      return false;
+    }
+
     const auto invocationId = this->generateInvocationId();
     auto pending = SharedPointer<PendingInvocation>(new PendingInvocation());
     pending->id = invocationId;
     pending->toolName = name;
     pending->sessionId = sessionId;
     pending->seq = seq;
+    pending->definition = tool->definition;
+    pending->modern = modern;
     pending->reply = reply;
 
+    bool atCapacity = false;
     {
       Lock lock(this->mutex);
-      this->pendingInvocations[invocationId] = pending;
+      if (this->pendingInvocations.size() >= kMaxPendingMcpRequests) {
+        atCapacity = true;
+      } else {
+        this->pendingInvocations[invocationId] = pending;
+      }
+    }
+    if (atCapacity) {
+      auto json = JSON::Object::Entries {
+        {"err", JSON::Object::Entries {
+          {"type", "CapacityError"},
+          {"message", "Too many pending MCP tool invocations"}
+        }}
+      };
+      reply(seq, JSON::Object(json), QueuedResponse{});
+      return false;
     }
 
     JSON::Object::Entries payload {
@@ -262,12 +473,50 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    JSON::Object::Entries data {
-      {"id", invocationId},
-      {"result", JSON::String(resultJson)}
-    };
-
-    pending->reply(pending->seq, JSON::Object(JSON::Object::Entries {{"data", JSON::Object(data)}}), QueuedResponse{});
+    try {
+      String validationError;
+      if (!pending->definition.validateResult(resultJson, validationError)) {
+        throw std::runtime_error(validationError);
+      }
+      auto result = JSON::parse(resultJson.empty() ? "{}" : resultJson);
+      if (!pending->modern && result.isObject()) {
+        auto& object = result.as<JSON::Object>();
+        if (object.contains("structuredContent") &&
+            !object.get("structuredContent").isObject()) {
+          const auto structuredContent = object.get("structuredContent");
+          object.set("structuredContent", JSON::Object(JSON::Object::Entries {
+            {"value", structuredContent}
+          }));
+        }
+      } else if (pending->modern && result.isObject()) {
+        auto& object = result.as<JSON::Object>();
+        object.set("resultType", JSON::String("complete"));
+        JSON::Object metadata(JSON::Object::Entries {});
+        if (object.contains("_meta") && object.get("_meta").isObject()) {
+          metadata = object.get("_meta").as<JSON::Object>();
+        }
+        metadata.set("io.modelcontextprotocol/serverInfo", JSON::Object(JSON::Object::Entries {
+          {"name", JSON::String("oro.runtime")},
+          {"version", JSON::String(runtime::version::VERSION_STRING)}
+        }));
+        object.set("_meta", metadata);
+      }
+      pending->reply(
+        pending->seq,
+        JSON::Object(JSON::Object::Entries {{"data", result}}),
+        QueuedResponse{}
+      );
+    } catch (const std::exception& err) {
+      JSON::Object::Entries error {
+        {"code", JSON::Number(static_cast<int>(mcp::ErrorCode::InternalError))},
+        {"message", JSON::String(err.what())}
+      };
+      pending->reply(
+        pending->seq,
+        JSON::Object(JSON::Object::Entries {{"err", JSON::Object(error)}}),
+        QueuedResponse{}
+      );
+    }
     return true;
   }
 
@@ -287,12 +536,11 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    JSON::Object::Entries errEntries {
-      {"id", invocationId},
-      {"error", error.toJSON()}
-    };
-
-    pending->reply(pending->seq, JSON::Object(JSON::Object::Entries {{"err", JSON::Object(errEntries)}}), QueuedResponse{});
+    pending->reply(
+      pending->seq,
+      JSON::Object(JSON::Object::Entries {{"err", error.toJSON()}}),
+      QueuedResponse{}
+    );
     return true;
   }
 
@@ -332,10 +580,19 @@ namespace oro::runtime::core::services {
       if (!parsed.contains("contents")) {
         throw std::runtime_error("Resource response missing contents");
       }
+      if (pending->modern) {
+        parsed["resultType"] = "complete";
+        parsed["ttlMs"] = 5000;
+        parsed["cacheScope"] = "private";
+        parsed["_meta"]["io.modelcontextprotocol/serverInfo"] = {
+          {"name", "oro.runtime"},
+          {"version", runtime::version::VERSION_STRING}
+        };
+      }
       message["result"] = parsed;
     } catch (const std::exception& err) {
       message["error"] = {
-        {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+        {"code", static_cast<int>(mcp::ErrorCode::InternalError)},
         {"message", err.what()}
       };
     }
@@ -441,7 +698,34 @@ namespace oro::runtime::core::services {
       this->service.removeSessionSubscriptions(sessionId);
     }
 
+    bool getExpectedRequestHeaders(
+      const String& payload,
+      Vector<mcp::ToolHeader>& headers,
+      String& error
+    ) override {
+      try {
+        const auto request = nlohmann::json::parse(payload);
+        if (request.value("method", "") != "tools/call") {
+          return true;
+        }
+        const auto params = request.value("params", nlohmann::json::object());
+        const auto name = params.value("name", "");
+        auto tool = this->service.getTool(name);
+        if (!tool) {
+          return true;
+        }
+        const auto arguments = params.contains("arguments")
+          ? params["arguments"].dump()
+          : String("{}");
+        return tool->definition.getExpectedHTTPHeaders(arguments, headers, error);
+      } catch (const std::exception& exception) {
+        error = String("Unable to validate MCP parameter headers: ") + exception.what();
+        return false;
+      }
+    }
+
     std::optional<String> onJsonRpcRequest(const String& sessionId, const String& payload) override {
+      SynchronousResponseGuard guard;
       nlohmann::json request;
       try {
         request = nlohmann::json::parse(payload);
@@ -459,9 +743,22 @@ namespace oro::runtime::core::services {
 
       auto result = this->service.handleJsonRpcRequest(sessionId, request);
       if (result.has_value()) {
+        if (isModernRequest(request)) {
+          finalizeModernResponse(*result, request);
+        }
         return result->dump();
       }
       return std::nullopt;
+    }
+
+    void onJsonRpcResponseQueued(const String& sessionId, const String& payload) override {
+      try {
+        const auto response = nlohmann::json::parse(payload);
+        if (response.is_object() &&
+            response.value("method", "") == "notifications/subscriptions/acknowledged") {
+          this->service.notifyModernSubscriptionStarted(sessionId);
+        }
+      } catch (...) {}
     }
 
     void onPing(const String& sessionId) override {
@@ -512,6 +809,11 @@ namespace oro::runtime::core::services {
       for (const auto& entry : this->sessionSubscriptions) {
         sessions.push_back(entry.first);
       }
+      for (const auto& entry : this->modernSubscriptions) {
+        if (std::find(sessions.begin(), sessions.end(), entry.first) == sessions.end()) {
+          sessions.push_back(entry.first);
+        }
+      }
 
       localServer = std::move(this->server);
       localAdapter = std::move(this->serverAdapter);
@@ -530,8 +832,11 @@ namespace oro::runtime::core::services {
     {
       Lock lock(this->mutex);
       this->sessionState.clear();
+      this->pendingInvocations.clear();
+      this->pendingResourceReads.clear();
       this->resourceSubscriptions.clear();
       this->sessionSubscriptions.clear();
+      this->modernSubscriptions.clear();
       this->serverConfig = mcp::HTTPServer::Config();
     }
 
@@ -728,23 +1033,10 @@ namespace oro::runtime::core::services {
     if (uri.empty()) {
       return false;
     }
-
-    nlohmann::json parsed;
-    try {
-      parsed = resultJson.empty() ? nlohmann::json::object() : nlohmann::json::parse(resultJson);
-      if (!parsed.is_object()) {
-        nlohmann::json wrapper;
-        wrapper["contents"] = parsed;
-        parsed = wrapper;
-      }
-      if (!parsed.contains("contents")) {
-        parsed["contents"] = nlohmann::json::array();
-      }
-    } catch (...) {
-      return false;
-    }
+    (void)resultJson;
 
     Vector<SharedPointer<ResourceSubscription>> targets;
+    Vector<std::pair<String, nlohmann::json>> modernTargets;
     {
       Lock lock(this->mutex);
       if (subscriptionFilter.has_value()) {
@@ -771,12 +1063,35 @@ namespace oro::runtime::core::services {
           targets.push_back(subscription);
         }
       }
+
+      for (const auto& entry : this->modernSubscriptions) {
+        const auto& sessionId = entry.first;
+        const auto& subscription = entry.second;
+        if (!subscription || !subscription->started) {
+          continue;
+        }
+        if (sessionFilter.has_value() && sessionId != *sessionFilter) {
+          continue;
+        }
+        if (subscriptionFilter.has_value() &&
+            requestIdentifier(subscription->requestId) != *subscriptionFilter) {
+          continue;
+        }
+        if (std::find(
+              subscription->resourceUris.begin(),
+              subscription->resourceUris.end(),
+              uri) == subscription->resourceUris.end()) {
+          continue;
+        }
+        modernTargets.push_back({sessionId, subscription->requestId});
+      }
     }
 
-    if (targets.empty()) {
+    if (targets.empty() && modernTargets.empty()) {
       return false;
     }
 
+    bool delivered = false;
     for (const auto& subscription : targets) {
       if (!subscription) {
         continue;
@@ -784,42 +1099,55 @@ namespace oro::runtime::core::services {
 
       nlohmann::json message;
       message["jsonrpc"] = "2.0";
-      message["method"] = "resources/update";
-
-      nlohmann::json params = parsed;
-      params["subscription"] = {
-        {"id", subscription->id},
-        {"resource", subscription->resourceUri}
-      };
-      params["resource"] = subscription->resourceUri;
-
-      message["params"] = params;
-      this->sendJsonRpcNotification(subscription->sessionId, message);
+      message["method"] = "notifications/resources/updated";
+      message["params"] = {{"uri", subscription->resourceUri}};
+      delivered = this->sendJsonRpcNotification(subscription->sessionId, message) || delivered;
     }
 
-    return true;
+    for (const auto& target : modernTargets) {
+      nlohmann::json message;
+      message["jsonrpc"] = "2.0";
+      message["method"] = "notifications/resources/updated";
+      message["params"] = {
+        {"uri", uri},
+        {"_meta", {
+          {"io.modelcontextprotocol/subscriptionId", target.second}
+        }}
+      };
+      delivered = this->sendJsonRpcNotification(target.first, message) || delivered;
+    }
+
+    return delivered;
   }
 
   void MCP::removeSessionSubscriptions(const String& sessionId,
                                        const std::optional<String>& reason) {
     Vector<SharedPointer<ResourceSubscription>> removed;
+    SharedPointer<ModernSubscription> modernSubscription = nullptr;
 
     {
       Lock lock(this->mutex);
+      const auto modernIt = this->modernSubscriptions.find(sessionId);
+      if (modernIt != this->modernSubscriptions.end()) {
+        modernSubscription = modernIt->second;
+        this->modernSubscriptions.erase(modernIt);
+      }
       auto it = this->sessionSubscriptions.find(sessionId);
       if (it == this->sessionSubscriptions.end()) {
-        return;
-      }
-
-      for (const auto& id : it->second) {
-        auto subIt = this->resourceSubscriptions.find(id);
-        if (subIt != this->resourceSubscriptions.end()) {
-          removed.push_back(subIt->second);
-          this->resourceSubscriptions.erase(subIt);
+        if (!modernSubscription) {
+          return;
         }
-      }
+      } else {
+        for (const auto& id : it->second) {
+          auto subIt = this->resourceSubscriptions.find(id);
+          if (subIt != this->resourceSubscriptions.end()) {
+            removed.push_back(subIt->second);
+            this->resourceSubscriptions.erase(subIt);
+          }
+        }
 
-      this->sessionSubscriptions.erase(it);
+        this->sessionSubscriptions.erase(it);
+      }
     }
 
     for (const auto& subscription : removed) {
@@ -852,14 +1180,99 @@ namespace oro::runtime::core::services {
         {"data", JSON::Object(dataEntries)}
       }), QueuedResponse{});
     }
+
+    if (modernSubscription && modernSubscription->started) {
+      for (const auto& uri : modernSubscription->resourceUris) {
+        auto resource = this->getResource(uri);
+        if (!resource || !resource->callback) {
+          continue;
+        }
+        JSON::Object::Entries dataEntries {
+          {"id", JSON::String(requestIdentifier(modernSubscription->requestId))},
+          {"resource", JSON::String(uri)},
+          {"sessionId", JSON::String(sessionId)},
+          {"descriptor", resource->descriptor.toJSON()}
+        };
+        resource->callback("-1", JSON::Object(JSON::Object::Entries {
+          {"source", "mcp.resource.unsubscribe"},
+          {"data", JSON::Object(dataEntries)}
+        }), QueuedResponse{});
+      }
+    }
   }
 
-  void MCP::sendJsonRpcNotification(const String& sessionId, const nlohmann::json& message) {
-    if (!this->server || !this->server->isRunning()) {
-      return;
+  void MCP::notifyModernListChange(const String& filter, const String& method) {
+    Vector<std::pair<String, nlohmann::json>> targets;
+    {
+      Lock lock(this->mutex);
+      for (const auto& entry : this->modernSubscriptions) {
+        const auto& subscription = entry.second;
+        if (!subscription || !subscription->started) {
+          continue;
+        }
+        const bool enabled = filter == "toolsListChanged"
+          ? subscription->toolsListChanged
+          : subscription->resourcesListChanged;
+        if (enabled) {
+          targets.push_back({entry.first, subscription->requestId});
+        }
+      }
     }
 
-    this->server->sendEvent(sessionId, "message", message.dump());
+    for (const auto& target : targets) {
+      nlohmann::json message;
+      message["jsonrpc"] = "2.0";
+      message["method"] = method;
+      message["params"] = {
+        {"_meta", {
+          {"io.modelcontextprotocol/subscriptionId", target.second}
+        }}
+      };
+      this->sendJsonRpcNotification(target.first, message);
+    }
+  }
+
+  bool MCP::sendJsonRpcNotification(const String& sessionId, const nlohmann::json& message) {
+    if (suppressSynchronousTransportSend) {
+      return false;
+    }
+    if (!this->server || !this->server->isRunning()) {
+      return false;
+    }
+
+    return this->server->sendEvent(sessionId, "message", message.dump());
+  }
+
+  void MCP::notifyModernSubscriptionStarted(const String& sessionId) {
+    nlohmann::json requestId;
+    Vector<String> resourceUris;
+    {
+      Lock lock(this->mutex);
+      const auto it = this->modernSubscriptions.find(sessionId);
+      if (it == this->modernSubscriptions.end() || !it->second || it->second->started) {
+        return;
+      }
+      it->second->started = true;
+      requestId = it->second->requestId;
+      resourceUris = it->second->resourceUris;
+    }
+
+    for (const auto& uri : resourceUris) {
+      auto resource = this->getResource(uri);
+      if (!resource || !resource->callback) {
+        continue;
+      }
+      JSON::Object::Entries dataEntries {
+        {"id", JSON::String(requestIdentifier(requestId))},
+        {"resource", JSON::String(resource->descriptor.uri)},
+        {"sessionId", JSON::String(sessionId)},
+        {"descriptor", resource->descriptor.toJSON()}
+      };
+      resource->callback("-1", JSON::Object(JSON::Object::Entries {
+        {"source", "mcp.resource.subscribe"},
+        {"data", JSON::Object(dataEntries)}
+      }), QueuedResponse{});
+    }
   }
 
   std::optional<nlohmann::json> MCP::handleJsonRpcRequest(const String& sessionId, const nlohmann::json& request) {
@@ -871,12 +1284,51 @@ namespace oro::runtime::core::services {
     const bool isNotification = idIt == request.end();
     nlohmann::json response;
     response["jsonrpc"] = "2.0";
-    if (idIt != request.end()) {
+    if (idIt != request.end() && (idIt->is_string() || idIt->is_number())) {
       response["id"] = *idIt;
     }
 
-    const auto method = request.value("method", "");
+    if (!request.contains("jsonrpc") ||
+        !request["jsonrpc"].is_string() ||
+        request["jsonrpc"].get<String>() != mcp::kJsonRpcVersion ||
+        !request.contains("method") ||
+        !request["method"].is_string() ||
+        request["method"].get<String>().empty() ||
+        (idIt != request.end() && !idIt->is_string() && !idIt->is_number())) {
+      response["error"] = {
+        {"code", static_cast<int>(mcp::ErrorCode::InvalidRequest)},
+        {"message", "Invalid JSON-RPC 2.0 request"}
+      };
+      this->sendJsonRpcNotification(sessionId, response);
+      return response;
+    }
+
+    const auto method = request["method"].get<String>();
+    if (request.contains("params") && !request["params"].is_object()) {
+      response["error"] = {
+        {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+        {"message", "MCP request params must be an object"}
+      };
+      this->sendJsonRpcNotification(sessionId, response);
+      return response;
+    }
+
     const auto params = request.value("params", nlohmann::json::object());
+    const bool modern = isModernRequest(request);
+
+    if (modern &&
+        (!params.contains("_meta") ||
+         !params["_meta"].is_object() ||
+         !params["_meta"].contains("io.modelcontextprotocol/clientCapabilities") ||
+         !params["_meta"]["io.modelcontextprotocol/clientCapabilities"].is_object())) {
+      response["error"] = {
+        {"code", static_cast<int>(mcp::ErrorCode::MissingRequiredClientCapability)},
+        {"message", "Request metadata must include clientCapabilities"},
+        {"data", {{"requiredCapabilities", nlohmann::json::object()}}}
+      };
+      this->sendJsonRpcNotification(sessionId, response);
+      return response;
+    }
 
     bool initialized = false;
     {
@@ -888,13 +1340,47 @@ namespace oro::runtime::core::services {
     }
 
     if (method == "initialize") {
-      const auto requestedVersion = params.value("protocolVersion", "");
-      if (requestedVersion != mcp::kProtocolVersion) {
+      const auto requestedVersion = params.contains("protocolVersion") && params["protocolVersion"].is_string()
+        ? params["protocolVersion"].get<String>()
+        : String();
+      if (isNotification) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidRequest)},
+          {"message", "initialize requires a request id"}
+        };
+      } else if (modern) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::MethodNotFound)},
+          {"message", "initialize is not available in the modern MCP protocol"}
+        };
+      } else if (initialized) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidRequest)},
+          {"message", "MCP session is already initialized"}
+        };
+      } else if (requestedVersion.empty()) {
         response["error"] = {
           {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
-          {"message", "Unsupported protocol version"}
+          {"message", "Missing protocol version"}
+        };
+      } else if (!params.contains("capabilities") ||
+                 !params["capabilities"].is_object() ||
+                 !params.contains("clientInfo") ||
+                 !params["clientInfo"].is_object() ||
+                 !params["clientInfo"].contains("name") ||
+                 !params["clientInfo"]["name"].is_string() ||
+                 params["clientInfo"]["name"].get<String>().empty() ||
+                 !params["clientInfo"].contains("version") ||
+                 !params["clientInfo"]["version"].is_string() ||
+                 params["clientInfo"]["version"].get<String>().empty()) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+          {"message", "initialize requires capabilities and clientInfo with name and version"}
         };
       } else {
+        const auto negotiatedVersion = mcp::isLegacyProtocolVersion(requestedVersion)
+          ? requestedVersion
+          : String(mcp::kLegacyProtocolVersion);
         {
           Lock lock(this->mutex);
           this->sessionState[sessionId] = true;
@@ -937,9 +1423,16 @@ namespace oro::runtime::core::services {
 
         nlohmann::json capabilities = nlohmann::json::object();
 
+        const bool hasSubscribableResource = std::any_of(
+          registeredResources.begin(),
+          registeredResources.end(),
+          [](const auto& resource) {
+            return resource.subscribable;
+          }
+        );
         if (!registeredResources.empty()) {
           nlohmann::json resourceCaps = nlohmann::json::object();
-          resourceCaps["subscribe"] = true;
+          resourceCaps["subscribe"] = hasSubscribableResource;
           capabilities["resources"] = resourceCaps;
         }
 
@@ -949,7 +1442,7 @@ namespace oro::runtime::core::services {
         }
 
         nlohmann::json resultPayload;
-        resultPayload["protocolVersion"] = mcp::kProtocolVersion;
+        resultPayload["protocolVersion"] = negotiatedVersion;
         resultPayload["capabilities"] = capabilities;
         resultPayload["serverInfo"] = serverInfo;
 
@@ -968,6 +1461,51 @@ namespace oro::runtime::core::services {
       return response;
     }
 
+    if (method == "server/discover") {
+      if (!modern) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::UnsupportedProtocolVersion)},
+          {"message", "server/discover requires MCP 2026-07-28 request metadata"},
+          {"data", {
+            {"supported", mcp::supportedProtocolVersions()},
+            {"requested", ""}
+          }}
+        };
+        return response;
+      }
+
+      const auto registeredResources = this->listResources();
+      const bool hasSubscribableResource = std::any_of(
+        registeredResources.begin(),
+        registeredResources.end(),
+        [](const auto& resource) {
+          return resource.subscribable;
+        }
+      );
+      nlohmann::json capabilities = {
+        {"tools", {{"listChanged", true}}},
+        {"resources", {
+          {"listChanged", true},
+          {"subscribe", hasSubscribableResource}
+        }}
+      };
+
+      response["result"] = {
+        {"supportedVersions", mcp::supportedProtocolVersions()},
+        {"capabilities", capabilities},
+        {"instructions", "Invoke registered application tools and resources using workspace-scoped inputs."},
+        {"ttlMs", 60000},
+        {"cacheScope", "private"},
+        {"_meta", {
+          {"io.modelcontextprotocol/serverInfo", {
+            {"name", "oro.runtime"},
+            {"version", runtime::version::VERSION_STRING}
+          }}
+        }}
+      };
+      return response;
+    }
+
     if (method == "ping") {
       response["result"] = nlohmann::json::object();
       this->sendJsonRpcNotification(sessionId, response);
@@ -978,7 +1516,7 @@ namespace oro::runtime::core::services {
       return std::nullopt;
     }
 
-    if (!initialized && method != "initialize" && method != "ping") {
+    if (!modern && !initialized && method != "initialize" && method != "ping") {
       response["error"] = {
         {"code", static_cast<int>(mcp::ErrorCode::InvalidRequest)},
         {"message", "Session not initialized"}
@@ -990,7 +1528,7 @@ namespace oro::runtime::core::services {
     if (method == "tools/list") {
       nlohmann::json tools = nlohmann::json::array();
       for (const auto& tool : this->listTools()) {
-        tools.push_back(nlohmann::json::parse(tool.toJSON().str()));
+        tools.push_back(nlohmann::json::parse(tool.toJSON(modern).str()));
       }
       response["result"] = {{"tools", tools}};
       this->sendJsonRpcNotification(sessionId, response);
@@ -1007,7 +1545,106 @@ namespace oro::runtime::core::services {
       return response;
     }
 
+    if (method == "subscriptions/listen") {
+      if (!modern) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::MethodNotFound)},
+          {"message", "subscriptions/listen requires MCP 2026-07-28"}
+        };
+        return response;
+      }
+      if (isNotification) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidRequest)},
+          {"message", "subscriptions/listen requires a request id"}
+        };
+        return response;
+      }
+      if (!params.contains("notifications") || !params["notifications"].is_object()) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+          {"message", "subscriptions/listen requires a notifications filter"}
+        };
+        return response;
+      }
+
+      const auto& requested = params["notifications"];
+      for (const auto* filter : {"toolsListChanged", "promptsListChanged", "resourcesListChanged"}) {
+        if (requested.contains(filter) && !requested[filter].is_boolean()) {
+          response["error"] = {
+            {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+            {"message", String(filter) + " must be a boolean"}
+          };
+          return response;
+        }
+      }
+      auto subscription = SharedPointer<ModernSubscription>(new ModernSubscription());
+      subscription->requestId = *idIt;
+      subscription->toolsListChanged = requested.value("toolsListChanged", false);
+      subscription->resourcesListChanged = requested.value("resourcesListChanged", false);
+      if (subscription->toolsListChanged) {
+        subscription->accepted["toolsListChanged"] = true;
+      }
+      if (subscription->resourcesListChanged) {
+        subscription->accepted["resourcesListChanged"] = true;
+      }
+
+      if (requested.contains("resourceSubscriptions")) {
+        if (!requested["resourceSubscriptions"].is_array()) {
+          response["error"] = {
+            {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+            {"message", "resourceSubscriptions must be an array of resource URIs"}
+          };
+          return response;
+        }
+        for (const auto& requestedUri : requested["resourceSubscriptions"]) {
+          if (!requestedUri.is_string()) {
+            response["error"] = {
+              {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+              {"message", "resourceSubscriptions entries must be strings"}
+            };
+            return response;
+          }
+          const auto uri = requestedUri.get<String>();
+          auto resource = this->getResource(uri);
+          if (!resource || !resource->descriptor.subscribable) {
+            continue;
+          }
+          if (std::find(
+                subscription->resourceUris.begin(),
+                subscription->resourceUris.end(),
+                uri) == subscription->resourceUris.end()) {
+            subscription->resourceUris.push_back(uri);
+          }
+        }
+        subscription->accepted["resourceSubscriptions"] = subscription->resourceUris;
+      }
+
+      {
+        Lock lock(this->mutex);
+        this->modernSubscriptions[sessionId] = subscription;
+      }
+
+      nlohmann::json acknowledgement;
+      acknowledgement["jsonrpc"] = "2.0";
+      acknowledgement["method"] = "notifications/subscriptions/acknowledged";
+      acknowledgement["params"] = {
+        {"notifications", subscription->accepted},
+        {"_meta", {
+          {"io.modelcontextprotocol/subscriptionId", subscription->requestId}
+        }}
+      };
+      return acknowledgement;
+    }
+
     if (method == "resources/subscribe") {
+      if (modern) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+          {"message", "Legacy resource subscriptions are not available in MCP 2026-07-28"}
+        };
+        return response;
+      }
       if (idIt == request.end()) {
         response["error"] = {
           {"code", static_cast<int>(mcp::ErrorCode::InvalidRequest)},
@@ -1017,7 +1654,9 @@ namespace oro::runtime::core::services {
         return response;
       }
 
-      const auto uri = params.value("uri", "");
+      const auto uri = params.contains("uri") && params["uri"].is_string()
+        ? params["uri"].get<String>()
+        : String();
       if (uri.empty()) {
         response["error"] = {
           {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
@@ -1030,7 +1669,7 @@ namespace oro::runtime::core::services {
       auto resource = this->getResource(uri);
       if (!resource) {
         response["error"] = {
-          {"code", static_cast<int>(mcp::ErrorCode::MethodNotFound)},
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
           {"message", "Resource not available"}
         };
         this->sendJsonRpcNotification(sessionId, response);
@@ -1078,13 +1717,7 @@ namespace oro::runtime::core::services {
         }), QueuedResponse{});
       }
 
-      nlohmann::json resultJson;
-      resultJson["subscription"] = {
-        {"id", subscriptionId},
-        {"resource", uri}
-      };
-
-      response["result"] = resultJson;
+      response["result"] = nlohmann::json::object();
       this->sendJsonRpcNotification(sessionId, response);
       return response;
     }
@@ -1099,90 +1732,75 @@ namespace oro::runtime::core::services {
         return response;
       }
 
-      String subscriptionId;
-      if (params.contains("subscription")) {
-        const auto& subNode = params["subscription"];
-        if (subNode.is_object()) {
-          subscriptionId = subNode.value("id", String());
-        } else if (subNode.is_string()) {
-          subscriptionId = subNode.get<std::string>();
-        }
-      }
-      if (subscriptionId.empty()) {
-        subscriptionId = params.value("id", String());
-      }
-
-      if (subscriptionId.empty()) {
+      const String uri = params.contains("uri") && params["uri"].is_string()
+        ? params["uri"].get<String>()
+        : String();
+      if (uri.empty()) {
         response["error"] = {
           {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
-          {"message", "Missing subscription id"}
+          {"message", "Missing resource uri"}
         };
         this->sendJsonRpcNotification(sessionId, response);
         return response;
       }
 
-      SharedPointer<ResourceSubscription> subscription = nullptr;
+      Vector<SharedPointer<ResourceSubscription>> subscriptions;
       {
         Lock lock(this->mutex);
-        auto it = this->resourceSubscriptions.find(subscriptionId);
-        if (it == this->resourceSubscriptions.end()) {
-          subscription = nullptr;
-        } else {
-          subscription = it->second;
-          if (!subscription || subscription->sessionId != sessionId) {
-            response["error"] = {
-              {"code", static_cast<int>(mcp::ErrorCode::InvalidRequest)},
-              {"message", "Subscription not active on this session"}
-            };
-            this->sendJsonRpcNotification(sessionId, response);
-            return response;
+        auto it = this->resourceSubscriptions.begin();
+        while (it != this->resourceSubscriptions.end()) {
+          const auto& subscription = it->second;
+          if (subscription && subscription->sessionId == sessionId && subscription->resourceUri == uri) {
+            subscriptions.push_back(subscription);
+            it = this->resourceSubscriptions.erase(it);
+          } else {
+            ++it;
           }
-          this->resourceSubscriptions.erase(it);
-          auto sessionIt = this->sessionSubscriptions.find(sessionId);
-          if (sessionIt != this->sessionSubscriptions.end()) {
-            auto& ids = sessionIt->second;
-            ids.erase(std::remove(ids.begin(), ids.end(), subscriptionId), ids.end());
-            if (ids.empty()) {
-              this->sessionSubscriptions.erase(sessionIt);
+        }
+
+        auto sessionIt = this->sessionSubscriptions.find(sessionId);
+        if (sessionIt != this->sessionSubscriptions.end()) {
+          auto& ids = sessionIt->second;
+          for (const auto& subscription : subscriptions) {
+            if (subscription) {
+              ids.erase(std::remove(ids.begin(), ids.end(), subscription->id), ids.end());
             }
+          }
+          if (ids.empty()) {
+            this->sessionSubscriptions.erase(sessionIt);
           }
         }
       }
 
-      if (subscription == nullptr) {
+      if (subscriptions.empty()) {
         response["error"] = {
-          {"code", static_cast<int>(mcp::ErrorCode::MethodNotFound)},
-          {"message", "Subscription not found"}
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+          {"message", "Resource is not subscribed on this session"}
         };
         this->sendJsonRpcNotification(sessionId, response);
         return response;
       }
 
-      auto resource = this->getResource(subscription->resourceUri);
-      if (resource && resource->callback) {
-        JSON::Object::Entries dataEntries {
-          {"id", JSON::String(subscription->id)},
-          {"resource", JSON::String(subscription->resourceUri)},
-          {"sessionId", JSON::String(subscription->sessionId)},
-          {"descriptor", resource->descriptor.toJSON()}
-        };
-        const auto paramsDump = params.is_null() ? std::string() : params.dump();
-        if (!paramsDump.empty() && paramsDump != "null") {
-          dataEntries.insert({"params", JSON::String(paramsDump)});
+      for (const auto& subscription : subscriptions) {
+        if (!subscription) {
+          continue;
         }
-
-        resource->callback("-1", JSON::Object(JSON::Object::Entries {
-          {"source", "mcp.resource.unsubscribe"},
-          {"data", JSON::Object(dataEntries)}
-        }), QueuedResponse{});
+        auto resource = this->getResource(subscription->resourceUri);
+        if (resource && resource->callback) {
+          JSON::Object::Entries dataEntries {
+            {"id", JSON::String(subscription->id)},
+            {"resource", JSON::String(subscription->resourceUri)},
+            {"sessionId", JSON::String(subscription->sessionId)},
+            {"descriptor", resource->descriptor.toJSON()}
+          };
+          resource->callback("-1", JSON::Object(JSON::Object::Entries {
+            {"source", "mcp.resource.unsubscribe"},
+            {"data", JSON::Object(dataEntries)}
+          }), QueuedResponse{});
+        }
       }
 
-      nlohmann::json resultJson;
-      resultJson["subscription"] = {
-        {"id", subscription->id},
-        {"resource", subscription->resourceUri}
-      };
-      response["result"] = resultJson;
+      response["result"] = nlohmann::json::object();
       this->sendJsonRpcNotification(sessionId, response);
       return response;
     }
@@ -1197,7 +1815,9 @@ namespace oro::runtime::core::services {
         return response;
       }
 
-      const auto uri = params.value("uri", "");
+      const auto uri = params.contains("uri") && params["uri"].is_string()
+        ? params["uri"].get<String>()
+        : String();
       if (uri.empty()) {
         response["error"] = {
           {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
@@ -1210,7 +1830,7 @@ namespace oro::runtime::core::services {
       auto resource = this->getResource(uri);
       if (!resource || !resource->callback) {
         response["error"] = {
-          {"code", static_cast<int>(mcp::ErrorCode::MethodNotFound)},
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
           {"message", "Resource not available"}
         };
         this->sendJsonRpcNotification(sessionId, response);
@@ -1224,9 +1844,18 @@ namespace oro::runtime::core::services {
       pending->seq = String();
       pending->reply = nullptr;
       pending->requestId = *idIt;
+      pending->modern = modern;
 
       {
         Lock lock(this->mutex);
+        if (this->pendingResourceReads.size() >= kMaxPendingMcpRequests) {
+          response["error"] = {
+            {"code", static_cast<int>(mcp::ErrorCode::InternalError)},
+            {"message", "Too many pending MCP resource reads"}
+          };
+          this->sendJsonRpcNotification(sessionId, response);
+          return response;
+        }
         this->pendingResourceReads[pending->id] = pending;
       }
 
@@ -1251,7 +1880,9 @@ namespace oro::runtime::core::services {
     }
 
     if (method == "tools/call") {
-      const auto name = params.value("name", "");
+      const auto name = params.contains("name") && params["name"].is_string()
+        ? params["name"].get<String>()
+        : String();
       const auto argumentsJson = params.contains("arguments") ? params["arguments"].dump() : std::string();
 
       if (name.empty()) {
@@ -1260,6 +1891,26 @@ namespace oro::runtime::core::services {
           {"message", "Missing tool name"}
         };
         this->sendJsonRpcNotification(sessionId, response);
+        return response;
+      }
+
+      auto registeredTool = this->getTool(name);
+      if (!registeredTool || !registeredTool->callback) {
+        response["error"] = {
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
+          {"message", "Tool not available"}
+        };
+        return response;
+      }
+      String validationError;
+      if (!registeredTool->definition.validateArguments(argumentsJson, validationError)) {
+        response["result"] = {
+          {"content", nlohmann::json::array({{
+            {"type", "text"},
+            {"text", validationError}
+          }})},
+          {"isError", true}
+        };
         return response;
       }
 
@@ -1291,9 +1942,9 @@ namespace oro::runtime::core::services {
         this->sendJsonRpcNotification(sessionId, message);
       };
 
-      if (!this->invokeTool(idString, name, sessionId, argumentsJson, callback)) {
+      if (!this->invokeTool(idString, name, sessionId, argumentsJson, modern, callback)) {
         response["error"] = {
-          {"code", static_cast<int>(mcp::ErrorCode::MethodNotFound)},
+          {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
           {"message", "Tool not available"}
         };
         this->sendJsonRpcNotification(sessionId, response);

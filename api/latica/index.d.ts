@@ -336,12 +336,12 @@ export class Peer {
      */
     join(sharedKey: any, args?: object | undefined): RemotePeer;
     /**
-     * @param {Packet} T - The constructor to be used to create packets.
-     * @param {Any} message - The message to be split and packaged.
-     * @return {Array<Packet<T>>}
+     * @param {typeof Packet} T - The constructor to be used to create packets.
+     * @param {any} message - The message to be split and packaged.
+     * @return {Promise<Packet[]>}
      * @ignore
      */
-    _message2packets(T: Packet, message: Any, args: any): Array<Packet<Packet>>;
+    _message2packets(T: typeof Packet, message: any, args: any): Promise<Packet[]>;
     /**
      * Sends a packet into the network that will be replicated and buffered.
      * Each peer that receives it will buffer it until TTL and then replicate
@@ -350,14 +350,14 @@ export class Peer {
      * @param {object} keys - the public and private key pair created by `Encryption.createKeyPair()`.
      * @param {object} args - The arguments to be applied.
      * @param {Buffer} args.message - The message to be encrypted by keys and sent.
-     * @param {Packet<T>=} args.packet - The previous packet in the packet chain.
+     * @param {Packet=} args.packet - The previous packet in the packet chain.
      * @param {Buffer} args.usr1 - 32 bytes of arbitrary clusterId in the protocol framing.
      * @param {Buffer} args.usr2 - 32 bytes of arbitrary clusterId in the protocol framing.
      * @return {Array<PacketPublish>}
      */
     publish(sharedKey: any, args: {
         message: Buffer;
-        packet?: Packet<T> | undefined;
+        packet?: Packet | undefined;
         usr1: Buffer;
         usr2: Buffer;
     }): Array<PacketPublish>;

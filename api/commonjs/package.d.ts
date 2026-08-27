@@ -25,13 +25,16 @@ export function detectESMSource(source: string): boolean;
  * }} PackageLoadOptions
  */
 /**
- * {import('./loader.js').RequestOptions & {
+ * @typedef {import('./loader.js').RequestOptions & {
  *   load?: boolean,
  *   type?: 'commonjs' | 'module',
  *   browser?: boolean,
  *   children?: string[]
  *   extensions?: string[] | Set<string>
  * }} PackageResolveOptions
+ */
+/**
+ * @typedef {ParsedPackageName} NameOptions
  */
 /**
  * @typedef {{
@@ -48,7 +51,6 @@ export function detectESMSource(source: string): boolean;
  * @typedef {{
  *   require?: string | string[],
  *   import?: string | string[],
- *   default?: string | string[],
  *   default?: string | string[],
  *   worker?: string | string[],
  *   browser?: string | string[]
@@ -353,6 +355,14 @@ export type PackageLoadOptions = import("./loader.js").RequestOptions & {
     type?: "commonjs" | "module";
     prefix?: string;
 };
+export type PackageResolveOptions = import("./loader.js").RequestOptions & {
+    load?: boolean;
+    type?: "commonjs" | "module";
+    browser?: boolean;
+    children?: string[];
+    extensions?: string[] | Set<string>;
+};
+export type NameOptions = ParsedPackageName;
 export type ParsedPackageName = {
     organization: string | null;
     name: string;
@@ -369,7 +379,6 @@ export type ParsedPackageName = {
 export type PackageExports = {
     require?: string | string[];
     import?: string | string[];
-    default?: string | string[];
     default?: string | string[];
     worker?: string | string[];
     browser?: string | string[];

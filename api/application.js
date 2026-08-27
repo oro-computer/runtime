@@ -74,6 +74,14 @@ export { client, menu }
  */
 
 /**
+ * Options for `setSystemMenuItemEnabled()`.
+ * @typedef {object} ApplicationMenuItemEnabledOptions
+ * @property {boolean} enabled - Whether the menu item is enabled.
+ * @property {number} indexMain - Zero-based top-level menu index.
+ * @property {number} indexSub - Zero-based submenu item index.
+ */
+
+/**
  * Maximum number of concurrently tracked application windows.
  *
  * The runtime currently caps window indices at this value when enumerating
@@ -336,7 +344,7 @@ export function getCurrentWindowIndex () {
  * @param {boolean=} [opts.frameless=false] - whether the window is frameless
  * @param {boolean=} [opts.utility=false] - whether the window is utility (macOS only)
  * @param {boolean=} [opts.shouldExitApplicationOnClose=false] - whether the window can exit the app
- * @param {boolean=} [opts.headless=false] - whether the window will be headless or not (no frame)
+ * @param {boolean=} opts.headless - overrides the project headless setting for this window
  * @param {string=} [opts.userScript=null] - A user script that will be injected into the window (desktop only)
  * @param {string[]=} [opts.protocolHandlers] - An array of protocol handler schemes to register with the new window (requires service worker)
  * @param {Record<string, string|number|boolean|(string|number|boolean)[]>=} [opts.config] - additional configuration key/value pairs
@@ -373,6 +381,7 @@ export async function createWindow (opts) {
       ? opts.config
       : (serializeConfig(opts?.config) ?? '')
 
+  /** @type {Record<string, any>} */
   const options = {
     targetWindowIndex: Number.isFinite(opts.index) ? opts.index : -1,
     url: formatURL(opts.path),
@@ -414,12 +423,15 @@ export async function createWindow (opts) {
     minHeight: opts.minHeight ?? 0,
     maxWidth: opts.maxWidth ?? '100%',
     maxHeight: opts.maxHeight ?? '100%',
-    headless: opts.headless === true,
     // @ts-ignore
     debug: opts.debug === true, // internal
     userScript: encodeURIComponent(opts.userScript ?? ''),
     __runtime_primordial_overrides__: runtimePrimordialOverrides,
     config
+  }
+
+  if (typeof opts.headless === 'boolean') {
+    options.headless = opts.headless
   }
 
   if (Array.isArray(opts?.protocolHandlers)) {
@@ -534,7 +546,7 @@ function throwOnInvalidIndex (index) {
     index === undefined ||
     typeof index !== 'number' ||
     !Number.isInteger(index) ||
-    index < -1
+    index < 0
   ) {
     throw new Error(
       `Invalid window index: ${index} (must be a positive integer number)`
@@ -740,7 +752,7 @@ export async function setTrayMenu (options) {
 
 /**
  * Set the enabled state of the system menu.
- * @param {object} value - an options object
+ * @param {ApplicationMenuItemEnabledOptions} value - an options object
  * @return {Promise<ipc.Result>}
  */
 export async function setSystemMenuItemEnabled (value) {

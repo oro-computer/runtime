@@ -32,11 +32,12 @@ function installNativeListener () {
 
   globalThis.addEventListener('data', (event) => {
     const { detail } = event || {}
-    const { source, params } = detail || {}
-    if (!source || !params) return
+    const params = detail?.params || {}
+    const source = params.source || detail?.source
+    const { data, err } = params
+    if (!source) return
     if (!source.startsWith('hci.')) return
 
-    const { data, err } = params
     const id = data?.id ?? err?.id
     if (id == null) return
 

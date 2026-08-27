@@ -37,21 +37,7 @@ export class Promise extends globalThis.Promise<any> {
      * @param {ResolverFunction} resolver
      */
     constructor(resolver: ResolverFunction);
-    [resourceSymbol]: {
-        [x: number]: () => import("../gc.js").Finalizer;
-        "__#private@#type": any;
-        "__#private@#destroyed": boolean;
-        "__#private@#asyncId": number;
-        "__#private@#triggerAsyncId": any;
-        "__#private@#requireManualDestroy": boolean;
-        get type(): string;
-        get destroyed(): boolean;
-        asyncId(): number;
-        triggerAsyncId(): number;
-        emitDestroy(): CoreAsyncResource;
-        bind(fn: Function, thisArg?: object | undefined): Function;
-        runInAsyncScope(fn: Function, thisArg?: object | undefined, ...args?: any[]): any;
-    };
+    [resourceSymbol]: asyncHooks.CoreAsyncResource;
 }
 export namespace Promise {
     function all(iterable: any): any;

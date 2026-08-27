@@ -24,6 +24,11 @@ let isApplicationPaused = false
  */
 let defaultConduitPort = globalThis.__args.conduit?.port || 0
 
+const defaultConduitHostname = (() => {
+  const hostname = globalThis.__args.conduit?.hostname || '127.0.0.1'
+  return hostname === '0.0.0.0' ? '127.0.0.1' : hostname
+})()
+
 /**
  * Determines if the current runtime should mirror pause/resume semantics for Conduit.
  * Desktop platforms emit focus/blur as applicationpause/resume, which should not
@@ -291,7 +296,19 @@ export class Conduit extends EventTarget {
     this.sharedKey = options.sharedKey || this.sharedKey
     // @ts-ignore
     this.port = this.constructor.port
-    this.connect()
+    this.connect().catch((error) => {
+      if (this.isErroring) return
+      this.socket = null
+      this.isActive = false
+      this.isConnecting = false
+      this.isErroring = true
+      this.dispatchEvent(
+        new ErrorEvent('error', {
+          error,
+          message: error?.message || 'Failed to connect Conduit'
+        })
+      )
+    })
 
     pool.add(this)
     gc.ref(this)
@@ -302,7 +319,7 @@ export class Conduit extends EventTarget {
    * @type {string}
    */
   get url () {
-    return `ws://localhost:${this.port}/${this.id}/${client.top.id}?key=${this.sharedKey || ''}`
+    return `ws://${defaultConduitHostname}:${this.port}/${this.id}/${client.top.id}?key=${this.sharedKey || ''}`
   }
 
   /**
@@ -392,12 +409,22 @@ export class Conduit extends EventTarget {
    */
   async connect (callback = null) {
     if (this.isConnecting) {
-      callback(new Error('Application is connecting'))
+      const error = new Error('Application is connecting')
+      if (typeof callback === 'function') {
+        callback(error)
+      } else {
+        throw error
+      }
       return this
     }
 
     if (isApplicationPaused) {
-      callback(new Error('Application is paused'))
+      const error = new Error('Application is paused')
+      if (typeof callback === 'function') {
+        callback(error)
+      } else {
+        throw error
+      }
       return this
     }
 
@@ -426,7 +453,12 @@ export class Conduit extends EventTarget {
     await Conduit.waitForActiveState()
 
     if (isApplicationPaused) {
-      callback(new Error('Application is paused'))
+      const error = new Error('Application is paused')
+      if (typeof callback === 'function') {
+        callback(error)
+      } else {
+        throw error
+      }
       return this
     }
 

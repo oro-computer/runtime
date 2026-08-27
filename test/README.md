@@ -14,6 +14,14 @@ Key targets:
 
 Run `node ./scripts/run.js --list-targets` to see the complete list.
 
+Before running a target, distinguish runtime source bootstrap from the test
+target itself. A non-empty `NO_ANDROID` disables only Android bootstrap and
+artifacts; a non-empty `NO_IOS` disables only iOS/iOS Simulator work on macOS.
+They are independent presence flags, so `0`/`false` still disable the named
+target. Use both only for a desktop-only runtime rebuild, and do not set the
+variable for a mobile target you intend to test. See
+[Source-build environment](../docs/BUILD_ENVIRONMENT.md).
+
 ### Developer Ergonomics
 
 - `--quick` skips native test extensions, reuses the staged workdir/fixtures, and disables the strict lifecycle pass for faster iteration.

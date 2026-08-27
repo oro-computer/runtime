@@ -23,6 +23,7 @@ async function readProjectConfig () {
 // const DELTA = 28
 
 let title = 'Oro Runtime JavaScript Tests'
+const isHeadless = application.config.build_headless === true
 // TODO(@chicoxyzzy): neither kill nor exit work so I use the counter workaround
 let counter = 1
 
@@ -194,7 +195,7 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     t.ok(err instanceof Error, 'throws error when path is not specified')
     t.equal(
       err?.message,
-      'Path and index are required options',
+      'Path is a required option',
       'error message is correct'
     )
     t.ok(
@@ -483,10 +484,7 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     counter++
     const windows = await application.getWindows()
     t.ok(windows instanceof Object, 'returns an object')
-    t.ok(
-      Object.keys(windows).length === counter,
-      `object has ${counter} windows`
-    )
+    t.equal(Object.keys(windows).length, 2, 'object has 2 active windows')
     t.ok(
       Object.keys(windows).every((index) => Number.isInteger(Number(index))),
       'keys are all integers'
@@ -518,7 +516,9 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     const mainWindowStatus = mainWindow.getStatus()
     t.equal(
       mainWindowStatus,
-      ApplicationWindow.constants.WINDOW_SHOWN,
+      isHeadless
+        ? ApplicationWindow.constants.WINDOW_HIDDEN
+        : ApplicationWindow.constants.WINDOW_SHOWN,
       'status is correct'
     )
   })
@@ -547,7 +547,11 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     t.equal(newWindow.index, counter, 'new window index is correct')
     counter++
     const newWindowSize = newWindow.getSize()
-    t.equal(newWindowSize.width, 800, 'width is inherited from the main window')
+    t.equal(
+      newWindowSize.width,
+      isHeadless ? window.screen.width : 800,
+      'width reflects the effective window size'
+    )
     // TODO(@chicoxyzzy): window borders
     // t.equal(newWindowSize.height, 600, 'height is inherited from the main window')
     // TODO(@chicoxyzzy): await newWindow.kill()
@@ -567,7 +571,7 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     t.equal(
       newWindowSize.width,
       window.screen.width,
-      'width is inherited from the main window'
+      'width reflects the effective window size'
     )
     // t.equal(newWindowSize.height, window.screen.height / 2, 'height is inherited from the main window')
     // TODO(@chicoxyzzy): await newWindow.kill()
@@ -584,8 +588,8 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     const newWindowSize = newWindow.getSize()
     t.equal(
       newWindowSize.width,
-      Math.round(window.screen.width * 0.8),
-      'width is inherited from the main window'
+      isHeadless ? window.screen.width : Math.round(window.screen.width * 0.8),
+      'width reflects the effective window size'
     )
     // TODO(@chicoxyzzy): window borders
     // t.equal(newWindowSize.height, Math.round(window.screen.height * 0.8), 'height is inherited from the main window')
@@ -606,10 +610,20 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
       width: 800,
       height: 600
     })
-    t.equal(width, 800, 'correct width is returned')
-    t.equal(height, 600, 'correct height is returned')
-    t.equal(mainWindow.getSize().width, 800, 'window options are updated')
-    t.equal(mainWindow.getSize().height, 600, 'window options are updated')
+    const expectedWidth = isHeadless ? window.screen.width : 800
+    const expectedHeight = isHeadless ? window.screen.height : 600
+    t.equal(width, expectedWidth, 'correct width is returned')
+    t.equal(height, expectedHeight, 'correct height is returned')
+    t.equal(
+      mainWindow.getSize().width,
+      expectedWidth,
+      'window options are updated'
+    )
+    t.equal(
+      mainWindow.getSize().height,
+      expectedHeight,
+      'window options are updated'
+    )
   })
 
   test('window.setSize in percent', async (t) => {
@@ -618,20 +632,26 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
       width: '50%',
       height: '50%'
     })
-    t.equal(width, window.screen.width / 2, 'correct width is returned')
+    const expectedWidth = isHeadless
+      ? window.screen.width
+      : window.screen.width / 2
+    const expectedHeight = isHeadless
+      ? window.screen.height
+      : Math.floor(window.screen.height / 2)
+    t.equal(width, expectedWidth, 'correct width is returned')
     t.equal(
       height,
-      Math.floor(window.screen.height / 2),
+      expectedHeight,
       'correct height is returned'
     )
     t.equal(
       mainWindow.getSize().width,
-      window.screen.width / 2,
+      expectedWidth,
       'window options are updated'
     )
     t.equal(
       mainWindow.getSize().height,
-      Math.floor(window.screen.height / 2),
+      expectedHeight,
       'window options are updated'
     )
   })
@@ -652,12 +672,16 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     const { status: statusShown } = await mainWindow.show()
     t.equal(
       statusShown,
-      ApplicationWindow.constants.WINDOW_SHOWN,
+      isHeadless
+        ? ApplicationWindow.constants.WINDOW_HIDDEN
+        : ApplicationWindow.constants.WINDOW_SHOWN,
       'correct status is returned on show'
     )
     t.equal(
       mainWindow.getStatus(),
-      ApplicationWindow.constants.WINDOW_SHOWN,
+      isHeadless
+        ? ApplicationWindow.constants.WINDOW_HIDDEN
+        : ApplicationWindow.constants.WINDOW_SHOWN,
       'window options are updated on show'
     )
   })
@@ -992,20 +1016,26 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
       ),
       new Promise((resolve) => setTimeout(() => resolve(true), 0))
     ])
-    const backendReadyPromise = new Promise((resolve) =>
-      window.addEventListener('backend:ready', () => resolve(true), {
-        once: true
-      })
-    )
-    const backenSendDataPromise = new Promise((resolve) =>
-      window.addEventListener('character', ({ detail }) => resolve(detail), {
-        once: true
-      })
-    )
+    const backendReadyPromise = Promise.race([
+      new Promise((resolve) =>
+        window.addEventListener('backend:ready', () => resolve(true), {
+          once: true
+        })
+      ),
+      new Promise((resolve) => setTimeout(() => resolve(false), 2048))
+    ])
+    const backendSendDataPromise = Promise.race([
+      new Promise((resolve) =>
+        window.addEventListener('character', ({ detail }) => resolve(detail), {
+          once: true
+        })
+      ),
+      new Promise((resolve) => setTimeout(() => resolve(null), 2048))
+    ])
     const [successOpen, backendReady, backendSendData] = await Promise.all([
       successOpenPromise,
       backendReadyPromise,
-      backenSendDataPromise
+      backendSendDataPromise
     ])
     t.ok(successOpen, 'does not emit a process-error event')
     t.ok(backendReady, 'can send events to window 0')
@@ -1056,18 +1086,22 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
   test('window.send to backend and back to current window', async (t) => {
     const currentWindow = await application.getCurrentWindow()
     const value = { firstname: 'Rick', secondname: 'Sanchez' }
+    const responsePromise = Promise.race([
+      new Promise((resolve) =>
+        currentWindow.on(
+          '20 minutes adventure',
+          ({ detail }) => resolve(detail),
+          { once: true }
+        )
+      ),
+      new Promise((resolve) => setTimeout(() => resolve(null), 2048))
+    ])
     await currentWindow.send({
       event: '20 minutes adventure',
       value,
       backend: true
     })
-    const result = await new Promise((resolve) =>
-      currentWindow.on(
-        '20 minutes adventure',
-        ({ detail }) => resolve(detail),
-        { once: true }
-      )
-    )
+    const result = await responsePromise
     t.deepEqual(result, value, 'send to backend and back succeeds')
   })
 

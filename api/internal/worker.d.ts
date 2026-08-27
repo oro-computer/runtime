@@ -32,9 +32,9 @@ export const RUNTIME_WORKER_ID: string;
 export const worker: object;
 /**
  * A reference to the global worker scope.
- * @type {WorkerGlobalScope}
+ * @type {object}
  */
-export const self: WorkerGlobalScope;
+export const self: object;
 declare namespace _default {
     export { RUNTIME_WORKER_ID };
     export { removeEventListener };

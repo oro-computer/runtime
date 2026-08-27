@@ -25,8 +25,11 @@ Destroys the pipe
 \fBChildProcess (extends EventEmitter)\fR
 This is an exported `ClassDeclaration` named ``ChildProcess` (extends `EventEmitter`)`, but it does not yet have a dedicated description in the generated reference.
 .TP
-\fBconstructor()\fR
-`ChildProcess` class constructor. env?: object, stdin?: boolean, stdout?: boolean, stderr?: boolean, signal?: AbortSignal, }=} [options]
+\fBconstructor(options)\fR
+`ChildProcess` class constructor.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ChildProcessOptions; optional; default null)
 .TP
 \fBkilled()\fR
 `true` if the child process was killed with kill()`, otherwise `false`.
@@ -76,13 +79,15 @@ Kills the child process. This function throws an error if the child process has 
 .br
 \fIsignal\fR (number \\| string; required)
 .TP
-\fBspawn(command, args)\fR
+\fBspawn(command, args, options)\fR
 Spawns the child process. This function will throw an error if the process is already spawned.
 \fBParameters:\fR
 .br
-\fIcommand\fR (string; required)
+\fIcommand\fR (string; required) Executable name or path.
 .br
-\fIargs\fR (string[]; optional)
+\fIargs\fR (string[] \\| ChildProcessOptions; optional) Tokenized arguments or options.
+.br
+\fIoptions\fR (ChildProcessOptions; optional; default null) Spawn options.
 \fBReturns:\fR
 .br
 \fIChildProcess\fR
@@ -108,23 +113,53 @@ Spawns the child process. This function will throw an error if the process is al
 \fIoptions\fR ({ once?: false }; optional)
 .TP
 \fBspawn(command, args, options)\fR
-Spawns a child process exeucting `command` with `args`
+Spawns a child process executing `command` directly with `args`.
 \fBParameters:\fR
 .br
 \fIcommand\fR (string; required)
 .br
-\fIargs\fR (string[] \\| object; optional)
+\fIargs\fR (string[] \\| ChildProcessOptions; optional)
 .br
-\fIoptions\fR (object; optional; default null)
+\fIoptions\fR (ChildProcessOptions; optional; default null)
 \fBReturns:\fR
 .br
 \fIChildProcess\fR
 .TP
 \fBexec(command, options, callback)\fR
-This is an exported `FunctionDeclaration` named `exec`, but it does not yet have a dedicated description in the generated reference.
+Executes a command string through the platform shell.
+\fBParameters:\fR
+.br
+\fIcommand\fR (string; required)
+.br
+\fIoptions\fR (ExecOptions \\| ExecCallback; optional; default null)
+.br
+\fIcallback\fR (ExecCallback; optional; default null)
+\fBReturns:\fR
+.br
+\fIChildProcess & PromiseLike<{ stdout: string \\| Buffer, stderr: string \\| Buffer }>\fR
+.TP
+\fBexecFile(file, args, options, callback)\fR
+Executes a file directly with tokenized arguments.
+\fBParameters:\fR
+.br
+\fIfile\fR (string; required)
+.br
+\fIargs\fR (string[] \\| ExecFileOptions \\| ExecCallback; optional)
+.br
+\fIoptions\fR (ExecFileOptions \\| ExecCallback; optional; default null)
+.br
+\fIcallback\fR (ExecCallback; optional; default null)
+\fBReturns:\fR
+.br
+\fIChildProcess & PromiseLike<{ stdout: string \\| Buffer, stderr: string \\| Buffer }>\fR
 .TP
 \fBexecSync(command, options)\fR
-This is an exported `FunctionDeclaration` named `execSync`, but it does not yet have a dedicated description in the generated reference.
-.TP
-\fBexecFile\fR
-This is an exported `VariableDeclaration` named `execFile`, but it does not yet have a dedicated description in the generated reference.
+Executes a command string synchronously through the platform shell.
+\fBParameters:\fR
+.br
+\fIcommand\fR (string; required)
+.br
+\fIoptions\fR (ExecSyncOptions; optional)
+\fBReturns:\fR
+.br
+\fIstring \\| Buffer\fR

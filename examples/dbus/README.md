@@ -4,7 +4,13 @@ This example shows how to drive the Oro Runtime DBus bridge directly from JavaSc
 
 ## Running the example
 
-1. Build or relink the runtime so the examples bundle is available (`npm run relink` or `npm run gen && npm test` if you are refreshing everything).
+1. Build or relink the runtime so the examples bundle is available
+   (`NO_ANDROID=1 NO_IOS=1 npm run relink` for a desktop-only relink, or
+   `npm run gen && npm test` if you are refreshing everything). `NO_ANDROID`
+   disables only Android bootstrap/artifacts and `NO_IOS` disables only
+   iOS/iOS Simulator work on macOS; both are presence flags, so `0`/`false`
+   still disable the named family. See
+   [Source-build environment](../../docs/BUILD_ENVIRONMENT.md).
 2. Launch the Oro app with the provided config (`examples/oro.toml`).
 3. Open the `dbus` example from the index page.
 4. Use the buttons in the UI to connect, claim the bus name, and try each action.

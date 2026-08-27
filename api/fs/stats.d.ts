@@ -5,10 +5,10 @@ export class Stats {
     /**
      * Creates a `Stats` instance from input, optionally with `BigInt` data types
      * @param {object|Stats} [stat]
-     * @param {fromBigInt=} [fromBigInt = false]
+     * @param {boolean=} [fromBigInt = false]
      * @return {Stats}
      */
-    static from(stat?: object | Stats, fromBigInt?: any | undefined): Stats;
+    static from(stat?: object | Stats, fromBigInt?: boolean | undefined): Stats;
     /**
      * `Stats` class constructor.
      * @param {object|Stats} stat
@@ -28,6 +28,10 @@ export class Stats {
     mtimeMs: any;
     ctimeMs: any;
     birthtimeMs: any;
+    atimeNs: any;
+    mtimeNs: any;
+    ctimeNs: any;
+    birthtimeNs: any;
     atime: Date;
     mtime: Date;
     ctime: Date;

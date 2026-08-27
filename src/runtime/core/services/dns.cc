@@ -30,18 +30,12 @@ namespace oro::runtime::core::services {
 
       String code(name);
 
-      if (code.rfind("UV_EAI_", 0) == 0) {
-        code.erase(0, 3);
-        if (code == "EAI_NONAME") {
-          return "ENOTFOUND";
-        } else if (code == "EAI_NODATA") {
-          return "ENODATA";
-        }
-        return code;
-      }
-
       if (code.rfind("UV_", 0) == 0) {
         code.erase(0, 3);
+      }
+
+      if (code == "EAI_NONAME" || code == "EAI_NODATA") {
+        return "ENOTFOUND";
       }
 
       return code;

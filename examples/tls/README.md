@@ -9,6 +9,10 @@ These demos exercise the experimental `oro:tls` module with a minimal echo serve
 
 ## Generate local certificates
 
+The PEM keys checked into this example are public, test-only fixtures. Never reuse them for a
+deployed service, application, or local trust root. Generate a fresh private CA and leaf keys for
+every real environment.
+
 Use the helper script to create a certificate authority (CA) and issue matching server/client certificates:
 
 ```

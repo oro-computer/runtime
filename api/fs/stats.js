@@ -6,6 +6,10 @@ import * as exports from './stats.js'
 const isWindows = /win/i.test(os.type())
 const isAndroid = /android/i.test(os.type())
 
+function dateFromMilliseconds (value) {
+  return new Date(typeof value === 'bigint' ? Number(value) : value)
+}
+
 /**
  * @ignore
  * @param {number|bigint} mode
@@ -37,7 +41,7 @@ export class Stats {
   /**
    * Creates a `Stats` instance from input, optionally with `BigInt` data types
    * @param {object|Stats} [stat]
-   * @param {fromBigInt=} [fromBigInt = false]
+   * @param {boolean=} [fromBigInt = false]
    * @return {Stats}
    */
   static from (stat, fromBigInt = false) {
@@ -62,13 +66,13 @@ export class Stats {
         ctimeMs:
           BigInt(stat.st_ctim?.tv_sec ?? 0n) * 1000n +
           BigInt(stat.st_ctim?.tv_nsec ?? 0n) / 1000_000n,
-        atimNs:
+        atimeNs:
           BigInt(stat.st_atim?.tv_sec ?? 0n) * 1000_000_000n +
           BigInt(stat.st_atim?.tv_nsec ?? 0n),
-        mtimNs:
+        mtimeNs:
           BigInt(stat.st_mtim?.tv_sec ?? 0n) * 1000_000_000n +
           BigInt(stat.st_mtim?.tv_nsec ?? 0n),
-        ctimNs:
+        ctimeNs:
           BigInt(stat.st_ctim?.tv_sec ?? 0n) * 1000_000_000n +
           BigInt(stat.st_ctim?.tv_nsec ?? 0n),
 
@@ -126,11 +130,15 @@ export class Stats {
     this.mtimeMs = stat.mtimeMs
     this.ctimeMs = stat.ctimeMs
     this.birthtimeMs = stat.birthtimeMs
+    this.atimeNs = stat.atimeNs
+    this.mtimeNs = stat.mtimeNs
+    this.ctimeNs = stat.ctimeNs
+    this.birthtimeNs = stat.birthtimeNs
 
-    this.atime = new Date(this.atimeMs)
-    this.mtime = new Date(this.mtimeMs)
-    this.ctime = new Date(this.ctimeMs)
-    this.birthtime = new Date(this.birthtimeMs)
+    this.atime = dateFromMilliseconds(this.atimeMs)
+    this.mtime = dateFromMilliseconds(this.mtimeMs)
+    this.ctime = dateFromMilliseconds(this.ctimeMs)
+    this.birthtime = dateFromMilliseconds(this.birthtimeMs)
 
     // hack to make stats assume file is regular file because it likely
     // came from the content resolver

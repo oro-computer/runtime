@@ -1,15 +1,12 @@
 import extension from 'oro:extension'
-import process from 'oro:process'
+import test from 'oro:test'
 
-const EXIT_TIMEOUT = 500
-
-try {
-  await extension.load('runtime-core-tests')
-  setTimeout(() => process.exit(0), EXIT_TIMEOUT)
-} catch (err) {
-  if (!/failed to load/i.test(err?.message)) {
-    console.error(err.message || err)
+test('runtime core native suite', async (t) => {
+  try {
+    const runtimeCore = await extension.load('runtime-core-tests')
+    t.ok(runtimeCore.loaded, 'native suite completed successfully')
+    t.ok(await runtimeCore.unload(), 'native suite extension unloaded')
+  } catch (err) {
+    t.ifError(err)
   }
-
-  setTimeout(() => process.exit(1), EXIT_TIMEOUT)
-}
+})

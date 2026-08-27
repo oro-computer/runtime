@@ -241,7 +241,29 @@ const WRITE_UPDATE_SYNC_STATUS =
 
 const asyncIterator = Symbol.asyncIterator || Symbol('asyncIterator')
 
+/**
+ * @typedef {object} WritableStateOptions
+ * @property {number} [highWaterMark]
+ * @property {function(any): any} [map]
+ * @property {function(any): any} [mapWritable]
+ * @property {function(any): number} [byteLength]
+ * @property {function(any): number} [byteLengthWritable]
+ */
+
+/**
+ * @typedef {object} ReadableStateOptions
+ * @property {number} [highWaterMark]
+ * @property {function(any): any} [map]
+ * @property {function(any): any} [mapReadable]
+ * @property {function(any): number} [byteLength]
+ * @property {function(any): number} [byteLengthReadable]
+ */
+
 export class WritableState {
+  /**
+   * @param {any} stream
+   * @param {WritableStateOptions} [options]
+   */
   constructor (
     stream,
     {
@@ -382,6 +404,10 @@ export class WritableState {
 }
 
 export class ReadableState {
+  /**
+   * @param {any} stream
+   * @param {ReadableStateOptions} [options]
+   */
   constructor (
     stream,
     {

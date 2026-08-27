@@ -1,4 +1,4 @@
-import { spawn, exec } from 'oro:child_process'
+import { spawn, exec, execFile } from 'oro:child_process'
 import process from 'oro:process'
 import test from 'oro:test'
 import os from 'oro:os'
@@ -165,6 +165,18 @@ test('child_process.spawn POSIX quoting: quotes and trailing backslash', async (
       argWithTrailingBackslash,
       'printf preserved trailing backslash in argument'
     )
+
+    const exact = await run(printfPath, [
+      '[%s][%s][%s]',
+      '',
+      ' A ',
+      'tail '
+    ])
+    t.equal(
+      exact,
+      '[][ A ][tail ]',
+      'spawn preserved empty and edge-whitespace arguments'
+    )
   } else {
     // Fallback to echo: not as strict but still checks preservation
     const out1 = (await run('/bin/echo', [argWithQuotes])).trim()
@@ -176,6 +188,89 @@ test('child_process.spawn POSIX quoting: quotes and trailing backslash', async (
       argWithTrailingBackslash,
       'echo preserved trailing backslash in argument'
     )
+  }
+})
+
+test('child_process exec and execFile preserve exact output', async (t) => {
+  if (/win32/i.test(os.platform())) return t.pass('skipped on windows')
+
+  const shellResult = await exec("printf 'without-newline'")
+  t.equal(
+    shellResult.stdout,
+    'without-newline',
+    'exec preserved output without adding a newline'
+  )
+
+  const fileResult = await execFile('/usr/bin/printf', ['%s', 'A B'])
+  t.equal(
+    fileResult.stdout,
+    'A B',
+    'execFile invoked the executable directly with tokenized arguments'
+  )
+
+  const environmentResult = await execFile('/usr/bin/env', [], {
+    env: { ORO_CHILD_PROCESS_ENV: 'isolated' }
+  })
+  t.equal(
+    environmentResult.stdout,
+    'ORO_CHILD_PROCESS_ENV=isolated\n',
+    'an explicit environment replaces inherited values'
+  )
+})
+
+test('child_process rejects unrepresentable argv characters', (t) => {
+  t.throws(
+    () => spawn('echo', ['invalid\u0001argument']),
+    /U\+0001/,
+    'the IPC argument delimiter is rejected'
+  )
+})
+
+test('child_process preserves fast child output through close', async (t) => {
+  const results = []
+  for (let index = 0; index < 12; index++) {
+    results.push(await new Promise((resolve, reject) => {
+      const expectedStdout = `stdout-${index}`
+      const expectedStderr = `stderr-${index}`
+      const child = spawn('node', [
+        '-e',
+        `process.stdout.write(${JSON.stringify(expectedStdout)});` +
+          `process.stderr.write(${JSON.stringify(expectedStderr)})`
+      ])
+      let stdout = ''
+      let stderr = ''
+      let sawExit = false
+      const timeout = setTimeout(() => {
+        try {
+          child.kill()
+        } catch {}
+        reject(new Error(`fast child ${index} did not close`))
+      }, 5000)
+
+      child.stdout.on('data', (data) => {
+        stdout += data.toString()
+      })
+      child.stderr.on('data', (data) => {
+        stderr += data.toString()
+      })
+      child.once('exit', () => {
+        sawExit = true
+      })
+      child.once('error', (error) => {
+        clearTimeout(timeout)
+        reject(error)
+      })
+      child.once('close', () => {
+        clearTimeout(timeout)
+        resolve({ expectedStdout, expectedStderr, stdout, stderr, sawExit })
+      })
+    }))
+  }
+
+  for (const result of results) {
+    t.equal(result.stdout, result.expectedStdout, 'stdout is complete at close')
+    t.equal(result.stderr, result.expectedStderr, 'stderr is complete at close')
+    t.ok(result.sawExit, 'exit is emitted before close')
   }
 })
 

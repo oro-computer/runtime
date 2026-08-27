@@ -217,11 +217,11 @@ export class Response {
     };
     /**
      * Creates a `Response` from JSON input
-     * @param {obejct} json
+     * @param {object} json
      * @param {ResponseOptions=} [options]
      * @return {Response}
      */
-    static from(json: obejct, options?: ResponseOptions | undefined): Response;
+    static from(json: object, options?: ResponseOptions | undefined): Response;
     /**
      * `Response` class constructor.
      * @param {Request|ResponseOptions} request

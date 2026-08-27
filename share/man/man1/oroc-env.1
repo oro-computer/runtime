@@ -23,7 +23,11 @@ enable verbose output
 mirror logs to a JSON file
 .SH NOTES
 .IP \(bu 2
-Prints a curated set of CLI, runtime, toolchain, and platform variables (for example, ORO_DEBUG, ORO_VERBOSE, ORO_HOME, JAVA_HOME, ANDROID_HOME, APPLE_ID, SIGNTOOL).
+Prints a curated set of CLI, runtime, source\-bootstrap, toolchain, and platform variables (for example, ORO_DEBUG, ORO_VERBOSE, ORO_HOME, NO_ANDROID, NO_IOS, JAVA_HOME, ANDROID_HOME, APPLE_ID, SIGNTOOL).
+.IP \(bu 2
+NO_ANDROID and NO_IOS are independent presence flags for runtime source bootstrap. A non\-empty
+.PP
+NO_ANDROID disables only Android work; a non\-empty NO_IOS disables only iOS/iOS Simulator work on macOS. Values such as 0 and false still disable the named target. They do not select the application target for `oroc build \-\-platform`.
 .IP \(bu 2
 Merges [env] / env_* entries from the active configuration and from local .ororc files when present.
 .IP \(bu 2

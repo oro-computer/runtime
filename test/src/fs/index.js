@@ -4,13 +4,12 @@ import { test } from 'oro:test'
 import crypto from 'oro:crypto'
 import path from 'oro:path'
 import fs from 'oro:fs'
+import { FileHandle } from 'oro:fs/handle'
 import os from 'oro:os'
 import process from 'oro:process'
+import FIXTURES from '../fixtures.js'
 
 const TMPDIR = `${os.tmpdir()}${path.sep}`
-const FIXTURES = /android/i.test(os.platform())
-  ? '/data/local/tmp/oro-test-fixtures/'
-  : `${TMPDIR}oro-test-fixtures${path.sep}`
 
 test('fs.access', async (t) => {
   const { F_OK, R_OK, W_OK, X_OK } = fs.constants
@@ -593,28 +592,37 @@ if (os.platform() !== 'android') {
       const hardStats = fs.statSync(hard)
       t.ok(hardStats.isFile(), 'hard link created')
       // create symlink and read its target
-      fs.symlink(src, sym, (err) => {
-        if (err) {
-          t.comment('symlink not allowed by policy; skipping readlinkSync')
-          // cleanup hardlink
+      await new Promise((resolve) => {
+        fs.symlink(src, sym, (err) => {
+          if (err) {
+            t.comment('symlink not allowed by policy; skipping readlinkSync')
+            try {
+              fs.unlinkSync(hard)
+            } catch {}
+            t.pass('linkSync covered')
+            return resolve()
+          }
+
           try {
-            fs.unlinkSync(hard)
-          } catch {}
-          return t.pass('linkSync covered')
-        }
-        const target = fs.readlinkSync(sym)
-        t.ok(typeof target === 'string', 'readlinkSync returns string')
-        t.ok(
-          target.endsWith('/file.txt') || target.endsWith('\\file.txt'),
-          'symlink target path'
-        )
-        try {
-          fs.unlinkSync(sym)
-        } catch {}
-        try {
-          fs.unlinkSync(hard)
-        } catch {}
-        t.pass('readlinkSync tested')
+            const target = fs.readlinkSync(sym)
+            t.ok(typeof target === 'string', 'readlinkSync returns string')
+            t.ok(
+              target.endsWith('/file.txt') || target.endsWith('\\file.txt'),
+              'symlink target path'
+            )
+            t.pass('readlinkSync tested')
+          } catch (err) {
+            t.fail(err)
+          } finally {
+            try {
+              fs.unlinkSync(sym)
+            } catch {}
+            try {
+              fs.unlinkSync(hard)
+            } catch {}
+            resolve()
+          }
+        })
       })
     } catch {
       t.comment('linkSync not allowed by policy; skipping')
@@ -705,6 +713,7 @@ if (os.platform() !== 'android') {
     const after = fs.statSync(target)
     t.ok(after.atimeMs >= at.getTime() - 1500, 'atime updated via fd')
     t.ok(after.mtimeMs >= mt.getTime() - 1500, 'mtime updated via fd')
+    t.ok(fs.fstatSync(fd).isFile(), 'descriptor remains open after futimes')
     fs.closeSync(fd)
   })
 }
@@ -832,10 +841,15 @@ test('fs.symlink', async (t) => {
 
       t.pass('The symlink is made without error')
 
-      // TODO: Update this when realpath is fixed
-      fs.realpath(dest, (resolvedPath) => {
+      fs.realpath(dest, (err, resolvedPath) => {
+        if (err) {
+          t.fail(err)
+          return resolve()
+        }
+
         t.ok(
-          resolvedPath.endsWith('/file.txt'),
+          resolvedPath.endsWith('/file.txt') ||
+            resolvedPath.endsWith('\\file.txt'),
           'link path matches the actual path'
         )
 
@@ -844,7 +858,7 @@ test('fs.symlink', async (t) => {
             t.fail(err)
             return resolve()
           }
-          t.ok('The synlink is removed')
+          t.pass('The symlink is removed')
           return resolve()
         })
       })
@@ -1196,44 +1210,51 @@ if (os.platform() !== 'android') {
     let l1 = 0
     let l2 = 0
     await new Promise((resolve) => {
+      let phase = 0
+      let settled = false
+      let safetyTimer = null
+      const finish = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(safetyTimer)
+        fs.unwatchFile(file)
+        try {
+          fs.rmSync(file, { force: true })
+        } catch {}
+        resolve()
+      }
       const listener1 = () => {
         l1++
       }
       const listener2 = () => {
         l2++
+        if (phase === 0) {
+          phase = 1
+          fs.unwatchFile(file, listener1)
+          setTimeout(() => {
+            try {
+              fs.appendFileSync(file, 'C')
+            } catch {}
+          }, 100)
+        } else if (phase === 1) {
+          phase = 2
+          t.ok(l1 >= 1, 'listener1 fired at least once')
+          t.ok(l2 >= 2, 'listener2 fired twice')
+          t.ok(l1 < l2, 'listener1 did not fire for second change')
+          finish()
+        }
       }
       fs.watchFile(file, { interval: 40 }, listener1)
       fs.watchFile(file, { interval: 40 }, listener2)
-      // First change: both fire
       setTimeout(() => {
         try {
           fs.appendFileSync(file, 'B')
         } catch {}
       }, 80)
-      // After some time, unwatch only listener1
-      setTimeout(() => {
-        fs.unwatchFile(file, listener1)
-      }, 200)
-      // Second change: only listener2 should fire
-      setTimeout(() => {
-        try {
-          fs.appendFileSync(file, 'C')
-        } catch {}
-      }, 260)
-      // Evaluate
-      setTimeout(() => {
-        try {
-          t.ok(l1 >= 1, 'listener1 fired at least once')
-          t.ok(l2 >= 2, 'listener2 fired twice')
-          t.ok(l1 < l2, 'listener1 did not fire for second change')
-        } finally {
-          fs.unwatchFile(file)
-          try {
-            fs.rmSync(file, { force: true })
-          } catch {}
-          resolve()
-        }
-      }, 600)
+      safetyTimer = setTimeout(() => {
+        t.fail(`watchFile listeners stalled in phase ${phase}`)
+        finish()
+      }, 2000)
     })
   })
 
@@ -1244,8 +1265,10 @@ if (os.platform() !== 'android') {
     )
     fs.writeFileSync(file, 'X')
     await new Promise((resolve) => {
+      let fired = false
       const listener = (curr, prev) => {
         try {
+          fired = true
           t.equal(typeof curr.size, 'bigint', 'curr.size is bigint')
           t.equal(typeof prev.size, 'bigint', 'prev.size is bigint')
         } finally {
@@ -1262,6 +1285,16 @@ if (os.platform() !== 'android') {
           fs.appendFileSync(file, 'Y')
         } catch {}
       }, 80)
+      setTimeout(() => {
+        if (!fired) {
+          fs.unwatchFile(file, listener)
+          try {
+            fs.rmSync(file, { force: true })
+          } catch {}
+          t.fail('bigint watchFile did not fire')
+          resolve()
+        }
+      }, 1000)
     })
   })
 
@@ -1276,7 +1309,7 @@ if (os.platform() !== 'android') {
           t.fail(err)
           return resolve()
         }
-        const fh = require('oro:fs/handle').FileHandle.from(fd)
+        const fh = FileHandle.from(fd)
         const parts = [
           Buffer.from('foo'),
           Buffer.from('bar'),
@@ -1305,7 +1338,7 @@ if (os.platform() !== 'android') {
           t.fail(err)
           return resolve()
         }
-        const fh = require('oro:fs/handle').FileHandle.from(fd)
+        const fh = FileHandle.from(fd)
         const a = Buffer.alloc(3)
         const b = Buffer.alloc(3)
         const c = Buffer.alloc(3)

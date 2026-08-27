@@ -1,12 +1,6 @@
 import { test } from 'oro:test'
 import fs from 'oro:fs'
-import os from 'oro:os'
-import path from 'oro:path'
-
-const TMPDIR = `${os.tmpdir()}${path.sep}`
-const FIXTURES = /android/i.test(os.platform())
-  ? '/data/local/tmp/oro-test-fixtures/'
-  : `${TMPDIR}oro-test-fixtures${path.sep}`
+import FIXTURES from '../fixtures.js'
 
 // Async promises API with bigint option
 test('fs.promises.fstat bigint returns bigints', async (t) => {

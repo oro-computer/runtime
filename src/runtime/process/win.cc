@@ -219,6 +219,7 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
         out.push_back(c);
       }
     }
+    out.append(String(bs_count, '\\'));
     out.push_back('"');
     return out;
   };
@@ -227,8 +228,24 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   String cmdline;
   if (shell == "cmd.exe") {
     cmdline = String("/d /s /c ") + (process_command.empty() ? String("") : process_command);
+  } else if (this->config.useDirectArguments) {
+    Vector<String> args {process_command};
+    if (this->config.argumentCount > 0) {
+      const auto encoded = oro::runtime::string::splitc(
+        this->argv,
+        static_cast<char>(0x01)
+      );
+      if (encoded.size() != this->config.argumentCount) {
+        return 0;
+      }
+      args.insert(args.end(), encoded.begin(), encoded.end());
+    }
+    for (size_t i = 0; i < args.size(); ++i) {
+      if (i > 0) cmdline.push_back(' ');
+      cmdline += quote_arg(args[i]);
+    }
   } else {
-    // Program path and arguments
+    // Legacy command-string mode.
     Vector<String> args;
     if (this->argv.size() > 0) {
       for (const auto& token : oro::runtime::string::splitc(this->argv, (char) 0x01)) {
@@ -243,9 +260,28 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   }
 
   // If not using shell, set application name to program path and pass only args
-  const char* applicationName = shell.size() > 0 ? shell.c_str() : (process_command.empty() ? nullptr : process_command.c_str());
+  const char* applicationName = shell.size() > 0
+    ? shell.c_str()
+    : (process_command.empty() ? nullptr : process_command.c_str());
   // CreateProcess may modify the command line buffer; ensure mutable
   std::string mutableCmd = cmdline;
+
+  Vector<char> environmentBlock;
+  if (config.replaceEnvironment) {
+    auto environment = this->env;
+    std::sort(environment.begin(), environment.end(), [](const String& left, const String& right) {
+      return oro::runtime::string::toLowerCase(left) <
+        oro::runtime::string::toLowerCase(right);
+    });
+    for (const auto& entry : environment) {
+      environmentBlock.insert(environmentBlock.end(), entry.begin(), entry.end());
+      environmentBlock.push_back('\0');
+    }
+    environmentBlock.push_back('\0');
+    if (environment.empty()) {
+      environmentBlock.push_back('\0');
+    }
+  }
 
   BOOL bSuccess = CreateProcess(
     applicationName,
@@ -254,7 +290,7 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
     nullptr,
     stdinFD || stdoutFD || stderrFD || config.inheritFDs, // Cannot be false when stdout, stderr or stdin is used
     stdinFD || stdoutFD || stderrFD ? CREATE_NO_WINDOW : 0,             // CREATE_NO_WINDOW cannot be used when stdout or stderr is redirected to parent process
-    nullptr,
+    config.replaceEnvironment ? environmentBlock.data() : nullptr,
     path.empty() ? nullptr : path.c_str(),
     &startup_info,
     &process_info
@@ -281,6 +317,11 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   }
 
   auto processHandle = process_info.hProcess;
+  closed = false;
+  id = process_info.dwProcessId;
+  data.id = process_info.dwProcessId;
+  data.handle = process_info.hProcess;
+
   auto t = Thread([&](HANDLE _processHandle) {
     DWORD exitCode = 0;
     try {
@@ -291,28 +332,26 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
         exitCode = -1;
       }
 
-      if (this->closed) {
-        std::cout << "Process killed. " << exitCode << std::endl;
-        return;
-      }
-
-      this->status = (exitCode <= UINT_MAX ? exitCode : WEXITSTATUS(exitCode));
-      this->closed = true;
-      if (this->onExit != nullptr)
-        this->onExit(std::to_string(this->status));
+      this->status = static_cast<int>(exitCode);
     } catch (const std::exception& e) {
       std::cerr << "Process thread exception: " << e.what() << std::endl;
-      this->closed = true;
+      this->status = -1;
+    }
+
+    this->closeFDs();
+    CloseHandle(_processHandle);
+    this->data.handle = nullptr;
+    this->closed = true;
+    if (this->onExit != nullptr) {
+      try {
+        this->onExit(std::to_string(this->status));
+      } catch (const std::exception& exception) {
+        std::cerr << "Process exit callback exception: " << exception.what() << std::endl;
+      }
     }
   }, processHandle);
 
   t.detach();
-
-  closed = false;
-  id = process_info.dwProcessId;
-
-  data.id = process_info.dwProcessId;
-  data.handle = process_info.hProcess;
 
   return process_info.dwProcessId;
 }
@@ -337,24 +376,35 @@ void Process::read() noexcept {
           break;
         }
 
-        auto b = String(buffer.get());
-        auto parts = splitc(b, '\n');
-
-        if (parts.size() > 1) {
-          Lock lock(stdoutMutex);
-
-          for (int i = 0; i < parts.size() - 1; i++) {
-            ss << parts[i];
-            String s(ss.str());
-            readStdout(s);
-            ss.str(String());
-            ss.clear();
-            ss.copyfmt(initial);
-          }
-          ss << parts[parts.size() - 1];
+        auto output = String(
+          reinterpret_cast<char*>(buffer.get()),
+          static_cast<size_t>(n)
+        );
+        Lock lock(stdoutMutex);
+        if (config.rawOutput) {
+          readStdout(output);
         } else {
-          ss << b;
+          auto parts = splitc(output, '\n');
+
+          if (parts.size() > 1) {
+            for (size_t part = 0; part + 1 < parts.size(); ++part) {
+              ss << parts[part];
+              String line(ss.str());
+              readStdout(line);
+              ss.str(String());
+              ss.clear();
+              ss.copyfmt(initial);
+            }
+            ss << parts.back();
+          } else {
+            ss << output;
+          }
         }
+      }
+
+      if (!config.rawOutput && ss.tellp() > 0) {
+        Lock lock(stdoutMutex);
+        readStdout(ss.str());
       }
     });
   }
@@ -368,7 +418,10 @@ void Process::read() noexcept {
         BOOL bSuccess = ReadFile(*stderrFD, static_cast<CHAR *>(buffer.get()), static_cast<DWORD>(config.bufferSize), &n, nullptr);
         if (!bSuccess || n == 0) break;
         Lock lock(stderrMutex);
-        readStderr(String(buffer.get()));
+        readStderr(String(
+          reinterpret_cast<char*>(buffer.get()),
+          static_cast<size_t>(n)
+        ));
       }
     });
   }
@@ -468,7 +521,7 @@ void Process::kill (PID id) noexcept {
 
   HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
-  if (snapshot) {
+  if (snapshot != INVALID_HANDLE_VALUE) {
     PROCESSENTRY32 process;
     ZeroMemory(&process, sizeof(process));
     process.dwSize = sizeof(process);
@@ -487,14 +540,13 @@ void Process::kill (PID id) noexcept {
     }
 
     CloseHandle(snapshot);
-
-    this->closed = true;
   }
 
   HANDLE process_handle = OpenProcess(PROCESS_TERMINATE, FALSE, id);
 
   if (process_handle) {
     TerminateProcess(process_handle, 2);
+    CloseHandle(process_handle);
   }
 }
 } // namespace oro::runtime::process

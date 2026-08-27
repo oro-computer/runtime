@@ -16,6 +16,6 @@
     "start": "npm test"
   },
   "dependencies": {
-    "@orocomputer/runtime": "../api"
+    "@oro-computer/runtime": "../api"
   }
 }

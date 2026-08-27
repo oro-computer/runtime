@@ -428,6 +428,7 @@ namespace oro::runtime::webview {
       }
 
       buffers.push_back(R"JAVASCRIPT(
+        const __CONFIG_NUMBER_PATTERN__ = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i
         for (const key in __RAW_CONFIG__) {
           let value = __RAW_CONFIG__[key]
 
@@ -441,16 +442,10 @@ namespace oro::runtime::webview {
             value = null
           } else if (value === 'NaN') {
             value = Number.NaN
-          } else if (value.startsWith('0x')) {
-            const parsed = parseInt(value.slice(2), 16)
-            if (!Number.isNaN(parsed)) {
-              value = parsed
-            }
-          } else {
-            const parsed = parseFloat(value)
-            if (!Number.isNaN(parsed)) {
-              value = parsed
-            }
+          } else if (/^0x[0-9a-f]+$/i.test(value)) {
+            value = Number(value)
+          } else if (__CONFIG_NUMBER_PATTERN__.test(value)) {
+            value = Number(value)
           }
 
           try { value = JSON.parse(value) } catch {}
@@ -521,7 +516,7 @@ namespace oro::runtime::webview {
                   configurable: false,
                   enumerable: false,
                   writable: false,
-                  value: String(new URL('{{pathname}}', globalThis.location.href)
+                  value: String(new URL('{{pathname}}', globalThis.location.href))
                 })
               }
             )JAVASCRIPT",

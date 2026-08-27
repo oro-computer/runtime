@@ -48,6 +48,7 @@ lerna-debug.log*
 # Node.js things
 node_modules/
 package-lock.json
+!test/package-lock.json
 
 # Default output directory
 build/
@@ -65,3 +66,6 @@ api/index.tmp.d.ts
 .npm-cache/
 ./.codex
 .codex
+
+# Locally cached MCP specification pages and generated indexes
+/docs/mcp/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/

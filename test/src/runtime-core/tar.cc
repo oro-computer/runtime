@@ -51,7 +51,7 @@ namespace oro::Tests {
 
       // Write a single entry archive into memory.
       auto* sinkPtr = new MemorySink(bytes, kCapacity);
-      ArchiveWriter writer(std::unique_ptr<MemorySink>(sinkPtr));
+      ArchiveWriter writer {std::unique_ptr<MemorySink>(sinkPtr)};
 
       const oro::runtime::String path = "large.bin";
       const uint32_t mode = 0644;
@@ -178,7 +178,7 @@ namespace oro::Tests {
       };
 
       auto* sinkPtr = new MemorySink(bytes, kCapacity);
-      ArchiveWriter writer(std::unique_ptr<MemorySink>(sinkPtr));
+      ArchiveWriter writer {std::unique_ptr<MemorySink>(sinkPtr)};
 
       const oro::runtime::String longPath =
         "very/long/path/that/exceeds/the/ustar/name/field/limits/and/therefore/needs/pax/header/filename.txt";

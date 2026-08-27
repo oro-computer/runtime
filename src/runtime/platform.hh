@@ -1,5 +1,5 @@
-#ifndef ORO_RUNTIME_PLATFORM_H
-#define ORO_RUNTIME_PLATFORM_H
+#ifndef ORO_RUNTIME_PLATFORM_HH
+#define ORO_RUNTIME_PLATFORM_HH
 
 #include "platform/system.hh"
 #include "platform/types.hh"

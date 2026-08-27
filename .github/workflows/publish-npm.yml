@@ -1,0 +1,428 @@
+name: Publish npm packages
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Signed release tag to package or publish
+        required: true
+        type: string
+      version:
+        description: Semantic version without the v prefix
+        required: true
+        type: string
+      publish:
+        description: Publish the verified tarballs to npm
+        required: false
+        default: false
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Signed release tag to package for inspection
+        required: true
+        default: v0.1.0
+        type: string
+      version:
+        description: Semantic version without the v prefix
+        required: true
+        default: 0.1.0
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_REF: ${{ inputs.ref }}
+  RELEASE_VERSION: ${{ inputs.version }}
+
+concurrency:
+  group: npm-publish-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  validate-tag:
+    name: Validate signed release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      commit_sha: ${{ steps.verify-tag.outputs.commit_sha }}
+    steps:
+      - name: Require matching version tag
+        shell: bash
+        run: |
+          expected_ref="v$RELEASE_VERSION"
+          if [[ "$RELEASE_REF" != "$expected_ref" ]]; then
+            echo >&2 "ref must be $expected_ref for version $RELEASE_VERSION"
+            exit 1
+          fi
+
+      - name: Verify annotated tag signature
+        id: verify-tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ref_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_REF")"
+          object_type="$(jq -r '.object.type' <<< "$ref_json")"
+          if [[ "$object_type" != "tag" ]]; then
+            echo >&2 "$RELEASE_REF must be an annotated, signed tag"
+            exit 1
+          fi
+
+          tag_sha="$(jq -r '.object.sha' <<< "$ref_json")"
+          verification="$(gh api "/repos/$GITHUB_REPOSITORY/git/tags/$tag_sha")"
+          if [[ "$(jq -r '.verification.verified' <<< "$verification")" != "true" ]]; then
+            reason="$(jq -r '.verification.reason' <<< "$verification")"
+            echo >&2 "$RELEASE_REF signature is not verified: $reason"
+            exit 1
+          fi
+
+          target_type="$(jq -r '.object.type' <<< "$verification")"
+          if [[ "$target_type" != "commit" ]]; then
+            echo >&2 "$RELEASE_REF must point directly to a commit, not $target_type"
+            exit 1
+          fi
+
+          commit_sha="$(jq -r '.object.sha' <<< "$verification")"
+          if [[ ! "$commit_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo >&2 "$RELEASE_REF resolved to an invalid commit SHA: $commit_sha"
+            exit 1
+          fi
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout signed release tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ steps.verify-tag.outputs.commit_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.x
+
+      - name: Verify synchronized release metadata
+        run: node ./bin/check-release-version.js "$RELEASE_VERSION"
+
+  platform-packages:
+    name: Pack ${{ matrix.package }}
+    needs: [validate-tag, top-level-packages]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: linux-x64
+            os: ubuntu-24.04
+            build_android: true
+            exclude_android: false
+            exclude_ios: true
+          - package: linux-arm64
+            os: ubuntu-24.04-arm
+            build_android: false
+            exclude_android: true
+            exclude_ios: true
+          - package: darwin-x64
+            os: macos-15-intel
+            build_android: false
+            exclude_android: true
+            exclude_ios: false
+          - package: darwin-arm64
+            os: macos-14
+            build_android: false
+            exclude_android: true
+            exclude_ios: false
+          - package: win32-x64
+            os: windows-2022
+            build_android: false
+            exclude_android: true
+            exclude_ios: true
+    env:
+      BUILD_ANDROID: ${{ matrix.build_android }}
+      EXCLUDE_ANDROID: ${{ matrix.exclude_android }}
+      EXCLUDE_IOS: ${{ matrix.exclude_ios }}
+      PACKAGE_ID: ${{ matrix.package }}
+      ORO_SKIP_PATH_PROMPT: '1'
+    steps:
+      - name: Checkout signed release tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+
+      - name: Setup Java for Android package
+        if: matrix.build_android
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '20.0.2'
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang-18 \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            curl \
+            git \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libdbus-1-dev \
+            libsystemd-dev \
+            libsoup-3.0-dev
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install automake libtool pkg-config
+
+      - name: Enable pnpm
+        shell: bash
+        run: corepack enable
+
+      - name: Install dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify synchronized release metadata
+        shell: bash
+        run: node ./bin/check-release-version.js "$RELEASE_VERSION"
+
+      - name: Configure platform package target families
+        shell: bash
+        run: |
+          if [[ "$EXCLUDE_ANDROID" == "true" ]]; then
+            echo "NO_ANDROID=1" >> "$GITHUB_ENV"
+          else
+            echo "NO_ANDROID=" >> "$GITHUB_ENV"
+          fi
+
+          if [[ "$EXCLUDE_IOS" == "true" ]]; then
+            echo "NO_IOS=1" >> "$GITHUB_ENV"
+          else
+            echo "NO_IOS=" >> "$GITHUB_ENV"
+          fi
+
+          if [[ "$BUILD_ANDROID" == "true" ]]; then
+            echo "ORO_ANDROID_CI=1" >> "$GITHUB_ENV"
+            echo "ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Windows runtime for npm package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ORO_HOME: ${{ github.workspace }}\build\npm\win32
+          PREFIX: ${{ github.workspace }}\build\npm\win32
+        run: .\bin\install.ps1 -yesdeps -verbose
+
+      - name: Build and pack platform package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          pack_dir="$RUNNER_TEMP/npm-packs"
+          mkdir -p "$pack_dir"
+          ./bin/publish-npm-modules.sh --only-platforms --yes-deps --dry-run --pack-destination "$pack_dir"
+
+      - name: Pack platform package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pack_dir="$RUNNER_TEMP/npm-packs"
+          mkdir -p "$pack_dir"
+          ./bin/publish-npm-modules.sh --only-platforms --no-rebuild --no-remove-oro-home --dry-run --pack-destination "$pack_dir"
+
+      - name: Download exact top-level tarballs for native smoke test
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: npm-pack-${{ inputs.version }}-top-level
+          path: ${{ runner.temp }}/npm-smoke-packs
+
+      - name: Smoke install exact package family on native runner
+        shell: bash
+        run: |
+          platform_archive="$RUNNER_TEMP/npm-packs/oro-computer-runtime-$PACKAGE_ID-$RELEASE_VERSION.tgz"
+          node_archive="$RUNNER_TEMP/npm-smoke-packs/oro-computer-runtime-node-$RELEASE_VERSION.tgz"
+          meta_archive="$RUNNER_TEMP/npm-smoke-packs/oro-computer-runtime-$RELEASE_VERSION.tgz"
+
+          for archive in "$platform_archive" "$node_archive" "$meta_archive"; do
+            if [[ ! -f "$archive" ]]; then
+              echo >&2 "Missing exact package tarball for smoke install: $archive"
+              exit 1
+            fi
+          done
+
+          smoke_root="$RUNNER_TEMP/npm-smoke-install"
+          npm install \
+            --prefix "$smoke_root" \
+            --no-package-lock \
+            --no-save \
+            --no-audit \
+            --no-fund \
+            "$platform_archive" \
+            "$node_archive" \
+            "$meta_archive"
+
+          node "$smoke_root/node_modules/@oro-computer/runtime/bin/oroc.js" --version
+          node "$smoke_root/node_modules/@oro-computer/runtime/bin/oroc.js" --help
+          node -e 'require(process.argv[1]); process.exit(0)' \
+            "$smoke_root/node_modules/@oro-computer/runtime-node/index.cjs"
+
+      - name: Upload platform package tarball
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: npm-pack-${{ inputs.version }}-${{ matrix.package }}
+          path: ${{ runner.temp }}/npm-packs/*.tgz
+          if-no-files-found: error
+
+  top-level-packages:
+    name: Pack Node adapter and meta-package
+    needs: validate-tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout signed release tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify synchronized release metadata
+        run: node ./bin/check-release-version.js "$RELEASE_VERSION"
+
+      - name: Pack Node adapter and meta-package
+        shell: bash
+        run: |
+          pack_dir="$RUNNER_TEMP/npm-packs"
+          mkdir -p "$pack_dir"
+          ./bin/publish-npm-modules.sh --only-top-level --no-rebuild --dry-run --pack-destination "$pack_dir"
+
+      - name: Upload top-level package tarballs
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: npm-pack-${{ inputs.version }}-top-level
+          path: ${{ runner.temp }}/npm-packs/*.tgz
+          if-no-files-found: error
+
+  publish:
+    name: Publish verified tarballs to npm
+    if: inputs.publish
+    needs: [validate-tag, platform-packages, top-level-packages]
+    environment: npm-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Setup Node.js with npm trusted publishing support
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+
+      - name: Install npm trusted publishing client
+        run: npm install --global npm@11.19.1
+
+      - name: Download exact package tarballs
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: npm-pack-${{ inputs.version }}-*
+          path: ${{ runner.temp }}/npm-packs
+          merge-multiple: true
+
+      - name: Verify complete npm package set
+        shell: bash
+        run: |
+          pack_dir="$RUNNER_TEMP/npm-packs"
+          expected=(
+            "@oro-computer/runtime-linux-x64|oro-computer-runtime-linux-x64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-linux-arm64|oro-computer-runtime-linux-arm64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-darwin-x64|oro-computer-runtime-darwin-x64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-darwin-arm64|oro-computer-runtime-darwin-arm64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-win32-x64|oro-computer-runtime-win32-x64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-node|oro-computer-runtime-node-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime|oro-computer-runtime-$RELEASE_VERSION.tgz"
+          )
+
+          shopt -s nullglob
+          archives=("$pack_dir"/*.tgz)
+          if (( ${#archives[@]} != ${#expected[@]} )); then
+            echo >&2 "Expected ${#expected[@]} npm tarballs; found ${#archives[@]}"
+            printf '%s\n' "${archives[@]}" >&2
+            exit 1
+          fi
+
+          for entry in "${expected[@]}"; do
+            package="${entry%%|*}"
+            archive="${entry#*|}"
+            if [[ ! -f "$pack_dir/$archive" ]]; then
+              echo >&2 "Missing expected npm tarball: $archive"
+              exit 1
+            fi
+
+            manifest="$(tar -xOzf "$pack_dir/$archive" package/package.json)"
+            manifest_name="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).name)' "$manifest")"
+            manifest_version="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).version)' "$manifest")"
+            if [[ "$manifest_name" != "$package" || "$manifest_version" != "$RELEASE_VERSION" ]]; then
+              echo >&2 "$archive contains $manifest_name@$manifest_version; expected $package@$RELEASE_VERSION"
+              exit 1
+            fi
+          done
+
+      - name: Publish packages in dependency order
+        shell: bash
+        run: |
+          pack_dir="$RUNNER_TEMP/npm-packs"
+          packages=(
+            "@oro-computer/runtime-linux-x64|oro-computer-runtime-linux-x64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-linux-arm64|oro-computer-runtime-linux-arm64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-darwin-x64|oro-computer-runtime-darwin-x64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-darwin-arm64|oro-computer-runtime-darwin-arm64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-win32-x64|oro-computer-runtime-win32-x64-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime-node|oro-computer-runtime-node-$RELEASE_VERSION.tgz"
+            "@oro-computer/runtime|oro-computer-runtime-$RELEASE_VERSION.tgz"
+          )
+
+          for entry in "${packages[@]}"; do
+            package="${entry%%|*}"
+            archive="$pack_dir/${entry#*|}"
+            local_integrity="sha512-$(openssl dgst -sha512 -binary "$archive" | base64 -w 0)"
+            published_integrity="$(npm view "$package@$RELEASE_VERSION" dist.integrity 2>/dev/null || true)"
+
+            if [[ -n "$published_integrity" ]]; then
+              if [[ "$published_integrity" != "$local_integrity" ]]; then
+                echo >&2 "$package@$RELEASE_VERSION already exists with different package contents"
+                exit 1
+              fi
+              echo "$package@$RELEASE_VERSION is already published with the verified integrity; skipping"
+              continue
+            fi
+
+            npm publish "$archive" --access public
+          done

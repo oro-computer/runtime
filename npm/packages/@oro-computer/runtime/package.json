@@ -1,0 +1,54 @@
+{
+  "name": "@oro-computer/runtime",
+  "version": "0.1.0",
+  "description": "Oro Runtime CLI (oroc).",
+  "type": "module",
+  "types": "./index.d.ts",
+  "bin": {
+    "oroc": "./bin/oroc.js"
+  },
+  "os": [
+    "linux",
+    "darwin",
+    "win32"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": ":"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oro-computer/runtime.git"
+  },
+  "keywords": [
+    "oro",
+    "runtime",
+    "oroc",
+    "webview",
+    "javascript",
+    "desktop",
+    "mobile"
+  ],
+  "author": "Oro Runtime Maintainers <maintainers@oro.computer>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/oro-computer/runtime/issues"
+  },
+  "homepage": "https://oro.computer/runtime",
+  "publishConfig": {
+    "access": "public"
+  },
+  "optionalDependencies": {
+    "@oro-computer/runtime-darwin-arm64": "0.1.0",
+    "@oro-computer/runtime-darwin-x64": "0.1.0",
+    "@oro-computer/runtime-linux-arm64": "0.1.0",
+    "@oro-computer/runtime-linux-x64": "0.1.0",
+    "@oro-computer/runtime-win32-x64": "0.1.0"
+  }
+}

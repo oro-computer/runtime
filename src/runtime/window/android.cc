@@ -73,6 +73,7 @@ namespace oro::runtime::window {
       .features = options.features,
       .client = this->bridge->client,
       .index = options.index,
+      .argv = options.argv,
       .userScript = options.userScript,
       .userConfig = options.userConfig,
       .conduit = {
@@ -771,6 +772,7 @@ extern "C" {
       },
       .client = window->bridge->client,
       .index = window->getOptions().index,
+      .argv = window->getOptions().argv,
       .userScript = window->getOptions().userScript,
       .userConfig = window->getOptions().userConfig,
       .conduit = {

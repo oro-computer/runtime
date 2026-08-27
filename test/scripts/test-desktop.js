@@ -4,13 +4,17 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
-  mkdirSync
+  mkdirSync,
+  symlinkSync,
+  accessSync,
+  constants as fsConstants
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { resolveOrocExecutable } from './oroc-path.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -22,6 +26,21 @@ const DEFAULT_FIXTURES_DIRNAME = 'oro-test-fixtures'
 const DEFAULT_WORKDIR_NAME = 'oro-test-work'
 const DEFAULT_STRICT_WORKDIR_NAME = 'oro-test-work-lifecycle'
 const CONFIG_BASENAMES = ['oro.toml', 'oro.ini']
+const RUNTIME_ENV_KEYS = [
+  'PWD',
+  'TMP',
+  'TEMP',
+  'TMPDIR',
+  'HOME',
+  'XDG_DATA_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_CACHE_HOME',
+  'XDG_STATE_HOME',
+  'ORO_TEST_FIXTURES_DIR',
+  'ORO_TEST_GREP',
+  'ORO_TEST_SKIP',
+  'ORO_TEST_ONLY'
+]
 
 function forEachConfigFile (dir, visitor) {
   for (const basename of CONFIG_BASENAMES) {
@@ -44,17 +63,32 @@ export function runDesktopTests (inputOptions = {}) {
 
   const fixturesDir = prepareFixtures(options, log)
   const workdirState = prepareWorkdir(options, log)
+  const entryPath = path.isAbsolute(options.entry)
+    ? options.entry
+    : path.resolve(workdirState.path, 'src', options.entry)
+  if (!existsSync(entryPath)) {
+    console.error(
+      `Test entry does not exist: ${options.entry} (resolved to ${entryPath})`
+    )
+    workdirState.cleanup()
+    return 1
+  }
 
   const childEnv = {
     ...process.env,
     ...options.env
   }
 
+  childEnv.ORO_RUNTIME_NODE_PATH ??= path.join(
+    repoRoot,
+    'npm/packages/@oro-computer/runtime-node/index.js'
+  )
+
   if (!childEnv.ORO_HOME_API) {
     childEnv.ORO_HOME_API = RUNTIME_HOME_API
   }
 
-  applyLinuxHeadlessEnv(childEnv, options.tmpdir, options.headless)
+  applyLinuxTestEnv(childEnv, options.tmpdir, options.headless)
 
   if (options.skipDesktopExtension) {
     childEnv.ORO_SKIP_DESKTOP_EXTENSION = '1'
@@ -66,8 +100,8 @@ export function runDesktopTests (inputOptions = {}) {
 
   childEnv.ORO_TEST_FIXTURES_DIR = fixturesDir
 
-  const oroc = resolveOrocExecutable(childEnv)
-  const buildArgs = createBuildArgs(options)
+  const oroc = resolveOrocExecutable(repoRoot, childEnv)
+  const buildArgs = createBuildArgs(options, fixturesDir, childEnv)
 
   const firstPass = runOroc(oroc, buildArgs, childEnv, workdirState.path)
   if (firstPass.status !== 0) {
@@ -292,13 +326,14 @@ function prepareWorkdir (options, log) {
 
   if (!existsSync(workdir)) {
     mkdirSync(workdir, { recursive: true })
-    cp(testRoot, workdir, { recursive: true })
+    copyTestApp(workdir)
     log(`workdir created → ${workdir}`)
   } else if (!options.reuseWorkdir || options.refreshWorkdir) {
-    cp(testRoot, workdir, { recursive: true })
+    copyTestApp(workdir)
     log(`workdir synced → ${workdir}`)
   } else {
-    log(`workdir reused → ${workdir}`)
+    copyTestApp(workdir)
+    log(`workdir sources updated → ${workdir}`)
   }
 
   if (options.skipTestExtensions) {
@@ -316,6 +351,24 @@ function prepareWorkdir (options, log) {
   return {
     path: workdir,
     cleanup
+  }
+}
+
+function copyTestApp (workdir) {
+  cp(testRoot, workdir, {
+    recursive: true,
+    filter: (source) => {
+      const relative = path.relative(testRoot, source)
+      const [topLevel] = relative.split(path.sep)
+      return !['build', 'node_modules', 'tmp'].includes(topLevel)
+    }
+  })
+
+  const packageScope = path.join(workdir, 'node_modules', '@oro-computer')
+  const runtimeModule = path.join(packageScope, 'runtime')
+  mkdirSync(packageScope, { recursive: true })
+  if (!existsSync(runtimeModule)) {
+    symlinkSync(RUNTIME_HOME_API, runtimeModule, 'dir')
   }
 }
 
@@ -338,8 +391,19 @@ function scrubExtensions (iniPath) {
   }
 }
 
-function createBuildArgs (options) {
-  const args = ['build', '-r', '--test', options.entry]
+function createBuildArgs (options, fixturesDir, runtimeEnv) {
+  const args = [
+    'build',
+    '-r',
+    '--test',
+    options.entry
+  ]
+  runtimeEnv.ORO_TEST_FIXTURES_DIR = fixturesDir
+  for (const name of RUNTIME_ENV_KEYS) {
+    if (runtimeEnv[name] !== undefined) {
+      args.push(`--env=${name}=${runtimeEnv[name]}`)
+    }
+  }
   if (options.prod) {
     args.push('-o', '--prod')
   }
@@ -418,27 +482,47 @@ function runOroc (oroc, args, env, cwd) {
   }
 }
 
-function applyLinuxHeadlessEnv (env, tmpdir, headless) {
-  if (process.platform !== 'linux' || !headless) return
+function applyLinuxTestEnv (env, tmpdir, headless) {
+  if (process.platform !== 'linux') return
 
-  if (!env.LIBGL_ALWAYS_SOFTWARE) {
-    env.LIBGL_ALWAYS_SOFTWARE = '1'
+  if (headless) {
+    if (!env.LIBGL_ALWAYS_SOFTWARE) {
+      env.LIBGL_ALWAYS_SOFTWARE = '1'
+    }
+
+    if (!env.WEBKIT_DISABLE_COMPOSITING_MODE) {
+      env.WEBKIT_DISABLE_COMPOSITING_MODE = '1'
+    }
+
+    if (!env.GDK_BACKEND) {
+      env.GDK_BACKEND = 'x11'
+    }
+
+    if (!env.GSK_RENDERER) {
+      env.GSK_RENDERER = 'cairo'
+    }
   }
 
-  if (!env.WEBKIT_DISABLE_COMPOSITING_MODE) {
-    env.WEBKIT_DISABLE_COMPOSITING_MODE = '1'
-  }
-
-  if (!env.GDK_BACKEND) {
-    env.GDK_BACKEND = 'x11'
-  }
-
-  if (!env.GSK_RENDERER) {
-    env.GSK_RENDERER = 'cairo'
-  }
-
-  if (!env.XDG_RUNTIME_DIR) {
+  if (!isWritableDirectory(env.XDG_RUNTIME_DIR)) {
     env.XDG_RUNTIME_DIR = path.join(tmpdir, 'oro-xdg-runtime')
+  }
+
+  const xdgHomes = {
+    XDG_DATA_HOME: 'data',
+    XDG_CONFIG_HOME: 'config',
+    XDG_CACHE_HOME: 'cache',
+    XDG_STATE_HOME: 'state'
+  }
+
+  for (const [name, basename] of Object.entries(xdgHomes)) {
+    if (!env[name]) {
+      env[name] = path.join(tmpdir, 'oro-xdg', basename)
+    }
+    mkdirSync(env[name], { recursive: true })
+  }
+
+  if (!env.TMPDIR) {
+    env.TMPDIR = tmpdir
   }
 
   mkdirSync(env.XDG_RUNTIME_DIR, {
@@ -447,35 +531,16 @@ function applyLinuxHeadlessEnv (env, tmpdir, headless) {
   })
 }
 
-function resolveOrocExecutable (env) {
-  if (env.ORO_BIN) return env.ORO_BIN
+function isWritableDirectory (directory) {
+  if (!directory) return false
 
-  const buildDir = path.join(repoRoot, 'build', 'x86_64-desktop', 'bin')
-
-  const candidates = [
-    path.join(buildDir, process.platform === 'win32' ? 'oroc.exe' : 'oroc'),
-    'oroc'
-  ]
-
-  for (const candidate of candidates) {
-    const resolved = resolveExecutableCandidate(candidate)
-    if (resolved) return resolved
+  try {
+    mkdirSync(directory, { recursive: true })
+    accessSync(directory, fsConstants.W_OK)
+    return true
+  } catch {
+    return false
   }
-
-  return 'oroc'
-}
-
-function resolveExecutableCandidate (candidate) {
-  if (path.isAbsolute(candidate)) {
-    return existsSync(candidate) ? candidate : null
-  }
-
-  const whichCmd = process.platform === 'win32' ? 'where' : 'which'
-  const result = spawnSync(whichCmd, [candidate], { stdio: 'ignore' })
-  if (result.status === 0) {
-    return candidate
-  }
-  return null
 }
 
 function printFailureHints (options) {
@@ -498,6 +563,8 @@ function printFailureHints (options) {
 
 function normalizeEntry (entry) {
   if (!entry) return './index.js'
+  if (entry.startsWith('./src/')) return `./${entry.slice('./src/'.length)}`
+  if (entry.startsWith('src/')) return `./${entry.slice('src/'.length)}`
   if (entry.startsWith('./') || entry.startsWith('../')) return entry
   if (entry.startsWith('/')) return entry
   return `./${entry}`
@@ -557,8 +624,10 @@ function parseCli (argv = process.argv.slice(2)) {
     options: {
       entry: { type: 'string' },
       strict: { type: 'boolean' },
+      'no-strict': { type: 'boolean' },
       quick: { type: 'boolean' },
       isolate: { type: 'boolean' },
+      'no-isolate': { type: 'boolean' },
       'reuse-workdir': { type: 'boolean' },
       'refresh-workdir': { type: 'boolean' },
       'keep-workdir': { type: 'boolean' },
@@ -568,6 +637,7 @@ function parseCli (argv = process.argv.slice(2)) {
       'skip-desktop-extension': { type: 'boolean' },
       debug: { type: 'boolean' },
       prod: { type: 'boolean' },
+      'no-prod': { type: 'boolean' },
       headless: { type: 'boolean' },
       workdir: { type: 'string' },
       'fixtures-dir': { type: 'string' },
@@ -598,9 +668,9 @@ function parseCli (argv = process.argv.slice(2)) {
   return {
     options: {
       entry,
-      strict: values.strict,
+      strict: values['no-strict'] ? false : values.strict,
       quick: values.quick,
-      isolate: values.isolate,
+      isolate: values['no-isolate'] ? false : values.isolate,
       reuseWorkdir: values['reuse-workdir'],
       refreshWorkdir: values['refresh-workdir'],
       keepWorkdir: values['keep-workdir'],
@@ -609,7 +679,7 @@ function parseCli (argv = process.argv.slice(2)) {
       skipTestExtensions: values['skip-test-extensions'],
       skipDesktopExtension: values['skip-desktop-extension'],
       debug: values.debug,
-      prod: values.prod,
+      prod: values['no-prod'] ? false : values.prod,
       headless: values.headless,
       workdir: values.workdir,
       fixturesDir: values['fixtures-dir'],

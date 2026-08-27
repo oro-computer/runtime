@@ -164,3 +164,5 @@ function createWorld (options) {
 if (globalThis.window === globalThis) {
   State.init()
 }
+
+export {}

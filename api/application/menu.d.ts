@@ -45,12 +45,12 @@ export class Menu extends EventTarget {
      * @ignore
      * @type {function(MenuItemEvent)?}
      */
-    set onmenuitem(onmenuitem: ((arg0: menuitemEvent) => any) | null);
+    set onmenuitem(onmenuitem: ((arg0: MenuItemEvent) => any) | null);
     /**
      * Level 1 'menuitem'` event listener.
-     * @type {function(menuitemEvent)?}
+     * @type {function(MenuItemEvent)?}
      */
-    get onmenuitem(): ((arg0: menuitemEvent) => any) | null;
+    get onmenuitem(): ((arg0: MenuItemEvent) => any) | null;
     /**
      * Set the menu layout for this `Menu` instance.
      * @param {string|object} layoutOrOptions
@@ -85,12 +85,12 @@ export class MenuContainer extends EventTarget {
      * @ignore
      * @type {function(MenuItemEvent)?}
      */
-    set onmenuitem(onmenuitem: ((arg0: menuitemEvent) => any) | null);
+    set onmenuitem(onmenuitem: ((arg0: MenuItemEvent) => any) | null);
     /**
      * Level 1 'menuitem'` event listener.
-     * @type {function(menuitemEvent)?}
+     * @type {function(MenuItemEvent)?}
      */
-    get onmenuitem(): ((arg0: menuitemEvent) => any) | null;
+    get onmenuitem(): ((arg0: MenuItemEvent) => any) | null;
     /**
      * The `TrayMenu` instance for the application.
      * @type {TrayMenu}
@@ -148,3 +148,4 @@ export const context: ContextMenu;
 export const container: MenuContainer;
 export default container;
 import ipc from '../ipc.js';
+import { MenuItemEvent } from '../internal/events.js';

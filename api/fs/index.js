@@ -43,10 +43,13 @@ import fds from './fds.js'
 import * as exports from './index.js'
 
 const kFileDescriptor = Symbol.for('oro.runtime.fs.web.FileDescriptor')
+const kFileFullName = Symbol.for('oro.runtime.fs.web.FileFullName')
+const kFileSystemHandleFullName = Symbol.for(
+  'oro.runtime.fs.web.FileSystemHandleFullName'
+)
 const kWatchFileRegistry = Symbol.for('oro.runtime.fs.watchFileRegistry')
 
 /**
- * @typedef {import('../buffer.js').Buffer} Buffer
  * @typedef {Uint8Array|Int8Array} TypedArray
  * @ignore
  */
@@ -63,14 +66,29 @@ function normalizePath (path) {
     return null
   }
 
-  if (URL.canParse(path)) {
-    const url = new URL(path)
-    if (url.origin === globalThis.location.origin) {
-      path = `./${url.pathname.slice(1)}`
+  if (typeof path === 'string') {
+    try {
+      if (URL.canParse(path)) {
+        const url = new URL(path)
+        if (url.origin === globalThis.location.origin) {
+          path = `./${url.pathname.slice(1)}`
+        }
+      }
+    } catch {
+      // Relative and platform-native paths are not required to parse as URLs.
     }
   }
 
   return path
+}
+
+function getDescriptorId (fd) {
+  const candidate = fd?.id ?? fd
+  const id = fds.id(candidate) || (fds.get(candidate) ? candidate : null)
+  if (!id) {
+    throw new Error('Invalid file descriptor.')
+  }
+  return id
 }
 
 function toSeconds (value) {
@@ -477,12 +495,12 @@ export function close (fd, callback) {
  * @param {number} fd  - fd
  */
 export function closeSync (fd) {
-  const id = fds.get(fd) || fd
+  const id = fds.id(fd) || fd
   const result = ipc.sendSync('fs.close', { id })
   if (result.err) {
     throw result.err
   }
-  fds.release(id)
+  fds.release(id, false)
 }
 
 /**
@@ -494,12 +512,12 @@ export function closeSync (fd) {
  * @see {@link https://nodejs.org/api/fs.html#fscopyfilesrc-dest-mode-callback}
  */
 export function copyFile (src, dest, flags = 0, callback) {
-  src = normalizePath(src)
-  dest = normalizePath(dest)
-
-  if (typeof src !== 'string') {
-    throw new TypeError("The argument 'src' must be a string")
+  if (typeof flags === 'function') {
+    callback = flags
+    flags = 0
   }
+
+  dest = normalizePath(dest)
 
   if (typeof dest !== 'string') {
     throw new TypeError("The argument 'dest' must be a string")
@@ -514,14 +532,25 @@ export function copyFile (src, dest, flags = 0, callback) {
   }
 
   if (src instanceof globalThis.FileSystemFileHandle) {
-    if (src.getFile()[kFileDescriptor]) {
-      src = src.getFile()[kFileDescriptor].path
-    } else {
-      src.getFile().arrayBuffer.then((arrayBuffer) => {
-        writeFile(dest, arrayBuffer, { flags }, callback)
+    Promise.resolve(src.getFile())
+      .then(async (file) => {
+        const filename =
+          file?.[kFileDescriptor]?.path ||
+          file?.[kFileFullName] ||
+          src[kFileSystemHandleFullName]
+        if (filename) {
+          copyFile(filename, dest, flags, callback)
+        } else {
+          writeFile(dest, await file.arrayBuffer(), { flags }, callback)
+        }
       })
-      return
-    }
+      .catch(callback)
+    return
+  }
+
+  src = normalizePath(src)
+  if (typeof src !== 'string') {
+    throw new TypeError("The argument 'src' must be a string")
   }
 
   ipc
@@ -1061,6 +1090,7 @@ export function openSync (path, flags = 'r', mode = 0o666, options = null) {
   }
 
   path = normalizePath(path)
+  flags = normalizeFlags(flags)
 
   const id = String(options?.id || rand64())
   const result = ipc.sendSync(
@@ -1096,7 +1126,7 @@ export function openSync (path, flags = 'r', mode = 0o666, options = null) {
  * @param {(object|function(Error|null, Dir|undefined):any)=} [options]
  * @param {string=} [options.encoding = 'utf8']
  * @param {boolean=} [options.withFileTypes = false]
- * @param {function(Error|null, Dir|undefined):any)} callback
+ * @param {function(Error|null, Dir|undefined):any} [callback]
  */
 export function opendir (path, options = {}, callback) {
   if (typeof options === 'function') {
@@ -1270,7 +1300,7 @@ export function readv (fd, buffers, position, callback = defaultCallback) {
  * @param {object|function(Error|null, (Dirent|string)[]|undefined):any} [options]
  * @param {string=} [options.encoding = 'utf8']
  * @param {boolean=} [options.withFileTypes = false]
- * @param {function(Error|null, (Dirent|string)[]):any} callback
+ * @param {function(Error|null, (Dirent|string)[]):any} [callback]
  */
 export function readdir (path, options = {}, callback) {
   if (typeof options === 'function') {
@@ -1695,7 +1725,7 @@ export function fstatSync (fd, options = null) {
  * @param {string=} [options.encoding = 'utf8']
  * @param {string=} [options.flag = 'r']
  * @param {AbortSignal|undefined} [options.signal]
- * @param {function(Error|null, Stats|undefined):any} callback
+ * @param {function(Error|null, Stats|undefined):any} [callback]
  */
 export function stat (path, options, callback) {
   if (typeof options === 'function') {
@@ -1711,36 +1741,37 @@ export function stat (path, options, callback) {
     path instanceof globalThis.FileSystemFileHandle ||
     path instanceof globalThis.FileSystemDirectoryHandle
   ) {
-    const file = path.getFile()
-
-    if (file?.[kFileDescriptor]) {
-      try {
-        file[kFileDescriptor].stat(options).then(
-          (stats) => callback(null, stats),
-          (err) => callback(err)
-        )
-      } catch (err) {
-        callback(err)
-      }
-
+    if (path[kFileSystemHandleFullName]) {
+      stat(path[kFileSystemHandleFullName], options, callback)
       return
-    } else {
+    }
+
+    if (path instanceof globalThis.FileSystemDirectoryHandle) {
       queueMicrotask(() => {
         const info = {
-          st_mode:
-            path instanceof globalThis.FileSystemDirectoryHandle
-              ? constants.S_IFDIR
-              : constants.S_IFREG,
-          st_size:
-            path instanceof globalThis.FileSystemFileHandle ? path.size : 0
+          st_mode: constants.S_IFDIR,
+          st_size: 0
         }
 
         const stats = Stats.from(info, Boolean(options?.bigint))
         callback(null, stats)
       })
-
       return
     }
+
+    Promise.resolve(path.getFile())
+      .then((file) => {
+        if (file?.[kFileDescriptor]) {
+          return file[kFileDescriptor].stat(options)
+        }
+
+        return Stats.from(
+          { st_mode: constants.S_IFREG, st_size: file?.size ?? 0 },
+          Boolean(options?.bigint)
+        )
+      })
+      .then((stats) => callback(null, stats), callback)
+    return
   }
 
   visit(path, {}, async (err, handle) => {
@@ -1769,7 +1800,7 @@ export function stat (path, options, callback) {
  * @param {string=} [options.encoding = 'utf8']
  * @param {string=} [options.flag = 'r']
  * @param {AbortSignal|undefined} [options.signal]
- * @param {function(Error|null, Stats|undefined):any} callback
+ * @param {function(Error|null, Stats|undefined):any} [callback]
  */
 export function lstat (path, options, callback) {
   if (typeof options === 'function') {
@@ -1823,7 +1854,7 @@ export function lstatSync (path, options = null) {
  * Creates a symlink of `src` at `dest`.
  * @param {string} src
  * @param {string} dest
- * @param {function(Error|null):any} callback
+ * @param {function(Error|null):any} [callback]
  */
 export function symlink (src, dest, type = null, callback) {
   let flags = 0
@@ -1970,7 +2001,7 @@ export function lchownSync (path, uid, gid) {
  * @param {string=} [options.mode = 0o666]
  * @param {string=} [options.flag = 'w']
  * @param {AbortSignal|undefined} [options.signal]
- * @param {function(Error|null):any} callback
+ * @param {function(Error|null):any} [callback]
  */
 export function writeFile (path, data, options, callback) {
   if (typeof options === 'function') {
@@ -2018,15 +2049,22 @@ export function writeFile (path, data, options, callback) {
  * @see {@link https://nodejs.org/api/fs.html#fswritefilesyncfile-data-options}
  */
 export function writeFileSync (path, data, options) {
+  if (typeof options === 'string') {
+    options = { encoding: options }
+  }
+
+  path = normalizePath(path)
+  options = options || {}
   const id = String(options?.id || rand64())
+  const flags = normalizeFlags(options.flag ?? options.flags ?? 'w')
 
   let result = ipc.sendSync(
     'fs.open',
     {
       id,
-      mode: options?.mode || 0o666,
+      mode: options.mode ?? 0o666,
       path,
-      flags: options?.flags ? normalizeFlags(options.flags) : 'w'
+      flags
     },
     options
   )
@@ -2540,11 +2578,11 @@ export function futimes (fd, atime, mtime, callback) {
   if (typeof callback !== 'function') {
     throw new TypeError('callback must be a function.')
   }
-  const handle = FileHandle.from(fd)
+  const id = getDescriptorId(fd)
   const a = toSeconds(atime)
   const m = toSeconds(mtime)
   ipc
-    .request('fs.futimes', { id: handle.id, atime: a, mtime: m })
+    .request('fs.futimes', { id, atime: a, mtime: m })
     .then((result) => {
       if (result?.err) {
         callback(result.err)
@@ -2559,11 +2597,11 @@ export function futimes (fd, atime, mtime, callback) {
  * Update atime/mtime for an fd (sync)
  */
 export function futimesSync (fd, atime, mtime) {
-  const handle = FileHandle.from(fd)
+  const id = getDescriptorId(fd)
   const a = toSeconds(atime)
   const m = toSeconds(mtime)
   const result = ipc.sendSync('fs.futimes', {
-    id: handle.id,
+    id,
     atime: a,
     mtime: m
   })

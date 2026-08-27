@@ -30,11 +30,28 @@ export class FIFO {
     peek(): any;
     isEmpty(): boolean;
 }
+/**
+ * @typedef {object} WritableStateOptions
+ * @property {number} [highWaterMark]
+ * @property {function(any): any} [map]
+ * @property {function(any): any} [mapWritable]
+ * @property {function(any): number} [byteLength]
+ * @property {function(any): number} [byteLengthWritable]
+ */
+/**
+ * @typedef {object} ReadableStateOptions
+ * @property {number} [highWaterMark]
+ * @property {function(any): any} [map]
+ * @property {function(any): any} [mapReadable]
+ * @property {function(any): number} [byteLength]
+ * @property {function(any): number} [byteLengthReadable]
+ */
 export class WritableState {
-    constructor(stream: any, { highWaterMark, map, mapWritable, byteLength, byteLengthWritable }?: {
-        highWaterMark?: number;
-        map?: any;
-    });
+    /**
+     * @param {any} stream
+     * @param {WritableStateOptions} [options]
+     */
+    constructor(stream: any, { highWaterMark, map, mapWritable, byteLength, byteLengthWritable }?: WritableStateOptions);
     stream: any;
     queue: FIFO;
     highWaterMark: number;
@@ -42,8 +59,8 @@ export class WritableState {
     error: any;
     pipeline: any;
     drains: any;
-    byteLength: any;
-    map: any;
+    byteLength: typeof defaultByteLength;
+    map: (arg0: any) => any;
     afterWrite: any;
     afterUpdateNextTick: any;
     get ended(): boolean;
@@ -58,10 +75,11 @@ export class WritableState {
     updateNextTick(): void;
 }
 export class ReadableState {
-    constructor(stream: any, { highWaterMark, map, mapReadable, byteLength, byteLengthReadable }?: {
-        highWaterMark?: number;
-        map?: any;
-    });
+    /**
+     * @param {any} stream
+     * @param {ReadableStateOptions} [options]
+     */
+    constructor(stream: any, { highWaterMark, map, mapReadable, byteLength, byteLengthReadable }?: ReadableStateOptions);
     stream: any;
     queue: FIFO;
     highWaterMark: number;
@@ -69,8 +87,8 @@ export class ReadableState {
     readAhead: boolean;
     error: any;
     pipeline: Pipeline;
-    byteLength: any;
-    map: any;
+    byteLength: typeof defaultByteLength;
+    map: (arg0: any) => any;
     pipeTo: any;
     afterRead: any;
     afterUpdateNextTick: any;
@@ -231,6 +249,21 @@ declare const _default: typeof Stream & {
     };
 };
 export default _default;
+export type WritableStateOptions = {
+    highWaterMark?: number;
+    map?: (arg0: any) => any;
+    mapWritable?: (arg0: any) => any;
+    byteLength?: (arg0: any) => number;
+    byteLengthWritable?: (arg0: any) => number;
+};
+export type ReadableStateOptions = {
+    highWaterMark?: number;
+    map?: (arg0: any) => any;
+    mapReadable?: (arg0: any) => any;
+    byteLength?: (arg0: any) => number;
+    byteLengthReadable?: (arg0: any) => number;
+};
 import web from './stream/web.js';
+declare function defaultByteLength(data: any): any;
 import { EventEmitter } from './events.js';
 declare const asyncIterator: symbol;

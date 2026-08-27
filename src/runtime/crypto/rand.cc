@@ -1,5 +1,6 @@
 #include <random>
 #include <limits>
+#include <mutex>
 
 #include "../crypto.hh"
 
@@ -11,34 +12,38 @@ namespace oro::runtime::crypto {
     return gen;
   }
 
+  static std::mutex& get_rng_mutex () {
+    static std::mutex mutex;
+    return mutex;
+  }
+
   uint64_t rand64 () {
     static std::uniform_int_distribution<uint64_t> dist(
       0,
       std::numeric_limits<uint64_t>::max()
     );
+    const std::lock_guard lock(get_rng_mutex());
     return dist(get_rng());
   }
 
-	int randint (int a, int b) {
+  int randint (int a, int b) {
     if (a == 0 && b == 0) {
       return 0;
     }
 
-    static std::random_device rd;  // non-deterministic random seed
-    static std::mt19937 gen(rd()); // mersenne twister rng
-
-    // Create a uniform distribution in the range of valid indices
-    std::uniform_int_distribution<size_t> dist(a, b);
-
-    // Generate and return a random index
-    return dist(gen);
+    if (a > b) {
+      std::swap(a, b);
+    }
+    std::uniform_int_distribution<int> dist(a, b);
+    const std::lock_guard lock(get_rng_mutex());
+    return dist(get_rng());
   }
 
-	int randint (int a) {
+  int randint (int a) {
     return randint(a, INT_MAX);
   }
 
-	int randint () {
+  int randint () {
     return randint(0, INT_MAX);
   }
 }

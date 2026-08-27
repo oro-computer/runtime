@@ -38,6 +38,6 @@ function assert_version_match () {
   fi
 }
 
-VERSION_NODE_PRIMARY=$(npm show ./npm/packages/@orocomputer/runtime-node version)
+VERSION_NODE_PRIMARY=$(npm show ./npm/packages/@oro-computer/runtime-node version)
 
-assert_version_match "@orocomputer/runtime-node" "$VERSION_NODE_PRIMARY"
+assert_version_match "@oro-computer/runtime-node" "$VERSION_NODE_PRIMARY"

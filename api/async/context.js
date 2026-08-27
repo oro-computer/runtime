@@ -392,10 +392,11 @@ export class Variable {
    * and ensuring the environment is reverted back afterwards.
    * The function allows for the modification of a specific context's
    * state in a controlled manner, ensuring that any changes can be undone.
-   * @template T, F extends AnyFunc<null>
+   * @template T
+   * @template {AnyFunc} F
    * @param {T} value
    * @param {F} fn
-   * @param {...Parameters<F>} args
+   * @param {...any} args
    * @returns {ReturnType<F>}
    */
   run (value, fn, ...args) {
@@ -444,7 +445,7 @@ export class Snapshot {
    *
    * @see {@link https://github.com/tc39/proposal-async-context/blob/master/README.md#asynccontextsnapshotwrap}
    *
-   * @template F
+   * @template {AnyFunc} F
    * @param {F} fn
    * @returns {F}
    */
@@ -469,9 +470,9 @@ export class Snapshot {
    * Runs the given function `fn` with arguments `args`, using a `null`
    * context and the current snapshot.
    *
-   * @template F extends AnyFunc<null>
+   * @template {AnyFunc} F
    * @param {F} fn
-   * @param {...Parameters<F>} args
+   * @param {...any} args
    * @returns {ReturnType<F>}
    */
   run (fn, ...args) {
@@ -484,7 +485,7 @@ export class Snapshot {
  * ensuring the environment is set to a specific `snapshot` before execution,
  * and reverted back afterwards.
  *
- * @template F extends AnyFunc<any>
+ * @template {AnyFunc} F
  * @param {F} fn
  * @param {ThisType<F>} context
  * @param {any[]} args

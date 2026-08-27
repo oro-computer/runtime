@@ -686,7 +686,7 @@ export class Reference {
   /**
    * Predicate function to determine if a `value` is an internal or external
    * script reference value.
-   * @param {amy} value
+   * @param {any} value
    * @return {boolean}
    */
   static isReference (value) {

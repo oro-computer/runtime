@@ -30,6 +30,17 @@ namespace oro::runtime::core::services {
     void setProcessStopping (const Process* process, bool stopping) {
       processStoppingStateFor(process)->store(stopping, std::memory_order_release);
     }
+
+    String encodeProcessArguments (const Vector<String>& args, size_t offset) {
+      String encoded;
+      for (size_t index = offset; index < args.size(); ++index) {
+        if (index > offset) {
+          encoded.push_back(static_cast<char>(0x01));
+        }
+        encoded += args[index];
+      }
+      return encoded;
+    }
   }
 
   bool Process::start () {
@@ -148,12 +159,7 @@ namespace oro::runtime::core::services {
       Timers::ID timer = 0;
 
       const auto command = args.size() > 0 ? args.at(0) : String("");
-      const auto argv = join(
-        args.size() > 1
-          ? Vector<String>{ args.begin() + 1, args.end() }
-          : Vector<String>{},
-        (char) 0x01
-      );
+      const auto argv = encodeProcessArguments(args, 1);
 
       auto stdoutBuffer = std::make_shared<StringStream>();
       auto stderrBuffer = std::make_shared<StringStream>();
@@ -242,6 +248,9 @@ namespace oro::runtime::core::services {
         });
       };
 
+      runtime::process::ProcessConfig processConfig;
+      processConfig.rawOutput = true;
+      processConfig.replaceEnvironment = options.replaceEnvironment;
       process.reset(new runtime::Process(
         command,
         argv,
@@ -250,12 +259,36 @@ namespace oro::runtime::core::services {
         onStdout,
         onStderr,
         onExit,
-        false
+        false,
+        processConfig
       ));
+
+      #if ORO_RUNTIME_PLATFORM_WINDOWS
+        process->shell = "cmd.exe";
+      #endif
 
       this->handles.insert_or_assign(id, process);
 
       const auto pid = process->open();
+      if (static_cast<int64_t>(pid) <= 0) {
+        completed->store(true, std::memory_order_release);
+        this->handles.erase(id);
+        const auto json = JSON::Object::Entries {
+          {"source", "child_process.exec"},
+          {"err", JSON::Object::Entries {
+            {"id", std::to_string(id)},
+            {"pid", std::to_string(pid)},
+            {"code", "ESPAWN"},
+            {"message", "Unable to start child process"}
+          }}
+        };
+        this->loop.dispatch([=, this] () {
+          if (!stopping->load(std::memory_order_acquire)) {
+            callback(seq, json, QueuedResponse{});
+          }
+        });
+        return;
+      }
 
       if (options.timeout > 0) {
         timer = this->timers.setTimeout(options.timeout, [=, this] () mutable {
@@ -354,14 +387,10 @@ namespace oro::runtime::core::services {
       }
 
       SharedPointer<runtime::Process> process = nullptr;
+      auto outputCount = std::make_shared<Atomic<uint64_t>>(0);
 
       const auto command = args.size() > 0 ? args.at(0) : String("");
-      const auto argv = join(
-        args.size() > 1
-          ? Vector<String>{ args.begin() + 1, args.end() }
-          : Vector<String>{},
-        (char) 0x01
-        );
+      const auto argv = encodeProcessArguments(args, 1);
 
       const auto onStdout = [=, this](const String& output) {
         if (
@@ -379,6 +408,7 @@ namespace oro::runtime::core::services {
         }};
 
         memcpy(bytes, output.c_str(), output.size());
+        outputCount->fetch_add(1, std::memory_order_acq_rel);
 
         QueuedResponse post;
         post.id = rand64();
@@ -413,6 +443,7 @@ namespace oro::runtime::core::services {
         }};
 
         memcpy(bytes, output.c_str(), output.size());
+        outputCount->fetch_add(1, std::memory_order_acq_rel);
 
         QueuedResponse post;
         post.id = rand64();
@@ -475,7 +506,8 @@ namespace oro::runtime::core::services {
               {"data", JSON::Object::Entries {
                 {"id", std::to_string(id)},
                 {"status", "close"},
-                {"code", code}
+                {"code", code},
+                {"outputCount", outputCount->load(std::memory_order_acquire)}
               }}
             };
 
@@ -487,6 +519,11 @@ namespace oro::runtime::core::services {
         });
       };
 
+      runtime::process::ProcessConfig processConfig;
+      processConfig.useDirectArguments = true;
+      processConfig.argumentCount = args.size() > 0 ? args.size() - 1 : 0;
+      processConfig.rawOutput = true;
+      processConfig.replaceEnvironment = options.replaceEnvironment;
       process.reset(new runtime::Process(
         command,
         argv,
@@ -495,12 +532,30 @@ namespace oro::runtime::core::services {
         onStdout,
         onStderr,
         onExit,
-        options.allowStdin
+        options.allowStdin,
+        processConfig
       ));
 
       this->handles.insert_or_assign(id, process);
 
       const auto pid = process->open();
+      if (static_cast<int64_t>(pid) <= 0) {
+        this->handles.erase(id);
+        const auto json = JSON::Object::Entries {
+          {"source", "child_process.spawn"},
+          {"err", JSON::Object::Entries {
+            {"id", std::to_string(id)},
+            {"pid", std::to_string(pid)},
+            {"code", "ESPAWN"},
+            {"message", "Unable to start child process"}
+          }}
+        };
+        return this->loop.dispatch([=, this] () {
+          if (!stopping->load(std::memory_order_acquire)) {
+            callback(seq, json, QueuedResponse{});
+          }
+        });
+      }
       const auto json = JSON::Object::Entries {
         {"source", "child_process.spawn"},
         {"data", JSON::Object::Entries {

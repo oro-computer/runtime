@@ -224,9 +224,10 @@ export class TLSServer extends EventEmitter {
     this._listening = true
     const ondata = (ev) => {
       const { detail } = ev || {}
-      const { source, params } = detail || {}
-      if (!params || source !== 'tls.server.connection') return
+      const params = detail?.params || {}
+      const source = params.source || detail?.source
       const { data } = params
+      if (source !== 'tls.server.connection' || !data) return
       if (!this._listening || data.id !== this.id) return
       const clientId = normaliseTlsHandleId()
       const r = ipc.sendSync('tls.server.accept', {
@@ -239,9 +240,10 @@ export class TLSServer extends EventEmitter {
         // Attach read listener specific to this socket
         const onread = (ev) => {
           const { detail } = ev || {}
-          const { source, params } = detail || {}
-          if (source !== 'tls.read' || !params) return
+          const params = detail?.params || {}
+          const source = params.source || detail?.source
           const { data, err } = params
+          if (source !== 'tls.read') return
           const id = data ? data.id : err ? err.id : null
           if (id !== socket.id) return
           if (err) return socket.emit('error', err)
@@ -272,9 +274,10 @@ export class TLSServer extends EventEmitter {
     }
     const onsecure = (ev) => {
       const { detail } = ev || {}
-      const { source, params } = detail || {}
-      if (!params || source !== 'tls.server.secureConnection') return
+      const params = detail?.params || {}
+      const source = params.source || detail?.source
       const { data } = params
+      if (source !== 'tls.server.secureConnection') return
       if (!data || data.serverId !== this.id) return
       // Emit rich event with negotiated info, and a simple ready event for back-compat
       const info = {
@@ -545,9 +548,10 @@ export function connect (options, cb) {
   // Await async secureConnect event once native implementation is available
   const onread = (ev) => {
     const { detail } = ev || {}
-    const { source, params } = detail || {}
-    if (source !== 'tls.read' || !params) return
+    const params = detail?.params || {}
+    const source = params.source || detail?.source
     const { data, err } = params
+    if (source !== 'tls.read') return
     const id = data ? data.id : err ? err.id : null
     if (id !== socket.id) return
     if (err) return socket.emit('error', err)
@@ -564,9 +568,10 @@ export function connect (options, cb) {
   }
   const ondata = (ev) => {
     const { detail } = ev || {}
-    const { source, params } = detail || {}
-    if (source !== 'tls.connect' || !params) return
+    const params = detail?.params || {}
+    const source = params.source || detail?.source
     const { data, err } = params
+    if (source !== 'tls.connect') return
     const eid = data ? data.id : err ? err.id : null
     if (eid !== socket.id) return
     globalThis.removeEventListener('data', ondata)
@@ -641,15 +646,16 @@ export function connect (options, cb) {
   try {
     res = ipc.sendSync('tls.connect', params, null, pinsBody)
   } catch (err) {
-    cleanupListeners()
     const e = err instanceof Error ? err : new Error('TLS connect failed')
-    if (typeof cb === 'function') cb(e)
-    socket.emit('error', e)
+    queueMicrotask(() => {
+      cleanupListeners()
+      if (typeof cb === 'function') cb(e)
+      socket.emit('error', e)
+    })
     return socket
   }
 
   if (res && res.err) {
-    cleanupListeners()
     const e = new Error(res.err?.message || 'TLS connect failed')
     if (res.err && typeof res.err === 'object') {
       if (res.err.code) e.code = res.err.code
@@ -660,8 +666,11 @@ export function connect (options, cb) {
       if (res.err.peerPin) e.peerPin = res.err.peerPin
       if (res.err.expectedPins) e.expectedPins = res.err.expectedPins
     }
-    if (typeof cb === 'function') cb(e)
-    socket.emit('error', e)
+    queueMicrotask(() => {
+      cleanupListeners()
+      if (typeof cb === 'function') cb(e)
+      socket.emit('error', e)
+    })
     return socket
   }
 
@@ -757,7 +766,7 @@ export async function clearTlsPins () {
 /**
  * Create a `sha256/<base64>` pin from a leaf certificate DER payload.
  *
- * @param {Buffer|TypedArray|DataView|ArrayBuffer} der
+ * @param {Buffer|ArrayBufferView|ArrayBuffer} der
  * @returns {Promise<string>}
  */
 export async function createTlsPinFromCertificateDer (der) {

@@ -20,7 +20,6 @@ import { CustomEvent, ErrorEvent } from '../events.js'
 import { IllegalConstructor } from '../util.js'
 import { URL, protocols } from '../url.js'
 import * as asyncHooks from './async/hooks.js'
-import { Deferred } from '../async.js'
 import { rand64 } from '../crypto.js'
 import location from '../location.js'
 import mime from '../mime.js'
@@ -569,9 +568,14 @@ class RuntimeWorker extends GlobalWorker {
                 const transfer = []
                 const message = ipc.Message.from(request.message, request.bytes)
                 const options = { bytes: message.bytes }
+                const params = { ...message.rawParams }
+                // Sequence numbers are local to each worker. Reusing them on
+                // the shared render-process bridge makes concurrent workers
+                // listen for the same response event.
+                delete params.seq
                 const promise = ipc.send(
                   message.name,
-                  message.rawParams,
+                  params,
                   options
                 )
 
@@ -613,6 +617,7 @@ class RuntimeWorker extends GlobalWorker {
   }
 
   terminate () {
+    RuntimeWorker.pool.delete(this.#id)
     globalThis.removeEventListener('data', this.#onglobaldata)
     globalThis.removeEventListener(
       'broadcastchannelmessage',
@@ -889,35 +894,27 @@ class ConcurrentQueue extends EventTarget {
 }
 
 class RuntimeQueuedResponses extends ConcurrentQueue {
-  async dispatch (id, seq, params, headers, options = null) {
-    if (options?.workerId) {
-      if (RuntimeWorker.pool.has(options.workerId)) {
-        const worker = RuntimeWorker.pool.get(options.workerId)?.deref?.()
-        if (worker) {
-          worker.postMessage({
-            __runtime_worker_event: {
-              type: 'runtime-queued-response',
-              detail: {
-                id,
-                seq,
-                params,
-                headers
-              }
-            }
-          })
-          return
-        }
-      }
-    }
+  pendingDispatch = Promise.resolve()
 
-    const promise = new Deferred()
-    await this.push(promise, 8)
+  dispatch (id, seq, params, headers, options = null) {
+    const workerId = options?.workerId || null
+    const request = this.pendingDispatch.then(() => {
+      return this.dispatchOne(id, seq, params, headers, workerId)
+    })
+    const pending = request.catch(() => {})
+    this.pendingDispatch = pending
+    return request
+  }
 
+  async dispatchOne (id, seq, params, headers, workerId) {
     if (typeof params !== 'object') {
       params = {}
     }
 
-    const result = await ipc.request(
+    // The native side has already materialized this body in memory before it
+    // evaluates the dispatch script. A synchronous read avoids leaving the
+    // shared queue blocked if a custom-scheme async XHR stalls in WebKit.
+    const result = ipc.sendSync(
       'queuedResponse',
       { id },
       {
@@ -925,14 +922,44 @@ class RuntimeQueuedResponses extends ConcurrentQueue {
       }
     )
 
-    promise.resolve()
+    const worker = workerId
+      ? RuntimeWorker.pool.get(workerId)?.deref?.()
+      : null
 
     if (result.err) {
-      this.dispatchEvent(new ErrorEvent('error', { error: result.err }))
+      if (worker) {
+        worker.postMessage({
+          __runtime_worker_event: {
+            type: 'runtime-queued-response',
+            detail: {
+              id,
+              seq,
+              params,
+              headers,
+              error: {
+                name: result.err.name,
+                message: result.err.message,
+                stack: result.err.stack
+              }
+            }
+          }
+        })
+      } else if (!workerId) {
+        this.dispatchEvent(new ErrorEvent('error', { error: result.err }))
+      }
     } else {
       const { data } = result
       const detail = { headers, params, data, id }
-      globalThis.dispatchEvent(new CustomEvent('data', { detail }))
+      if (worker) {
+        worker.postMessage({
+          __runtime_worker_event: {
+            type: 'runtime-queued-response',
+            detail
+          }
+        })
+      } else if (!workerId) {
+        globalThis.dispatchEvent(new CustomEvent('data', { detail }))
+      }
     }
   }
 }
@@ -1165,6 +1192,9 @@ hooks.onReady(async () => {
 })
 
 // symbolic globals
+// Queued response bodies form a runtime-wide ordered transport. Fetch one body
+// at a time because the native bridge exposes a single response queue shared
+// by the top-level scope and all workers.
 globals.register('RuntimeQueuedResponses', new RuntimeQueuedResponses())
 globals.register(
   'RuntimeExecution',

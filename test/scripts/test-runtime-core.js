@@ -1,9 +1,14 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import {
+  mkdirSync,
+  accessSync,
+  constants as fsConstants
+} from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { resolveOrocExecutable } from './oroc-path.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -22,15 +27,19 @@ export function runRuntimeCoreTests (inputOptions = {}) {
     env.ORO_SKIP_DESKTOP_EXTENSION = '1'
   }
 
-  applyLinuxHeadlessEnv(env, options.tmpdir, options.headless)
+  applyLinuxTestEnv(env, options.tmpdir, options.headless)
 
-  const oroc = resolveOrocExecutable(env)
+  const oroc = resolveOrocExecutable(repoRoot, env)
   const args = createArgs(options)
   const result = spawnSync(oroc, args, {
     stdio: 'inherit',
     env,
     cwd: options.cwd || testRoot
   })
+
+  if (result.error) {
+    console.error(result.error)
+  }
 
   if (
     result.status &&
@@ -42,7 +51,7 @@ export function runRuntimeCoreTests (inputOptions = {}) {
     )
   }
 
-  return result.status || 0
+  return result.status ?? (result.error ? 1 : 0)
 }
 
 export default runRuntimeCoreTests
@@ -84,36 +93,6 @@ function resolveOptions (input = {}) {
   }
 }
 
-function resolveOrocExecutable (env) {
-  if (env.ORO_BIN) return env.ORO_BIN
-
-  const buildDir = path.join(repoRoot, 'build', 'x86_64-desktop', 'bin')
-  const candidates = [
-    path.join(buildDir, process.platform === 'win32' ? 'oroc.exe' : 'oroc'),
-    'oroc'
-  ]
-
-  for (const candidate of candidates) {
-    const resolved = resolveExecutableCandidate(candidate)
-    if (resolved) return resolved
-  }
-
-  return 'oroc'
-}
-
-function resolveExecutableCandidate (candidate) {
-  if (path.isAbsolute(candidate)) {
-    return existsSync(candidate) ? candidate : null
-  }
-
-  const whichCmd = process.platform === 'win32' ? 'where' : 'which'
-  const result = spawnSync(whichCmd, [candidate], { stdio: 'ignore' })
-  if (result.status === 0) {
-    return candidate
-  }
-  return null
-}
-
 function createArgs (options) {
   const args = [
     'build',
@@ -131,33 +110,65 @@ function createArgs (options) {
   return args
 }
 
-function applyLinuxHeadlessEnv (env, tmpdir, headless) {
-  if (process.platform !== 'linux' || !headless) return
+function applyLinuxTestEnv (env, tmpdir, headless) {
+  if (process.platform !== 'linux') return
 
-  if (!env.LIBGL_ALWAYS_SOFTWARE) {
-    env.LIBGL_ALWAYS_SOFTWARE = '1'
+  if (headless) {
+    if (!env.LIBGL_ALWAYS_SOFTWARE) {
+      env.LIBGL_ALWAYS_SOFTWARE = '1'
+    }
+
+    if (!env.WEBKIT_DISABLE_COMPOSITING_MODE) {
+      env.WEBKIT_DISABLE_COMPOSITING_MODE = '1'
+    }
+
+    if (!env.GDK_BACKEND) {
+      env.GDK_BACKEND = 'x11'
+    }
+
+    if (!env.GSK_RENDERER) {
+      env.GSK_RENDERER = 'cairo'
+    }
   }
 
-  if (!env.WEBKIT_DISABLE_COMPOSITING_MODE) {
-    env.WEBKIT_DISABLE_COMPOSITING_MODE = '1'
-  }
-
-  if (!env.GDK_BACKEND) {
-    env.GDK_BACKEND = 'x11'
-  }
-
-  if (!env.GSK_RENDERER) {
-    env.GSK_RENDERER = 'cairo'
-  }
-
-  if (!env.XDG_RUNTIME_DIR) {
+  if (!isWritableDirectory(env.XDG_RUNTIME_DIR)) {
     env.XDG_RUNTIME_DIR = path.join(tmpdir, 'oro-xdg-runtime')
+  }
+
+  const xdgHomes = {
+    XDG_DATA_HOME: 'data',
+    XDG_CONFIG_HOME: 'config',
+    XDG_CACHE_HOME: 'cache',
+    XDG_STATE_HOME: 'state'
+  }
+
+  for (const [name, basename] of Object.entries(xdgHomes)) {
+    if (!env[name]) {
+      env[name] = path.join(tmpdir, 'oro-xdg', basename)
+    }
+    mkdirSync(env[name], { recursive: true })
+  }
+
+  if (!env.TMPDIR) {
+    env.TMPDIR = tmpdir
   }
 
   mkdirSync(env.XDG_RUNTIME_DIR, {
     recursive: true,
     mode: 0o700
   })
+}
+
+function isWritableDirectory (directory) {
+  if (!directory) return false
+
+  try {
+    mkdirSync(directory, { recursive: true })
+    accessSync(directory, fsConstants.W_OK)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function pickBoolean (...candidates) {

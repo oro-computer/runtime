@@ -169,13 +169,30 @@ namespace oro::runtime::process {
 
       auto thread = Thread([this] {
         int code = 0;
-        waitpid(this->id, &code, 0);
+        PID waited = -1;
+        do {
+          waited = waitpid(this->id, &code, 0);
+        } while (waited < 0 && errno == EINTR);
 
-        this->status = WEXITSTATUS(code);
+        if (waited < 0) {
+          this->status = -1;
+        } else if (WIFEXITED(code)) {
+          this->status = WEXITSTATUS(code);
+        } else if (WIFSIGNALED(code)) {
+          this->status = 128 + WTERMSIG(code);
+        } else {
+          this->status = -1;
+        }
+
+        this->closeFDs();
         this->closed = true;
 
         if (this->onExit != nullptr) {
-          this->onExit(std::to_string(status));
+          try {
+            this->onExit(std::to_string(status));
+          } catch (const std::exception& exception) {
+            std::cerr << "Process exit callback exception: " << exception.what() << std::endl;
+          }
         }
       });
 
@@ -260,6 +277,45 @@ namespace oro::runtime::process {
     #else
 
       return open([&command, &path, this] () -> int {
+        if (this->config.useDirectArguments) {
+          if (!path.empty() && chdir(path.c_str()) != 0) {
+            _exit(EXIT_FAILURE);
+          }
+
+          Vector<String> arguments {command};
+          if (this->config.argumentCount > 0) {
+            auto encoded = splitc(this->argv, static_cast<char>(0x01));
+            if (encoded.size() != this->config.argumentCount) {
+              _exit(EXIT_FAILURE);
+            }
+            arguments.insert(arguments.end(), encoded.begin(), encoded.end());
+          }
+
+          Vector<char*> argumentPointers;
+          argumentPointers.reserve(arguments.size() + 1);
+          for (auto& argument : arguments) {
+            argumentPointers.push_back(argument.data());
+          }
+          argumentPointers.push_back(nullptr);
+
+          if (this->config.replaceEnvironment) {
+            clearenv();
+          }
+          for (const auto& kv : this->env) {
+            putenv(const_cast<char*>(kv.c_str()));
+          }
+
+          #if !ORO_RUNTIME_PLATFORM_IOS
+            setpgid(0, 0);
+            #if defined(__linux__)
+              prctl(PR_SET_PDEATHSIG, SIGTERM);
+            #endif
+          #endif
+
+          execvp(command.c_str(), argumentPointers.data());
+          _exit(EXIT_FAILURE);
+        }
+
         // Build shell command line: cd '<path>' && <command><argv>
         String cmdline = command;
         if (!this->argv.empty()) {
@@ -279,7 +335,10 @@ namespace oro::runtime::process {
           cd_and_cmd = String("cd '") + esc + String("' && ") + cmdline;
         }
 
-        // Apply environment overrides in child prior to exec
+        if (this->config.replaceEnvironment) {
+          clearenv();
+        }
+        // Apply environment values in the child prior to exec.
         for (const auto& kv : this->env) {
           putenv(const_cast<char*>(kv.c_str()));
         }
@@ -352,27 +411,37 @@ namespace oro::runtime::process {
             if (n > 0) {
               if (fd_is_stdout[i]) {
                 Lock lock(stdoutMutex);
-                auto b = String(reinterpret_cast<char*>(buffer.get()));
-                auto parts = splitc(b, '\n');
-
-                if (parts.size() > 1) {
-                  for (int i = 0; i < parts.size() - 1; i++) {
-                    ss << parts[i];
-
-                    String s(ss.str());
-                    readStdout(s);
-
-                    ss.str(String());
-                    ss.clear();
-                    ss.copyfmt(initial);
-                  }
-                  ss << parts[parts.size() - 1];
+                auto output = String(
+                  reinterpret_cast<char*>(buffer.get()),
+                  static_cast<size_t>(n)
+                );
+                if (config.rawOutput) {
+                  readStdout(output);
                 } else {
-                  ss << b;
+                  auto parts = splitc(output, '\n');
+
+                  if (parts.size() > 1) {
+                    for (size_t part = 0; part + 1 < parts.size(); ++part) {
+                      ss << parts[part];
+
+                      String line(ss.str());
+                      readStdout(line);
+
+                      ss.str(String());
+                      ss.clear();
+                      ss.copyfmt(initial);
+                    }
+                    ss << parts.back();
+                  } else {
+                    ss << output;
+                  }
                 }
               } else {
                 Lock lock(stderrMutex);
-                readStderr(String(reinterpret_cast<char*>(buffer.get())));
+                readStderr(String(
+                  reinterpret_cast<char*>(buffer.get()),
+                  static_cast<size_t>(n)
+                ));
               }
             } else if (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
               pollfds[i].fd = -1;
@@ -387,6 +456,11 @@ namespace oro::runtime::process {
 
           any_open = true;
         }
+      }
+
+      if (!config.rawOutput && ss.tellp() > 0) {
+        Lock lock(stdoutMutex);
+        readStdout(ss.str());
       }
     });
   #endif

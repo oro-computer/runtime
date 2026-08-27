@@ -4,10 +4,18 @@ export class Bluetooth extends EventTarget {
     getAvailability(): Promise<boolean>;
 }
 export class BluetoothDevice extends EventTarget {
+    /**
+     * @param {object} [options]
+     * @param {string} [options.id]
+     * @param {string} [options.name]
+     * @param {string[]} [options.services]
+     * @param {any} [options.manufacturerData]
+     */
     constructor({ id, name, services, manufacturerData }?: {
         id?: string;
         name?: string;
-        services?: any[];
+        services?: string[];
+        manufacturerData?: any;
     });
     id: string;
     name: string;

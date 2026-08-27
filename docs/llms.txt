@@ -27,7 +27,15 @@ What Oro Runtime ships downstream
   - `share/man/man1` — CLI commands
   - `share/man/man3` — JavaScript and C APIs
   - `share/man/man7` — concepts, IPC, workflows, route catalogs
-- Installed high-level docs: `share/doc/oroc/{README.md,MCP.md,llms.txt}`
+- Installed high-level docs: `share/doc/oroc/{README.md,MCP.md,llms.txt}` and `share/doc/oroc/docs/BUILD_ENVIRONMENT.md`
+
+Runtime source-build target controls
+- `NO_ANDROID` and `NO_IOS` are distinct, presence-based controls for building the runtime source tree; they are not `oroc build --platform` selectors.
+- Any non-empty `NO_ANDROID` disables only Android setup, ABI libraries, and staged Android artifacts. It does not disable iOS or desktop.
+- Any non-empty `NO_IOS` disables only iOS and iOS Simulator dependency, library, prebuild, and staging work on macOS. It does not disable Android or macOS desktop.
+- `0` and `false` are non-empty and still disable the named target. Leave the variable unset or empty to enable that target.
+- Set both explicitly for desktop-only source bootstrap: `NO_ANDROID=1 NO_IOS=1 ./bin/install.sh`.
+- Canonical contract: `share/doc/oroc/docs/BUILD_ENVIRONMENT.md` in an installed runtime or `docs/BUILD_ENVIRONMENT.md` in the source tree.
 
 Recommended discovery order
 - Operational task or CLI question:
@@ -94,6 +102,7 @@ Important runtime constraints
 
 Useful installed references
 - Runtime overview: `share/doc/oroc/README.md`
+- Source-build environment: `share/doc/oroc/docs/BUILD_ENVIRONMENT.md`
 - MCP guide: `share/doc/oroc/MCP.md`
 - CLI reference: `api/CLI.md`
 - Config reference: `api/CONFIG.md`

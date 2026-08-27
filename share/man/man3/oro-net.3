@@ -7,14 +7,253 @@ import * as module from 'oro:net'
 .fi
 .SH DESCRIPTION
 .PP
-oro:net is a JavaScript API module exposed by the Oro Runtime.
+Node\-style TCP clients and servers backed by the native runtime.
 .SH REFERENCE
 .TP
+\fBTCPSocket (extends EventEmitter)\fR
+This is an exported `ClassDeclaration` named ``TCPSocket` (extends `EventEmitter`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(id, opts)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIid\fR (string \\| number \\| bigint \\| TCPSocketOptions; optional)
+.br
+\fIopts\fR (TCPSocketOptions; optional)
+.TP
+\fBconnect(port, host, cb)\fR
+Connects this socket to a remote TCP endpoint.
+\fBParameters:\fR
+.br
+\fIport\fR (number \\| TCPConnectOptions; required)
+.br
+\fIhost\fR (string \\| (() => void); optional)
+.br
+\fIcb\fR (() => void; optional)
+\fBReturns:\fR
+.br
+\fITCPSocket\fR
+.TP
+\fBwrite(chunk, encoding, cb)\fR
+Queues bytes for writing.
+\fBParameters:\fR
+.br
+\fIchunk\fR (string \\| Buffer \\| Uint8Array \\| ArrayBuffer \\| DataView; required)
+.br
+\fIencoding\fR (string \\| TCPCallback; optional)
+.br
+\fIcb\fR (TCPCallback; optional)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBaddress()\fR
+Returns this socket's local address, when available.
+\fBReturns:\fR
+.br
+\fITCPAddress \\| null\fR
+.TP
+\fBremoteAddressInfo()\fR
+Returns this socket's remote address, when connected.
+\fBReturns:\fR
+.br
+\fITCPAddress \\| null\fR
+.TP
+\fBlocalAddress()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIstring \\| undefined\fR
+.TP
+\fBlocalPort()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fInumber \\| undefined\fR
+.TP
+\fBdestroyed()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBconnecting()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBpending()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBwritableLength()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBsetNoDelay(on)\fR
+Enables or disables TCP_NODELAY.
+\fBParameters:\fR
+.br
+\fIon\fR (boolean; optional; default true)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBsetKeepAlive(on, initialDelaySec)\fR
+Enables or disables TCP keepalive.
+\fBParameters:\fR
+.br
+\fIon\fR (boolean; optional; default true)
+.br
+\fIinitialDelaySec\fR (number; optional; default 0)
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBend(chunk, encoding, cb)\fR
+Optionally writes a final chunk and half\-closes the socket.
+\fBParameters:\fR
+.br
+\fIchunk\fR (string \\| Buffer \\| Uint8Array \\| ArrayBuffer \\| DataView; optional)
+.br
+\fIencoding\fR (string \\| (() => void); optional)
+.br
+\fIcb\fR (() => void; optional)
+\fBReturns:\fR
+.br
+\fITCPSocket\fR
+.TP
+\fBsetTimeout(ms, cb)\fR
+Sets the inactivity timeout.
+\fBParameters:\fR
+.br
+\fIms\fR (number; required)
+.br
+\fIcb\fR (() => void; optional)
+\fBReturns:\fR
+.br
+\fITCPSocket\fR
+.TP
+\fBdestroy()\fR
+Closes the socket and releases its native handle.
+\fBReturns:\fR
+.br
+\fITCPSocket\fR
+.TP
+\fBTCPServer (extends EventEmitter)\fR
+This is an exported `ClassDeclaration` named ``TCPServer` (extends `EventEmitter`)`, but it does not yet have a dedicated description in the generated reference.
+.TP
+\fBconstructor(options, connectionListener)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (TCPServerOptions; optional)
+.br
+\fIconnectionListener\fR (TCPConnectionListener; optional)
+.TP
+\fBlisten(port, host, backlog, cb)\fR
+Starts accepting connections.
+\fBParameters:\fR
+.br
+\fIport\fR (number \\| TCPListenOptions; required)
+.br
+\fIhost\fR (string \\| TCPCallback; optional)
+.br
+\fIbacklog\fR (number \\| TCPCallback; optional)
+.br
+\fIcb\fR (TCPCallback; optional)
+\fBReturns:\fR
+.br
+\fITCPServer\fR
+.TP
+\fBsetTimeout(ms, cb)\fR
+Sets the inactivity timeout applied to subsequently accepted sockets.
+\fBParameters:\fR
+.br
+\fIms\fR (number; required)
+.br
+\fIcb\fR ((socket: TCPSocket) => void; optional)
+\fBReturns:\fR
+.br
+\fITCPServer\fR
+.TP
+\fBclose(cb)\fR
+Stops accepting connections and closes tracked client sockets.
+\fBParameters:\fR
+.br
+\fIcb\fR (TCPCallback; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBgetConnections(cb)\fR
+Returns the number of tracked client connections.
+\fBParameters:\fR
+.br
+\fIcb\fR ((err: Error \\| null, count: number) => void; optional)
+\fBReturns:\fR
+.br
+\fInumber\fR
+.TP
+\fBwaitClose(timeoutMs)\fR
+Waits for tracked clients to close, up to a bounded timeout.
+\fBParameters:\fR
+.br
+\fItimeoutMs\fR (number; optional; default 2000)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR
+.TP
+\fBaddress()\fR
+Returns the server's bound address, when available.
+\fBReturns:\fR
+.br
+\fITCPAddress \\| null\fR
+.TP
+\fBlistening()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
 \fBcreateServer(options, connectionListener)\fR
-This is an exported `FunctionDeclaration` named `createServer`, but it does not yet have a dedicated description in the generated reference.
+Creates a TCP server.
+\fBParameters:\fR
+.br
+\fIoptions\fR (TCPServerOptions \\| TCPConnectionListener; optional)
+.br
+\fIconnectionListener\fR (TCPConnectionListener; optional)
+\fBReturns:\fR
+.br
+\fITCPServer\fR
 .TP
-\fBcreateConnection(options, cb)\fR
-This is an exported `FunctionDeclaration` named `createConnection`, but it does not yet have a dedicated description in the generated reference.
+\fBcreateConnection(options, host, cb)\fR
+Creates and connects a TCP socket.
+\fBParameters:\fR
+.br
+\fIoptions\fR (number \\| TCPConnectOptions; required)
+.br
+\fIhost\fR (string \\| (() => void); optional)
+.br
+\fIcb\fR (() => void; optional)
+\fBReturns:\fR
+.br
+\fITCPSocket\fR
 .TP
-\fBconnect\fR
-This is an exported `VariableDeclaration` named `connect`, but it does not yet have a dedicated description in the generated reference.
+\fBconnect(options, host, cb)\fR
+Alias for {@link createConnection}.
+\fBParameters:\fR
+.br
+\fIoptions\fR (number \\| TCPConnectOptions; required)
+.br
+\fIhost\fR (string \\| (() => void); optional)
+.br
+\fIcb\fR (() => void; optional)
+\fBReturns:\fR
+.br
+\fITCPSocket\fR

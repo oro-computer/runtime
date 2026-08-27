@@ -267,6 +267,7 @@ namespace oro::runtime::window {
       .features = options.features,
       .client = this->bridge->client,
       .index = options.index,
+      .argv = options.argv,
       .userScript = options.userScript,
       .userConfig = options.userConfig,
       .conduit = {
@@ -312,6 +313,7 @@ namespace oro::runtime::window {
       },
       .client = this->bridge->client,
       .index = options.index,
+      .argv = options.argv,
       .userScript = options.userScript,
       .userConfig = options.userConfig,
       .conduit = {

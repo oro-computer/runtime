@@ -62,7 +62,7 @@ export const worker = {
 
 /**
  * A reference to the global worker scope.
- * @type {WorkerGlobalScope}
+ * @type {object}
  */
 export const self = globalThis.self || globalThis
 
@@ -80,8 +80,25 @@ if (isWorkerScope) {
         return false
       }
 
-      const { id, seq, params } = event.detail || {}
-      globals.get('RuntimeQueuedResponses').dispatch(id, seq, params)
+      const { id, seq, params, headers, data, error } = event.detail || {}
+      if (error) {
+        globalThis.reportError?.(
+          Object.assign(new Error(error.message), error)
+        )
+      } else if (data !== undefined) {
+        globalThis.dispatchEvent(
+          new CustomEvent('data', {
+            detail: { id, params, headers, data }
+          })
+        )
+      } else {
+        globals.get('RuntimeQueuedResponses').dispatch(
+          id,
+          seq,
+          params,
+          headers
+        )
+      }
     }
   )
 }

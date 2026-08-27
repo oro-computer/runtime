@@ -177,7 +177,13 @@ namespace oro::runtime::ipc {
       ]() mutable {
         context.callback(incomingMessage, this, [this, incomingMessage, callback](const auto result) mutable {
           if (result.seq == "-1") {
-            this->bridge.send(result.seq, result.str(), result.queuedResponse);
+            this->dispatcher.dispatch([this, result] {
+              this->bridge.send(
+                result.seq,
+                result.str(),
+                result.queuedResponse
+              );
+            });
           } else {
             callback(result);
           }
@@ -196,7 +202,13 @@ namespace oro::runtime::ipc {
       callback = std::move(callback)
     ](const auto result) mutable {
       if (result.seq == "-1") {
-        this->bridge.send(result.seq, result.str(), result.queuedResponse);
+        this->dispatcher.dispatch([this, result] {
+          this->bridge.send(
+            result.seq,
+            result.str(),
+            result.queuedResponse
+          );
+        });
       } else {
         callback(result);
       }

@@ -7,10 +7,16 @@ The example seeds `$HOST_HOME/.oro/navigator-mounts` with a few files, exposes i
 ## Running
 
 ```bash
-npm run relink
+NO_ANDROID=1 NO_IOS=1 npm run relink
 oroc build examples
 oroc run examples --entry navigator-mounts/index.html
 ```
+
+The two exclusions are independent source-bootstrap presence flags.
+`NO_ANDROID` disables only Android bootstrap/artifacts; `NO_IOS` disables only
+iOS/iOS Simulator work on macOS. Neither changes the target selected by
+`oroc build`, and `0`/`false` still disable the named family. See
+[Source-build environment](../../docs/BUILD_ENVIRONMENT.md).
 
 Configure the mount in the example config (`examples/oro.toml`):
 

@@ -172,6 +172,19 @@ export class Test {
   }
 
   /**
+   * Assert that two values are deeply equivalent.
+   *
+   * @template T
+   * @param {T} actual
+   * @param {T} expected
+   * @param {string} [msg]
+   * @returns {void}
+   */
+  same (actual, expected, msg) {
+    this.deepEqual(actual, expected, msg)
+  }
+
+  /**
    * @template T
    * @param {T} actual
    * @param {T} expected
@@ -258,11 +271,69 @@ export class Test {
   }
 
   /**
+   * Assert that a value is falsy.
+   *
+   * @param {unknown} actual
+   * @param {string} [msg]
+   * @returns {void}
+   */
+  notOk (actual, msg) {
+    if (this.strict && !msg) throw new Error('tapzero msg required')
+    this._assert(
+      !actual,
+      actual,
+      'falsy value',
+      msg || 'should be falsy',
+      'notOk'
+    )
+  }
+
+  /**
+   * Assert that a value matches a regular expression.
+   *
+   * @param {unknown} actual
+   * @param {RegExp} expected
+   * @param {string} [msg]
+   * @returns {void}
+   */
+  match (actual, expected, msg) {
+    if (!(expected instanceof RegExp)) {
+      throw new TypeError('t.match() expects a regular expression')
+    }
+    if (this.strict && !msg) throw new Error('tapzero msg required')
+    const pattern = new RegExp(expected.source, expected.flags)
+    this._assert(
+      pattern.test(String(actual)),
+      actual,
+      expected,
+      msg || 'should match pattern',
+      'match'
+    )
+  }
+
+  /**
    * @param {string} [msg]
    * @returns {void}
    */
   pass (msg) {
     return this.ok(true, msg)
+  }
+
+  /**
+   * Mark the current test as skipped.
+   *
+   * @param {string} [msg]
+   * @returns {void}
+   */
+  skip (msg) {
+    if (this.strict && !msg) throw new Error('tapzero msg required')
+    this._assert(
+      true,
+      'skipped',
+      'skipped',
+      `${msg || 'test skipped'} # SKIP`,
+      'skip'
+    )
   }
 
   /**
@@ -314,6 +385,50 @@ export class Test {
      * @ignore
      */
     this._assert(pass, caught, expected, message || 'show throw', 'throws')
+  }
+
+  /**
+   * Assert that a promise or async function rejects.
+   * @param {PromiseLike<any>|(() => any)} input
+   * @param {RegExp|((error: Error) => boolean)} [expected]
+   * @param {string} [message]
+   * @returns {Promise<void>}
+   */
+  async rejects (input, expected, message) {
+    if (typeof expected === 'string') {
+      message = expected
+      expected = undefined
+    }
+
+    if (this.strict && !message) throw new Error('tapzero msg required')
+
+    /** @type {Error | null} */
+    let caught = null
+    try {
+      const result = typeof input === 'function' ? input() : input
+      await result
+    } catch (err) {
+      caught = /** @type {Error} */ (err)
+    }
+
+    let pass = !!caught
+    if (expected instanceof RegExp) {
+      pass = !!(caught && expected.test(caught.message))
+    } else if (typeof expected === 'function') {
+      pass = !!(caught && expected(caught))
+    } else if (expected !== undefined) {
+      throw new Error(
+        `t.rejects() not implemented for expected: ${typeof expected}`
+      )
+    }
+
+    this._assert(
+      pass,
+      caught,
+      expected,
+      message || 'should reject',
+      'rejects'
+    )
   }
 
   // DOM Assertions

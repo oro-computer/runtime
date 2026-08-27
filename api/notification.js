@@ -1005,7 +1005,7 @@ export class Notification extends EventTarget {
 
   /**
    * `true` if the notification was closed, otherwise `false`.
-   * @type {boolea}
+   * @type {boolean}
    */
   get closed () {
     return this.#closed

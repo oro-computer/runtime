@@ -2238,13 +2238,14 @@ declare module "oro:async/context" {
          * and ensuring the environment is reverted back afterwards.
          * The function allows for the modification of a specific context's
          * state in a controlled manner, ensuring that any changes can be undone.
-         * @template T, F extends AnyFunc<null>
+         * @template T
+         * @template {AnyFunc} F
          * @param {T} value
          * @param {F} fn
-         * @param {...Parameters<F>} args
+         * @param {...any} args
          * @returns {ReturnType<F>}
          */
-        run<T_1, F>(value: T_1, fn: F, ...args: Parameters<F>[]): ReturnType<F>;
+        run<T_1, F extends AnyFunc>(value: T_1, fn: F, ...args: any[]): ReturnType<F>;
         /**
          * Get the `AsyncContext.Variable` value.
          * @template T
@@ -2274,21 +2275,21 @@ declare module "oro:async/context" {
          *
          * @see {@link https://github.com/tc39/proposal-async-context/blob/master/README.md#asynccontextsnapshotwrap}
          *
-         * @template F
+         * @template {AnyFunc} F
          * @param {F} fn
          * @returns {F}
          */
-        static wrap<F>(fn: F): F;
+        static wrap<F extends AnyFunc>(fn: F): F;
         /**
          * Runs the given function `fn` with arguments `args`, using a `null`
          * context and the current snapshot.
          *
-         * @template F extends AnyFunc<null>
+         * @template {AnyFunc} F
          * @param {F} fn
-         * @param {...Parameters<F>} args
+         * @param {...any} args
          * @returns {ReturnType<F>}
          */
-        run<F>(fn: F, ...args: Parameters<F>[]): ReturnType<F>;
+        run<F extends AnyFunc>(fn: F, ...args: any[]): ReturnType<F>;
         #private;
     }
     /**
@@ -2504,10 +2505,10 @@ declare module "oro:internal/async/hooks" {
          * Runs function `fn` in the execution context of this `CoreAsyncResource`.
          * @param {function} fn
          * @param {object=} [thisArg]
-         * @param {...any} [args]
+         * @param {...any} args
          * @return {any}
          */
-        runInAsyncScope(fn: Function, thisArg?: object | undefined, ...args?: any[]): any;
+        runInAsyncScope(fn: Function, thisArg?: object | undefined, ...args: any[]): any;
         #private;
     }
     export class TopLevelAsyncResource extends CoreAsyncResource {
@@ -2561,10 +2562,10 @@ declare module "oro:async/resource" {
 declare module "oro:async/hooks" {
     /**
      * Factory for creating a `AsyncHook` instance.
-     * @param {AsyncHookCallbackOptions|AsyncHookCallbacks=} [callbacks]
+     * @param {AsyncHookCallbacks=} [callbacks]
      * @return {AsyncHook}
      */
-    export function createHook(callbacks?: (AsyncHookCallbackOptions | AsyncHookCallbacks) | undefined): AsyncHook;
+    export function createHook(callbacks?: AsyncHookCallbacks | undefined): AsyncHook;
     /**
      * A container for `AsyncHooks` callbacks.
      * @ignore
@@ -2941,6 +2942,7 @@ declare module "oro:os" {
     /**
      * The host operating system. This value can be one of:
      * - android
+     * - androidos
      * - android-emulator
      * - iphoneos
      * - iphone-simulator
@@ -2950,9 +2952,9 @@ declare module "oro:os" {
      * - unknown
      * - win32
      * @ignore
-     * @return {'android'|'android-emulator'|'iphoneos'|iphone-simulator'|'linux'|'macosx'|unix'|unknown'|win32'}
+     * @return {'android'|'androidos'|'android-emulator'|'iphoneos'|'iphone-simulator'|'linux'|'macosx'|'unix'|'unknown'|'win32'}
      */
-    export function host(): "android" | "android-emulator" | "iphoneos" | iphone;
+    export function host(): "android" | "androidos" | "android-emulator" | "iphoneos" | "iphone-simulator" | "linux" | "macosx" | "unix" | "unknown" | "win32";
     /**
      * Returns the home directory of the current user.
      * @return {string}
@@ -3018,12 +3020,12 @@ declare module "oro:application/menu" {
          * @ignore
          * @type {function(MenuItemEvent)?}
          */
-        set onmenuitem(onmenuitem: ((arg0: menuitemEvent) => any) | null);
+        set onmenuitem(onmenuitem: ((arg0: MenuItemEvent) => any) | null);
         /**
          * Level 1 'menuitem'` event listener.
-         * @type {function(menuitemEvent)?}
+         * @type {function(MenuItemEvent)?}
          */
-        get onmenuitem(): ((arg0: menuitemEvent) => any) | null;
+        get onmenuitem(): ((arg0: MenuItemEvent) => any) | null;
         /**
          * Set the menu layout for this `Menu` instance.
          * @param {string|object} layoutOrOptions
@@ -3058,12 +3060,12 @@ declare module "oro:application/menu" {
          * @ignore
          * @type {function(MenuItemEvent)?}
          */
-        set onmenuitem(onmenuitem: ((arg0: menuitemEvent) => any) | null);
+        set onmenuitem(onmenuitem: ((arg0: MenuItemEvent) => any) | null);
         /**
          * Level 1 'menuitem'` event listener.
-         * @type {function(menuitemEvent)?}
+         * @type {function(MenuItemEvent)?}
          */
-        get onmenuitem(): ((arg0: menuitemEvent) => any) | null;
+        get onmenuitem(): ((arg0: MenuItemEvent) => any) | null;
         /**
          * The `TrayMenu` instance for the application.
          * @type {TrayMenu}
@@ -3121,6 +3123,7 @@ declare module "oro:application/menu" {
     export const container: MenuContainer;
     export default container;
     import ipc from "oro:ipc";
+    import { MenuItemEvent } from "oro:internal/events";
 }
 
 declare module "oro:internal/events" {
@@ -3636,11 +3639,28 @@ declare module "oro:stream" {
         peek(): any;
         isEmpty(): boolean;
     }
+    /**
+     * @typedef {object} WritableStateOptions
+     * @property {number} [highWaterMark]
+     * @property {function(any): any} [map]
+     * @property {function(any): any} [mapWritable]
+     * @property {function(any): number} [byteLength]
+     * @property {function(any): number} [byteLengthWritable]
+     */
+    /**
+     * @typedef {object} ReadableStateOptions
+     * @property {number} [highWaterMark]
+     * @property {function(any): any} [map]
+     * @property {function(any): any} [mapReadable]
+     * @property {function(any): number} [byteLength]
+     * @property {function(any): number} [byteLengthReadable]
+     */
     export class WritableState {
-        constructor(stream: any, { highWaterMark, map, mapWritable, byteLength, byteLengthWritable }?: {
-            highWaterMark?: number;
-            map?: any;
-        });
+        /**
+         * @param {any} stream
+         * @param {WritableStateOptions} [options]
+         */
+        constructor(stream: any, { highWaterMark, map, mapWritable, byteLength, byteLengthWritable }?: WritableStateOptions);
         stream: any;
         queue: FIFO;
         highWaterMark: number;
@@ -3648,8 +3668,8 @@ declare module "oro:stream" {
         error: any;
         pipeline: any;
         drains: any;
-        byteLength: any;
-        map: any;
+        byteLength: typeof defaultByteLength;
+        map: (arg0: any) => any;
         afterWrite: any;
         afterUpdateNextTick: any;
         get ended(): boolean;
@@ -3664,10 +3684,11 @@ declare module "oro:stream" {
         updateNextTick(): void;
     }
     export class ReadableState {
-        constructor(stream: any, { highWaterMark, map, mapReadable, byteLength, byteLengthReadable }?: {
-            highWaterMark?: number;
-            map?: any;
-        });
+        /**
+         * @param {any} stream
+         * @param {ReadableStateOptions} [options]
+         */
+        constructor(stream: any, { highWaterMark, map, mapReadable, byteLength, byteLengthReadable }?: ReadableStateOptions);
         stream: any;
         queue: FIFO;
         highWaterMark: number;
@@ -3675,8 +3696,8 @@ declare module "oro:stream" {
         readAhead: boolean;
         error: any;
         pipeline: Pipeline;
-        byteLength: any;
-        map: any;
+        byteLength: typeof defaultByteLength;
+        map: (arg0: any) => any;
         pipeTo: any;
         afterRead: any;
         afterUpdateNextTick: any;
@@ -3837,7 +3858,22 @@ declare module "oro:stream" {
         };
     };
     export default _default;
+    export type WritableStateOptions = {
+        highWaterMark?: number;
+        map?: (arg0: any) => any;
+        mapWritable?: (arg0: any) => any;
+        byteLength?: (arg0: any) => number;
+        byteLengthWritable?: (arg0: any) => number;
+    };
+    export type ReadableStateOptions = {
+        highWaterMark?: number;
+        map?: (arg0: any) => any;
+        mapReadable?: (arg0: any) => any;
+        byteLength?: (arg0: any) => number;
+        byteLengthReadable?: (arg0: any) => number;
+    };
     import web from "oro:stream/web";
+    function defaultByteLength(data: any): any;
     import { EventEmitter } from "oro:events";
     const asyncIterator: symbol;
 }
@@ -5899,10 +5935,10 @@ declare module "oro:fs/stats" {
         /**
          * Creates a `Stats` instance from input, optionally with `BigInt` data types
          * @param {object|Stats} [stat]
-         * @param {fromBigInt=} [fromBigInt = false]
+         * @param {boolean=} [fromBigInt = false]
          * @return {Stats}
          */
-        static from(stat?: object | Stats, fromBigInt?: any | undefined): Stats;
+        static from(stat?: object | Stats, fromBigInt?: boolean | undefined): Stats;
         /**
          * `Stats` class constructor.
          * @param {object|Stats} stat
@@ -5922,6 +5958,10 @@ declare module "oro:fs/stats" {
         mtimeMs: any;
         ctimeMs: any;
         birthtimeMs: any;
+        atimeNs: any;
+        mtimeNs: any;
+        ctimeNs: any;
+        birthtimeNs: any;
         atime: Date;
         mtime: Date;
         ctime: Date;
@@ -7093,9 +7133,7 @@ declare module "oro:fs/promises" {
      * @return {Watcher}
      */
     export function watch(path: any, options?: (Function | object) | undefined): Watcher;
-    export type Stats = import("oro:fs/stats").Stats;
     export default exports;
-    export type Buffer = import("oro:buffer").Buffer;
     export type TypedArray = Uint8Array | Int8Array;
     import { Buffer } from "oro:buffer";
     import { FileHandle } from "oro:fs/handle";
@@ -7111,7 +7149,7 @@ declare module "oro:fs/promises" {
     import { WriteStream } from "oro:fs/stream";
     import * as exports from "oro:fs/promises";
 
-    export { bookmarks, constants, Dir, DirectoryHandle, Dirent, fds, FileHandle, ReadStream, Watcher, WriteStream };
+    export { bookmarks, constants, Dir, DirectoryHandle, Dirent, fds, FileHandle, ReadStream, Stats, Watcher, WriteStream };
 }
 
 declare module "oro:fs/index" {
@@ -7345,9 +7383,9 @@ declare module "oro:fs/index" {
      * @param {(object|function(Error|null, Dir|undefined):any)=} [options]
      * @param {string=} [options.encoding = 'utf8']
      * @param {boolean=} [options.withFileTypes = false]
-     * @param {function(Error|null, Dir|undefined):any)} callback
+     * @param {function(Error|null, Dir|undefined):any} [callback]
      */
-    export function opendir(path: string | Buffer | URL, options?: (object | ((arg0: Error | null, arg1: Dir | undefined) => any)) | undefined, callback: any): void;
+    export function opendir(path: string | Buffer | URL, options?: (object | ((arg0: Error | null, arg1: Dir | undefined) => any)) | undefined, callback?: (arg0: Error | null, arg1: Dir | undefined) => any): void;
     /**
      * Synchronously open a directory.
      * @see {@link https://nodejs.org/api/fs.html#fsreaddirpath-options-callback}
@@ -7406,9 +7444,9 @@ declare module "oro:fs/index" {
      * @param {object|function(Error|null, (Dirent|string)[]|undefined):any} [options]
      * @param {string=} [options.encoding = 'utf8']
      * @param {boolean=} [options.withFileTypes = false]
-     * @param {function(Error|null, (Dirent|string)[]):any} callback
+     * @param {function(Error|null, (Dirent|string)[]):any} [callback]
      */
-    export function readdir(path: string | Buffer | URL, options?: object | ((arg0: Error | null, arg1: (Dirent | string)[] | undefined) => any), callback: (arg0: Error | null, arg1: (Dirent | string)[]) => any): void;
+    export function readdir(path: string | Buffer | URL, options?: object | ((arg0: Error | null, arg1: (Dirent | string)[] | undefined) => any), callback?: (arg0: Error | null, arg1: (Dirent | string)[]) => any): void;
     /**
      * Synchronously read all entries in a directory.
      * @see {@link https://nodejs.org/api/fs.html#fsreaddirpath-options-callback}
@@ -7508,9 +7546,9 @@ declare module "oro:fs/index" {
      * @param {string=} [options.encoding = 'utf8']
      * @param {string=} [options.flag = 'r']
      * @param {AbortSignal|undefined} [options.signal]
-     * @param {function(Error|null, Stats|undefined):any} callback
+     * @param {function(Error|null, Stats|undefined):any} [callback]
      */
-    export function stat(path: string | Buffer | URL | number, options?: (object | ((arg0: Error | null, arg1: Stats | undefined) => any)) | undefined, callback: (arg0: Error | null, arg1: Stats | undefined) => any): void;
+    export function stat(path: string | Buffer | URL | number, options?: (object | ((arg0: Error | null, arg1: Stats | undefined) => any)) | undefined, callback?: (arg0: Error | null, arg1: Stats | undefined) => any): void;
     /**
      * Get the stats of a symbolic link
      * @param {string|Buffer|URL|number} path - filename or file descriptor
@@ -7518,9 +7556,9 @@ declare module "oro:fs/index" {
      * @param {string=} [options.encoding = 'utf8']
      * @param {string=} [options.flag = 'r']
      * @param {AbortSignal|undefined} [options.signal]
-     * @param {function(Error|null, Stats|undefined):any} callback
+     * @param {function(Error|null, Stats|undefined):any} [callback]
      */
-    export function lstat(path: string | Buffer | URL | number, options?: (object | ((arg0: Error | null, arg1: Stats | undefined) => any)) | undefined, callback: (arg0: Error | null, arg1: Stats | undefined) => any): void;
+    export function lstat(path: string | Buffer | URL | number, options?: (object | ((arg0: Error | null, arg1: Stats | undefined) => any)) | undefined, callback?: (arg0: Error | null, arg1: Stats | undefined) => any): void;
     /**
      * Synchronously get stats of a symbolic link
      * @param {string|Buffer|URL} path
@@ -7531,9 +7569,9 @@ declare module "oro:fs/index" {
      * Creates a symlink of `src` at `dest`.
      * @param {string} src
      * @param {string} dest
-     * @param {function(Error|null):any} callback
+     * @param {function(Error|null):any} [callback]
      */
-    export function symlink(src: string, dest: string, type: any, callback: (arg0: Error | null) => any): void;
+    export function symlink(src: string, dest: string, type?: any, callback?: (arg0: Error | null) => any): void;
     /**
      * Synchronously create a symlink
      * @param {string} src
@@ -7568,9 +7606,9 @@ declare module "oro:fs/index" {
      * @param {string=} [options.mode = 0o666]
      * @param {string=} [options.flag = 'w']
      * @param {AbortSignal|undefined} [options.signal]
-     * @param {function(Error|null):any} callback
+     * @param {function(Error|null):any} [callback]
      */
-    export function writeFile(path: string | Buffer | URL | number, data: string | Buffer | TypedArray | DataView | object, options?: (object | ((arg0: Error | null) => any)) | undefined, callback: (arg0: Error | null) => any): void;
+    export function writeFile(path: string | Buffer | URL | number, data: string | Buffer | TypedArray | DataView | object, options?: (object | ((arg0: Error | null) => any)) | undefined, callback?: (arg0: Error | null) => any): void;
     /**
      * Writes data to a file synchronously.
      * @param {string|Buffer|URL|number} path - filename or file descriptor
@@ -7682,7 +7720,6 @@ declare module "oro:fs/index" {
      */
     export function watch(path: any, options?: (Function | object) | undefined, callback?: Function | undefined): Watcher;
     export default exports;
-    export type Buffer = import("oro:buffer").Buffer;
     export type TypedArray = Uint8Array | Int8Array;
     import { Stats } from "oro:fs/stats";
     import { Buffer } from "oro:buffer";
@@ -7880,11 +7917,10 @@ declare module "oro:ai/llm" {
         #private;
     }
     /**
-     * @typedef {
-     *   context: Context,
-     *   model: Model,
-     *   lora: LoRA
-     * {}} LoRAAttachmentOptions
+     * @typedef {object} LoRAAttachmentOptions
+     * @property {Context} context
+     * @property {Model} model
+     * @property {LoRA} lora
      */
     export class LoRAAttachment {
         /**
@@ -7904,9 +7940,22 @@ declare module "oro:ai/llm" {
          */
         get lora(): LoRA;
         toJSON(): {
-            context: any;
-            model: any;
-            lora: any;
+            context: {
+                id: string;
+                size: number;
+                model: {
+                    name: string;
+                };
+            };
+            model: {
+                name: string;
+            };
+            lora: {
+                name: string;
+                model: {
+                    name: string;
+                };
+            };
         };
         #private;
     }
@@ -8006,13 +8055,11 @@ declare module "oro:ai/llm" {
     export type LoraAttachOptions = {
         scale?: number;
     };
-    /**
-     * : Context,
-     *   model: Model,
-     *   lora: LoRA
-     * {}} LoRAAttachmentOptions
-     */
-    export type context = any;
+    export type LoRAAttachmentOptions = {
+        context: Context;
+        model: Model;
+        lora: LoRA;
+    };
     export type ContextOptions = {
         size?: number;
         minP?: number;
@@ -8301,6 +8348,7 @@ declare module "oro:conduit" {
          * @type {string}
          */
         sharedKey: string;
+        isErroring: boolean;
         /**
          * The URL string for the WebSocket server.
          * @type {string}
@@ -8332,7 +8380,6 @@ declare module "oro:conduit" {
          * @return {Promise<Conduit>}
          */
         connect(callback?: ((arg0: Error | null) => any) | undefined): Promise<Conduit>;
-        isErroring: boolean;
         /**
          * Reconnects a `Conduit` socket.
          * @param {{retries?: number, timeout?: number}} [options]
@@ -9197,7 +9244,7 @@ declare module "oro:window" {
             backend?: boolean | undefined;
             event: string;
             value?: (string | object) | undefined;
-        }): Promise<ipc.Result>;
+        }): Promise<any>;
         /**
          * Post a message to a window
          * TODO(@jwerle): research using `BroadcastChannel` instead
@@ -9331,7 +9378,7 @@ declare module "oro:application" {
      * @param {boolean=} [opts.frameless=false] - whether the window is frameless
      * @param {boolean=} [opts.utility=false] - whether the window is utility (macOS only)
      * @param {boolean=} [opts.shouldExitApplicationOnClose=false] - whether the window can exit the app
-     * @param {boolean=} [opts.headless=false] - whether the window will be headless or not (no frame)
+     * @param {boolean=} opts.headless - overrides the project headless setting for this window
      * @param {string=} [opts.userScript=null] - A user script that will be injected into the window (desktop only)
      * @param {string[]=} [opts.protocolHandlers] - An array of protocol handler schemes to register with the new window (requires service worker)
      * @param {Record<string, string|number|boolean|(string|number|boolean)[]>=} [opts.config] - additional configuration key/value pairs
@@ -9503,10 +9550,10 @@ declare module "oro:application" {
     export function setTrayMenu(options: ApplicationMenuOptions): Promise<ipc.Result>;
     /**
      * Set the enabled state of the system menu.
-     * @param {object} value - an options object
+     * @param {ApplicationMenuItemEnabledOptions} value - an options object
      * @return {Promise<ipc.Result>}
      */
-    export function setSystemMenuItemEnabled(value: object): Promise<ipc.Result>;
+    export function setSystemMenuItemEnabled(value: ApplicationMenuItemEnabledOptions): Promise<ipc.Result>;
     /**
      * Predicate function to determine if application is in a "paused" state.
      * @return {boolean}
@@ -9524,6 +9571,13 @@ declare module "oro:application" {
      * @property {string} value - Menu layout expressed with the native menu DSL.
      * @property {number=} [index] - Window index to target when the menu is
      * window-scoped on the active platform.
+     */
+    /**
+     * Options for `setSystemMenuItemEnabled()`.
+     * @typedef {object} ApplicationMenuItemEnabledOptions
+     * @property {boolean} enabled - Whether the menu item is enabled.
+     * @property {number} indexMain - Zero-based top-level menu index.
+     * @property {number} indexSub - Zero-based submenu item index.
      */
     /**
      * Maximum number of concurrently tracked application windows.
@@ -9673,6 +9727,23 @@ declare module "oro:application" {
          * window-scoped on the active platform.
          */
         index?: number | undefined;
+    };
+    /**
+     * Options for `setSystemMenuItemEnabled()`.
+     */
+    export type ApplicationMenuItemEnabledOptions = {
+        /**
+         * - Whether the menu item is enabled.
+         */
+        enabled: boolean;
+        /**
+         * - Zero-based top-level menu index.
+         */
+        indexMain: number;
+        /**
+         * - Zero-based submenu item index.
+         */
+        indexSub: number;
     };
     import { ApplicationURLEvent } from "oro:internal/events";
     import ApplicationWindow from "oro:window";
@@ -10033,21 +10104,7 @@ declare module "oro:internal/promise" {
          * @param {ResolverFunction} resolver
          */
         constructor(resolver: ResolverFunction);
-        [resourceSymbol]: {
-            [x: number]: () => import("oro:gc").Finalizer;
-            "__#private@#type": any;
-            "__#private@#destroyed": boolean;
-            "__#private@#asyncId": number;
-            "__#private@#triggerAsyncId": any;
-            "__#private@#requireManualDestroy": boolean;
-            get type(): string;
-            get destroyed(): boolean;
-            asyncId(): number;
-            triggerAsyncId(): number;
-            emitDestroy(): CoreAsyncResource;
-            bind(fn: Function, thisArg?: object | undefined): Function;
-            runInAsyncScope(fn: Function, thisArg?: object | undefined, ...args?: any[]): any;
-        };
+        [resourceSymbol]: asyncHooks.CoreAsyncResource;
     }
     export namespace Promise {
         function all(iterable: any): any;
@@ -10356,10 +10413,10 @@ declare module "oro:vm" {
         /**
          * Predicate function to determine if a `value` is an internal or external
          * script reference value.
-         * @param {amy} value
+         * @param {any} value
          * @return {boolean}
          */
-        static isReference(value: amy): boolean;
+        static isReference(value: any): boolean;
         /**
          * `Reference` class constructor.
          * @param {string} id
@@ -10575,9 +10632,9 @@ declare module "oro:worker_threads" {
     /**
 
      * A pool of known worker threads.
-     * @type {<Map<string, Worker>}
+     * @type {Map<string, Worker>}
      */
-    export const workers: <Map>() => <string, Worker>() => any;
+    export const workers: Map<string, Worker>;
     /**
      * `true` if this is the "main" thread, otherwise `false`
      * The "main" thread is the top level webview window.
@@ -10679,6 +10736,11 @@ declare module "oro:worker_threads" {
         get id(): number;
         get threadId(): number;
         /**
+         * `true` after the worker has loaded and can receive application messages.
+         * @type {boolean}
+         */
+        get online(): boolean;
+        /**
          * A `Writable` standard input stream if `{ stdin: true }` was set when
          * creating this `Worker` instance.
          * @type {import('./stream.js').Writable?}
@@ -10739,19 +10801,43 @@ declare module "oro:worker_threads" {
 
 declare module "oro:child_process" {
     /**
-     * Spawns a child process exeucting `command` with `args`
+     * Spawns a child process executing `command` directly with `args`.
      * @param {string} command
-     * @param {string[]|object=} [args]
-     * @param {object=} [options
+     * @param {string[]|ChildProcessOptions} [args]
+     * @param {ChildProcessOptions} [options]
      * @return {ChildProcess}
      */
-    export function spawn(command: string, args?: (string[] | object) | undefined, options?: object | undefined): ChildProcess;
-    export function exec(command: any, options: any, callback: any): ChildProcess & {
-        then(resolve: any, reject: any): Promise<any>;
-        catch(reject: any): Promise<any>;
-        finally(next: any): Promise<any>;
-    };
-    export function execSync(command: any, options: any): any;
+    export function spawn(command: string, args?: string[] | ChildProcessOptions, options?: ChildProcessOptions): ChildProcess;
+    /**
+     * Executes a command string through the platform shell.
+     * @param {string} command
+     * @param {ExecOptions|ExecCallback} [options]
+     * @param {ExecCallback} [callback]
+     * @return {ChildProcess & PromiseLike<{ stdout: string | Buffer, stderr: string | Buffer }>}
+     */
+    export function exec(command: string, options?: ExecOptions | ExecCallback, callback?: ExecCallback): ChildProcess & PromiseLike<{
+        stdout: string | Buffer;
+        stderr: string | Buffer;
+    }>;
+    /**
+     * Executes a file directly with tokenized arguments.
+     * @param {string} file
+     * @param {string[]|ExecFileOptions|ExecCallback} [args]
+     * @param {ExecFileOptions|ExecCallback} [options]
+     * @param {ExecCallback} [callback]
+     * @return {ChildProcess & PromiseLike<{ stdout: string | Buffer, stderr: string | Buffer }>}
+     */
+    export function execFile(file: string, args?: string[] | ExecFileOptions | ExecCallback, options?: ExecFileOptions | ExecCallback, callback?: ExecCallback): ChildProcess & PromiseLike<{
+        stdout: string | Buffer;
+        stderr: string | Buffer;
+    }>;
+    /**
+     * Executes a command string synchronously through the platform shell.
+     * @param {string} command
+     * @param {ExecSyncOptions} [options]
+     * @return {string|Buffer}
+     */
+    export function execSync(command: string, options?: ExecSyncOptions): string | Buffer;
     export class Pipe extends AsyncResource {
         /**
          * `Pipe` class constructor.
@@ -10778,21 +10864,9 @@ declare module "oro:child_process" {
         [x: number]: () => import("oro:gc").Finalizer;
         /**
          * `ChildProcess` class constructor.
-         * @param {{
-         *   env?: object,
-         *   stdin?: boolean,
-         *   stdout?: boolean,
-         *   stderr?: boolean,
-         *   signal?: AbortSignal,
-         * }=} [options]
+         * @param {ChildProcessOptions} [options]
          */
-        constructor(options?: {
-            env?: object;
-            stdin?: boolean;
-            stdout?: boolean;
-            stderr?: boolean;
-            signal?: AbortSignal;
-        } | undefined);
+        constructor(options?: ChildProcessOptions);
         /**
          * @ignore
          * @type {Pipe}
@@ -10884,11 +10958,12 @@ declare module "oro:child_process" {
         /**
          * Spawns the child process. This function will throw an error if the process
          * is already spawned.
-         * @param {string} command
-         * @param {string[]=} [args]
+         * @param {string} command Executable name or path.
+         * @param {string[]|ChildProcessOptions} [args] Tokenized arguments or options.
+         * @param {ChildProcessOptions} [options] Spawn options.
          * @return {ChildProcess}
          */
-        spawn(...args?: string[] | undefined): ChildProcess;
+        spawn(command: string, args?: string[] | ChildProcessOptions, options?: ChildProcessOptions): ChildProcess;
         /**
          * `EventTarget` based `addEventListener` method.
          * @param {string} event
@@ -10907,18 +10982,60 @@ declare module "oro:child_process" {
         removeEventListener(event: string, callback: (arg0: Event) => any): void;
         #private;
     }
-    export function execFile(command: any, options: any, callback: any): ChildProcess & {
-        then(resolve: any, reject: any): Promise<any>;
-        catch(reject: any): Promise<any>;
-        finally(next: any): Promise<any>;
-    };
     namespace _default {
         export { ChildProcess };
         export { spawn };
         export { execFile };
         export { exec };
+        export { execSync };
     }
     export default _default;
+    export type ChildProcessOptions = {
+        /**
+         * Complete child environment. Replaces the inherited environment when provided.
+         */
+        env?: Record<string, string | number | boolean | null | undefined>;
+        /**
+         * Working directory for the child.
+         */
+        cwd?: string;
+        /**
+         * Open a writable stdin pipe.
+         */
+        stdin?: boolean;
+        /**
+         * Open a readable stdout pipe.
+         */
+        stdout?: boolean;
+        /**
+         * Open a readable stderr pipe.
+         */
+        stderr?: boolean;
+        /**
+         * Signal that terminates the child when aborted.
+         */
+        signal?: AbortSignal;
+        /**
+         * Signal used for timeout or abort termination.
+         */
+        killSignal?: number | string;
+        /**
+         * Milliseconds before terminating the child.
+         */
+        timeout?: number;
+    };
+    export type ExecOptions = ChildProcessOptions & {
+        encoding?: string;
+        shell?: string;
+    };
+    export type ExecFileOptions = ChildProcessOptions & {
+        encoding?: string;
+    };
+    export type ExecSyncOptions = Omit<ChildProcessOptions, "signal" | "stdin"> & {
+        encoding?: string;
+    };
+    export type ExecCallback = (error: Error | null, stdout: string | Buffer | null, stderr: string | Buffer | null) => void;
+    import { Buffer } from "oro:buffer";
     import { AsyncResource } from "oro:async/resource";
     import { EventEmitter } from "oro:events";
     import { Worker } from "oro:worker_threads";
@@ -11162,10 +11279,10 @@ declare module "oro:dns/index" {
      * @see {@link https://nodejs.org/api/dns.html#dns_dns_lookup_hostname_options_callback}
      * @param {string} hostname - The host name to resolve.
      * @param {(LookupOptions|number|string)=} [options] - Lookup options or the record family.
-     * @param {function(Error, string|LookupAddress[], 4|6=):void} cb - Invoked when the lookup completes.
+     * @param {function(Error, string|LookupAddress[], 4|6=):void} [cb] - Invoked when the lookup completes.
      * @returns {void}
      */
-    export function lookup(hostname: string, options?: (LookupOptions | number | string) | undefined, cb: (arg0: Error, arg1: string | LookupAddress[], arg2: (4 | 6) | undefined) => void): void;
+    export function lookup(hostname: string, options?: (LookupOptions | number | string) | undefined, cb?: (arg0: Error, arg1: string | LookupAddress[], arg2: (4 | 6) | undefined) => void): void;
     export default exports;
     export type LookupAddress = {
         /**
@@ -11288,7 +11405,7 @@ declare module "oro:dgram" {
             connectState: number;
             reuseAddr: boolean;
             ipv6Only: boolean;
-            remoteAddress: {};
+            remoteAddress: any;
         };
         enableDataEventFallback(): void;
         disableDataEventFallback(): void;
@@ -12645,9 +12762,9 @@ declare module "oro:service-worker/context" {
         data: any | null;
         /**
          * The `ExtendableEvent` for this `Context` instance.
-         * @type {ExtendableEvent}
+         * @type {import('./events.js').ExtendableEvent}
          */
-        get event(): ExtendableEvent;
+        get event(): import("oro:service-worker/events").ExtendableEvent;
         /**
          * An environment context object.
          * @type {object?}
@@ -12668,7 +12785,7 @@ declare module "oro:service-worker/context" {
          * It can also be used to detect whether that work was successful.
          * @param {Promise} promise
          */
-        waitUntil(promise: Promise<any>): Promise<any>;
+        waitUntil(promise: Promise<any>): Promise<void>;
         /**
          * TODO
          */
@@ -13092,35 +13209,35 @@ declare module "oro:http" {
         get writableHighWaterMark(): number;
         /**
          * @ignore
-         * @return {OutgoingMessage}
+         * @return {this}
          */
-        addTrailers(_headers: any): OutgoingMessage;
+        addTrailers(_headers: any): this;
         /**
          * @ignore
-         * @return {OutgoingMessage}
+         * @return {this}
          */
-        cork(): OutgoingMessage;
+        cork(): this;
         /**
          * @ignore
-         * @return {OutgoingMessage}
+         * @return {this}
          */
-        uncork(): OutgoingMessage;
+        uncork(): this;
         /**
          * Destroys the message.
          * Once a socket is associated with the message and is connected,
          * that socket will be destroyed as well.
          * @param {Error?} [err]
-         * @return {OutgoingMessage}
+         * @return {this}
          */
-        destroy(err?: Error | null): OutgoingMessage;
+        destroy(err?: Error | null): this;
         /**
          * Finishes the outgoing message.
          * @param {(Buffer|Uint8Array|string|function)=} [chunk]
          * @param {(string|function)=} [encoding]
          * @param {function=} [callback]
-         * @return {OutgoingMessage}
+         * @return {this}
          */
-        end(chunk?: (Buffer | Uint8Array | string | Function) | undefined, encoding?: (string | Function) | undefined, callback?: Function | undefined): OutgoingMessage;
+        end(chunk?: (Buffer | Uint8Array | string | Function) | undefined, encoding?: (string | Function) | undefined, callback?: Function | undefined): this;
         /**
          * Append a single header value for the header object.
          * @param {string} name
@@ -13906,12 +14023,10 @@ declare module "oro:enumeration" {
         contains(value: any): boolean;
         /**
          * @ignore
+         * @param {any} value
+         * @return {this}
          */
-        add(): void;
-        /**
-         * @ignore
-         */
-        delete(): void;
+        add(_value: any): this;
         /**
          * JSON represenation of a `Enumeration` instance.
          * @ignore
@@ -13921,9 +14036,9 @@ declare module "oro:enumeration" {
         /**
          * Internal inspect function.
          * @ignore
-         * @return {LanguageQueryResult}
+         * @return {string}
          */
-        inspect(): LanguageQueryResult;
+        inspect(): string;
     }
     export default Enumeration;
 }
@@ -15060,12 +15175,12 @@ declare module "oro:latica/index" {
          */
         join(sharedKey: any, args?: object | undefined): RemotePeer;
         /**
-         * @param {Packet} T - The constructor to be used to create packets.
-         * @param {Any} message - The message to be split and packaged.
-         * @return {Array<Packet<T>>}
+         * @param {typeof Packet} T - The constructor to be used to create packets.
+         * @param {any} message - The message to be split and packaged.
+         * @return {Promise<Packet[]>}
          * @ignore
          */
-        _message2packets(T: Packet, message: Any, args: any): Array<Packet<Packet>>;
+        _message2packets(T: typeof Packet, message: any, args: any): Promise<Packet[]>;
         /**
          * Sends a packet into the network that will be replicated and buffered.
          * Each peer that receives it will buffer it until TTL and then replicate
@@ -15074,14 +15189,14 @@ declare module "oro:latica/index" {
          * @param {object} keys - the public and private key pair created by `Encryption.createKeyPair()`.
          * @param {object} args - The arguments to be applied.
          * @param {Buffer} args.message - The message to be encrypted by keys and sent.
-         * @param {Packet<T>=} args.packet - The previous packet in the packet chain.
+         * @param {Packet=} args.packet - The previous packet in the packet chain.
          * @param {Buffer} args.usr1 - 32 bytes of arbitrary clusterId in the protocol framing.
          * @param {Buffer} args.usr2 - 32 bytes of arbitrary clusterId in the protocol framing.
          * @return {Array<PacketPublish>}
          */
         publish(sharedKey: any, args: {
             message: Buffer;
-            packet?: Packet<T> | undefined;
+            packet?: Packet | undefined;
             usr1: Buffer;
             usr2: Buffer;
         }): Array<PacketPublish>;
@@ -15569,6 +15684,16 @@ declare module "oro:test/index" {
          */
         deepEqual<T>(actual: T, expected: T, msg?: string): void;
         /**
+         * Assert that two values are deeply equivalent.
+         *
+         * @template T
+         * @param {T} actual
+         * @param {T} expected
+         * @param {string} [msg]
+         * @returns {void}
+         */
+        same<T>(actual: T, expected: T, msg?: string): void;
+        /**
          * @template T
          * @param {T} actual
          * @param {T} expected
@@ -15603,10 +15728,34 @@ declare module "oro:test/index" {
          */
         ok(actual: unknown, msg?: string): void;
         /**
+         * Assert that a value is falsy.
+         *
+         * @param {unknown} actual
+         * @param {string} [msg]
+         * @returns {void}
+         */
+        notOk(actual: unknown, msg?: string): void;
+        /**
+         * Assert that a value matches a regular expression.
+         *
+         * @param {unknown} actual
+         * @param {RegExp} expected
+         * @param {string} [msg]
+         * @returns {void}
+         */
+        match(actual: unknown, expected: RegExp, msg?: string): void;
+        /**
          * @param {string} [msg]
          * @returns {void}
          */
         pass(msg?: string): void;
+        /**
+         * Mark the current test as skipped.
+         *
+         * @param {string} [msg]
+         * @returns {void}
+         */
+        skip(msg?: string): void;
         /**
          * @param {Error | null | undefined} err
          * @param {string} [msg]
@@ -15620,6 +15769,14 @@ declare module "oro:test/index" {
          * @returns {void}
          */
         throws(fn: Function, expected?: RegExp | any, message?: string): void;
+        /**
+         * Assert that a promise or async function rejects.
+         * @param {PromiseLike<any>|(() => any)} input
+         * @param {RegExp|((error: Error) => boolean)} [expected]
+         * @param {string} [message]
+         * @returns {Promise<void>}
+         */
+        rejects(input: PromiseLike<any> | (() => any), expected?: RegExp | ((error: Error) => boolean), message?: string): Promise<void>;
         /**
          * Sleep for ms with an optional msg
          *
@@ -16251,7 +16408,7 @@ declare module "oro:commonjs/cache" {
      * instances in the application context, including windows and workers.
      */
     export class Cache {
-        [x: number]: () => gc.Finalizer;
+        [x: number]: () => import("oro:gc").Finalizer;
         /**
          * A globally shared type mapping for the cache to use when
          * derserializing a value.
@@ -16648,11 +16805,11 @@ declare module "oro:commonjs/loader" {
         };
         /**
          * Creates a `Response` from JSON input
-         * @param {obejct} json
+         * @param {object} json
          * @param {ResponseOptions=} [options]
          * @return {Response}
          */
-        static from(json: obejct, options?: ResponseOptions | undefined): Response;
+        static from(json: object, options?: ResponseOptions | undefined): Response;
         /**
          * `Response` class constructor.
          * @param {Request|ResponseOptions} request
@@ -16865,13 +17022,16 @@ declare module "oro:commonjs/package" {
      * }} PackageLoadOptions
      */
     /**
-     * {import('./loader.js').RequestOptions & {
+     * @typedef {import('./loader.js').RequestOptions & {
      *   load?: boolean,
      *   type?: 'commonjs' | 'module',
      *   browser?: boolean,
      *   children?: string[]
      *   extensions?: string[] | Set<string>
      * }} PackageResolveOptions
+     */
+    /**
+     * @typedef {ParsedPackageName} NameOptions
      */
     /**
      * @typedef {{
@@ -16888,7 +17048,6 @@ declare module "oro:commonjs/package" {
      * @typedef {{
      *   require?: string | string[],
      *   import?: string | string[],
-     *   default?: string | string[],
      *   default?: string | string[],
      *   worker?: string | string[],
      *   browser?: string | string[]
@@ -17193,6 +17352,14 @@ declare module "oro:commonjs/package" {
         type?: "commonjs" | "module";
         prefix?: string;
     };
+    export type PackageResolveOptions = import("oro:commonjs/loader").RequestOptions & {
+        load?: boolean;
+        type?: "commonjs" | "module";
+        browser?: boolean;
+        children?: string[];
+        extensions?: string[] | Set<string>;
+    };
+    export type NameOptions = ParsedPackageName;
     export type ParsedPackageName = {
         organization: string | null;
         name: string;
@@ -17209,7 +17376,6 @@ declare module "oro:commonjs/package" {
     export type PackageExports = {
         require?: string | string[];
         import?: string | string[];
-        default?: string | string[];
         default?: string | string[];
         worker?: string | string[];
         browser?: string | string[];
@@ -17246,6 +17412,9 @@ declare module "oro:commonjs/module" {
      */
     /**
      * @typedef {import('./package.js').PackageOptions} PackageOptions
+     */
+    /**
+     * @typedef {import('./require.js').RequireOptions} RequireOptions
      */
     /**
      * @typedef {{
@@ -17611,6 +17780,7 @@ declare module "oro:commonjs/module" {
     export type ModuleResolver = (arg0: string, arg1: Module, arg2: (arg0: string) => any) => any;
     export type RequireFunction = import("oro:commonjs/require").RequireFunction;
     export type PackageOptions = import("oro:commonjs/package").PackageOptions;
+    export type RequireOptions = import("oro:commonjs/require").RequireOptions;
     export type CreateRequireOptions = {
         prefix?: string;
         request?: import("oro:commonjs/loader").RequestOptions;
@@ -17662,11 +17832,9 @@ declare module "oro:commonjs/require" {
      * @typedef {import('./package.js').PackageResolveOptions} PackageResolveOptions
      */
     /**
-     * @typedef {
-     *   PackageResolveOptions &
-     *   PackageOptions &
-     *   { origins?: string[] | URL[] }
-     * } ResolveOptions
+     * @typedef {PackageResolveOptions & PackageOptions & {
+     *   origins?: string[] | URL[]
+     * }} ResolveOptions
      */
     /**
      * @typedef {ResolveOptions & {
@@ -17714,11 +17882,15 @@ declare module "oro:commonjs/require" {
     export type RequireFunction = (arg0: string) => any;
     export type PackageOptions = import("oro:commonjs/package").PackageOptions;
     export type PackageResolveOptions = import("oro:commonjs/package").PackageResolveOptions;
+    export type ResolveOptions = PackageResolveOptions & PackageOptions & {
+        origins?: string[] | URL[];
+    };
     export type RequireOptions = ResolveOptions & {
         resolvers?: RequireResolver[];
         importmap?: import("oro:commonjs/module").ImportMap;
         cache?: boolean;
     };
+    import URL from "oro:url";
 }
 
 declare module "oro:commonjs" {
@@ -18147,7 +18319,8 @@ declare module "oro:did/index" {
         idSegments: readonly any[];
         href: string;
         toString(): string;
-        toJSON(): string;
+        /** @returns {string|Record<string, any>} */
+        toJSON(): string | Record<string, any>;
         equals(other: any): boolean;
     }
     export class DIDURL extends DID {
@@ -18163,18 +18336,6 @@ declare module "oro:did/index" {
         withoutParameter(name: any): DIDURL;
         withQuery(query: any): DIDURL;
         withFragment(fragment: any): DIDURL;
-        toJSON(): {
-            did: string;
-            method: any;
-            methodSpecificId: any;
-            parameters: {
-                [k: string]: any;
-            };
-            path: any;
-            query: any;
-            fragment: any;
-            href: string;
-        };
     }
     export class DIDDocument {
         static from(input: any): DIDDocument;
@@ -18773,18 +18934,50 @@ declare module "oro:mcp/index" {
      * @returns {Promise<number|null>}
      */
     export function registerTool(tool: MCPRegisterToolOptions): Promise<number | null>;
-    export function unregisterTool(name: any): Promise<boolean>;
-    export function listTools(): Promise<any>;
+    /**
+     * Unregister a tool by name.
+     * @param {string} name
+     * @returns {Promise<boolean>} Whether a registered tool was removed.
+     */
+    export function unregisterTool(name: string): Promise<boolean>;
+    /**
+     * List the currently registered tool descriptors.
+     * @returns {Promise<MCPToolDescriptor[]>}
+     */
+    export function listTools(): Promise<MCPToolDescriptor[]>;
     /**
      * Register a resource that can be read or subscribed to by MCP clients.
      * @param {MCPRegisterResourceOptions} resource
      * @returns {Promise<number|null>}
      */
     export function registerResource(resource: MCPRegisterResourceOptions): Promise<number | null>;
-    export function unregisterResource(uri: any): Promise<boolean>;
-    export function listResources(): Promise<any>;
-    export function invokeTool(name: any, args?: {}, options?: any): Promise<boolean>;
-    export function publishResource(uri: any, result: any, options?: any): Promise<boolean>;
+    /**
+     * Unregister a resource by URI.
+     * @param {string} uri
+     * @returns {Promise<boolean>} Whether a registered resource was removed.
+     */
+    export function unregisterResource(uri: string): Promise<boolean>;
+    /**
+     * List the currently registered resource descriptors.
+     * @returns {Promise<MCPResourceDescriptor[]>}
+     */
+    export function listResources(): Promise<MCPResourceDescriptor[]>;
+    /**
+     * Invoke a registered tool through the local MCP service.
+     * @param {string} name
+     * @param {Record<string, any>} [args]
+     * @param {MCPInvocationOptions} [options]
+     * @returns {Promise<boolean>} Whether the invocation was accepted.
+     */
+    export function invokeTool(name: string, args?: Record<string, any>, options?: MCPInvocationOptions): Promise<boolean>;
+    /**
+     * Publish an update to active subscriptions for a registered resource.
+     * @param {string} uri
+     * @param {MCPResourceHandlerResult} result
+     * @param {MCPPublishResourceOptions} [options]
+     * @returns {Promise<boolean>} Whether at least one matching stream received the update.
+     */
+    export function publishResource(uri: string, result: MCPResourceHandlerResult, options?: MCPPublishResourceOptions): Promise<boolean>;
     /**
      * Configure a runtime authorization handler for incoming MCP HTTP requests.
      * Pass a function to enable dynamic authorization or `null`/`undefined` to clear.
@@ -18802,20 +18995,18 @@ declare module "oro:mcp/index" {
      * - `authorize` registers a dynamic authorization handler for this server.
      *
      * @param {MCPStartServerOptions} [options]
-     * @returns {Promise<{ running: boolean, host: string, port: number, endpoint: string, oauth?: { authorizePath?: string | null, tokenPath?: string | null, metadataPath?: string | null } }>}
+     * @returns {Promise<MCPStartServerResult>}
      */
-    export function startServer(options?: MCPStartServerOptions): Promise<{
-        running: boolean;
-        host: string;
-        port: number;
-        endpoint: string;
-        oauth?: {
-            authorizePath?: string | null;
-            tokenPath?: string | null;
-            metadataPath?: string | null;
-        };
-    }>;
+    export function startServer(options?: MCPStartServerOptions): Promise<MCPStartServerResult>;
+    /**
+     * Stop the embedded MCP server.
+     * @returns {Promise<boolean>} Whether the server is stopped.
+     */
     export function stopServer(): Promise<boolean>;
+    /**
+     * Report whether the embedded MCP server is running.
+     * @returns {Promise<boolean>}
+     */
     export function serverStatus(): Promise<boolean>;
     namespace _default {
         export { registerTool };
@@ -18850,15 +19041,137 @@ declare module "oro:mcp/index" {
          */
         arguments: Record<string, any>;
     };
+    export type MCPIcon = {
+        /**
+         * URI or data URI for the icon.
+         */
+        src: string;
+        /**
+         * MIME type of the icon.
+         */
+        mimeType?: string;
+        /**
+         * Available sizes, such as `48x48` or `any`.
+         */
+        sizes?: string[];
+        /**
+         * Optional color-scheme hint.
+         */
+        theme?: "light" | "dark";
+    };
+    export type MCPToolAnnotations = {
+        title?: string;
+        readOnlyHint?: boolean;
+        destructiveHint?: boolean;
+        idempotentHint?: boolean;
+        openWorldHint?: boolean;
+    };
+    export type MCPAnnotations = {
+        audience?: ("user" | "assistant")[];
+        /**
+         * Importance from 0 through 1.
+         */
+        priority?: number;
+        /**
+         * ISO 8601 last-modified timestamp.
+         */
+        lastModified?: string;
+    };
+    export type MCPTextContent = {
+        type: "text";
+        text: string;
+        annotations?: MCPAnnotations;
+        _meta?: Record<string, any>;
+    };
+    export type MCPBinaryContent = {
+        type: "image" | "audio";
+        /**
+         * Base64-encoded content.
+         */
+        data: string;
+        mimeType: string;
+        annotations?: MCPAnnotations;
+        _meta?: Record<string, any>;
+    };
+    export type MCPResourceLinkContent = {
+        type: "resource_link";
+        name: string;
+        uri: string;
+        title?: string;
+        description?: string;
+        mimeType?: string;
+        size?: number;
+        icons?: MCPIcon[];
+        annotations?: MCPAnnotations;
+        _meta?: Record<string, any>;
+    };
+    export type MCPResourceContents = {
+        uri: string;
+        text?: string;
+        /**
+         * Base64-encoded bytes.
+         */
+        blob?: string;
+        mimeType?: string;
+        _meta?: Record<string, any>;
+    };
+    export type MCPResourceContentInput = {
+        /**
+         * Defaults to the registered resource URI.
+         */
+        uri?: string;
+        text?: string;
+        /**
+         * Base64 string or bytes.
+         */
+        blob?: string | Uint8Array;
+        mimeType?: string;
+        _meta?: Record<string, any>;
+    };
+    export type MCPEmbeddedResourceContent = {
+        type: "resource";
+        resource: MCPResourceContents;
+        annotations?: MCPAnnotations;
+        _meta?: Record<string, any>;
+    };
+    export type MCPContentBlock = MCPTextContent | MCPBinaryContent | MCPResourceLinkContent | MCPEmbeddedResourceContent;
+    export type MCPJSONValue = string | number | boolean | null | MCPJSONValue[] | {
+        [key: string]: MCPJSONValue;
+    };
+    export type MCPToolResult = {
+        content: MCPContentBlock[];
+        structuredContent?: MCPJSONValue;
+        isError?: boolean;
+        _meta?: Record<string, any>;
+    };
+    /**
+     * A handler may return a complete MCP result or any JSON value. Direct JSON
+     * values become `structuredContent` and receive a serialized text content block.
+     */
+    export type MCPToolHandlerResult = MCPToolResult | MCPJSONValue | undefined;
     export type MCPResourceDescriptor = {
         /**
          * Unique resource URI.
          */
         uri: string;
         name?: string;
+        title?: string;
         description?: string;
         mimeType?: string;
+        icons?: MCPIcon[];
+        annotations?: MCPAnnotations;
+        /**
+         * Size of the raw resource content in bytes.
+         */
+        size?: number;
+        /**
+         * Protocol and application metadata.
+         */
+        _meta?: Record<string, any>;
         subscribable?: boolean;
+        /**
+         * Deprecated alias for `_meta`.
+         */
         metadata?: any;
     };
     export type MCPResourceContext = {
@@ -18937,11 +19250,11 @@ declare module "oro:mcp/index" {
     };
     export type MCPOAuthScreenOptions = {
         /**
-         * Inline HTML string for the authorization screen.
+         * Inline HTML for the authorization screen. Approval forms must submit `decision` and the `{{AUTHORIZATION_REQUEST}}` placeholder value as `authorization_request`.
          */
         html?: string;
         /**
-         * Absolute path to a HTML file used for the authorization screen.
+         * Absolute path to an HTML authorization screen with the same one-time request handling as `html`.
          */
         file?: string;
     };
@@ -18951,9 +19264,13 @@ declare module "oro:mcp/index" {
          */
         enabled?: boolean;
         /**
-         * Explicit issuer URL reported in discovery metadata.
+         * Explicit authorization-server issuer URL reported in discovery metadata. Required when exposing a non-loopback server through a proxy.
          */
         issuer?: string;
+        /**
+         * Canonical public URI of the MCP endpoint. Required when its public URI differs from the bound host and endpoint.
+         */
+        resource?: string;
         /**
          * Override for the authorization endpoint path.
          */
@@ -18975,7 +19292,7 @@ declare module "oro:mcp/index" {
          */
         tokenLifetimeSeconds?: number;
         /**
-         * Optional client identifier shown on the default screen.
+         * Pre-registered client identifier. Required when OAuth is enabled.
          */
         defaultClientId?: string;
         /**
@@ -18983,38 +19300,139 @@ declare module "oro:mcp/index" {
          */
         defaultScope?: string;
         /**
+         * Exact pre-registered redirect URIs accepted for the client. At least one is required when OAuth is enabled.
+         */
+        redirectUris?: string[];
+        /**
          * Custom authorization screen configuration.
          */
         screen?: MCPOAuthScreenOptions;
     };
     export type MCPRegisterToolOptions = {
         name: string;
+        title?: string;
         description?: string;
-        metadata?: any;
         inputSchema?: Record<string, any>;
-        handler?: (context: MCPToolInvocationContext) => any | Promise<any>;
+        /**
+         * A valid JSON Schema. Defaults to dialect 2020-12 when `$schema` is omitted.
+         */
+        outputSchema?: Record<string, any>;
+        icons?: MCPIcon[];
+        annotations?: MCPToolAnnotations;
+        /**
+         * Protocol and application metadata.
+         */
+        _meta?: Record<string, any>;
+        /**
+         * Deprecated alias for `_meta`.
+         */
+        metadata?: any;
+        handler?: (context: MCPToolInvocationContext) => MCPToolHandlerResult | Promise<MCPToolHandlerResult>;
+    };
+    export type MCPToolDescriptor = {
+        name: string;
+        title?: string;
+        description?: string;
+        inputSchema: Record<string, any>;
+        outputSchema?: Record<string, any>;
+        icons?: MCPIcon[];
+        annotations?: MCPToolAnnotations;
+        _meta?: Record<string, any>;
+        /**
+         * Deprecated alias for `_meta`.
+         */
+        metadata?: Record<string, any>;
     };
     export type MCPRegisterResourceOptions = {
         uri: string;
         name?: string;
+        title?: string;
         description?: string;
         mimeType?: string;
+        icons?: MCPIcon[];
+        annotations?: MCPAnnotations;
+        /**
+         * Size of the raw resource content in bytes.
+         */
+        size?: number;
         subscribable?: boolean;
+        /**
+         * Protocol and application metadata.
+         */
+        _meta?: Record<string, any>;
+        /**
+         * Deprecated alias for `_meta`.
+         */
         metadata?: any;
-        handler?: (context: MCPResourceContext) => any | Promise<any>;
+        handler?: (context: MCPResourceContext) => MCPResourceHandlerResult | Promise<MCPResourceHandlerResult>;
         onSubscribe?: (context: MCPResourceContext) => void | Promise<void>;
         onUnsubscribe?: (context: MCPResourceContext) => void | Promise<void>;
     };
+    export type MCPResourceHandlerResultObject = {
+        contents: MCPResourceContentInput[];
+        _meta?: Record<string, any>;
+    };
+    export type MCPResourceHandlerResult = MCPResourceHandlerResultObject | MCPResourceContentInput | MCPResourceContentInput[] | string | Uint8Array | null | undefined;
+    export type MCPInvocationOptions = {
+        sessionId?: string;
+    };
+    export type MCPPublishResourceOptions = {
+        sessionId?: string;
+        subscriptionId?: string;
+    };
     export type MCPStartServerOptions = {
         host?: string;
+        /**
+         * TCP port from 0 through 65535. Use 0 to select an available port.
+         */
         port?: number;
         endpoint?: string;
         sse?: string;
         message?: string;
         token?: string;
+        /**
+         * Positive 32-bit SSE retry interval in milliseconds.
+         */
         retry?: number;
+        /**
+         * Seconds to retain an inactive legacy session.
+         */
+        sessionTtlSeconds?: number;
+        /**
+         * Maximum HTTP request body size.
+         */
+        maxRequestBytes?: number;
+        /**
+         * Maximum concurrent HTTP session contexts.
+         */
+        maxSessions?: number;
+        /**
+         * Maximum queued events per SSE stream.
+         */
+        maxQueuedEvents?: number;
+        /**
+         * Maximum queued event bytes per SSE stream.
+         */
+        maxQueuedBytes?: number;
+        /**
+         * Allow a reconnect to replace an existing legacy SSE stream for the same session.
+         */
+        replaceSseStreamOnReconnect?: boolean;
         authorize?: (request: MCPAuthorizationRequest) => boolean | MCPAuthorizationDecision | Promise<boolean | MCPAuthorizationDecision>;
         oauth?: MCPOAuthOptions | boolean;
+    };
+    export type MCPOAuthServerEndpoints = {
+        authorizePath?: string | null;
+        tokenPath?: string | null;
+        metadataPath?: string | null;
+        protectedResourceMetadataPath?: string | null;
+    };
+    export type MCPStartServerResult = {
+        running: boolean;
+        host: string;
+        port: number;
+        endpoint: string;
+        oauth?: MCPOAuthServerEndpoints;
     };
 }
 
@@ -19051,35 +19469,36 @@ declare module "oro:navigation" {
 }
 
 declare module "oro:net" {
-    export function createServer(options: any, connectionListener: any): TCPServer;
-    export function createConnection(options: any, cb: any): TCPSocket;
-    export function connect(options: any, cb: any): TCPSocket;
-    class TCPServer extends EventEmitter {
-        constructor(options: {}, connectionListener: any);
-        id: bigint;
-        _listening: boolean;
-        _clients: Set<any>;
-        _timeoutMs: number;
-        _timeoutHandler: any;
-        _defaults: {
-            noDelay: boolean;
-            keepAlive: boolean;
-            keepAliveDelay: number;
-        };
-        listen(port: any, host: string, backlog: number, cb: any): this;
-        _ondata: (ev: any) => void;
-        setTimeout(ms: any, cb: any): this;
-        close(cb: any): Promise<void>;
-        getConnections(cb: any): number;
-        waitClose(timeoutMs?: number): Promise<boolean>;
-        address(): {
-            address: any;
-            port: any;
-        };
-    }
-    class TCPSocket extends EventEmitter {
-        constructor(id: any, opts: any);
-        id: any;
+    /**
+     * Creates a TCP server.
+     * @param {TCPServerOptions|TCPConnectionListener} [options]
+     * @param {TCPConnectionListener} [connectionListener]
+     * @returns {TCPServer}
+     */
+    export function createServer(options?: TCPServerOptions | TCPConnectionListener, connectionListener?: TCPConnectionListener): TCPServer;
+    /**
+     * Creates and connects a TCP socket.
+     * @param {number|TCPConnectOptions} options
+     * @param {string|(() => void)} [host]
+     * @param {() => void} [cb]
+     * @returns {TCPSocket}
+     */
+    export function createConnection(options: number | TCPConnectOptions, host?: string | (() => void), cb?: () => void): TCPSocket;
+    /**
+     * Alias for {@link createConnection}.
+     * @param {number|TCPConnectOptions} options
+     * @param {string|(() => void)} [host]
+     * @param {() => void} [cb]
+     * @returns {TCPSocket}
+     */
+    export function connect(options: number | TCPConnectOptions, host?: string | (() => void), cb?: () => void): TCPSocket;
+    export class TCPSocket extends EventEmitter {
+        /**
+         * @param {string|number|bigint|TCPSocketOptions} [id]
+         * @param {TCPSocketOptions} [opts]
+         */
+        constructor(id?: string | number | bigint | TCPSocketOptions, opts?: TCPSocketOptions);
+        id: string;
         _reading: boolean;
         _destroyed: boolean;
         _connected: boolean;
@@ -19095,39 +19514,202 @@ declare module "oro:net" {
         };
         _writing: boolean;
         _queue: any[];
+        _bufferedBytes: number;
+        _needDrain: boolean;
+        _ending: boolean;
+        _shutdownStarted: boolean;
+        writableHighWaterMark: any;
         _timeoutMs: number;
         _timeoutTimer: any;
         _writeHandler: (ev: any) => void;
         _inflight: {
             cb: any;
+            length: any;
         };
         _bumpTimeout(): void;
-        connect(port: any, host: string, cb: any): this;
+        /**
+         * Connects this socket to a remote TCP endpoint.
+         * @param {number|TCPConnectOptions} port
+         * @param {string|(() => void)} [host]
+         * @param {() => void} [cb]
+         * @returns {TCPSocket}
+         */
+        connect(port: number | TCPConnectOptions, host?: string | (() => void), cb?: () => void): TCPSocket;
         _connectHandler: (ev: any) => void;
         _startRead(): void;
         _globalHandler: (ev: any) => void;
-        write(chunk: any, cb: any): boolean;
+        /**
+         * Queues bytes for writing.
+         * @param {string|Buffer|Uint8Array|ArrayBuffer|DataView} chunk
+         * @param {string|TCPCallback} [encoding]
+         * @param {TCPCallback} [cb]
+         * @returns {boolean}
+         */
+        write(chunk: string | Buffer | Uint8Array | ArrayBuffer | DataView, encoding?: string | TCPCallback, cb?: TCPCallback): boolean;
+        _emitDrainIfNeeded(): void;
         _flushQueue(): void;
-        address(): {
-            address: any;
-            port: any;
-        };
-        remoteAddressInfo(): {
-            address: any;
-            port: any;
-        };
-        get remoteAddress(): any;
-        get remotePort(): any;
+        /**
+         * Returns this socket's local address, when available.
+         * @returns {TCPAddress|null}
+         */
+        address(): TCPAddress | null;
+        /**
+         * Returns this socket's remote address, when connected.
+         * @returns {TCPAddress|null}
+         */
+        remoteAddressInfo(): TCPAddress | null;
+        get remoteAddress(): string;
+        get remotePort(): number;
+        /** @returns {string|undefined} */
+        get localAddress(): string | undefined;
+        /** @returns {number|undefined} */
+        get localPort(): number | undefined;
+        /** @returns {boolean} */
+        get destroyed(): boolean;
+        /** @returns {boolean} */
+        get connecting(): boolean;
+        /** @returns {boolean} */
+        get pending(): boolean;
+        /** @returns {number} */
+        get writableLength(): number;
+        /**
+         * Enables or disables TCP_NODELAY.
+         * @param {boolean} [on=true]
+         * @returns {boolean}
+         */
         setNoDelay(on?: boolean): boolean;
+        /**
+         * Enables or disables TCP keepalive.
+         * @param {boolean} [on=true]
+         * @param {number} [initialDelaySec=0]
+         * @returns {boolean}
+         */
         setKeepAlive(on?: boolean, initialDelaySec?: number): boolean;
-        end(chunk: any, cb: any): void;
+        /**
+         * Optionally writes a final chunk and half-closes the socket.
+         * @param {string|Buffer|Uint8Array|ArrayBuffer|DataView} [chunk]
+         * @param {string|(() => void)} [encoding]
+         * @param {() => void} [cb]
+         * @returns {TCPSocket}
+         */
+        end(chunk?: string | Buffer | Uint8Array | ArrayBuffer | DataView, encoding?: string | (() => void), cb?: () => void): TCPSocket;
+        _endCallback: () => void;
+        _shutdown(): void;
         _onShutdown: (ev: any) => void;
         _endTimer: number;
-        setTimeout(ms: any, cb: any): this;
-        destroy(): void;
+        /**
+         * Sets the inactivity timeout.
+         * @param {number} ms
+         * @param {() => void} [cb]
+         * @returns {TCPSocket}
+         */
+        setTimeout(ms: number, cb?: () => void): TCPSocket;
+        /**
+         * Closes the socket and releases its native handle.
+         * @returns {TCPSocket}
+         */
+        destroy(): TCPSocket;
     }
+    export class TCPServer extends EventEmitter {
+        /**
+         * @param {TCPServerOptions} [options]
+         * @param {TCPConnectionListener} [connectionListener]
+         */
+        constructor(options?: TCPServerOptions, connectionListener?: TCPConnectionListener);
+        id: string;
+        _listening: boolean;
+        _clients: Set<any>;
+        _timeoutMs: any;
+        _timeoutHandler: (socket: TCPSocket) => void;
+        _defaults: {
+            noDelay: boolean;
+            keepAlive: boolean;
+            keepAliveDelay: any;
+            writableHighWaterMark: any;
+        };
+        /**
+         * Starts accepting connections.
+         * @param {number|TCPListenOptions} port
+         * @param {string|TCPCallback} [host]
+         * @param {number|TCPCallback} [backlog]
+         * @param {TCPCallback} [cb]
+         * @returns {TCPServer}
+         */
+        listen(port: number | TCPListenOptions, host?: string | TCPCallback, backlog?: number | TCPCallback, cb?: TCPCallback): TCPServer;
+        _ondata: (ev: any) => void;
+        /**
+         * Sets the inactivity timeout applied to subsequently accepted sockets.
+         * @param {number} ms
+         * @param {(socket: TCPSocket) => void} [cb]
+         * @returns {TCPServer}
+         */
+        setTimeout(ms: number, cb?: (socket: TCPSocket) => void): TCPServer;
+        /**
+         * Stops accepting connections and closes tracked client sockets.
+         * @param {TCPCallback} [cb]
+         * @returns {Promise<void>}
+         */
+        close(cb?: TCPCallback): Promise<void>;
+        /**
+         * Returns the number of tracked client connections.
+         * @param {(err: Error|null, count: number) => void} [cb]
+         * @returns {number}
+         */
+        getConnections(cb?: (err: Error | null, count: number) => void): number;
+        /**
+         * Waits for tracked clients to close, up to a bounded timeout.
+         * @param {number} [timeoutMs=2000]
+         * @returns {Promise<boolean>}
+         */
+        waitClose(timeoutMs?: number): Promise<boolean>;
+        /**
+         * Returns the server's bound address, when available.
+         * @returns {TCPAddress|null}
+         */
+        address(): TCPAddress | null;
+        /** @returns {boolean} */
+        get listening(): boolean;
+    }
+    namespace _default {
+        export { connect };
+        export { createConnection };
+        export { createServer };
+        export { TCPSocket as Socket };
+        export { TCPServer as Server };
+    }
+    export default _default;
+    export type TCPAddress = {
+        address: string;
+        port: number;
+    };
+    export type TCPConnectOptions = {
+        port: number;
+        host?: string;
+        timeout?: number;
+        writableHighWaterMark?: number;
+    };
+    export type TCPServerOptions = {
+        noDelay?: boolean;
+        keepAlive?: boolean;
+        keepAliveDelay?: number;
+        timeout?: number;
+        writableHighWaterMark?: number;
+    };
+    export type TCPListenOptions = {
+        port: number;
+        host?: string;
+        backlog?: number;
+    };
+    export type TCPSocketOptions = {
+        id?: string | number | bigint;
+        existing?: boolean;
+        writableHighWaterMark?: number;
+    };
+    export type TCPConnectionListener = (socket: TCPSocket) => void;
+    export type TCPCallback = (err?: Error) => void;
     import { EventEmitter } from "oro:events";
-    export {};
+    import { Buffer } from "oro:buffer";
+    export { TCPSocket as Socket, TCPServer as Server };
 }
 
 declare module "oro:node-esm-loader" {
@@ -19481,9 +20063,9 @@ declare module "oro:notification" {
         get id(): string;
         /**
          * `true` if the notification was closed, otherwise `false`.
-         * @type {boolea}
+         * @type {boolean}
          */
-        get closed(): boolea;
+        get closed(): boolean;
         /**
          * The last action identifier associated with this notification.
          * Empty string represents the default action.
@@ -19900,12 +20482,12 @@ declare module "oro:shared-worker" {
     /**
      * A reference to the opened environment. This value is an instance of an
      * `Environment` if the scope is a ServiceWorker scope.
-     * @type {Environment|null}
+     * @type {import('./shared-worker/env.js').Environment|null}
      */
-    export const env: Environment | null;
+    export const env: any | null;
+    export { SharedWorker };
     export default SharedWorker;
     import { SharedWorker } from "oro:shared-worker/index";
-    export { Environment, SharedWorker };
 }
 
 declare module "oro:signal" {
@@ -20319,73 +20901,7 @@ declare module "oro:tar" {
 }
 
 declare module "oro:tcp" {
-    export function connect(options: any, cb: any, ...args: any[]): {
-        id: any;
-        _reading: boolean;
-        _destroyed: boolean;
-        _connected: boolean;
-        _connecting: boolean;
-        _ended: boolean;
-        _remote: {
-            address: any;
-            port: any;
-        };
-        _local: {
-            address: any;
-            port: any;
-        };
-        _writing: boolean;
-        _queue: any[];
-        _timeoutMs: number;
-        _timeoutTimer: any;
-        _writeHandler: (ev: any) => void;
-        _inflight: {
-            cb: any;
-        };
-        _bumpTimeout(): void;
-        connect(port: any, host: string, cb: any): /*elided*/ any;
-        _connectHandler: (ev: any) => void;
-        _startRead(): void;
-        _globalHandler: (ev: any) => void;
-        write(chunk: any, cb: any): boolean;
-        _flushQueue(): void;
-        address(): {
-            address: any;
-            port: any;
-        };
-        remoteAddressInfo(): {
-            address: any;
-            port: any;
-        };
-        get remoteAddress(): any;
-        get remotePort(): any;
-        setNoDelay(on?: boolean): boolean;
-        setKeepAlive(on?: boolean, initialDelaySec?: number): boolean;
-        end(chunk: any, cb: any): void;
-        _onShutdown: (ev: any) => void;
-        _endTimer: number;
-        setTimeout(ms: any, cb: any): /*elided*/ any;
-        destroy(): void;
-        _events: any;
-        _contexts: any;
-        _eventsCount: number;
-        _maxListeners: number;
-        setMaxListeners(n: any): /*elided*/ any;
-        getMaxListeners(): any;
-        emit(type: any, ...args: any[]): boolean;
-        addListener(type: any, listener: any): any;
-        on(arg0: any, arg1: any): any;
-        prependListener(type: any, listener: any): any;
-        once(type: any, listener: any): /*elided*/ any;
-        prependOnceListener(type: any, listener: any): /*elided*/ any;
-        removeListener(type: any, listener: any): /*elided*/ any;
-        off(type: any, listener: any): /*elided*/ any;
-        removeAllListeners(type: any, ...args: any[]): /*elided*/ any;
-        listeners(type: any): any[];
-        rawListeners(type: any): any[];
-        listenerCount(type: any): any;
-        eventNames(): (string | symbol)[];
-    };
+    export function connect(options: any, cb: any, ...args: any[]): import("oro:net").TCPSocket;
     export const createServer: typeof _createServer;
     namespace _default {
         export { connect };
@@ -20450,10 +20966,10 @@ declare module "oro:tls" {
     /**
      * Create a `sha256/<base64>` pin from a leaf certificate DER payload.
      *
-     * @param {Buffer|TypedArray|DataView|ArrayBuffer} der
+     * @param {Buffer|ArrayBufferView|ArrayBuffer} der
      * @returns {Promise<string>}
      */
-    export function createTlsPinFromCertificateDer(der: Buffer | any | DataView | ArrayBuffer): Promise<string>;
+    export function createTlsPinFromCertificateDer(der: Buffer | ArrayBufferView | ArrayBuffer): Promise<string>;
     /**
      * Create a `sha256/<base64>` pin from a PEM-encoded certificate.
      *
@@ -21015,10 +21531,10 @@ declare module "oro:xpc" {
     /**
      * Helper to encode binary payloads as XPC data.
      * @param {Buffer | ArrayBuffer | ArrayBufferView | string} value
-     * @param {BufferEncoding} [encoding='utf8']
+     * @param {XPCBufferEncoding} [encoding='utf8']
      * @returns {object}
      */
-    export function data(value: Buffer | ArrayBuffer | ArrayBufferView | string, encoding?: BufferEncoding): object;
+    export function data(value: Buffer | ArrayBuffer | ArrayBufferView | string, encoding?: XPCBufferEncoding): object;
     /**
      * Helper to encode UUID payloads.
      * @param {string | { toString(): string }} value
@@ -21045,6 +21561,7 @@ declare module "oro:xpc" {
         value?: any;
         encoding?: string;
     };
+    export type XPCBufferEncoding = "utf8" | "utf-8" | "hex" | "base64";
     export type XPCMessageTimeoutDetail = {
         messageId: string | null;
         reason: string | null;
@@ -21780,10 +22297,18 @@ declare module "oro:internal/bluetooth-web" {
         getAvailability(): Promise<boolean>;
     }
     export class BluetoothDevice extends EventTarget {
+        /**
+         * @param {object} [options]
+         * @param {string} [options.id]
+         * @param {string} [options.name]
+         * @param {string[]} [options.services]
+         * @param {any} [options.manufacturerData]
+         */
         constructor({ id, name, services, manufacturerData }?: {
             id?: string;
             name?: string;
-            services?: any[];
+            services?: string[];
+            manufacturerData?: any;
         });
         id: string;
         name: string;
@@ -22280,11 +22805,12 @@ declare module "oro:internal/callsite" {
         }>;
         /**
          * Creates a `CallSiteList` instance from `Error` input.
+         * @ignore
          * @param {Error} error
          * @param {string} source
          * @return {CallSiteList}
          */
-        static from(error: Error, source: string): CallSiteList;
+        static fromError(error: Error, source: string): CallSiteList;
         /**
          * `CallSiteList` class constructor.
          * @param {Error} error
@@ -22944,9 +23470,9 @@ declare module "oro:internal/worker" {
     export const worker: object;
     /**
      * A reference to the global worker scope.
-     * @type {WorkerGlobalScope}
+     * @type {object}
      */
-    export const self: WorkerGlobalScope;
+    export const self: object;
     namespace _default {
         export { RUNTIME_WORKER_ID };
         export { removeEventListener };
@@ -23301,14 +23827,6 @@ declare module "oro:service-worker/storage" {
      * application and through service worker restarts.
      */
     export class SessionStorageProvider extends Provider {
-        /**
-         * Remove a value by `key`.
-         * @param {string} key
-         * @return {string?}
-         * @throws DOMException
-         * @throws NotFoundError
-         */
-        remove(key: string): string | null;
     }
     /**
      * A local storage provider that persists until the data is cleared.
@@ -23618,60 +24136,9 @@ declare module "oro:test/harness" {
 declare module "oro:vm/init" {
     export {};
 }
-declare function isTypedArray(object: any): boolean;
-declare function isArrayBuffer(object: any): object is ArrayBuffer;
-declare function findMessageTransfers(transfers: any, object: any, options?: any): any;
-declare const Uint8ArrayPrototype: Uint8Array<ArrayBufferLike>;
-declare const TypedArrayPrototype: any;
-declare const TypedArray: any;
-declare class Client extends EventTarget {
-    constructor(id: any, port: any);
-    id: any;
-    port: any;
-    onMessage(event: any): void;
-    postMessage(...args: any[]): any;
-    destroy(): void;
-}
-declare class Realm {
-    constructor(state: any, port: any);
-    /**
-     * The `MessagePort` for the VM realm.
-     * @type {MessagePort}
-     */
-    port: MessagePort;
-    /**
-     * A reference to the top level worker statae
-     * @type {State}
-     */
-    state: State;
-    /**
-     * Known content worlds that exist in a realm
-     * @type {Map<String, World>}
-     */
-    worlds: Map<string, World>;
-    get clients(): Map<any, any>;
-    postMessage(...args: any[]): void;
-}
-declare class State {
-    static init(): State;
-    /**
-     * All known connected `MessagePort` instances
-     * @type {MessagePort[]}
-     */
-    ports: MessagePort[];
-    /**
-     * Pending events to be dispatched to realm
-     * @type {MessageEvent[]}
-     */
-    pending: MessageEvent[];
-    /**
-     * The realm for all virtual machines. This is a headless webview
-     */
-    realm: any;
-    clients: Map<any, any>;
-    onConnect(event: any): void;
-    init(): void;
-    onPortMessage(port: any, event: any): void;
+
+declare module "oro:vm/worker" {
+    export {};
 }
 
 declare module "oro:vm/world" {

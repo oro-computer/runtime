@@ -22,6 +22,27 @@ namespace oro::runtime::mcp {
     }
   }
 
+  bool isModernProtocolVersion(const String& version) {
+    return version == kProtocolVersion;
+  }
+
+  bool isLegacyProtocolVersion(const String& version) {
+    return version == kLegacyProtocolVersion ||
+      version == kOlderLegacyProtocolVersion;
+  }
+
+  bool isSupportedProtocolVersion(const String& version) {
+    return isModernProtocolVersion(version) || isLegacyProtocolVersion(version);
+  }
+
+  Vector<String> supportedProtocolVersions() {
+    return {
+      kProtocolVersion,
+      kLegacyProtocolVersion,
+      kOlderLegacyProtocolVersion
+    };
+  }
+
   Error::Error(ErrorCode errorCode, const String& message)
     : code(errorCode),
       message(message)

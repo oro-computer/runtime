@@ -1,3 +1,28 @@
+<#
+.SYNOPSIS
+Build and stage the Oro Runtime on Windows.
+
+.DESCRIPTION
+The source-bootstrap environment variables NO_ANDROID and NO_IOS are distinct
+presence flags and are passed through to bin/install.sh.
+
+Any non-empty NO_ANDROID value disables only Android setup, ABI libraries, and
+staged Android artifacts. It does not disable iOS or a desktop target.
+
+Any non-empty NO_IOS value disables only iOS and iOS Simulator work on macOS.
+It does not disable Android or macOS desktop; on Windows it is harmless and can
+be set to state desktop-only intent consistently across CI hosts.
+
+Values such as 0 and false are non-empty and still disable the corresponding
+target. Leave a variable unset or empty to enable it. Set both variables for an
+explicitly desktop-only source build. These variables do not select an
+application target for oroc build --platform. See docs/BUILD_ENVIRONMENT.md.
+
+.EXAMPLE
+$env:NO_ANDROID = "1"
+$env:NO_IOS = "1"
+.\bin\install.ps1 -debug -verbose
+#>
 param([Switch]$debug, [Switch]$verbose, [Switch]$force, [Switch]$shbuild=$true, [Switch]$package_setup, [Switch]$declare_only=$false, [Switch]$yesdeps=$false,$fte="",$toolchain = "vsbuild")
 
 # -shbuild:$false - Don't run bin\install.sh (Builds runtime lib)
@@ -394,6 +419,24 @@ Function Bits-Download {
   return $exitCode
 }
 
+Function Confirm-AuthenticodeInstaller {
+  param([string]$path)
+
+  if (-not (Test-Path $path -PathType Leaf)) {
+    Write-Log "h" "not ok - downloaded installer is missing: $path"
+    return $false
+  }
+
+  $signature = Get-AuthenticodeSignature -FilePath $path
+  if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+    Write-Log "h" "not ok - downloaded installer has an invalid Authenticode signature: $path ($($signature.Status))"
+    return $false
+  }
+
+  Write-Log "v" "Verified Authenticode signature for $path ($($signature.SignerCertificate.Subject))"
+  return $true
+}
+
 # Sub UAC process is importing function definitions
 if ($declare_only) {
   Exit 0
@@ -459,9 +502,9 @@ if ((Test-Path "bin" -PathType Container) -eq $false) {
 
 Function Get-UrlCall {
   param($url, $dest)
-  # need .exe because curl is an alias for iwr, go figure...  
+  # need .exe because curl is an alias for iwr, go figure...
   if ($global:useCurl) {
-    return "iex ""& curl.exe -L --write-out '%{http_code}' """"$url"""" --output """"$dest""""""`n"
+    return "iex ""& curl.exe --fail --location --silent --show-error --write-out '%{http_code}' """"$url"""" --output """"$dest""""""`n"
   } else {
     return "Bits-Download(""$url"", ""$dest"")"
   }
@@ -562,6 +605,9 @@ Function Build-VCRuntimeInstallBlock() {
       if ($r -ne 200) {
         Return 1
       }
+      if (-not (Confirm-AuthenticodeInstaller "$env:TEMP\$installer")) {
+        Return 1
+      }
       Write-Log "h" "# Installing $env:TEMP\$installer"
       iex "& $env:TEMP\$installer /quiet"
       Write-Log "v" "Install result: $LASTEXITCODE"
@@ -609,6 +655,9 @@ Function Build-GitInstallBlock() {
     $r=-geturl-
     Write-Log "v" "HTTP result: $r"
     if ($r -ne 200) {
+      Return 1
+    }
+    if (-not (Confirm-AuthenticodeInstaller "$env:TEMP\$installer")) {
       Return 1
     }
     Write-Log "h" "# Installing $env:TEMP\$installer"
@@ -668,6 +717,9 @@ Function Build-CMakeInstallBlock() {
     $r=-geturl-
     Write-Log "v" "HTTP result: $r"
     if ($r -ne 200) {
+      Return 1
+    }
+    if (-not (Confirm-AuthenticodeInstaller "$env:TEMP\$installer")) {
       Return 1
     }
     Write-Log "h" "# Installing $env:TEMP\$installer"
@@ -730,6 +782,9 @@ Function Build-LLVMInstallBlock() {
     if ($r -ne 200) {
       Return 1
     }
+    if (-not (Confirm-AuthenticodeInstaller "$env:TEMP\$installer")) {
+      Return 1
+    }
     Write-Log "h" "# Installing $env:TEMP\$installer"
     iex "& $env:TEMP\$installer /S"
     sleep 1
@@ -757,6 +812,9 @@ Function Build-VSBuildInstallBlock() {
     $r=-geturl-
     Write-Log "v" "HTTP result: $r"
     if ($r -ne 200) {
+      Return 1
+    }
+    if (-not (Confirm-AuthenticodeInstaller "$env:TEMP\$installer")) {
       Return 1
     }
     Write-Log "h" "# Installing $env:TEMP\$installer"
@@ -925,7 +983,7 @@ Download size: 5.5GB, Installed size: 10.2GB y/[N]"
 
   if ($all_deps_accepted) {
     # Install process will write exit code back to this file
-    $deps_status_file="$($env:Temp)\socket-deps-$([guid]::NewGuid()).dat"
+    $deps_status_file="$($env:Temp)\oro-deps-$([guid]::NewGuid()).dat"
     Write-Log "d" "deps_status_file: $deps_status_file"
 
     if ($install_tasks.Count -gt 0) {
@@ -949,7 +1007,7 @@ Download size: 5.5GB, Installed size: 10.2GB y/[N]"
       "
 
       if ($debug) {
-        $install_script_name="$($env:Temp)\socket-deps-$([guid]::NewGuid()).ps1"
+        $install_script_name="$($env:Temp)\oro-deps-$([guid]::NewGuid()).ps1"
         Write-Log "d" "Writing install script to $install_script_name"
         Write-Output "$script".replace("\""", """") > $install_script_name
       }
@@ -968,7 +1026,7 @@ Download size: 5.5GB, Installed size: 10.2GB y/[N]"
         }
 
         if ($debug) {
-          $install_script_name="$($env:Temp)\socket-deps-$([guid]::NewGuid()).ps1"
+          $install_script_name="$($env:Temp)\oro-deps-$([guid]::NewGuid()).ps1"
           Write-Log "d" "Writing intall script to $install_script_name"
           Write-Output "$script".replace("\""", """") > $install_script_name
         } else {

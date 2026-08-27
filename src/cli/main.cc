@@ -2398,6 +2398,10 @@ inline String quoteTomlString (const String& value) {
   return "\"" + escapeTomlString(value) + "\"";
 }
 
+inline String quoteIniString (const String& value) {
+  return "\"" + escapeIniValue(value) + "\"";
+}
+
 inline bool isValidTomlBareKey (const String& key) {
   if (key.size() == 0) {
     return false;
@@ -2412,6 +2416,92 @@ inline bool isValidTomlBareKey (const String& key) {
     }
   }
   return true;
+}
+
+inline String mergeEnvironmentAssignments (
+  const String& source,
+  const UserConfigFormat format,
+  const Vector<std::pair<String, String>>& assignments
+) {
+  if (assignments.empty()) {
+    return source;
+  }
+
+  Map<> overrides;
+  for (const auto& assignment : assignments) {
+    overrides[assignment.first] = assignment.second;
+  }
+
+  auto writeOverrides = [&] (StringStream& output) {
+    for (const auto& assignment : overrides) {
+      const auto key = format == UserConfigFormat::Toml &&
+          !isValidTomlBareKey(assignment.first)
+        ? quoteTomlString(assignment.first)
+        : assignment.first;
+      const auto value = format == UserConfigFormat::Toml
+        ? quoteTomlString(assignment.second)
+        : quoteIniString(assignment.second);
+      output << key << " = " << value << "\n";
+    }
+  };
+
+  auto assignmentKey = [&] (const String& line) {
+    const auto separator = line.find('=');
+    if (separator == String::npos) {
+      return String("");
+    }
+
+    auto key = trim(line.substr(0, separator));
+    if (key.size() >= 2 && key.front() == '"' && key.back() == '"') {
+      key = key.substr(1, key.size() - 2);
+    }
+    return key;
+  };
+
+  StringStream input(source);
+  StringStream output;
+  String line;
+  bool foundEnvironmentTable = false;
+  bool inEnvironmentTable = false;
+  bool wroteOverrides = false;
+
+  while (std::getline(input, line)) {
+    const auto cleanLine = trim(line);
+    const bool isTable = cleanLine.size() >= 2 &&
+      cleanLine.front() == '[' && cleanLine.back() == ']';
+
+    if (isTable) {
+      if (inEnvironmentTable && !wroteOverrides) {
+        writeOverrides(output);
+        wroteOverrides = true;
+      }
+
+      inEnvironmentTable = cleanLine == "[env]";
+      if (inEnvironmentTable) {
+        foundEnvironmentTable = true;
+      }
+      output << line << "\n";
+      continue;
+    }
+
+    if (inEnvironmentTable && overrides.count(assignmentKey(line)) > 0) {
+      continue;
+    }
+
+    output << line << "\n";
+  }
+
+  if (inEnvironmentTable && !wroteOverrides) {
+    writeOverrides(output);
+    wroteOverrides = true;
+  }
+
+  if (!foundEnvironmentTable) {
+    output << "\n[env]\n";
+    writeOverrides(output);
+  }
+
+  return output.str();
 }
 
 inline UserConfigFormat detectConfigFormatForPath (const Path& path) {
@@ -4761,7 +4851,7 @@ int runApp (const Path& path, const String& args, bool headless) {
       if (headlessRunnerFlags.size() == 0) {
         // use sane defaults if 'xvfb-run' is used
         if (headlessRunner == "xvfb-run") {
-          headlessRunnerFlags = " --server-args='-screen 0 1920x1080x24' ";
+          headlessRunnerFlags = " -a --server-args='-screen 0 1920x1080x24' ";
         }
       }
     }
@@ -5945,7 +6035,11 @@ optionsAndEnv parseCommandLineOptions (
 
     if (equal(key, "--env")) {
       if (value.size() > 0) {
-        auto parts = parseStringList(value);
+        // An explicit assignment may contain whitespace in its value. Only
+        // parse a list when the argument contains environment variable names.
+        const auto parts = value.find('=') == String::npos
+          ? parseStringList(value)
+          : Vector<String> {value};
         for (const auto& part : parts) {
           envs.push_back(part);
         }
@@ -6595,26 +6689,26 @@ int main (int argc, char* argv[]) {
           Vector<std::pair<String, String>> envAssignments;
           envAssignments.reserve(envs.size());
           for (const auto& value : envs) {
-            const auto parts = split(value, '=');
-            if (parts.size() == 2) {
-              envAssignments.emplace_back(parts[0], parts[1]);
-            } else if (parts.size() == 1 && env::has(parts[0])) {
-              envAssignments.emplace_back(parts[0], env::get(parts[0]));
-            }
-          }
-
-          if (!envAssignments.empty()) {
-            StringStream stream;
-            stream << "\n[env]\n";
-            for (const auto& assignment : envAssignments) {
-              if (configFormat == UserConfigFormat::Toml) {
-                stream << assignment.first << " = " << quoteTomlString(assignment.second) << "\n";
-              } else {
-                stream << assignment.first << " = " << assignment.second << "\n";
+            const auto separator = value.find('=');
+            if (separator != String::npos) {
+              const auto key = trim(value.substr(0, separator));
+              if (key.empty()) {
+                logError("--env expects NAME or NAME=VALUE");
+                exit(1);
               }
+              envAssignments.emplace_back(key, value.substr(separator + 1));
+            } else if (env::has(value)) {
+              envAssignments.emplace_back(value, env::get(value));
+            } else {
+              logError("environment variable '" + value + "' is not set");
+              exit(1);
             }
-            configDocument += stream.str();
           }
+          configDocument = mergeEnvironmentAssignments(
+            configDocument,
+            configFormat,
+            envAssignments
+          );
         }
 
         Vector<String> cliArguments;
@@ -7765,6 +7859,17 @@ int main (int argc, char* argv[]) {
         if (ORO_RUNTIME_BUILD_TIME > stats.st_mtime) {
           flagRunUserBuildOnly = false;
         }
+
+        const auto runtimeArchive = resolveRuntimeStaticArchive(
+          "lib/" + platform.arch + "-desktop"
+        );
+        struct stat runtimeArchiveStats;
+        if (
+          stat(convertWStringToString(runtimeArchive).c_str(), &runtimeArchiveStats) == 0 &&
+          runtimeArchiveStats.st_mtime > stats.st_mtime
+        ) {
+          flagRunUserBuildOnly = false;
+        }
       }
     }
 
@@ -8791,13 +8896,24 @@ int main (int argc, char* argv[]) {
           }
           seenExtensions.push_back(extension);
 
-          auto source = settings["build_extensions_" + extension + "_source"];
+          const auto extensionKey = "build_extensions_" + extension;
+          const auto scopedExtensionKey = "build_extensions_android_" + extension;
+          const auto legacyScopedExtensionKey = extensionKey + "_android";
+          auto source = settings[extensionKey + "_source"];
+          if (source.size() == 0) {
+            source = settings[scopedExtensionKey + "_source"];
+          }
           auto oldCwd = fs::current_path();
           fs::current_path(targetPath);
 
-          if (source.size() == 0 && fs::is_directory(settings["build_extensions_" + extension])) {
-            source = settings["build_extensions_" + extension];
-            settings["build_extensions_" + extension] = "";
+          if (source.size() == 0) {
+            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, legacyScopedExtensionKey}) {
+              if (fs::is_directory(settings[sourceKey])) {
+                source = settings[sourceKey];
+                settings[sourceKey] = "";
+                break;
+              }
+            }
           }
 
           if (source.size() > 0) {
@@ -8970,7 +9086,11 @@ int main (int argc, char* argv[]) {
 
           for (
             auto source : parseStringList(
-              trim(settings["build_extensions_" + extension] + " " + settings["build_extensions_" + extension + "_android"]),
+              trim(
+                settings[extensionKey] + " " +
+                settings[scopedExtensionKey] + " " +
+                settings[legacyScopedExtensionKey]
+              ),
               ' '
             )
           ) {
@@ -9480,11 +9600,22 @@ int main (int argc, char* argv[]) {
           extension = split(extension, '_')[0];
           fs::current_path(targetPath);
 
-          auto source = settings["build_extensions_" + extension + "_source"];
+          const auto extensionKey = "build_extensions_" + extension;
+          const auto scopedExtensionKey = "build_extensions_ios_" + extension;
+          const auto legacyScopedExtensionKey = extensionKey + "_ios";
+          auto source = settings[extensionKey + "_source"];
+          if (source.size() == 0) {
+            source = settings[scopedExtensionKey + "_source"];
+          }
 
-          if (source.size() == 0 && fs::is_directory(settings["build_extensions_" + extension])) {
-            source = settings["build_extensions_" + extension];
-            settings["build_extensions_" + extension] = "";
+          if (source.size() == 0) {
+            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, legacyScopedExtensionKey}) {
+              if (fs::is_directory(settings[sourceKey])) {
+                source = settings[sourceKey];
+                settings[sourceKey] = "";
+                break;
+              }
+            }
           }
 
           if (source.size() > 0) {
@@ -9548,7 +9679,11 @@ int main (int argc, char* argv[]) {
           auto target = settings["build_extensions_" + extension + "_target"];
 
           auto sources = parseStringList(
-            trim(settings["build_extensions_" + extension] + " " + settings["build_extensions_" + extension + "_ios"]),
+            trim(
+              settings[extensionKey] + " " +
+              settings[scopedExtensionKey] + " " +
+              settings[legacyScopedExtensionKey]
+            ),
             ' '
           );
 
@@ -10206,6 +10341,7 @@ int main (int argc, char* argv[]) {
           command
             << CXX
             << " -shared"
+            << " -Wl,--exclude-libs,ALL"
             << " -rdynamic"
             << " -fPIC"
             << " " << flags
@@ -10957,14 +11093,23 @@ int main (int argc, char* argv[]) {
           extension = split(extension, '_')[0];
           fs::current_path(targetPath);
 
-          auto source = settings["build_extensions_" + extension + "_source"];
+          const auto extensionKey = "build_extensions_" + extension;
+          const auto scopedExtensionKey = "build_extensions_" + os + "_" + extension;
+          const auto legacyScopedExtensionKey = extensionKey + "_" + os;
+          auto source = settings[extensionKey + "_source"];
+          if (source.size() == 0) {
+            source = settings[scopedExtensionKey + "_source"];
+          }
 
           if (source.size() == 0) {
-            source = settings["build_extensions_" + extension];
-            if (source.size() > 0) {
-              if (fs::is_directory(source)) {
-                settings["build_extensions_" + extension + "_path"] = (targetPath / source).string();
-                settings["build_extensions_" + extension] = "";
+            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, legacyScopedExtensionKey}) {
+              source = settings[sourceKey];
+              if (source.size() > 0) {
+                if (fs::is_directory(source)) {
+                  settings[extensionKey + "_path"] = (targetPath / source).string();
+                  settings[sourceKey] = "";
+                }
+                break;
               }
             }
           }
@@ -11112,7 +11257,11 @@ int main (int argc, char* argv[]) {
           auto target = settings["build_extensions_" + extension + "_target"];
 
           auto sources = parseStringList(
-            trim(settings["build_extensions_" + extension] + " " + settings["build_extensions_" + extension + "_" + os]),
+            trim(
+              settings[extensionKey] + " " +
+              settings[scopedExtensionKey] + " " +
+              settings[legacyScopedExtensionKey]
+            ),
             ' '
           );
 
@@ -11552,6 +11701,7 @@ int main (int argc, char* argv[]) {
             << " " << flags
             << " " << extraFlags
           #if defined(__linux__)
+            << " -Wl,--exclude-libs,ALL"
             << " -luv"
             << " -lusb-1.0"
             << " -lllama"
@@ -13698,6 +13848,10 @@ int main (int argc, char* argv[]) {
     envs["ORO_DEBUG"] = env::get("ORO_DEBUG");
     envs["ORO_VERBOSE"] = env::get("ORO_VERBOSE");
 
+    // runtime source-bootstrap target exclusions
+    envs["NO_ANDROID"] = env::get("NO_ANDROID");
+    envs["NO_IOS"] = env::get("NO_IOS");
+
     // runtime variables
     auto runtimeHome = getHomeHome(false);
     envs["ORO_HOME"] = runtimeHome;
@@ -13848,11 +14002,11 @@ int main (int argc, char* argv[]) {
     { { "--replace-sse-stream" }, true, false }
   };
 
-	  createSubcommand("mcp", mcpOptions, false, [&](Map<> optionsWithValue, std::unordered_set<String> optionsWithoutValue) -> void {
-	    const bool hasHttp = optionsWithoutValue.find("--http") != optionsWithoutValue.end();
-	    const bool hasStdio = optionsWithoutValue.find("--stdio") != optionsWithoutValue.end();
-	    if (hasHttp && hasStdio) {
-	      logError("mcp: --http and --stdio are mutually exclusive");
+  createSubcommand("mcp", mcpOptions, false, [&](Map<> optionsWithValue, std::unordered_set<String> optionsWithoutValue) -> void {
+    const bool hasHttp = optionsWithoutValue.find("--http") != optionsWithoutValue.end();
+    const bool hasStdio = optionsWithoutValue.find("--stdio") != optionsWithoutValue.end();
+    if (hasHttp && hasStdio) {
+      logError("mcp: --http and --stdio are mutually exclusive");
       exit(1);
     }
 
@@ -13893,115 +14047,150 @@ int main (int argc, char* argv[]) {
       env::set("ORO_HOME", mcpHome.string());
     }
 
-	    oro::cli::mcp::Options mcpRunOptions;
+    oro::cli::mcp::Options mcpRunOptions;
     mcpRunOptions.workspaceRoot = workspaceRoot;
     mcpRunOptions.configPath = configPath;
-	    mcpRunOptions.cliExecutable = cliInvocationPath;
-	    mcpRunOptions.cliDisplayName = gCliDisplayName;
-	    mcpRunOptions.useHttp = useHttp;
+    mcpRunOptions.cliExecutable = cliInvocationPath;
+    mcpRunOptions.cliDisplayName = gCliDisplayName;
+    mcpRunOptions.useHttp = useHttp;
 
-	    const bool allowReadOutsideWorkspace =
-	      optionsWithoutValue.find("--allow-read-outside-workspace") != optionsWithoutValue.end();
-	    const bool readWorkspaceOnly =
-	      optionsWithoutValue.find("--read-workspace-only") != optionsWithoutValue.end();
-	    if (allowReadOutsideWorkspace && readWorkspaceOnly) {
-	      logError("mcp: --allow-read-outside-workspace and --read-workspace-only are mutually exclusive");
-	      exit(1);
-	    }
-	    mcpRunOptions.allowReadOutsideWorkspace = !readWorkspaceOnly;
+    const bool allowReadOutsideWorkspace =
+      optionsWithoutValue.find("--allow-read-outside-workspace") != optionsWithoutValue.end();
+    const bool readWorkspaceOnly =
+      optionsWithoutValue.find("--read-workspace-only") != optionsWithoutValue.end();
+    if (allowReadOutsideWorkspace && readWorkspaceOnly) {
+      logError("mcp: --allow-read-outside-workspace and --read-workspace-only are mutually exclusive");
+      exit(1);
+    }
+    mcpRunOptions.allowReadOutsideWorkspace = allowReadOutsideWorkspace;
 
-	    mcpRunOptions.replaceSseStreamOnReconnect =
-	      optionsWithoutValue.find("--replace-sse-stream") != optionsWithoutValue.end();
+    mcpRunOptions.replaceSseStreamOnReconnect =
+      optionsWithoutValue.find("--replace-sse-stream") != optionsWithoutValue.end();
 
-	    const bool hostExplicit = optionsWithValue.count("--host") > 0 && optionsWithValue["--host"].size() > 0;
-	    const bool endpointExplicit = optionsWithValue.count("--endpoint") > 0 && optionsWithValue["--endpoint"].size() > 0;
-	    const bool portExplicit = optionsWithValue.count("--port") > 0 && optionsWithValue["--port"].size() > 0;
-	    const bool tokenExplicit = optionsWithValue.count("--token") > 0 && optionsWithValue["--token"].size() > 0;
-	    const bool noAuth = optionsWithoutValue.find("--no-auth") != optionsWithoutValue.end();
+    const bool hostExplicit = optionsWithValue.count("--host") > 0 && optionsWithValue["--host"].size() > 0;
+    const bool endpointExplicit = optionsWithValue.count("--endpoint") > 0 && optionsWithValue["--endpoint"].size() > 0;
+    const bool portExplicit = optionsWithValue.count("--port") > 0 && optionsWithValue["--port"].size() > 0;
+    const bool tokenExplicit = optionsWithValue.count("--token") > 0 && optionsWithValue["--token"].size() > 0;
+    const bool noAuth = optionsWithoutValue.find("--no-auth") != optionsWithoutValue.end();
 
-	    if (useHttp) {
-	      const fs::path configRel = configPath.empty() ? fs::path("oro.toml") : fs::path(configPath);
-	      const auto configRelNorm = configRel.lexically_normal();
-	      if (!configRelNorm.empty() && configRelNorm.is_relative()) {
-	        std::error_code ec;
-	        const auto configAbs = fs::weakly_canonical(workspaceRoot / configRelNorm, ec);
-	        if (!ec && fs::is_regular_file(configAbs, ec) && !ec) {
-	          try {
-	            const auto doc = runtime::TOML::parseFile(configAbs);
-	            if (doc.isTable()) {
-	              const auto& mcpTable = doc["mcp"];
-	              if (mcpTable.isTable()) {
-	                const auto& hostValue = mcpTable["host"];
-	                if (!hostExplicit && hostValue.is(runtime::TOML::Type::String) && hostValue.asString().size() > 0) {
-	                  mcpRunOptions.host = hostValue.asString();
-	                }
+    if (useHttp) {
+      const fs::path configRel = configPath.empty() ? fs::path("oro.toml") : fs::path(configPath);
+      const auto configRelNorm = configRel.lexically_normal();
+      if (!configRelNorm.empty() && configRelNorm.is_relative()) {
+        std::error_code ec;
+        const auto workspaceAbs = fs::weakly_canonical(workspaceRoot, ec);
+        const auto configAbs = ec
+          ? fs::path()
+          : fs::weakly_canonical(workspaceAbs / configRelNorm, ec);
+        const auto configRelative = ec
+          ? fs::path()
+          : fs::relative(configAbs, workspaceAbs, ec);
+        bool configInsideWorkspace = !ec && !configRelative.is_absolute();
+        for (const auto& part : configRelative) {
+          if (part == "..") {
+            configInsideWorkspace = false;
+            break;
+          }
+        }
 
-	                const auto& endpointValue = mcpTable["endpoint"];
-	                if (!endpointExplicit && endpointValue.is(runtime::TOML::Type::String) && endpointValue.asString().size() > 0) {
-	                  mcpRunOptions.endpoint = endpointValue.asString();
-	                }
+        if (configInsideWorkspace && fs::is_regular_file(configAbs, ec) && !ec) {
+          try {
+            const auto doc = runtime::TOML::parseFile(configAbs);
+            if (doc.isTable()) {
+              const auto& mcpTable = doc["mcp"];
+              if (mcpTable.isTable()) {
+                const auto& hostValue = mcpTable["host"];
+                if (!hostExplicit && hostValue.is(runtime::TOML::Type::String) && hostValue.asString().size() > 0) {
+                  mcpRunOptions.host = hostValue.asString();
+                }
 
-	                const auto& portValue = mcpTable["port"];
-	                if (!portExplicit && portValue.is(runtime::TOML::Type::Integer)) {
-	                  const auto port = portValue.asInteger();
-	                  if (port > 0 && port <= 65535) {
-	                    mcpRunOptions.port = static_cast<int>(port);
-	                  }
-	                }
+                const auto& endpointValue = mcpTable["endpoint"];
+                if (!endpointExplicit && endpointValue.is(runtime::TOML::Type::String) && endpointValue.asString().size() > 0) {
+                  mcpRunOptions.endpoint = endpointValue.asString();
+                }
 
-	                const auto& tokenValue = mcpTable["token"];
-	                if (!tokenExplicit && tokenValue.is(runtime::TOML::Type::String) && tokenValue.asString().size() > 0) {
-	                  mcpRunOptions.token = tokenValue.asString();
-	                }
-	              }
-	            }
-	          } catch (...) {}
-	        }
-	      }
-	    }
+                const auto& portValue = mcpTable["port"];
+                if (!portExplicit && portValue.is(runtime::TOML::Type::Integer)) {
+                  const auto port = portValue.asInteger();
+                  if (port > 0 && port <= 65535) {
+                    mcpRunOptions.port = static_cast<int>(port);
+                  }
+                }
 
-	    if (hostExplicit) {
-	      mcpRunOptions.host = optionsWithValue["--host"];
-	    }
-	    if (endpointExplicit) {
-	      mcpRunOptions.endpoint = optionsWithValue["--endpoint"];
-	    }
+                const auto& tokenValue = mcpTable["token"];
+                if (!tokenExplicit && tokenValue.is(runtime::TOML::Type::String) && tokenValue.asString().size() > 0) {
+                  mcpRunOptions.token = tokenValue.asString();
+                }
+              }
+            }
+          } catch (...) {}
+        }
+      }
+    }
 
-	    if (portExplicit) {
-	      try {
-	        mcpRunOptions.port = std::stoi(optionsWithValue["--port"]);
-	      } catch (...) {
-	        logError("mcp: --port must be an integer");
-	        exit(1);
-	      }
-	    }
+    if (hostExplicit) {
+      mcpRunOptions.host = optionsWithValue["--host"];
+    }
+    if (endpointExplicit) {
+      mcpRunOptions.endpoint = optionsWithValue["--endpoint"];
+    }
 
-	    if (tokenExplicit) {
-	      mcpRunOptions.token = optionsWithValue["--token"];
-	    }
+    if (portExplicit) {
+      try {
+        size_t consumed = 0;
+        const auto port = std::stoi(optionsWithValue["--port"], &consumed);
+        if (consumed != optionsWithValue["--port"].size() || port < 0 || port > 65535) {
+          throw std::out_of_range("port");
+        }
+        mcpRunOptions.port = port;
+      } catch (...) {
+        logError("mcp: --port must be an integer from 0 through 65535");
+        exit(1);
+      }
+    }
 
-	    if (useHttp) {
-	      const String host = mcpRunOptions.host.size() > 0 ? mcpRunOptions.host : "127.0.0.1";
-	      const bool loopbackHost = host == "127.0.0.1" || host == "localhost" || host == "::1";
+    if (tokenExplicit) {
+      mcpRunOptions.token = optionsWithValue["--token"];
+    }
+
+    if (useHttp) {
+      const String host = mcpRunOptions.host.size() > 0 ? mcpRunOptions.host : "127.0.0.1";
+      const String normalizedHost = toLowerCase(host);
+      const bool loopbackHost = normalizedHost == "localhost" ||
+        normalizedHost == "localhost." ||
+        normalizedHost.rfind("127.", 0) == 0 ||
+        normalizedHost == "::1" ||
+        normalizedHost == "[::1]";
 
       if (noAuth && !loopbackHost) {
         logError("mcp: --no-auth is only allowed with loopback hosts (127.0.0.1, localhost, ::1)");
-	        exit(1);
-	      }
+        exit(1);
+      }
 
-	      const bool tokenRequested = tokenExplicit || (mcpRunOptions.token.size() > 0);
+      const bool tokenRequested = tokenExplicit || (mcpRunOptions.token.size() > 0);
 
-	      if (noAuth) {
-	        mcpRunOptions.token = "";
-	      } else if (!tokenRequested && loopbackHost) {
-	        // Codex and other local MCP clients often expect unauthenticated loopback servers.
-	        // Require --token explicitly to enable bearer auth on loopback.
-	        mcpRunOptions.token = "";
-	      } else if (mcpRunOptions.token.size() == 0) {
-	        std::ostringstream tokenStream;
-        tokenStream << std::hex << std::setw(16) << std::setfill('0') << rand64()
-                    << std::setw(16) << std::setfill('0') << rand64();
-        mcpRunOptions.token = tokenStream.str();
+      if (noAuth) {
+        mcpRunOptions.token = "";
+      } else if (!tokenRequested || mcpRunOptions.token.size() == 0) {
+#if ORO_CLI_HAS_SODIUM
+        if (sodium_init() < 0) {
+          logError("mcp: failed to initialize secure token generation");
+          exit(1);
+        }
+        std::array<unsigned char, 32> tokenBytes {};
+        std::array<char, 65> tokenHex {};
+        randombytes_buf(tokenBytes.data(), tokenBytes.size());
+        sodium_bin2hex(
+          tokenHex.data(),
+          tokenHex.size(),
+          tokenBytes.data(),
+          tokenBytes.size()
+        );
+        mcpRunOptions.token = tokenHex.data();
+#else
+        logError("mcp: automatic token generation requires libsodium; pass --token or use --no-auth on loopback");
+        exit(1);
+#endif
       }
     }
 

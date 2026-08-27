@@ -229,9 +229,7 @@ export function cp(src: any, dest: any, options: any): Promise<void>;
  * @return {Watcher}
  */
 export function watch(path: any, options?: (Function | object) | undefined): Watcher;
-export type Stats = import("./stats.js").Stats;
 export default exports;
-export type Buffer = import("../buffer.js").Buffer;
 export type TypedArray = Uint8Array | Int8Array;
 import { Buffer } from '../buffer.js';
 import { FileHandle } from './handle.js';
@@ -246,4 +244,4 @@ import fds from './fds.js';
 import { ReadStream } from './stream.js';
 import { WriteStream } from './stream.js';
 import * as exports from './promises.js';
-export { bookmarks, constants, Dir, DirectoryHandle, Dirent, fds, FileHandle, ReadStream, Watcher, WriteStream };
+export { bookmarks, constants, Dir, DirectoryHandle, Dirent, fds, FileHandle, ReadStream, Stats, Watcher, WriteStream };

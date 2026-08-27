@@ -17,6 +17,7 @@ namespace oro::runtime::core::services {
       struct SpawnOptions {
         String cwd;
         const Vector<String> env;
+        bool replaceEnvironment = false;
         bool allowStdin = true;
         bool allowStdout = true;
         bool allowStderr = true;
@@ -25,6 +26,7 @@ namespace oro::runtime::core::services {
       struct ExecOptions {
         String cwd;
         const Vector<String> env;
+        bool replaceEnvironment = false;
         bool allowStdout = true;
         bool allowStderr = true;
         uint64_t timeout = 0;

@@ -75,6 +75,12 @@ allow external exec during builds
 .TP
 \fBORO_ENABLE_SANITIZERS\fR
 enable ASan/UBSan on desktop builds
+.TP
+\fBNO_ANDROID\fR
+source bootstrap: disable only Android work when non\-empty
+.TP
+\fBNO_IOS\fR
+source bootstrap: disable only iOS/iOS Simulator work when non\-empty
 .SH GENERAL OPTIONS
 .TP
 \fB\-h, \-\-help\fR
@@ -105,7 +111,7 @@ enable structured JSON logs on stdout
 mirror logs to a JSON file
 .SH NOTES
 .PP
-Run 'oroc <subcommand> \-\-help' for subcommand\-specific flags, examples, and platform notes. Use 'oroc help <query>' to search commands, options, examples, and workflow notes by topic. 'oroc <subcommand> \-\-json' emits structured command results when that subcommand supports it. The global 'oroc \-\-json <subcommand>' form is reserved for JSON log streaming. Use '\-\-log\-file=<path>' when you need machine\-readable stdout plus a separate log stream.
+Run 'oroc <subcommand> \-\-help' for subcommand\-specific flags, examples, and platform notes. Use 'oroc help <query>' to search commands, options, examples, and workflow notes by topic. 'oroc <subcommand> \-\-json' emits structured command results when that subcommand supports it. The global 'oroc \-\-json <subcommand>' form is reserved for JSON log streaming. Use '\-\-log\-file=<path>' when you need machine\-readable stdout plus a separate log stream. NO_ANDROID and NO_IOS are independent presence flags for building the runtime source tree; they do not select an application target for 'oroc build \-\-platform'. Values such as 0 and false are non\-empty and still disable the named target.
 .SH EXAMPLES
 .TP
 \fBoroc init my\-app\fR

@@ -777,11 +777,12 @@ export class CallSite {
 export class CallSiteList extends Array {
   /**
    * Creates a `CallSiteList` instance from `Error` input.
+   * @ignore
    * @param {Error} error
    * @param {string} source
    * @return {CallSiteList}
    */
-  static from (error, source) {
+  static fromError (error, source) {
     const callsites = new this(
       error,
       source.split('\n').slice(0, Error.stackTraceLimit)
@@ -960,7 +961,7 @@ export class CallSiteList extends Array {
  * @return {CallSite[]}
  */
 export function createCallSites (error, source) {
-  return CallSiteList.from(error, source)
+  return CallSiteList.fromError(error, source)
 }
 
 export default CallSite

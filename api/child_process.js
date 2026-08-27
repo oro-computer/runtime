@@ -11,12 +11,111 @@ import ipc from './ipc.js'
 import gc from './gc.js'
 import os from './os.js'
 
+/**
+ * @typedef {object} ChildProcessOptions
+ * @property {Record<string, string | number | boolean | null | undefined>} [env] Complete child environment. Replaces the inherited environment when provided.
+ * @property {string} [cwd] Working directory for the child.
+ * @property {boolean} [stdin=true] Open a writable stdin pipe.
+ * @property {boolean} [stdout=true] Open a readable stdout pipe.
+ * @property {boolean} [stderr=true] Open a readable stderr pipe.
+ * @property {AbortSignal} [signal] Signal that terminates the child when aborted.
+ * @property {number|string} [killSignal='SIGTERM'] Signal used for timeout or abort termination.
+ * @property {number} [timeout] Milliseconds before terminating the child.
+ */
+
+/**
+ * @typedef {ChildProcessOptions & { encoding?: string, shell?: string }} ExecOptions
+ */
+
+/**
+ * @typedef {ChildProcessOptions & { encoding?: string }} ExecFileOptions
+ */
+
+/**
+ * @typedef {Omit<ChildProcessOptions, 'signal'|'stdin'> & { encoding?: string }} ExecSyncOptions
+ */
+
+/**
+ * @typedef {(error: Error | null, stdout: string | Buffer | null, stderr: string | Buffer | null) => void} ExecCallback
+ */
+
 const dc = diagnostics.channels.group('child_process', [
   'spawn',
   'close',
   'exit',
   'kill'
 ])
+
+function validateEnvironment (env) {
+  if (env == null) return
+  if (typeof env !== 'object' || Array.isArray(env)) {
+    throw new TypeError('Expecting env to be an object.')
+  }
+
+  for (const [key, value] of Object.entries(env)) {
+    if (!key || key.includes('=') || key.includes('\u0000') || key.includes('\u0001')) {
+      throw new TypeError('Environment names cannot be empty or contain =, NUL, or U+0001 characters.')
+    }
+    const stringValue = String(value ?? '')
+    if (stringValue.includes('\u0000') || stringValue.includes('\u0001')) {
+      throw new TypeError('Environment values cannot contain NUL or U+0001 characters.')
+    }
+  }
+}
+
+function serializeEnvironment (env) {
+  validateEnvironment(env)
+  return Object.entries(env)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${String(value ?? '')}`)
+    .join('\u0001')
+}
+
+function normalizeSpawnInput (command, args, options) {
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    options = args
+    args = []
+  }
+
+  if (!command || typeof command !== 'string') {
+    throw new TypeError('Expecting command to be a string.')
+  }
+
+  if (command.includes('\u0000') || command.includes('\u0001')) {
+    throw new TypeError('Command cannot contain NUL or U+0001 characters.')
+  }
+
+  if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) {
+    throw new TypeError('Expecting args to be an array of strings.')
+  }
+
+  if (args.some((arg) => arg.includes('\u0000') || arg.includes('\u0001'))) {
+    throw new TypeError('Arguments cannot contain NUL or U+0001 characters.')
+  }
+
+  if (options != null && (typeof options !== 'object' || Array.isArray(options))) {
+    throw new TypeError('Expecting options to be an object.')
+  }
+
+  if (options?.cwd != null && typeof options.cwd !== 'string') {
+    throw new TypeError('Expecting cwd to be a string.')
+  }
+  if (options?.cwd?.includes('\u0000')) {
+    throw new TypeError('Working directory cannot contain NUL characters.')
+  }
+  if (options?.timeout != null &&
+      (!Number.isFinite(options.timeout) || options.timeout < 0)) {
+    throw new TypeError('Expecting timeout to be a non-negative finite number.')
+  }
+  for (const key of ['stdin', 'stdout', 'stderr']) {
+    if (options?.[key] != null && typeof options[key] !== 'boolean') {
+      throw new TypeError(`Expecting ${key} to be a boolean.`)
+    }
+  }
+  validateEnvironment(options?.env)
+
+  return { args, options }
+}
 
 export class Pipe extends AsyncResource {
   #process = null
@@ -33,27 +132,30 @@ export class Pipe extends AsyncResource {
     this.#process = process
 
     if (process.stdout) {
-      const { emit } = process.stdout
-      process.stdout.emit = (...args) => {
+      const stdout = process.stdout
+      const { emit } = stdout
+      stdout.emit = (...args) => {
         if (!this.reading) return false
         return this.runInAsyncScope(() => {
-          return emit.call(process.stdout, ...args)
+          return emit.call(stdout, ...args)
         })
       }
     }
 
     if (process.stderr) {
-      const { emit } = process.stderr
-      process.stderr.emit = (...args) => {
+      const stderr = process.stderr
+      const { emit } = stderr
+      stderr.emit = (...args) => {
         if (!this.reading) return false
         return this.runInAsyncScope(() => {
-          return emit.call(process.stderr, ...args)
+          return emit.call(stderr, ...args)
         })
       }
     }
 
+    // `exit` can be emitted before the child's stdio has been delivered. Keep
+    // the pipe readable until `close`, which represents the end of stdio.
     process.once('close', () => this.destroy())
-    process.once('exit', () => this.destroy())
   }
 
   /**
@@ -123,13 +225,7 @@ export class ChildProcess extends EventEmitter {
 
   /**
    * `ChildProcess` class constructor.
-   * @param {{
-   *   env?: object,
-   *   stdin?: boolean,
-   *   stdout?: boolean,
-   *   stderr?: boolean,
-   *   signal?: AbortSignal,
-   * }=} [options]
+   * @param {ChildProcessOptions} [options]
    */
   constructor (options = null) {
     super()
@@ -221,11 +317,17 @@ export class ChildProcess extends EventEmitter {
           }
 
           case 'close': {
-            this.#resource.runInAsyncScope(() => {
-              this.emit('close', this.#state.exitCode)
-            })
+            const exitCode = this.#state.exitCode
+            // Readable streams schedule delivery from push() in a microtask.
+            // Defer close so all stdout/stderr queued before the native close
+            // notification is observable first.
+            queueMicrotask(() => {
+              this.#resource.runInAsyncScope(() => {
+                this.emit('close', exitCode)
+              })
 
-            dc.channel('close').publish({ child_process: this })
+              dc.channel('close').publish({ child_process: this })
+            })
             break
           }
 
@@ -252,7 +354,7 @@ export class ChildProcess extends EventEmitter {
     }
     this.#worker.on('error', this.#onWorkerError)
 
-    const detachWorkerListeners = () => {
+    const cleanupWorker = () => {
       try {
         this.#worker?.off?.('message', this.#onWorkerMessage)
       } catch {}
@@ -261,9 +363,11 @@ export class ChildProcess extends EventEmitter {
       } catch {}
       this.#onWorkerMessage = null
       this.#onWorkerError = null
+      this.#worker?.terminate()
+      gc.unref(this)
     }
-    this.once('close', detachWorkerListeners)
-    this.once('exit', detachWorkerListeners)
+    this.once('close', cleanupWorker)
+    this.once('error', cleanupWorker)
   }
 
   /**
@@ -419,25 +523,24 @@ export class ChildProcess extends EventEmitter {
   /**
    * Spawns the child process. This function will throw an error if the process
    * is already spawned.
-   * @param {string} command
-   * @param {string[]=} [args]
+   * @param {string} command Executable name or path.
+   * @param {string[]|ChildProcessOptions} [args] Tokenized arguments or options.
+   * @param {ChildProcessOptions} [options] Spawn options.
    * @return {ChildProcess}
    */
-  spawn (...args) {
+  spawn (command, args = [], options = null) {
     if (/spawning|spawn/.test(this.#state.lifecycle)) {
       throw new Error('Cannot spawn an already spawned ChildProcess')
     }
 
-    if (!args[0] || typeof args[0] !== 'string') {
-      throw new TypeError('Expecting command to be a string.')
-    }
+    const normalized = normalizeSpawnInput(command, args, options)
 
     this.#state.lifecycle = 'spawning'
     this.#worker.postMessage({
       id: this.#id,
       env: this.#env,
       method: 'spawn',
-      args
+      args: [command, normalized.args, normalized.options]
     })
 
     return this
@@ -504,39 +607,29 @@ export class ChildProcess extends EventEmitter {
 }
 
 /**
- * Spawns a child process exeucting `command` with `args`
+ * Spawns a child process executing `command` directly with `args`.
  * @param {string} command
- * @param {string[]|object=} [args]
- * @param {object=} [options
+ * @param {string[]|ChildProcessOptions} [args]
+ * @param {ChildProcessOptions} [options]
  * @return {ChildProcess}
  */
 export function spawn (command, args = [], options = null) {
-  if (args && typeof args === 'object' && !Array.isArray(args)) {
-    options = args
-    args = []
-  }
+  const normalized = normalizeSpawnInput(command, args, options)
 
-  if (!command || typeof command !== 'string') {
-    throw new TypeError('Expecting command to be a string.')
+  const child = new ChildProcess(normalized.options)
+  let started = false
+  const start = () => {
+    if (started) return
+    started = true
+    child.worker.off('online', start)
+    child.spawn(command, normalized.args, normalized.options)
   }
-
-  if (args && typeof args === 'string') {
-    // @ts-ignore
-    args = args.split(' ')
-  }
-
-  const child = new ChildProcess(options)
-  child.worker.on('online', () => child.spawn(command, args, options))
+  child.worker.on('online', start)
+  if (child.worker.online) queueMicrotask(start)
   return child
 }
 
-export function exec (command, options, callback) {
-  if (typeof options === 'function') {
-    callback = options
-    options = {}
-  }
-
-  const child = spawn(command, options)
+function captureExecOutput (child, options, callback) {
   const stdout = []
   const stderr = []
   let closed = false
@@ -549,7 +642,6 @@ export function exec (command, options, callback) {
       }
 
       stdout.push(Buffer.from(data))
-      stdout.push(Buffer.from('\n'))
     })
   }
 
@@ -560,7 +652,6 @@ export function exec (command, options, callback) {
       }
 
       stderr.push(Buffer.from(data))
-      stderr.push(Buffer.from('\n'))
     })
   }
 
@@ -598,7 +689,8 @@ export function exec (command, options, callback) {
       stderr.splice(0, stderr.length)
     })
   }
-  // Intentionally make the ChildProcess awaitable
+
+  // Intentionally make the ChildProcess awaitable.
   return Object.assign(child, {
     // oxlint-disable-next-line unicorn/no-thenable
     then (resolve, reject) {
@@ -652,7 +744,68 @@ export function exec (command, options, callback) {
   })
 }
 
+/**
+ * Executes a command string through the platform shell.
+ * @param {string} command
+ * @param {ExecOptions|ExecCallback} [options]
+ * @param {ExecCallback} [callback]
+ * @return {ChildProcess & PromiseLike<{ stdout: string | Buffer, stderr: string | Buffer }>}
+ */
+export function exec (command, options = null, callback = null) {
+  if (typeof options === 'function') {
+    callback = options
+    options = {}
+  }
+
+  if (!command || typeof command !== 'string') {
+    throw new TypeError('Expecting command to be a string.')
+  }
+
+  const shell = options?.shell || (/win32/i.test(os.platform())
+    ? process.env.ComSpec || process.env.COMSPEC || 'cmd.exe'
+    : '/bin/sh')
+  const shellArgs = /win32/i.test(os.platform())
+    ? ['/d', '/s', '/c', command]
+    : ['-c', command]
+  const child = spawn(shell, shellArgs, options)
+  return captureExecOutput(child, options, callback)
+}
+
+/**
+ * Executes a file directly with tokenized arguments.
+ * @param {string} file
+ * @param {string[]|ExecFileOptions|ExecCallback} [args]
+ * @param {ExecFileOptions|ExecCallback} [options]
+ * @param {ExecCallback} [callback]
+ * @return {ChildProcess & PromiseLike<{ stdout: string | Buffer, stderr: string | Buffer }>}
+ */
+export function execFile (file, args = [], options = null, callback = null) {
+  if (typeof args === 'function') {
+    callback = args
+    args = []
+    options = {}
+  } else if (args && typeof args === 'object' && !Array.isArray(args)) {
+    callback = typeof options === 'function' ? options : callback
+    options = args
+    args = []
+  } else if (typeof options === 'function') {
+    callback = options
+    options = {}
+  }
+
+  const child = spawn(file, args, options)
+  return captureExecOutput(child, options, callback)
+}
+
+/**
+ * Executes a command string synchronously through the platform shell.
+ * @param {string} command
+ * @param {ExecSyncOptions} [options]
+ * @return {string|Buffer}
+ */
 export function execSync (command, options) {
+  normalizeSpawnInput(command, [], options)
+
   const decodeOutput = (value) => {
     if (typeof value !== 'string') {
       return value
@@ -664,7 +817,7 @@ export function execSync (command, options) {
     }
   }
 
-  const result = ipc.sendSync('child_process.exec', {
+  const params = {
     id: rand64(),
     args: command,
     cwd: options?.cwd ?? '',
@@ -673,7 +826,12 @@ export function execSync (command, options) {
     stderr: options?.stderr !== false,
     timeout: Number.isFinite(options?.timeout) ? options.timeout : 0,
     killSignal: options?.killSignal ?? signal.SIGTERM
-  })
+  }
+  if (options?.env !== undefined) {
+    params.env = serializeEnvironment(options.env)
+  }
+
+  const result = ipc.sendSync('child_process.exec', params)
 
   if (result.err) {
     // @ts-ignore
@@ -745,8 +903,6 @@ export function execSync (command, options) {
   return output
 }
 
-export const execFile = exec
-
 exec[Symbol.for('nodejs.util.promisify.custom')] = exec[
   Symbol.for('oro.runtime.util.promisify.custom')
 ] = async function execPromisify (command, options) {
@@ -765,5 +921,6 @@ export default {
   ChildProcess,
   spawn,
   execFile,
-  exec
+  exec,
+  execSync
 }

@@ -1,12 +1,18 @@
 #include "tests.hh"
-#include "src/core/codec.hh"
+#include "src/runtime/bytes.hh"
 #include "src/runtime/ipc.hh"
 #include "src/runtime/javascript.hh"
+#include "src/runtime/url.hh"
 
 namespace oro::Tests {
+  using runtime::bytes::decodeHexString;
+  using runtime::bytes::encodeHexString;
+  using runtime::url::decodeURIComponent;
+  using runtime::url::encodeURIComponent;
+
   void codec (Harness& t) {
     t.test("oro::encodeURIComponent", [](auto t) {
-      const auto encoded = oro::encodeURIComponent(
+      const auto encoded = encodeURIComponent(
         "a % encoded string with foo@bar.com, $100, & #tag"
       );
 
@@ -14,13 +20,13 @@ namespace oro::Tests {
       t.assert(encoded.size() != 0, "encoded has size");
       t.equals(
         encoded,
-        "a%20%25%20encoded%20string%20with%20foo%40bar%2Ecom%2C%20%24100%2C%20%26%20%23tag",
+        "a%20%25%20encoded%20string%20with%20foo%40bar.com%2C%20%24100%2C%20%26%20%23tag",
         "encoded value is correct"
       );
     });
 
     t.test("oro::decodeURIComponent", [](auto t) {
-      const auto decoded = oro::decodeURIComponent(
+      const auto decoded = decodeURIComponent(
         "a%20%25%20encoded%20string%20with%20foo%40bar%2Ecom%2C%20%24100%2C%20%26%20%23tag"
       );
 
@@ -81,19 +87,19 @@ namespace oro::Tests {
 
     t.test("oro::encodeHexString", [](auto t) {
       t.equals(
-        oro::encodeHexString("hello world"),
+        encodeHexString("hello world"),
         "68656C6C6F20776F726C64",
         "encodes 'hello world'"
       );
 
       t.equals(
-        oro::encodeHexString("#F"),
+        encodeHexString("#F"),
         "2346",
         "encodes '\u0023\u0046'"
       );
 
       t.equals(
-        oro::encodeHexString("{\"foo\":\"bar\",\"biz\":{\"baz\":\"boop\"}}"),
+        encodeHexString("{\"foo\":\"bar\",\"biz\":{\"baz\":\"boop\"}}"),
         "7B22666F6F223A22626172222C2262697A223A7B2262617A223A22626F6F70227D7D",
         "encodes '{\"foo\":\"bar\",\"biz\":{\"baz\":\"boop\"}}'"
       );
@@ -101,19 +107,19 @@ namespace oro::Tests {
 
     t.test("oro::decodeHexString", [](auto t) {
       t.equals(
-        oro::decodeHexString("68656C6C6F20776F726C64"),
+        decodeHexString("68656C6C6F20776F726C64"),
         "hello world",
         "decodes '68656C6C6F20776F726C64'"
       );
 
       t.equals(
-        oro::decodeHexString("2346"),
+        decodeHexString("2346"),
         "#F",
         "decodes '2346'"
       );
 
       t.equals(
-        oro::decodeHexString("7B22666F6F223A22626172222C2262697A223A7B2262617A223A22626F6F70227D7D"),
+        decodeHexString("7B22666F6F223A22626172222C2262697A223A7B2262617A223A22626F6F70227D7D"),
         "{\"foo\":\"bar\",\"biz\":{\"baz\":\"boop\"}}",
         "decodes '7B22666F6F223A22626172222C2262697A223A7B2262617A223A22626F6F70227D7D'"
       );

@@ -228,9 +228,9 @@ export function openSync(path: string | Buffer | URL, flags?: string | undefined
  * @param {(object|function(Error|null, Dir|undefined):any)=} [options]
  * @param {string=} [options.encoding = 'utf8']
  * @param {boolean=} [options.withFileTypes = false]
- * @param {function(Error|null, Dir|undefined):any)} callback
+ * @param {function(Error|null, Dir|undefined):any} [callback]
  */
-export function opendir(path: string | Buffer | URL, options?: (object | ((arg0: Error | null, arg1: Dir | undefined) => any)) | undefined, callback: any): void;
+export function opendir(path: string | Buffer | URL, options?: (object | ((arg0: Error | null, arg1: Dir | undefined) => any)) | undefined, callback?: (arg0: Error | null, arg1: Dir | undefined) => any): void;
 /**
  * Synchronously open a directory.
  * @see {@link https://nodejs.org/api/fs.html#fsreaddirpath-options-callback}
@@ -289,9 +289,9 @@ export function readv(fd: number, buffers: Array<Buffer | TypedArray>, position?
  * @param {object|function(Error|null, (Dirent|string)[]|undefined):any} [options]
  * @param {string=} [options.encoding = 'utf8']
  * @param {boolean=} [options.withFileTypes = false]
- * @param {function(Error|null, (Dirent|string)[]):any} callback
+ * @param {function(Error|null, (Dirent|string)[]):any} [callback]
  */
-export function readdir(path: string | Buffer | URL, options?: object | ((arg0: Error | null, arg1: (Dirent | string)[] | undefined) => any), callback: (arg0: Error | null, arg1: (Dirent | string)[]) => any): void;
+export function readdir(path: string | Buffer | URL, options?: object | ((arg0: Error | null, arg1: (Dirent | string)[] | undefined) => any), callback?: (arg0: Error | null, arg1: (Dirent | string)[]) => any): void;
 /**
  * Synchronously read all entries in a directory.
  * @see {@link https://nodejs.org/api/fs.html#fsreaddirpath-options-callback}
@@ -391,9 +391,9 @@ export function fstatSync(fd: number | FileHandle, options?: object | undefined)
  * @param {string=} [options.encoding = 'utf8']
  * @param {string=} [options.flag = 'r']
  * @param {AbortSignal|undefined} [options.signal]
- * @param {function(Error|null, Stats|undefined):any} callback
+ * @param {function(Error|null, Stats|undefined):any} [callback]
  */
-export function stat(path: string | Buffer | URL | number, options?: (object | ((arg0: Error | null, arg1: Stats | undefined) => any)) | undefined, callback: (arg0: Error | null, arg1: Stats | undefined) => any): void;
+export function stat(path: string | Buffer | URL | number, options?: (object | ((arg0: Error | null, arg1: Stats | undefined) => any)) | undefined, callback?: (arg0: Error | null, arg1: Stats | undefined) => any): void;
 /**
  * Get the stats of a symbolic link
  * @param {string|Buffer|URL|number} path - filename or file descriptor
@@ -401,9 +401,9 @@ export function stat(path: string | Buffer | URL | number, options?: (object | (
  * @param {string=} [options.encoding = 'utf8']
  * @param {string=} [options.flag = 'r']
  * @param {AbortSignal|undefined} [options.signal]
- * @param {function(Error|null, Stats|undefined):any} callback
+ * @param {function(Error|null, Stats|undefined):any} [callback]
  */
-export function lstat(path: string | Buffer | URL | number, options?: (object | ((arg0: Error | null, arg1: Stats | undefined) => any)) | undefined, callback: (arg0: Error | null, arg1: Stats | undefined) => any): void;
+export function lstat(path: string | Buffer | URL | number, options?: (object | ((arg0: Error | null, arg1: Stats | undefined) => any)) | undefined, callback?: (arg0: Error | null, arg1: Stats | undefined) => any): void;
 /**
  * Synchronously get stats of a symbolic link
  * @param {string|Buffer|URL} path
@@ -414,9 +414,9 @@ export function lstatSync(path: string | Buffer | URL, options?: object | undefi
  * Creates a symlink of `src` at `dest`.
  * @param {string} src
  * @param {string} dest
- * @param {function(Error|null):any} callback
+ * @param {function(Error|null):any} [callback]
  */
-export function symlink(src: string, dest: string, type: any, callback: (arg0: Error | null) => any): void;
+export function symlink(src: string, dest: string, type?: any, callback?: (arg0: Error | null) => any): void;
 /**
  * Synchronously create a symlink
  * @param {string} src
@@ -451,9 +451,9 @@ export function lchownSync(path: string, uid: number, gid: number): void;
  * @param {string=} [options.mode = 0o666]
  * @param {string=} [options.flag = 'w']
  * @param {AbortSignal|undefined} [options.signal]
- * @param {function(Error|null):any} callback
+ * @param {function(Error|null):any} [callback]
  */
-export function writeFile(path: string | Buffer | URL | number, data: string | Buffer | TypedArray | DataView | object, options?: (object | ((arg0: Error | null) => any)) | undefined, callback: (arg0: Error | null) => any): void;
+export function writeFile(path: string | Buffer | URL | number, data: string | Buffer | TypedArray | DataView | object, options?: (object | ((arg0: Error | null) => any)) | undefined, callback?: (arg0: Error | null) => any): void;
 /**
  * Writes data to a file synchronously.
  * @param {string|Buffer|URL|number} path - filename or file descriptor
@@ -565,7 +565,6 @@ export function futimesSync(fd: any, atime: any, mtime: any): void;
  */
 export function watch(path: any, options?: (Function | object) | undefined, callback?: Function | undefined): Watcher;
 export default exports;
-export type Buffer = import("../buffer.js").Buffer;
 export type TypedArray = Uint8Array | Int8Array;
 import { Stats } from './stats.js';
 import { Buffer } from '../buffer.js';

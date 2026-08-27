@@ -16,9 +16,9 @@ export class Context {
     data: any | null;
     /**
      * The `ExtendableEvent` for this `Context` instance.
-     * @type {ExtendableEvent}
+     * @type {import('./events.js').ExtendableEvent}
      */
-    get event(): ExtendableEvent;
+    get event(): import("./events.js").ExtendableEvent;
     /**
      * An environment context object.
      * @type {object?}
@@ -39,7 +39,7 @@ export class Context {
      * It can also be used to detect whether that work was successful.
      * @param {Promise} promise
      */
-    waitUntil(promise: Promise<any>): Promise<any>;
+    waitUntil(promise: Promise<any>): Promise<void>;
     /**
      * TODO
      */

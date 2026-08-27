@@ -1,9 +1,9 @@
 name: Release Artifacts
 
 on:
-  release:
-    types:
-      - published
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -18,6 +18,7 @@ on:
         options:
           - all
           - linux-x64-desktop
+          - linux-arm64-desktop
           - linux-x64-android-sdk
           - macos-x64-desktop
           - macos-x64-ios-sdk
@@ -26,22 +27,101 @@ on:
           - windows-x64-desktop
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CI: true
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  RELEASE_VERSION: ${{ github.event.release.tag_name || github.event.inputs.version || format('manual-{0}', github.run_number) }}
+  RELEASE_LABEL: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.version || format('manual-{0}', github.run_number) }}
 
 concurrency:
-  group: release-artifacts-${{ github.workflow }}-${{ github.event.release.tag_name || github.ref || github.run_id }}
+  group: release-artifacts-${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  validate-release:
+    name: Validate release metadata and tooling
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      commit_sha: ${{ steps.source.outputs.commit_sha }}
+      version: ${{ steps.source.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Capture release source commit
+        id: source
+        shell: bash
+        run: |
+          commit_sha="$(git rev-parse HEAD)"
+          if [[ ! "$commit_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo >&2 "Checkout resolved to an invalid commit SHA: $commit_sha"
+            exit 1
+          fi
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_LABEL#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify annotated release tag signature
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit_sha }}
+        run: |
+          ref_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")"
+          object_type="$(jq -r '.object.type' <<< "$ref_json")"
+          if [[ "$object_type" != "tag" ]]; then
+            echo >&2 "$RELEASE_TAG must be an annotated, signed tag"
+            exit 1
+          fi
+
+          tag_sha="$(jq -r '.object.sha' <<< "$ref_json")"
+          verification="$(gh api "/repos/$GITHUB_REPOSITORY/git/tags/$tag_sha")"
+          if [[ "$(jq -r '.verification.verified' <<< "$verification")" != "true" ]]; then
+            reason="$(jq -r '.verification.reason' <<< "$verification")"
+            echo >&2 "$RELEASE_TAG signature is not verified: $reason"
+            exit 1
+          fi
+
+          target_type="$(jq -r '.object.type' <<< "$verification")"
+          if [[ "$target_type" != "commit" ]]; then
+            echo >&2 "$RELEASE_TAG must point directly to a commit, not $target_type"
+            exit 1
+          fi
+
+          target_sha="$(jq -r '.object.sha' <<< "$verification")"
+          if [[ "$target_sha" != "$SOURCE_COMMIT" ]]; then
+            echo >&2 "$RELEASE_TAG points to $target_sha but the workflow checked out $SOURCE_COMMIT"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.x
+
+      - name: Validate release version
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.version != ''
+        run: node ./bin/check-release-version.js "$RELEASE_LABEL"
+
+  verify-release:
+    name: Verify full supported platform matrix
+    needs: validate-release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
   build-release-artifacts:
     name: Build ${{ matrix.name }}
+    needs: [validate-release, verify-release]
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 180
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -52,8 +132,8 @@ jobs:
             runs_on: ubuntu-24.04
             build_android: false
             release_support: desktop
-            no_android: true
-            build_ios: false
+            exclude_android: true
+            exclude_ios: true
             build_windows: false
           - name: Linux x64 Android SDK
             artifact_id: linux-x64-android-sdk
@@ -61,8 +141,17 @@ jobs:
             runs_on: ubuntu-24.04
             build_android: true
             release_support: android
-            no_android: false
-            build_ios: false
+            exclude_android: false
+            exclude_ios: true
+            build_windows: false
+          - name: Linux arm64 Desktop
+            artifact_id: linux-arm64-desktop
+            archive_ext: tar.gz
+            runs_on: ubuntu-24.04-arm
+            build_android: false
+            release_support: desktop
+            exclude_android: true
+            exclude_ios: true
             build_windows: false
           - name: macOS x64 Desktop
             artifact_id: macos-x64-desktop
@@ -70,8 +159,8 @@ jobs:
             runs_on: macos-15-intel
             build_android: false
             release_support: desktop
-            no_android: true
-            build_ios: false
+            exclude_android: true
+            exclude_ios: true
             build_windows: false
           - name: macOS x64 iOS SDK
             artifact_id: macos-x64-ios-sdk
@@ -79,8 +168,8 @@ jobs:
             runs_on: macos-15-intel
             build_android: false
             release_support: ios
-            no_android: true
-            build_ios: true
+            exclude_android: true
+            exclude_ios: false
             build_windows: false
           - name: macOS arm64 Desktop
             artifact_id: macos-arm64-desktop
@@ -88,8 +177,8 @@ jobs:
             runs_on: macos-14
             build_android: false
             release_support: desktop
-            no_android: true
-            build_ios: false
+            exclude_android: true
+            exclude_ios: true
             build_windows: false
           - name: macOS arm64 iOS SDK
             artifact_id: macos-arm64-ios-sdk
@@ -97,8 +186,8 @@ jobs:
             runs_on: macos-14
             build_android: false
             release_support: ios
-            no_android: true
-            build_ios: true
+            exclude_android: true
+            exclude_ios: false
             build_windows: false
           - name: Windows x64
             artifact_id: windows-x64-desktop
@@ -106,13 +195,19 @@ jobs:
             runs_on: windows-2022
             build_android: false
             release_support: desktop
-            no_android: true
-            build_ios: false
+            exclude_android: true
+            exclude_ios: true
             build_windows: true
 
     env:
-      DEBUG: '1'
-      VERBOSE: '1'
+      ARTIFACT_ID: ${{ matrix.artifact_id }}
+      ARCHIVE_EXT: ${{ matrix.archive_ext }}
+      BUILD_ANDROID: ${{ matrix.build_android }}
+      EXCLUDE_ANDROID: ${{ matrix.exclude_android }}
+      EXCLUDE_IOS: ${{ matrix.exclude_ios }}
+      RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+      RELEASE_SUPPORT: ${{ matrix.release_support }}
+      REQUESTED_ARTIFACT_ID: ${{ github.event.inputs.artifact_id }}
       ORO_SKIP_PATH_PROMPT: '1'
       RUN_SELECTED_ARTIFACT: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.artifact_id == 'all' || github.event.inputs.artifact_id == matrix.artifact_id }}
 
@@ -121,21 +216,23 @@ jobs:
         if: env.RUN_SELECTED_ARTIFACT != 'true'
         shell: bash
         run: |
-          echo "Skipping ${{ matrix.artifact_id }} for workflow_dispatch artifact_id=${{ github.event.inputs.artifact_id }}"
+          echo "Skipping $ARTIFACT_ID for workflow_dispatch artifact_id=$REQUESTED_ARTIFACT_ID"
 
       - name: Checkout
         if: env.RUN_SELECTED_ARTIFACT == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.validate-release.outputs.commit_sha }}
 
       - name: Setup Node.js
         if: env.RUN_SELECTED_ARTIFACT == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 20.x
+          node-version: 24.x
 
       - name: Setup Java for Android builds
         if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_android
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '20.0.2'
@@ -148,10 +245,15 @@ jobs:
         run: |
           brew install automake libtool pkg-config
 
+      - name: Enable pnpm
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
+        shell: bash
+        run: corepack enable
+
       - name: Install root dependencies
         if: env.RUN_SELECTED_ARTIFACT == 'true'
         shell: bash
-        run: npm install --no-audit
+        run: pnpm install --frozen-lockfile
 
       - name: Regenerate shipped docs and typings
         if: env.RUN_SELECTED_ARTIFACT == 'true'
@@ -166,15 +268,15 @@ jobs:
           PREFIX: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
         run: |
           rm -rf "$ORO_HOME"
-          if [[ "${{ matrix.build_ios }}" != "true" ]]; then
+          if [[ "$EXCLUDE_IOS" == "true" ]]; then
             export NO_IOS=1
           else
             unset NO_IOS
           fi
 
-          if [[ "${{ matrix.no_android }}" == "true" ]]; then
+          if [[ "$EXCLUDE_ANDROID" == "true" ]]; then
             export NO_ANDROID=1
-          elif [[ "${{ matrix.build_android }}" == "true" ]]; then
+          elif [[ "$BUILD_ANDROID" == "true" ]]; then
             export ORO_ANDROID_CI=1
             export ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes
             unset NO_ANDROID
@@ -198,18 +300,108 @@ jobs:
           $env:NO_ANDROID = "1"
           .\bin\install.ps1 -yesdeps -verbose
 
-      - name: Record packaged targets
+      - name: Smoke test staged runtime (Unix)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        shell: bash
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+          ORO_CLI_BIN: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}/bin/oroc
+        run: |
+          ./bin/ci_version_check.sh
+          "$ORO_CLI_BIN" help >/dev/null
+
+      - name: Smoke test staged runtime (Windows)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_windows
+        shell: pwsh
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+          ORO_CLI_BIN: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}/bin/oroc.exe
+        run: |
+          .\bin\ci_version_check.ps1
+          & $env:ORO_CLI_BIN help | Out-Null
+
+      - name: Validate packaged target families (Unix)
         if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
         shell: bash
         env:
           ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
         run: |
+          shopt -s nullglob
+          android_targets=("$ORO_HOME"/lib/*-android)
+          ios_targets=("$ORO_HOME"/lib/*-iPhoneOS "$ORO_HOME"/lib/*-iPhoneSimulator "$ORO_HOME"/lib/*-ios "$ORO_HOME"/lib/*-ios-simulator)
+
+          case "$RELEASE_SUPPORT" in
+            desktop)
+              if (( ${#android_targets[@]} != 0 || ${#ios_targets[@]} != 0 )); then
+                echo >&2 "Desktop artifact unexpectedly contains a mobile target directory"
+                exit 1
+              fi
+              ;;
+            android)
+              if (( ${#android_targets[@]} == 0 || ${#ios_targets[@]} != 0 )); then
+                echo >&2 "Android SDK artifact does not contain only the intended Android target family"
+                exit 1
+              fi
+              for target in arm64-v8a-android x86_64-android; do
+                if [[ ! -d "$ORO_HOME/lib/$target" ]]; then
+                  echo >&2 "Android SDK artifact is missing required ABI target: $target"
+                  exit 1
+                fi
+              done
+              ;;
+            ios)
+              if (( ${#ios_targets[@]} == 0 || ${#android_targets[@]} != 0 )); then
+                echo >&2 "iOS SDK artifact does not contain only the intended Apple-mobile target family"
+                exit 1
+              fi
+              required_ios_targets=(arm64-iPhoneOS x86_64-iPhoneSimulator)
+              if [[ "$RUNNER_ARCH" == "ARM64" ]]; then
+                required_ios_targets+=(arm64-iPhoneSimulator)
+              fi
+              for target in "${required_ios_targets[@]}"; do
+                if [[ ! -d "$ORO_HOME/lib/$target" ]]; then
+                  echo >&2 "iOS SDK artifact is missing required target: $target"
+                  exit 1
+                fi
+              done
+              ;;
+            *)
+              echo >&2 "Unknown release support family: $RELEASE_SUPPORT"
+              exit 1
+              ;;
+          esac
+
+      - name: Validate packaged target families (Windows)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_windows
+        shell: pwsh
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+        run: |
+          $libRoot = Join-Path $env:ORO_HOME 'lib'
+          $targets = if (Test-Path $libRoot) { @(Get-ChildItem -Path $libRoot -Directory) } else { @() }
+          $androidTargets = @($targets | Where-Object { $_.Name -like '*-android' })
+          $iosTargets = @($targets | Where-Object { $_.Name -match '-(iPhoneOS|iPhoneSimulator|ios|ios-simulator)$' })
+          if ($env:RELEASE_SUPPORT -ne 'desktop') {
+            throw "Windows artifact has unsupported release family: $env:RELEASE_SUPPORT"
+          }
+          if ($androidTargets.Count -ne 0 -or $iosTargets.Count -ne 0) {
+            throw 'Windows desktop artifact unexpectedly contains a mobile target directory'
+          }
+
+      - name: Record packaged targets
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        shell: bash
+        env:
+          ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+          RUNNER_ARCH_NAME: ${{ runner.arch }}
+          RUNNER_OS_NAME: ${{ runner.os }}
+        run: |
           {
             echo "release_version=$RELEASE_VERSION"
-            echo "artifact_id=${{ matrix.artifact_id }}"
-            echo "release_support=${{ matrix.release_support }}"
-            echo "runner_os=${{ runner.os }}"
-            echo "runner_arch=${{ runner.arch }}"
+            echo "artifact_id=$ARTIFACT_ID"
+            echo "release_support=$RELEASE_SUPPORT"
+            echo "runner_os=$RUNNER_OS_NAME"
+            echo "runner_arch=$RUNNER_ARCH_NAME"
             echo "included_targets:"
             find "$ORO_HOME/lib" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read -r path; do
               echo "  - $(basename "$path")"
@@ -223,14 +415,16 @@ jobs:
         shell: pwsh
         env:
           ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+          RUNNER_ARCH_NAME: ${{ runner.arch }}
+          RUNNER_OS_NAME: ${{ runner.os }}
         run: |
           $metadata = Join-Path $env:ORO_HOME 'RELEASE-METADATA.txt'
           $lines = @(
             "release_version=$env:RELEASE_VERSION",
-            "artifact_id=${{ matrix.artifact_id }}",
-            "release_support=${{ matrix.release_support }}",
-            "runner_os=${{ runner.os }}",
-            "runner_arch=${{ runner.arch }}",
+            "artifact_id=$env:ARTIFACT_ID",
+            "release_support=$env:RELEASE_SUPPORT",
+            "runner_os=$env:RUNNER_OS_NAME",
+            "runner_arch=$env:RUNNER_ARCH_NAME",
             "included_targets:"
           )
 
@@ -257,7 +451,7 @@ jobs:
         env:
           ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
         run: |
-          tar -C "$(dirname "$ORO_HOME")" -czf "${RUNNER_TEMP}/oro-runtime-${RELEASE_VERSION}-${{ matrix.artifact_id }}.tar.gz" "$(basename "$ORO_HOME")"
+          tar -C "$(dirname "$ORO_HOME")" -czf "${RUNNER_TEMP}/oro-runtime-${RELEASE_VERSION}-${ARTIFACT_ID}.tar.gz" "$(basename "$ORO_HOME")"
 
       - name: Archive runtime distribution (zip)
         if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.archive_ext == 'zip'
@@ -265,22 +459,122 @@ jobs:
         env:
           ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
         run: |
-          $archive = Join-Path $env:RUNNER_TEMP "oro-runtime-$env:RELEASE_VERSION-${{ matrix.artifact_id }}.zip"
+          $archive = Join-Path $env:RUNNER_TEMP "oro-runtime-$env:RELEASE_VERSION-$env:ARTIFACT_ID.zip"
           if (Test-Path $archive) {
             Remove-Item -Force $archive
           }
           Compress-Archive -Path $env:ORO_HOME -DestinationPath $archive
 
+      - name: Generate SPDX SBOM
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.spdx.json
+
+      - name: Generate checksum (Unix)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          sha256sum "oro-runtime-${RELEASE_VERSION}-${ARTIFACT_ID}.${ARCHIVE_EXT}" > "oro-runtime-${RELEASE_VERSION}-${ARTIFACT_ID}.${ARCHIVE_EXT}.sha256"
+
+      - name: Generate checksum (Windows)
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "oro-runtime-$env:RELEASE_VERSION-$env:ARTIFACT_ID.$env:ARCHIVE_EXT"
+          $hash = (Get-FileHash (Join-Path $env:RUNNER_TEMP $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content (Join-Path $env:RUNNER_TEMP "$name.sha256")
+
+      - name: Attest archive provenance
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.${{ matrix.archive_ext }}
+
       - name: Upload workflow artifact
         if: env.RUN_SELECTED_ARTIFACT == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
-          path: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.${{ matrix.archive_ext }}
+          path: |
+            ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.${{ matrix.archive_ext }}
+            ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.${{ matrix.archive_ext }}.sha256
+            ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.spdx.json
           if-no-files-found: error
 
-      - name: Attach asset to GitHub release
-        if: env.RUN_SELECTED_ARTIFACT == 'true' && github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+  verify-release-assets:
+    name: Verify complete release asset set
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.artifact_id == 'all'
+    needs: [validate-release, build-release-artifacts]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+    steps:
+      - name: Checkout release verification tooling
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          files: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.${{ matrix.archive_ext }}
+          ref: ${{ needs.validate-release.outputs.commit_sha }}
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: oro-runtime-${{ env.RELEASE_VERSION }}-*
+          path: ${{ runner.temp }}/release-assets
+          merge-multiple: true
+
+      - name: Verify exact archives, checksums, and SPDX documents
+        shell: bash
+        run: ./bin/verify-release-assets.sh "$RUNNER_TEMP/release-assets" "$RELEASE_VERSION"
+
+  publish-npm:
+    name: Publish npm package family
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [validate-release, verify-release-assets]
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish-npm.yml
+    with:
+      ref: ${{ github.ref_name }}
+      version: ${{ needs.validate-release.outputs.version }}
+      publish: true
+
+  publish-github-release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [validate-release, verify-release-assets, publish-npm]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+    steps:
+      - name: Checkout release verification tooling
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.validate-release.outputs.commit_sha }}
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: oro-runtime-${{ env.RELEASE_VERSION }}-*
+          path: ${{ runner.temp }}/release-assets
+          merge-multiple: true
+
+      - name: Verify expected release assets
+        shell: bash
+        run: ./bin/verify-release-assets.sh "$RUNNER_TEMP/release-assets" "$RELEASE_VERSION"
+
+      - name: Publish GitHub release with verified assets
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: false
+          generate_release_notes: true
+          files: ${{ runner.temp }}/release-assets/*

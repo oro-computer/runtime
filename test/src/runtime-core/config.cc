@@ -1,8 +1,9 @@
 #include "./tests.hh"
-#include "src/core/config.hh"
 #include "src/runtime/config.hh"
 
 namespace oro::Tests {
+  using runtime::config::Config;
+
   void config (Harness& t) {
     t.test("oro::Config::get()", [](auto t) {
       const auto config = Config(R"INI(
@@ -224,16 +225,27 @@ pool_prewarm_size = 4096
         oro::runtime::config::UserConfigFormat::Ini
       );
 
-      t.equals(
-        flattened.at("ai_llm_model_Qwen_2_5_7B_Instruct_pool_prewarm"),
-        "2",
+      const auto prewarm = flattened.find(
+        "ai_llm_model_Qwen_2_5_7B_Instruct_pool_prewarm"
+      );
+      t.assert(
+        prewarm != flattened.end(),
         "per-model prewarm count uses the normalized flattened key"
       );
-      t.equals(
-        flattened.at("ai_llm_model_Qwen_2_5_7B_Instruct_pool_prewarm_size"),
-        "4096",
+      if (prewarm != flattened.end()) {
+        t.equals(prewarm->second, "2", "per-model prewarm count is preserved");
+      }
+
+      const auto prewarmSize = flattened.find(
+        "ai_llm_model_Qwen_2_5_7B_Instruct_pool_prewarm_size"
+      );
+      t.assert(
+        prewarmSize != flattened.end(),
         "per-model prewarm size uses the normalized flattened key"
       );
+      if (prewarmSize != flattened.end()) {
+        t.equals(prewarmSize->second, "4096", "per-model prewarm size is preserved");
+      }
     });
   }
 }

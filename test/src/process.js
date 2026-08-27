@@ -27,7 +27,7 @@ test('process.cwd', async (t) => {
   } else if (process.platform === 'linux') {
     t.equal(
       process.cwd(),
-      path.resolve(process.argv0, '../../oro-runtime-javascript-tests'),
+      path.dirname(process.argv0),
       'process.cwd() returns a correct value'
     )
   } else if (process.platform === 'android' || process.platform === 'ios') {
@@ -44,9 +44,6 @@ test('process.cwd', async (t) => {
     // for future platforms
     t.fail(`FIXME: not implemented for platform ${process.platform}`)
   }
-
-  // make us happy
-  delete globalThis.process
 })
 
 test('process.arch', (t) => {

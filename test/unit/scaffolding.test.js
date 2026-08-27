@@ -28,7 +28,7 @@ test('hello world scaffold prefers oro module specifiers', () => {
 test('default config banner references Oro Runtime', () => {
   assert.match(
     templates,
-    /Oro ⚡ Runtime · A modern runtime/,
+    /^# Oro Runtime ☆ v\{\{cli_version\}\}$/m,
     'default config comment uses Oro name'
   )
 })

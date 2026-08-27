@@ -55,7 +55,7 @@ export class Socket extends EventEmitter {
         connectState: number;
         reuseAddr: boolean;
         ipv6Only: boolean;
-        remoteAddress: {};
+        remoteAddress: any;
     };
     enableDataEventFallback(): void;
     disableDataEventFallback(): void;

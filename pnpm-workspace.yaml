@@ -1,5 +1,5 @@
 packages:
-  - npm/packages/@orocomputer/runtime-node
+  - npm/packages/@oro-computer/runtime-node
   - examples
 
 onlyBuiltDependencies:

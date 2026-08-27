@@ -1,5 +1,5 @@
 {
-  "name": "@orocomputer/examples",
+  "name": "@oro-computer/examples",
   "private": true,
   "type": "module",
   "scripts": {

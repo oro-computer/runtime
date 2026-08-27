@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOWNLOAD_URL="https://sqlite.org/2025/sqlite-amalgamation-3500400.zip"
+EXPECTED_SHA256="1d3049dd0f830a025a53105fc79fd2ab9431aea99e137809d064d8ee8356b032"
 ARCHIVE_NAME="sqlite-amalgamation-3500400.zip"
 ARCHIVE_BASENAME="sqlite-amalgamation-3500400"
 BUILD_DIR="$ROOT/build"
@@ -62,6 +63,16 @@ mkdir -p "$BUILD_DIR" "$CACHE_DIR"
 
 require_cmd unzip
 
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    die "sha256sum or shasum is required to verify downloads"
+  fi
+}
+
 if command -v curl >/dev/null 2>&1; then
   DOWNLOADER=(curl -fL)
 elif command -v wget >/dev/null 2>&1; then
@@ -83,6 +94,11 @@ if [[ ! -f "$ARCHIVE_PATH" ]]; then
   fi
 else
   log "using cached archive $ARCHIVE_PATH"
+fi
+
+OBSERVED_SHA256="$(sha256_file "$ARCHIVE_PATH")"
+if [[ "$OBSERVED_SHA256" != "$EXPECTED_SHA256" ]]; then
+  die "checksum mismatch for $ARCHIVE_NAME: expected $EXPECTED_SHA256, found $OBSERVED_SHA256"
 fi
 
 mkdir -p "$TMP_DIR"

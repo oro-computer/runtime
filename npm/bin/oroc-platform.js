@@ -14,7 +14,7 @@ const child = spawn(installation.bin.oroc, process.argv.slice(2), {
 child.once('exit', (code) => {
   if (!exiting) {
     exiting = true
-    process.exit(code)
+    process.exit(code ?? 1)
   }
 })
 

@@ -9,6 +9,16 @@ struct UVSource {
   gpointer tag;
   oro::runtime::loop::Loop* loop = nullptr;
 };
+
+static void detachGTKSource (oro::runtime::loop::Loop* loop) {
+  if (loop->gtk.source == nullptr) {
+    return;
+  }
+
+  g_source_destroy(loop->gtk.source);
+  g_source_unref(loop->gtk.source);
+  loop->gtk.source = nullptr;
+}
 #endif
 
 namespace oro::runtime::loop {
@@ -231,77 +241,81 @@ namespace oro::runtime::loop {
   #endif
   }
 
+  Loop::~Loop () {
+    if (this->state > State::None && this->state < State::Shutdown) {
+      this->shutdown();
+    }
+
+  #if ORO_RUNTIME_PLATFORM_LINUX
+    detachGTKSource(this);
+  #endif
+  }
+
   bool Loop::init () {
     if (this->state == State::None) {
       this->state = State::Init;
       this->uv.open(this);
 
     #if ORO_RUNTIME_PLATFORM_LINUX
-      if (this->gtk.source) {
-        const auto id = g_source_get_id(this->gtk.source);
-        if (id > 0) {
-          g_source_remove(id);
-        }
+      detachGTKSource(this);
 
-        g_object_unref(this->gtk.source);
-        this->gtk.source = nullptr;
-      }
+      if (!this->options.dedicatedThread) {
+        // @see https://api.gtkd.org/glib.c.types.GSourceFuncs.html
+        this->gtk.functions.prepare = [](GSource *source, gint *timeout) -> gboolean {
+          auto loop = reinterpret_cast<UVSource*>(source)->loop;
 
-      // @see https://api.gtkd.org/glib.c.types.GSourceFuncs.html
-      this->gtk.functions.prepare = [](GSource *source, gint *timeout) -> gboolean {
-        auto loop = reinterpret_cast<UVSource*>(source)->loop;
+          if (!loop->started()) {
+            return false;
+          }
 
-        if (!loop->started()) {
-          return false;
-        }
+          if (!loop->alive()) {
+            return true;
+          }
 
-        if (!loop->alive()) {
-          return true;
-        }
+          *timeout = loop->timeout();
+          return *timeout == 0;
+        };
 
-        *timeout = loop->timeout();
-        return *timeout == 0;
-      };
+        this->gtk.functions.check = [](GSource* source) -> gboolean {
+          const auto loop = reinterpret_cast<UVSource*>(source)->loop;
+          const auto tag = reinterpret_cast<UVSource *>(source)->tag;
+          const auto timeout = loop->timeout();
 
-      this->gtk.functions.check = [](GSource* source) -> gboolean {
-        const auto loop = reinterpret_cast<UVSource*>(source)->loop;
-        const auto tag = reinterpret_cast<UVSource *>(source)->tag;
-        const auto timeout = loop->timeout();
+          if (timeout == 0) {
+            return true;
+          }
 
-        if (timeout == 0) {
-          return true;
-        }
+          const auto condition = g_source_query_unix_fd(source, tag);
+          return (
+            ((condition & G_IO_IN) == G_IO_IN) ||
+            ((condition & G_IO_OUT) == G_IO_OUT)
+          );
+        };
 
-        const auto condition = g_source_query_unix_fd(source, tag);
-        return (
-          ((condition & G_IO_IN) == G_IO_IN) ||
-          ((condition & G_IO_OUT) == G_IO_OUT)
+        this->gtk.functions.dispatch = [](
+          GSource *source,
+          GSourceFunc callback,
+          gpointer user_data
+        ) -> gboolean {
+          const auto loop = reinterpret_cast<UVSource*>(source)->loop;
+          loop->state = Loop::State::Polling;
+          loop->uv.run(UV_RUN_NOWAIT);
+          loop->state = Loop::State::Idle;
+          return G_SOURCE_CONTINUE;
+        };
+
+        this->gtk.source = g_source_new(&this->gtk.functions, sizeof(UVSource));
+        auto uvsource = reinterpret_cast<UVSource*>(this->gtk.source);
+        uvsource->loop = this;
+        uvsource->tag = g_source_add_unix_fd(
+          this->gtk.source,
+          uv_backend_fd(this->get()),
+          (GIOCondition) (G_IO_IN | G_IO_OUT | G_IO_ERR)
         );
-      };
 
-      this->gtk.functions.dispatch = [](
-        GSource *source,
-        GSourceFunc callback,
-        gpointer user_data
-      ) -> gboolean {
-        const auto loop = reinterpret_cast<UVSource*>(source)->loop;
-        loop->state = Loop::State::Polling;
-        loop->uv.run(UV_RUN_NOWAIT);
-        loop->state = Loop::State::Idle;
-        return G_SOURCE_CONTINUE;
-      };
-
-      this->gtk.source = g_source_new(&this->gtk.functions, sizeof(UVSource));
-      auto uvsource = reinterpret_cast<UVSource*>(this->gtk.source);
-      uvsource->loop = this;
-      uvsource->tag = g_source_add_unix_fd(
-        this->gtk.source,
-        uv_backend_fd(this->get()),
-        (GIOCondition) (G_IO_IN | G_IO_OUT | G_IO_ERR)
-      );
-
-      g_source_set_priority(this->gtk.source, G_PRIORITY_HIGH);
-      g_source_attach(this->gtk.source, nullptr);
+        g_source_set_priority(this->gtk.source, G_PRIORITY_HIGH);
+        g_source_attach(this->gtk.source, nullptr);
+      }
 
     #endif
     }
@@ -361,14 +375,24 @@ namespace oro::runtime::loop {
 
     stopOnDispatchQueue(this, State::Stopped);
 #else
-    this->state = State::Stopped;
-    this->uv.stop();
-
-    Lock lock(this->mutex);
-    if (this->options.dedicatedThread) {
-      if (this->thread.joinable()) {
+    if (this->options.dedicatedThread && this->thread.joinable()) {
+      if (this->thread.get_id() == std::this_thread::get_id()) {
+        this->state = State::Stopped;
+        uv_stop(this->get());
+      } else {
+        {
+          Lock lock(this->mutex);
+          this->queue.push([this]() {
+            this->state = State::Stopped;
+            uv_stop(this->get());
+          });
+        }
+        uv_async_send(&this->uv.async);
         this->thread.join();
       }
+    } else {
+      this->state = State::Stopped;
+      this->uv.stop();
     }
 #endif
 
@@ -399,15 +423,24 @@ namespace oro::runtime::loop {
 #if ORO_RUNTIME_PLATFORM_APPLE
     stopOnDispatchQueue(this, State::Paused);
 #else
-    this->state = State::Paused;
-    this->uv.stop();
-
-    Lock lock(this->mutex);
-    if (this->options.dedicatedThread) {
-      // clean up old thread if still running
-      if (this->thread.joinable()) {
+    if (this->options.dedicatedThread && this->thread.joinable()) {
+      if (this->thread.get_id() == std::this_thread::get_id()) {
+        this->state = State::Paused;
+        uv_stop(this->get());
+      } else {
+        {
+          Lock lock(this->mutex);
+          this->queue.push([this]() {
+            this->state = State::Paused;
+            uv_stop(this->get());
+          });
+        }
+        uv_async_send(&this->uv.async);
         this->thread.join();
       }
+    } else {
+      this->state = State::Paused;
+      this->uv.stop();
     }
 #endif
 
@@ -434,7 +467,19 @@ namespace oro::runtime::loop {
 
   bool Loop::shutdown () {
     if (this->state > State::None && this->state < State::Shutdown) {
+      if (this->state == State::Init) {
+      #if ORO_RUNTIME_PLATFORM_LINUX
+        detachGTKSource(this);
+      #endif
+        this->state = State::Shutdown;
+        this->uv.close();
+        return true;
+      }
+
       if (this->stop()) {
+      #if ORO_RUNTIME_PLATFORM_LINUX
+        detachGTKSource(this);
+      #endif
         this->state = State::Shutdown;
 #if ORO_RUNTIME_PLATFORM_APPLE
         if (isOnDispatchQueue(this)) {

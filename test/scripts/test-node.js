@@ -1,5 +1,5 @@
-import test from '@orocomputer/runtime/test.js'
-import { network, Encryption } from '@orocomputer/runtime/network.js'
+import test from '@oro-computer/runtime/test.js'
+import { network, Encryption } from '@oro-computer/runtime/network.js'
 
 test('network imports', async (t) => {
   const socket = await network({

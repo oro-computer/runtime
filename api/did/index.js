@@ -221,6 +221,7 @@ export class DID {
     return this.href
   }
 
+  /** @returns {string|Record<string, any>} */
   toJSON () {
     return this.href
   }
@@ -310,6 +311,7 @@ export class DIDURL extends DID {
     return formatDIDUrl(this)
   }
 
+  /** @returns {string|Record<string, any>} */
   toJSON () {
     return {
       did: super.toString(),

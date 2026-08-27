@@ -251,6 +251,10 @@ Key pieces
 - `src/runtime/core/services.hh`: registry and lifecycle.
 - Service examples: FS, DNS, Timers, UDP, OS, Process, SQLite, NetworkStatus, Notifications, MediaDevices, Geolocation, TLS, Diagnostics, AI.
 - SQLite depends on the amalgamation staged at `build/sqlite/sqlite3.c`; `bin/install.sh` (and CI bootstrap) should run `bin/fetch-sqlite.sh` or set `SQLITE_SOURCE_DIR` before building.
+- Source target exclusions are independent: non-empty `NO_ANDROID` disables only
+  Android bootstrap/artifacts, while non-empty `NO_IOS` disables only iOS/iOS
+  Simulator work on macOS. Neither disables desktop, and `0`/`false` still
+  count as set. See [Source-build environment](BUILD_ENVIRONMENT.md).
 - Each service gets `context`, `dispatcher`, `loop`, and manages its own handles and observers.
 
 Lifecycle

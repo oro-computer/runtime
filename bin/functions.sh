@@ -422,24 +422,57 @@ function abs_path() {
 }
 
 download_to_tmp() {
-  local uri=$1
+  local uri="$1"
+  local expected_checksum="${2:-}"
   local tmp="$(mktemp -d)"
-  local output=$tmp/"$(basename "$uri")"
-  local http_code
+  local output="$tmp/$(basename "$uri")"
 
-  if [ -n "$ORO_ANDROID_REPO" ]; then
+  if [ -n "${ORO_ANDROID_REPO:-}" ]; then
     echo >&2 cp "$ORO_ANDROID_REPO/$(basename "$uri")" "$output"
-    cp "$ORO_ANDROID_REPO/$(basename "$uri")" "$output" || return $?
+    if ! cp "$ORO_ANDROID_REPO/$(basename "$uri")" "$output"; then
+      rm -rf "$tmp"
+      return 1
+    fi
   else
-    http_code=$(curl -L --write-out '%{http_code}' "$uri" --output "$output")
-    # DONT COMMIT
-    cp "$output" ..
-    if  [ "$http_code" != "200" ] ; then
-      echo "$http_code"
+    if ! curl --fail --location --silent --show-error "$uri" --output "$output"; then
       rm -rf "$tmp"
       return 1
     fi
   fi
+
+  if [ -n "$expected_checksum" ]; then
+    local observed_checksum
+    if [[ "$expected_checksum" =~ ^[0-9a-f]{64}$ ]]; then
+      if command -v sha256sum >/dev/null 2>&1; then
+        observed_checksum="$(sha256sum "$output" | awk '{print $1}')"
+      elif command -v shasum >/dev/null 2>&1; then
+        observed_checksum="$(shasum -a 256 "$output" | awk '{print $1}')"
+      fi
+    elif [[ "$expected_checksum" =~ ^[0-9a-f]{40}$ ]]; then
+      if command -v sha1sum >/dev/null 2>&1; then
+        observed_checksum="$(sha1sum "$output" | awk '{print $1}')"
+      elif command -v shasum >/dev/null 2>&1; then
+        observed_checksum="$(shasum -a 1 "$output" | awk '{print $1}')"
+      fi
+    else
+      echo >&2 "not ok - expected checksum for $uri must be SHA-256 or SHA-1"
+      rm -rf "$tmp"
+      return 1
+    fi
+
+    if [ -z "${observed_checksum:-}" ]; then
+      echo >&2 "not ok - no supported checksum utility is available to verify $uri"
+      rm -rf "$tmp"
+      return 1
+    fi
+
+    if [ "$observed_checksum" != "$expected_checksum" ]; then
+      echo >&2 "not ok - checksum mismatch for $uri"
+      rm -rf "$tmp"
+      return 1
+    fi
+  fi
+
   echo "$output"
 }
 

@@ -728,25 +728,30 @@ export class ApplicationWindow extends EventTarget {
       throw new Error('event should be a non-empty string')
     }
 
+    if (options.backend === true) {
+      return await ipc.send('process.write', {
+        index: this.#senderWindowIndex,
+        event: options.event,
+        value:
+          options.value !== undefined ? JSON.stringify(options.value) : null
+      })
+    }
+
     const value =
       typeof options.value !== 'string'
         ? JSON.stringify(options.value)
         : options.value
 
-    if (options.backend === true) {
-      return await ipc.request('process.write', {
-        index: this.#senderWindowIndex,
-        event: options.event,
-        value: value !== undefined ? JSON.stringify(value) : null
-      })
-    }
-
-    return await ipc.request('window.send', {
+    const result = await ipc.request('window.send', {
       index: this.#senderWindowIndex,
       targetWindowIndex: options.window,
       event: options.event,
       value: encodeURIComponent(value)
     })
+    if (result.err) {
+      throw result.err
+    }
+    return result.data
   }
 
   /**

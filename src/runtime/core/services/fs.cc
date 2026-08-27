@@ -3186,11 +3186,10 @@ namespace oro::runtime::core::services {
             }}
           };
         } else {
-          const char* out = static_cast<const char*>(uv_fs_get_ptr(req));
           json = JSON::Object::Entries {
             {"source", "fs.mkdtemp"},
             {"data", JSON::Object::Entries {
-              {"path", String(out ? out : "")}
+              {"path", String(req->path ? req->path : "")}
             }}
           };
         }

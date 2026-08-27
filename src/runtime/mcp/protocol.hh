@@ -17,8 +17,15 @@ namespace oro::runtime::mcp {
   using types::String;
   using types::Vector;
 
-  inline constexpr const char* kProtocolVersion = "2025-06-18";
+  inline constexpr const char* kProtocolVersion = "2026-07-28";
+  inline constexpr const char* kLegacyProtocolVersion = "2025-11-25";
+  inline constexpr const char* kOlderLegacyProtocolVersion = "2025-06-18";
   inline constexpr const char* kJsonRpcVersion = "2.0";
+
+  bool isModernProtocolVersion(const String& version);
+  bool isLegacyProtocolVersion(const String& version);
+  bool isSupportedProtocolVersion(const String& version);
+  Vector<String> supportedProtocolVersions();
 
   enum class ErrorCode : int {
     ParseError = -32700,
@@ -26,6 +33,9 @@ namespace oro::runtime::mcp {
     MethodNotFound = -32601,
     InvalidParams = -32602,
     InternalError = -32603,
+    HeaderMismatch = -32020,
+    MissingRequiredClientCapability = -32021,
+    UnsupportedProtocolVersion = -32022,
     ServerErrorStart = -32000,
     ServerErrorEnd = -32099
   };

@@ -17,7 +17,7 @@ namespace oro::cli::mcp {
     runtime::String token;
 
     // File system access policy for MCP tools/resources.
-    bool allowReadOutsideWorkspace = true;
+    bool allowReadOutsideWorkspace = false;
 
     // Streamable HTTP transport policy.
     bool replaceSseStreamOnReconnect = false;

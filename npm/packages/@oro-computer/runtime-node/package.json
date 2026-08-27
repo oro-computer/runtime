@@ -1,0 +1,46 @@
+{
+  "name": "@oro-computer/runtime-node",
+  "version": "0.1.0",
+  "description": "Oro Runtime Node adapter",
+  "main": "index.js",
+  "exports": {
+    "import": "./index.js",
+    "require": "./index.cjs"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "standard index.js",
+    "build": "esbuild index.js --outfile=index.cjs --platform=node --format=cjs",
+    "prepack": "npm run build"
+  },
+  "files": [
+    "API.md",
+    "index.cjs",
+    "index.js",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oro-computer/runtime.git"
+  },
+  "author": "Oro Runtime Maintainers <maintainers@oro.computer>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/oro-computer/runtime/issues"
+  },
+  "homepage": "https://oro.computer/runtime",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "esbuild": "0.28.2",
+    "standard": "^17.1.0"
+  }
+}

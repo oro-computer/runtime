@@ -20,13 +20,121 @@ import ipc, { IPCSearchParams, Result } from '../ipc.js'
  */
 
 /**
+ * @typedef {object} MCPIcon
+ * @property {string} src URI or data URI for the icon.
+ * @property {string} [mimeType] MIME type of the icon.
+ * @property {string[]} [sizes] Available sizes, such as `48x48` or `any`.
+ * @property {'light'|'dark'} [theme] Optional color-scheme hint.
+ */
+
+/**
+ * @typedef {object} MCPToolAnnotations
+ * @property {string} [title]
+ * @property {boolean} [readOnlyHint]
+ * @property {boolean} [destructiveHint]
+ * @property {boolean} [idempotentHint]
+ * @property {boolean} [openWorldHint]
+ */
+
+/**
+ * @typedef {object} MCPAnnotations
+ * @property {('user'|'assistant')[]} [audience]
+ * @property {number} [priority] Importance from 0 through 1.
+ * @property {string} [lastModified] ISO 8601 last-modified timestamp.
+ */
+
+/**
+ * @typedef {object} MCPTextContent
+ * @property {'text'} type
+ * @property {string} text
+ * @property {MCPAnnotations} [annotations]
+ * @property {Record<string, any>} [_meta]
+ */
+
+/**
+ * @typedef {object} MCPBinaryContent
+ * @property {'image'|'audio'} type
+ * @property {string} data Base64-encoded content.
+ * @property {string} mimeType
+ * @property {MCPAnnotations} [annotations]
+ * @property {Record<string, any>} [_meta]
+ */
+
+/**
+ * @typedef {object} MCPResourceLinkContent
+ * @property {'resource_link'} type
+ * @property {string} name
+ * @property {string} uri
+ * @property {string} [title]
+ * @property {string} [description]
+ * @property {string} [mimeType]
+ * @property {number} [size]
+ * @property {MCPIcon[]} [icons]
+ * @property {MCPAnnotations} [annotations]
+ * @property {Record<string, any>} [_meta]
+ */
+
+/**
+ * @typedef {object} MCPResourceContents
+ * @property {string} uri
+ * @property {string} [text]
+ * @property {string} [blob] Base64-encoded bytes.
+ * @property {string} [mimeType]
+ * @property {Record<string, any>} [_meta]
+ */
+
+/**
+ * @typedef {object} MCPResourceContentInput
+ * @property {string} [uri] Defaults to the registered resource URI.
+ * @property {string} [text]
+ * @property {string|Uint8Array} [blob] Base64 string or bytes.
+ * @property {string} [mimeType]
+ * @property {Record<string, any>} [_meta]
+ */
+
+/**
+ * @typedef {object} MCPEmbeddedResourceContent
+ * @property {'resource'} type
+ * @property {MCPResourceContents} resource
+ * @property {MCPAnnotations} [annotations]
+ * @property {Record<string, any>} [_meta]
+ */
+
+/**
+ * @typedef {MCPTextContent|MCPBinaryContent|MCPResourceLinkContent|MCPEmbeddedResourceContent} MCPContentBlock
+ */
+
+/**
+ * @typedef {string|number|boolean|null|MCPJSONValue[]|{[key: string]: MCPJSONValue}} MCPJSONValue
+ */
+
+/**
+ * @typedef {object} MCPToolResult
+ * @property {MCPContentBlock[]} content
+ * @property {MCPJSONValue} [structuredContent]
+ * @property {boolean} [isError]
+ * @property {Record<string, any>} [_meta]
+ */
+
+/**
+ * @typedef {MCPToolResult|MCPJSONValue|undefined} MCPToolHandlerResult
+ * A handler may return a complete MCP result or any JSON value. Direct JSON
+ * values become `structuredContent` and receive a serialized text content block.
+ */
+
+/**
  * @typedef {object} MCPResourceDescriptor
  * @property {string} uri Unique resource URI.
  * @property {string} [name]
+ * @property {string} [title]
  * @property {string} [description]
  * @property {string} [mimeType]
+ * @property {MCPIcon[]} [icons]
+ * @property {MCPAnnotations} [annotations]
+ * @property {number} [size] Size of the raw resource content in bytes.
+ * @property {Record<string, any>} [_meta] Protocol and application metadata.
  * @property {boolean} [subscribable]
- * @property {any} [metadata]
+ * @property {any} [metadata] Deprecated alias for `_meta`.
  */
 
 /**
@@ -60,57 +168,126 @@ import ipc, { IPCSearchParams, Result } from '../ipc.js'
 
 /**
  * @typedef {object} MCPOAuthScreenOptions
- * @property {string} [html] Inline HTML string for the authorization screen.
- * @property {string} [file] Absolute path to a HTML file used for the authorization screen.
+ * @property {string} [html] Inline HTML for the authorization screen. Approval forms must submit `decision` and the `{{AUTHORIZATION_REQUEST}}` placeholder value as `authorization_request`.
+ * @property {string} [file] Absolute path to an HTML authorization screen with the same one-time request handling as `html`.
  */
 
 /**
  * @typedef {object} MCPOAuthOptions
  * @property {boolean} [enabled] Enable the built-in OAuth flow (defaults to `true` when omitted).
- * @property {string} [issuer] Explicit issuer URL reported in discovery metadata.
+ * @property {string} [issuer] Explicit authorization-server issuer URL reported in discovery metadata. Required when exposing a non-loopback server through a proxy.
+ * @property {string} [resource] Canonical public URI of the MCP endpoint. Required when its public URI differs from the bound host and endpoint.
  * @property {string} [authorizePath] Override for the authorization endpoint path.
  * @property {string} [tokenPath] Override for the token endpoint path.
  * @property {string} [metadataPath] Override for the OAuth discovery metadata path.
  * @property {number} [codeLifetimeSeconds] Authorization code lifetime override (seconds).
  * @property {number} [tokenLifetimeSeconds] Access token lifetime override (seconds).
- * @property {string} [defaultClientId] Optional client identifier shown on the default screen.
+ * @property {string} [defaultClientId] Pre-registered client identifier. Required when OAuth is enabled.
  * @property {string} [defaultScope] Optional scope displayed on the default screen.
+ * @property {string[]} [redirectUris] Exact pre-registered redirect URIs accepted for the client. At least one is required when OAuth is enabled.
  * @property {MCPOAuthScreenOptions} [screen] Custom authorization screen configuration.
  */
 
 /**
  * @typedef {object} MCPRegisterToolOptions
  * @property {string} name
+ * @property {string} [title]
  * @property {string} [description]
- * @property {any} [metadata]
  * @property {Record<string, any>} [inputSchema]
- * @property {(context: MCPToolInvocationContext) => any | Promise<any>} [handler]
+ * @property {Record<string, any>} [outputSchema] A valid JSON Schema. Defaults to dialect 2020-12 when `$schema` is omitted.
+ * @property {MCPIcon[]} [icons]
+ * @property {MCPToolAnnotations} [annotations]
+ * @property {Record<string, any>} [_meta] Protocol and application metadata.
+ * @property {any} [metadata] Deprecated alias for `_meta`.
+ * @property {(context: MCPToolInvocationContext) => MCPToolHandlerResult | Promise<MCPToolHandlerResult>} [handler]
+ */
+
+/**
+ * @typedef {object} MCPToolDescriptor
+ * @property {string} name
+ * @property {string} [title]
+ * @property {string} [description]
+ * @property {Record<string, any>} inputSchema
+ * @property {Record<string, any>} [outputSchema]
+ * @property {MCPIcon[]} [icons]
+ * @property {MCPToolAnnotations} [annotations]
+ * @property {Record<string, any>} [_meta]
+ * @property {Record<string, any>} [metadata] Deprecated alias for `_meta`.
  */
 
 /**
  * @typedef {object} MCPRegisterResourceOptions
  * @property {string} uri
  * @property {string} [name]
+ * @property {string} [title]
  * @property {string} [description]
  * @property {string} [mimeType]
+ * @property {MCPIcon[]} [icons]
+ * @property {MCPAnnotations} [annotations]
+ * @property {number} [size] Size of the raw resource content in bytes.
  * @property {boolean} [subscribable]
- * @property {any} [metadata]
- * @property {(context: MCPResourceContext) => any | Promise<any>} [handler]
+ * @property {Record<string, any>} [_meta] Protocol and application metadata.
+ * @property {any} [metadata] Deprecated alias for `_meta`.
+ * @property {(context: MCPResourceContext) => MCPResourceHandlerResult | Promise<MCPResourceHandlerResult>} [handler]
  * @property {(context: MCPResourceContext) => void | Promise<void>} [onSubscribe]
  * @property {(context: MCPResourceContext) => void | Promise<void>} [onUnsubscribe]
  */
 
 /**
+ * @typedef {object} MCPResourceHandlerResultObject
+ * @property {MCPResourceContentInput[]} contents
+ * @property {Record<string, any>} [_meta]
+ */
+
+/**
+ * @typedef {MCPResourceHandlerResultObject|MCPResourceContentInput|MCPResourceContentInput[]|string|Uint8Array|null|undefined} MCPResourceHandlerResult
+ */
+
+/**
+ * @typedef {object} MCPInvocationOptions
+ * @property {string} [sessionId]
+ */
+
+/**
+ * @typedef {object} MCPPublishResourceOptions
+ * @property {string} [sessionId]
+ * @property {string} [subscriptionId]
+ */
+
+/**
  * @typedef {object} MCPStartServerOptions
  * @property {string} [host]
- * @property {number} [port]
+ * @property {number} [port] TCP port from 0 through 65535. Use 0 to select an available port.
  * @property {string} [endpoint]
  * @property {string} [sse]
  * @property {string} [message]
  * @property {string} [token]
- * @property {number} [retry]
+ * @property {number} [retry] Positive 32-bit SSE retry interval in milliseconds.
+ * @property {number} [sessionTtlSeconds=600] Seconds to retain an inactive legacy session.
+ * @property {number} [maxRequestBytes=16777216] Maximum HTTP request body size.
+ * @property {number} [maxSessions=1024] Maximum concurrent HTTP session contexts.
+ * @property {number} [maxQueuedEvents=1024] Maximum queued events per SSE stream.
+ * @property {number} [maxQueuedBytes=8388608] Maximum queued event bytes per SSE stream.
+ * @property {boolean} [replaceSseStreamOnReconnect=false] Allow a reconnect to replace an existing legacy SSE stream for the same session.
  * @property {(request: MCPAuthorizationRequest) => boolean | MCPAuthorizationDecision | Promise<boolean | MCPAuthorizationDecision>} [authorize]
  * @property {MCPOAuthOptions | boolean} [oauth]
+ */
+
+/**
+ * @typedef {object} MCPOAuthServerEndpoints
+ * @property {string|null} [authorizePath]
+ * @property {string|null} [tokenPath]
+ * @property {string|null} [metadataPath]
+ * @property {string|null} [protectedResourceMetadataPath]
+ */
+
+/**
+ * @typedef {object} MCPStartServerResult
+ * @property {boolean} running
+ * @property {string} host
+ * @property {number} port
+ * @property {string} endpoint
+ * @property {MCPOAuthServerEndpoints} [oauth]
  */
 
 const toolHandlers = new Map()
@@ -179,6 +356,10 @@ function ensureConduitClient () {
 
   const handleChannelError = () => {
     rejectAllPending(new Error('CONDUIT_CHANNEL_ERROR'))
+    const client = conduitClient
+    conduitUnavailable = true
+    conduitClient = null
+    client?.close()
   }
 
   conduitClient.addEventListener('close', handleChannelError)
@@ -440,18 +621,7 @@ async function runtimeRequest (command, value, options = null) {
     return fallback()
   }
 
-  try {
-    return await promise
-  } catch (error) {
-    if (
-      error &&
-      (error.message === 'CONDUIT_TIMEOUT' ||
-        error.message === 'CONDUIT_CHANNEL_ERROR')
-    ) {
-      return fallback()
-    }
-    return fallback()
-  }
+  return await promise
 }
 
 function normalizeMetadata (value) {
@@ -467,18 +637,26 @@ function normalizeMetadata (value) {
 
 function normalizeToolDefinition (tool) {
   const value = assertObject(tool)
+  const metadata = normalizeMetadata(value?._meta ?? value?.metadata)
   return {
     name: value?.name ?? '',
+    title: value?.title ?? '',
     description: value?.description ?? '',
     inputSchema: assertObject(value?.inputSchema),
-    metadata: normalizeMetadata(value?.metadata)
+    outputSchema: value?.outputSchema,
+    icons: Array.isArray(value?.icons) ? value.icons : undefined,
+    annotations: assertObject(value?.annotations, undefined),
+    _meta: metadata,
+    metadata
   }
 }
 
 function normalizeDescriptor (descriptor) {
   const value = { ...assertObject(descriptor) }
-  if (value.metadata !== undefined) {
-    value.metadata = normalizeMetadata(value.metadata)
+  const metadata = normalizeMetadata(value._meta ?? value.metadata)
+  if (metadata !== undefined) {
+    value._meta = metadata
+    value.metadata = metadata
   }
   return value
 }
@@ -612,31 +790,176 @@ function handleToolInvocation (payload) {
     arguments: args
   }
 
+  const resolve = (result) => {
+    let resultJson
+    try {
+      resultJson = JSON.stringify(normalizeToolResult(result))
+    } catch (error) {
+      return runtimeRequest('mcp.server.rejectInvocation', {
+        id: invocationId,
+        message: error?.message || 'Failed to serialize tool result'
+      })
+    }
+
+    return runtimeRequest('mcp.server.resolveInvocation', {
+      id: invocationId,
+      result: resultJson
+    })
+  }
+
   Promise.resolve()
     .then(() => handler(context))
-    .then((result) => {
-      let resultJson = 'null'
-      try {
-        resultJson = result === undefined ? 'null' : JSON.stringify(result)
-      } catch (error) {
-        return runtimeRequest('mcp.server.rejectInvocation', {
-          id: invocationId,
-          message: error?.message || 'Failed to serialize tool result'
+    .then(
+      (result) => resolve(result),
+      (error) =>
+        resolve({
+          content: [
+            {
+              type: 'text',
+              text: error?.message || String(error)
+            }
+          ],
+          isError: true
         })
-      }
-
-      return runtimeRequest('mcp.server.resolveInvocation', {
-        id: invocationId,
-        result: resultJson
-      })
-    })
-    .catch((error) =>
-      runtimeRequest('mcp.server.rejectInvocation', {
-        id: invocationId,
-        message: error?.message || String(error)
-      })
     )
     .catch(() => {})
+}
+
+function isValidBase64 (value) {
+  return (
+    typeof value === 'string' &&
+    value.length % 4 === 0 &&
+    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      value
+    )
+  )
+}
+
+function validateContentBlock (content, index) {
+  const label = `Tool result content[${index}]`
+  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    throw new TypeError(`${label} must be an object`)
+  }
+  if (typeof content.type !== 'string') {
+    throw new TypeError(`${label}.type must be a string`)
+  }
+  validateMetadata(content._meta, `${label}._meta`)
+  validateResourceAnnotations(content.annotations, `${label}.annotations`)
+
+  if (content.type === 'text') {
+    if (typeof content.text !== 'string') {
+      throw new TypeError(`${label}.text must be a string`)
+    }
+    return
+  }
+
+  if (content.type === 'image' || content.type === 'audio') {
+    if (!isValidBase64(content.data)) {
+      throw new TypeError(`${label}.data must be valid base64`)
+    }
+    if (typeof content.mimeType !== 'string' || content.mimeType.length === 0) {
+      throw new TypeError(`${label}.mimeType must be a non-empty string`)
+    }
+    return
+  }
+
+  if (content.type === 'resource_link') {
+    if (typeof content.name !== 'string' || content.name.length === 0) {
+      throw new TypeError(`${label}.name must be a non-empty string`)
+    }
+    if (typeof content.uri !== 'string' || content.uri.length === 0) {
+      throw new TypeError(`${label}.uri must be a non-empty string`)
+    }
+    validateOptionalString(content.title, `${label}.title`)
+    validateOptionalString(content.description, `${label}.description`)
+    validateOptionalString(content.mimeType, `${label}.mimeType`)
+    validateIcons(content.icons, `${label}.icons`)
+    if (
+      content.size !== undefined &&
+      (!Number.isSafeInteger(content.size) || content.size < 0)
+    ) {
+      throw new TypeError(`${label}.size must be a non-negative safe integer`)
+    }
+    return
+  }
+
+  if (content.type === 'resource') {
+    const resource = content.resource
+    if (!resource || typeof resource !== 'object' || Array.isArray(resource)) {
+      throw new TypeError(`${label}.resource must be an object`)
+    }
+    if (typeof resource.uri !== 'string' || resource.uri.length === 0) {
+      throw new TypeError(`${label}.resource.uri must be a non-empty string`)
+    }
+    const hasText = typeof resource.text === 'string'
+    const hasBlob = typeof resource.blob === 'string'
+    if (hasText === hasBlob) {
+      throw new TypeError(
+        `${label}.resource must contain exactly one string field: text or blob`
+      )
+    }
+    if (hasBlob && !isValidBase64(resource.blob)) {
+      throw new TypeError(`${label}.resource.blob must be valid base64`)
+    }
+    validateOptionalString(resource.mimeType, `${label}.resource.mimeType`)
+    validateMetadata(resource._meta, `${label}.resource._meta`)
+    return
+  }
+
+  throw new TypeError(`${label}.type is not a supported MCP content type`)
+}
+
+function normalizeToolResult (result) {
+  if (
+    result &&
+    typeof result === 'object' &&
+    Array.isArray(result.content)
+  ) {
+    result.content.forEach(validateContentBlock)
+    if (result.isError !== undefined && typeof result.isError !== 'boolean') {
+      throw new TypeError('Tool result isError must be a boolean')
+    }
+    if (result.structuredContent !== undefined) {
+      validateJSONValue(
+        result.structuredContent,
+        'Tool result structuredContent'
+      )
+    }
+    validateMetadata(result._meta, 'Tool result _meta')
+    if (
+      result.structuredContent !== undefined &&
+      (result.structuredContent === null ||
+        typeof result.structuredContent !== 'object' ||
+        Array.isArray(result.structuredContent))
+    ) {
+      const serialized = JSON.stringify(result.structuredContent)
+      if (
+        !result.content.some(
+          (entry) => entry.type === 'text' && entry.text === serialized
+        )
+      ) {
+        return {
+          ...result,
+          content: [...result.content, { type: 'text', text: serialized }]
+        }
+      }
+    }
+    return result
+  }
+
+  if (result === undefined) {
+    return { content: [] }
+  }
+
+  validateJSONValue(result, 'Tool result')
+  const text = JSON.stringify(result)
+  if (typeof text !== 'string') {
+    throw new TypeError('Tool result must be JSON serializable')
+  }
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: result
+  }
 }
 
 function handleResourceRead (payload) {
@@ -882,16 +1205,19 @@ function normalizeOAuthOptions (options) {
   }
 
   const source = options === true ? {} : options
-  if (typeof source !== 'object') {
-    return null
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    throw new TypeError('oauth must be a boolean or an options object')
   }
 
   const normalized = {}
-  normalized.enabled =
-    source.enabled !== undefined ? Boolean(source.enabled) : true
+  if (source.enabled !== undefined && typeof source.enabled !== 'boolean') {
+    throw new TypeError('oauth.enabled must be a boolean')
+  }
+  normalized.enabled = source.enabled ?? true
 
   const stringFields = [
     ['issuer', 'issuer'],
+    ['resource', 'resource'],
     ['authorizePath', 'authorizePath'],
     ['tokenPath', 'tokenPath'],
     ['metadataPath', 'metadataPath'],
@@ -901,9 +1227,25 @@ function normalizeOAuthOptions (options) {
 
   for (const [key, target] of stringFields) {
     const value = source[key]
-    if (typeof value === 'string' && value.length > 0) {
-      normalized[target] = value
+    if (value === undefined) continue
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new TypeError(`oauth.${key} must be a non-empty string`)
     }
+    normalized[target] = value
+  }
+
+  if (source.redirectUris !== undefined) {
+    if (
+      !Array.isArray(source.redirectUris) ||
+      source.redirectUris.some(
+        (value) => typeof value !== 'string' || value.length === 0
+      )
+    ) {
+      throw new TypeError(
+        'oauth.redirectUris must be an array of non-empty strings'
+      )
+    }
+    normalized.redirectUris = [...source.redirectUris]
   }
 
   const numberFields = [
@@ -913,19 +1255,37 @@ function normalizeOAuthOptions (options) {
 
   for (const [key, target] of numberFields) {
     const value = source[key]
-    if (Number.isFinite(value) && value > 0) {
-      normalized[target] = Math.floor(value)
+    if (value === undefined) continue
+    if (
+      !Number.isSafeInteger(value) ||
+      value <= 0 ||
+      value > 0xffffffff
+    ) {
+      throw new RangeError(
+        `oauth.${key} must be a positive 32-bit safe integer`
+      )
     }
+    normalized[target] = value
   }
 
   const screen = source.screen
-  if (screen && typeof screen === 'object') {
-    const screenConfig = {}
-    if (typeof screen.html === 'string' && screen.html.length > 0) {
-      screenConfig.html = screen.html
+  if (screen !== undefined) {
+    if (!screen || typeof screen !== 'object' || Array.isArray(screen)) {
+      throw new TypeError('oauth.screen must be an options object')
     }
-    if (typeof screen.file === 'string' && screen.file.length > 0) {
-      screenConfig.file = screen.file
+    const screenConfig = {}
+    for (const key of ['html', 'file']) {
+      const value = screen[key]
+      if (value === undefined) continue
+      if (typeof value !== 'string' || value.length === 0) {
+        throw new TypeError(`oauth.screen.${key} must be a non-empty string`)
+      }
+      screenConfig[key] = value
+    }
+    if (screenConfig.html && screenConfig.file) {
+      throw new TypeError(
+        'oauth.screen must specify either html or file, not both'
+      )
     }
     if (Object.keys(screenConfig).length > 0) {
       normalized.screen = screenConfig
@@ -938,56 +1298,107 @@ function normalizeOAuthOptions (options) {
 function normalizeResourceResult (result, descriptor) {
   const normalizedDescriptor = normalizeDescriptor(descriptor)
   const mimeType = normalizedDescriptor?.mimeType || 'application/octet-stream'
+  const uri = normalizedDescriptor?.uri || ''
 
   if (result == null) {
     return { contents: [] }
   }
 
-  if (typeof result === 'string') {
-    return {
-      contents: [{ type: 'text', text: result }]
+  const normalizeContent = (content) => {
+    if (typeof content === 'string') {
+      content = { text: content }
+    } else if (Buffer.isBuffer(content) || content instanceof Uint8Array) {
+      content = { blob: Buffer.from(content).toString('base64') }
     }
+
+    if (!content || typeof content !== 'object' || Array.isArray(content)) {
+      throw new TypeError('Resource contents must be objects, strings, or bytes')
+    }
+
+    const contentUri =
+      typeof content.uri === 'string' && content.uri.length > 0
+        ? content.uri
+        : uri
+    if (!contentUri) {
+      throw new TypeError('Resource content requires a non-empty uri')
+    }
+
+    const hasText = typeof content.text === 'string'
+    const binary = Buffer.isBuffer(content.blob) ||
+      content.blob instanceof Uint8Array
+    const blob = binary
+      ? Buffer.from(content.blob).toString('base64')
+      : content.blob
+    const hasBlob = typeof blob === 'string'
+    if (hasText === hasBlob) {
+      throw new TypeError(
+        'Resource content must contain exactly one string field: text or blob'
+      )
+    }
+
+    if (hasBlob && !isValidBase64(blob)) {
+      throw new TypeError('Resource blob must be valid base64')
+    }
+
+    const normalized = {
+      uri: contentUri,
+      ...(hasText ? { text: content.text } : { blob })
+    }
+    const contentMimeType = content.mimeType ?? (hasBlob ? mimeType : undefined)
+    if (contentMimeType !== undefined) {
+      if (typeof contentMimeType !== 'string' || contentMimeType.length === 0) {
+        throw new TypeError('Resource content mimeType must be a non-empty string')
+      }
+      normalized.mimeType = contentMimeType
+    }
+    if (content._meta !== undefined) {
+      if (
+        !content._meta ||
+        typeof content._meta !== 'object' ||
+        Array.isArray(content._meta)
+      ) {
+        throw new TypeError('Resource content _meta must be an object')
+      }
+      normalized._meta = content._meta
+    }
+    return normalized
+  }
+
+  if (typeof result === 'string') {
+    return { contents: [normalizeContent(result)] }
   }
 
   if (Buffer.isBuffer(result) || result instanceof Uint8Array) {
-    const base64 = Buffer.from(result).toString('base64')
-    return {
-      contents: [{ type: 'blob', blob: base64, mimeType }]
-    }
+    return { contents: [normalizeContent(result)] }
   }
 
   if (Array.isArray(result)) {
-    return { contents: result }
+    return { contents: result.map(normalizeContent) }
   }
 
   if (typeof result === 'object') {
     if (Array.isArray(result.contents)) {
-      return { contents: result.contents }
-    }
-
-    if (typeof result.text === 'string') {
-      return { contents: [{ type: 'text', text: result.text }] }
-    }
-
-    if (Buffer.isBuffer(result.blob) || result.blob instanceof Uint8Array) {
-      const base64 = Buffer.from(result.blob).toString('base64')
-      return {
-        contents: [
-          { type: 'blob', blob: base64, mimeType: result.mimeType || mimeType }
-        ]
+      const normalized = { contents: result.contents.map(normalizeContent) }
+      if (result._meta !== undefined) {
+        if (
+          !result._meta ||
+          typeof result._meta !== 'object' ||
+          Array.isArray(result._meta)
+        ) {
+          throw new TypeError('Resource result _meta must be an object')
+        }
+        normalized._meta = result._meta
       }
+      return normalized
     }
 
-    if (typeof result.blob === 'string') {
-      return {
-        contents: [
-          {
-            type: 'blob',
-            blob: result.blob,
-            mimeType: result.mimeType || mimeType
-          }
-        ]
-      }
+    if (
+      typeof result.text === 'string' ||
+      typeof result.blob === 'string' ||
+      Buffer.isBuffer(result.blob) ||
+      result.blob instanceof Uint8Array
+    ) {
+      return { contents: [normalizeContent(result)] }
     }
   }
 
@@ -1009,10 +1420,138 @@ function serializeForIPC (value, label) {
   }
 
   try {
-    return JSON.stringify(value)
+    const serialized = JSON.stringify(value)
+    if (typeof serialized !== 'string') {
+      throw new TypeError(`${label} must be JSON serializable`)
+    }
+    return serialized
   } catch (error) {
     throw new TypeError(error?.message || `Failed to serialize ${label}`)
   }
+}
+
+function validateOptionalString (value, label) {
+  if (value !== undefined && typeof value !== 'string') {
+    throw new TypeError(`${label} must be a string`)
+  }
+}
+
+function validateMetadata (value, label) {
+  if (
+    value !== undefined &&
+    (!value || typeof value !== 'object' || Array.isArray(value))
+  ) {
+    throw new TypeError(`${label} must be an object`)
+  }
+}
+
+function validateJSONValue (value, label) {
+  try {
+    const serialized = JSON.stringify(value, (key, nested) => {
+      if (typeof nested === 'number' && !Number.isFinite(nested)) {
+        throw new TypeError(`${label} numbers must be finite`)
+      }
+      if (
+        nested === undefined ||
+        typeof nested === 'bigint' ||
+        typeof nested === 'function' ||
+        typeof nested === 'symbol'
+      ) {
+        throw new TypeError(`${label} must contain only JSON values`)
+      }
+      return nested
+    })
+    if (typeof serialized !== 'string') {
+      throw new TypeError(`${label} must be JSON serializable`)
+    }
+  } catch (error) {
+    throw new TypeError(error?.message || `${label} must be JSON serializable`)
+  }
+}
+
+function validateIcons (icons, label) {
+  if (icons === undefined) return
+  if (!Array.isArray(icons)) {
+    throw new TypeError(`${label} must be an array`)
+  }
+  for (let index = 0; index < icons.length; index++) {
+    const icon = icons[index]
+    const prefix = `${label}[${index}]`
+    if (!icon || typeof icon !== 'object' || Array.isArray(icon)) {
+      throw new TypeError(`${prefix} must be an object`)
+    }
+    if (typeof icon.src !== 'string' || icon.src.length === 0) {
+      throw new TypeError(`${prefix}.src must be a non-empty string`)
+    }
+    validateOptionalString(icon.mimeType, `${prefix}.mimeType`)
+    if (
+      icon.sizes !== undefined &&
+      (!Array.isArray(icon.sizes) ||
+        icon.sizes.some(
+          (size) => typeof size !== 'string' || size.length === 0
+        ))
+    ) {
+      throw new TypeError(
+        `${prefix}.sizes must be an array of non-empty strings`
+      )
+    }
+    if (
+      icon.theme !== undefined &&
+      icon.theme !== 'light' &&
+      icon.theme !== 'dark'
+    ) {
+      throw new TypeError(`${prefix}.theme must be 'light' or 'dark'`)
+    }
+  }
+}
+
+function validateToolAnnotations (annotations) {
+  if (annotations === undefined) return
+  validateMetadata(annotations, 'tool.annotations')
+  validateOptionalString(annotations.title, 'tool.annotations.title')
+  for (const key of [
+    'readOnlyHint',
+    'destructiveHint',
+    'idempotentHint',
+    'openWorldHint'
+  ]) {
+    if (annotations[key] !== undefined && typeof annotations[key] !== 'boolean') {
+      throw new TypeError(`tool.annotations.${key} must be a boolean`)
+    }
+  }
+}
+
+function validateResourceAnnotations (
+  annotations,
+  label = 'resource.annotations'
+) {
+  if (annotations === undefined) return
+  validateMetadata(annotations, label)
+  if (
+    annotations.audience !== undefined &&
+    (!Array.isArray(annotations.audience) ||
+      annotations.audience.some(
+        (role) => role !== 'user' && role !== 'assistant'
+      ))
+  ) {
+    throw new TypeError(
+      `${label}.audience must contain only 'user' or 'assistant'`
+    )
+  }
+  if (
+    annotations.priority !== undefined &&
+    (!Number.isFinite(annotations.priority) ||
+      annotations.priority < 0 ||
+      annotations.priority > 1)
+  ) {
+    throw new RangeError(
+      `${label}.priority must be a number from 0 through 1`
+    )
+  }
+  validateOptionalString(
+    annotations.lastModified,
+    `${label}.lastModified`
+  )
 }
 
 /**
@@ -1025,18 +1564,58 @@ export async function registerTool (tool) {
     throw new TypeError('tool.name must be a non-empty string')
   }
 
-  const metadataJson = serializeForIPC(tool.metadata, 'tool metadata')
-  const inputSchemaJson = serializeForIPC(tool.inputSchema, 'tool input schema')
+  const inputSchema = tool.inputSchema ?? { type: 'object' }
+  if (
+    !inputSchema ||
+    typeof inputSchema !== 'object' ||
+    Array.isArray(inputSchema) ||
+    inputSchema.type !== 'object'
+  ) {
+    throw new TypeError("tool.inputSchema must declare type 'object' at its root")
+  }
+  if (
+    tool.outputSchema !== undefined &&
+    (!tool.outputSchema ||
+      typeof tool.outputSchema !== 'object' ||
+      Array.isArray(tool.outputSchema))
+  ) {
+    throw new TypeError('tool.outputSchema must be a JSON object')
+  }
+  validateOptionalString(tool.title, 'tool.title')
+  validateOptionalString(tool.description, 'tool.description')
+  validateIcons(tool.icons, 'tool.icons')
+  validateToolAnnotations(tool.annotations)
+  validateMetadata(tool._meta ?? tool.metadata, 'tool metadata')
+  if (tool.handler !== undefined && typeof tool.handler !== 'function') {
+    throw new TypeError('tool.handler must be a function')
+  }
+
+  const metadataJson = serializeForIPC(
+    tool._meta ?? tool.metadata,
+    'tool metadata'
+  )
+  const inputSchemaJson = serializeForIPC(inputSchema, 'tool input schema')
+  const outputSchemaJson = serializeForIPC(
+    tool.outputSchema,
+    'tool output schema'
+  )
+  const iconsJson = serializeForIPC(tool.icons, 'tool icons')
+  const annotationsJson = serializeForIPC(
+    tool.annotations,
+    'tool annotations'
+  )
 
   const payload = {
     name: tool.name,
+    title: tool.title || '',
     description: tool.description || '',
-    metadata: metadataJson
+    metadata: metadataJson,
+    inputSchema: inputSchemaJson
   }
 
-  if (inputSchemaJson.length > 0) {
-    payload.inputSchema = inputSchemaJson
-  }
+  if (outputSchemaJson.length > 0) payload.outputSchema = outputSchemaJson
+  if (iconsJson.length > 0) payload.icons = iconsJson
+  if (annotationsJson.length > 0) payload.annotations = annotationsJson
 
   const result = await runtimeRequest('mcp.server.registerTool', payload)
 
@@ -1051,6 +1630,11 @@ export async function registerTool (tool) {
   return data.id ?? null
 }
 
+/**
+ * Unregister a tool by name.
+ * @param {string} name
+ * @returns {Promise<boolean>} Whether a registered tool was removed.
+ */
 export async function unregisterTool (name) {
   if (typeof name !== 'string' || name.length === 0) {
     throw new TypeError('name must be a non-empty string')
@@ -1066,6 +1650,10 @@ export async function unregisterTool (name) {
   return false
 }
 
+/**
+ * List the currently registered tool descriptors.
+ * @returns {Promise<MCPToolDescriptor[]>}
+ */
 export async function listTools () {
   const result = await runtimeRequest('mcp.server.listTools')
   const data = resultData(result)
@@ -1087,7 +1675,40 @@ export async function registerResource (resource) {
     throw new TypeError('resource.uri must be a non-empty string')
   }
 
-  const metadataJson = serializeForIPC(resource.metadata, 'resource metadata')
+  validateOptionalString(resource.name, 'resource.name')
+  validateOptionalString(resource.title, 'resource.title')
+  validateOptionalString(resource.description, 'resource.description')
+  validateOptionalString(resource.mimeType, 'resource.mimeType')
+  validateIcons(resource.icons, 'resource.icons')
+  validateResourceAnnotations(resource.annotations)
+  validateMetadata(resource._meta ?? resource.metadata, 'resource metadata')
+  if (
+    resource.subscribable !== undefined &&
+    typeof resource.subscribable !== 'boolean'
+  ) {
+    throw new TypeError('resource.subscribable must be a boolean')
+  }
+  for (const key of ['handler', 'onSubscribe', 'onUnsubscribe']) {
+    if (resource[key] !== undefined && typeof resource[key] !== 'function') {
+      throw new TypeError(`resource.${key} must be a function`)
+    }
+  }
+  if (
+    resource.size !== undefined &&
+    (!Number.isSafeInteger(resource.size) || resource.size < 0)
+  ) {
+    throw new TypeError('resource.size must be a non-negative safe integer')
+  }
+
+  const metadataJson = serializeForIPC(
+    resource._meta ?? resource.metadata,
+    'resource metadata'
+  )
+  const iconsJson = serializeForIPC(resource.icons, 'resource icons')
+  const annotationsJson = serializeForIPC(
+    resource.annotations,
+    'resource annotations'
+  )
 
   const hasReadHandler = typeof resource.handler === 'function'
   const hasSubscribeHandler = typeof resource.onSubscribe === 'function'
@@ -1100,8 +1721,12 @@ export async function registerResource (resource) {
   const result = await runtimeRequest('mcp.server.registerResource', {
     uri: resource.uri,
     name: resource.name || '',
+    title: resource.title || '',
     description: resource.description || '',
     mimeType: resource.mimeType || '',
+    icons: iconsJson,
+    annotations: annotationsJson,
+    size: resource.size === undefined ? '' : String(resource.size),
     subscribable: subscribable ? 'true' : 'false',
     metadata: metadataJson
   })
@@ -1115,8 +1740,14 @@ export async function registerResource (resource) {
       unsubscribe: hasUnsubscribeHandler ? resource.onUnsubscribe : null,
       descriptor: normalizeDescriptor({
         uri: resource.uri,
+        name: resource.name || resource.uri,
+        title: resource.title || '',
+        description: resource.description || '',
         mimeType: resource.mimeType || '',
-        metadata: resource.metadata
+        icons: resource.icons,
+        annotations: resource.annotations,
+        size: resource.size,
+        _meta: resource._meta ?? resource.metadata
       })
     })
   } else {
@@ -1126,6 +1757,11 @@ export async function registerResource (resource) {
   return data.id ?? null
 }
 
+/**
+ * Unregister a resource by URI.
+ * @param {string} uri
+ * @returns {Promise<boolean>} Whether a registered resource was removed.
+ */
 export async function unregisterResource (uri) {
   if (typeof uri !== 'string' || uri.length === 0) {
     throw new TypeError('uri must be a non-empty string')
@@ -1141,6 +1777,10 @@ export async function unregisterResource (uri) {
   return false
 }
 
+/**
+ * List the currently registered resource descriptors.
+ * @returns {Promise<MCPResourceDescriptor[]>}
+ */
 export async function listResources () {
   const result = await runtimeRequest('mcp.server.listResources')
   const data = resultData(result)
@@ -1148,16 +1788,40 @@ export async function listResources () {
   return resources.map((resource) => ({
     uri: resource?.uri ?? '',
     name: resource?.name ?? '',
+    title: resource?.title ?? '',
     description: resource?.description ?? '',
     mimeType: resource?.mimeType ?? '',
+    icons: Array.isArray(resource?.icons) ? resource.icons : undefined,
+    annotations: assertObject(resource?.annotations, undefined),
+    size: Number.isSafeInteger(resource?.size) ? resource.size : undefined,
     subscribable: Boolean(resource?.subscribable),
-    metadata: normalizeMetadata(resource?.metadata)
+    _meta: normalizeMetadata(resource?._meta ?? resource?.metadata),
+    metadata: normalizeMetadata(resource?._meta ?? resource?.metadata)
   }))
 }
 
+/**
+ * Invoke a registered tool through the local MCP service.
+ * @param {string} name
+ * @param {Record<string, any>} [args]
+ * @param {MCPInvocationOptions} [options]
+ * @returns {Promise<boolean>} Whether the invocation was accepted.
+ */
 export async function invokeTool (name, args = {}, options = null) {
   if (typeof name !== 'string' || name.length === 0) {
     throw new TypeError('name must be a non-empty string')
+  }
+  if (!args || typeof args !== 'object' || Array.isArray(args)) {
+    throw new TypeError('args must be an object')
+  }
+  if (
+    options !== null &&
+    (typeof options !== 'object' || Array.isArray(options))
+  ) {
+    throw new TypeError('options must be an object')
+  }
+  if (options?.sessionId !== undefined && typeof options.sessionId !== 'string') {
+    throw new TypeError('options.sessionId must be a string')
   }
 
   let argumentsJson = ''
@@ -1182,9 +1846,27 @@ export async function invokeTool (name, args = {}, options = null) {
   return Boolean(data.accepted)
 }
 
+/**
+ * Publish an update to active subscriptions for a registered resource.
+ * @param {string} uri
+ * @param {MCPResourceHandlerResult} result
+ * @param {MCPPublishResourceOptions} [options]
+ * @returns {Promise<boolean>} Whether at least one matching stream received the update.
+ */
 export async function publishResource (uri, result, options = null) {
   if (typeof uri !== 'string' || uri.length === 0) {
     throw new TypeError('uri must be a non-empty string')
+  }
+  if (
+    options !== null &&
+    (typeof options !== 'object' || Array.isArray(options))
+  ) {
+    throw new TypeError('options must be an object')
+  }
+  for (const key of ['sessionId', 'subscriptionId']) {
+    if (options?.[key] !== undefined && typeof options[key] !== 'string') {
+      throw new TypeError(`options.${key} must be a string`)
+    }
   }
 
   const descriptor = getResourceHandlerEntry(uri)?.descriptor || null
@@ -1274,27 +1956,113 @@ export async function setAuthorizationHandler (handler) {
  * - `authorize` registers a dynamic authorization handler for this server.
  *
  * @param {MCPStartServerOptions} [options]
- * @returns {Promise<{ running: boolean, host: string, port: number, endpoint: string, oauth?: { authorizePath?: string | null, tokenPath?: string | null, metadataPath?: string | null } }>}
+ * @returns {Promise<MCPStartServerResult>}
  */
 export async function startServer (options = null) {
-  if (options && Object.prototype.hasOwnProperty.call(options, 'authorize')) {
-    await setAuthorizationHandler(options.authorize)
+  if (
+    options !== null &&
+    (typeof options !== 'object' || Array.isArray(options))
+  ) {
+    throw new TypeError('options must be an object')
   }
 
   const payload = {}
-  if (options?.host) payload.host = options.host
-  if (Number.isFinite(options?.port)) payload.port = String(options.port)
-  if (options?.endpoint) payload.endpoint = options.endpoint
-  if (options?.sse) payload.sse = options.sse
-  if (options?.message) payload.message = options.message
-  if (options?.token) payload.token = options.token
-  if (Number.isFinite(options?.retry)) payload.retry = String(options.retry)
+  const setString = (key, allowEmpty = false) => {
+    const value = options?.[key]
+    if (value === undefined) return
+    if (typeof value !== 'string' || (!allowEmpty && value.length === 0)) {
+      throw new TypeError(
+        `${key} must be ${allowEmpty ? 'a string' : 'a non-empty string'}`
+      )
+    }
+    payload[key] = value
+  }
+  const setPositiveInteger = (key) => {
+    const value = options?.[key]
+    if (value === undefined) return
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new RangeError(`${key} must be a positive safe integer`)
+    }
+    payload[key] = String(value)
+  }
+  setString('host')
+  if (options?.port !== undefined) {
+    if (
+      !Number.isSafeInteger(options.port) ||
+      options.port < 0 ||
+      options.port > 65535
+    ) {
+      throw new RangeError('port must be a safe integer from 0 through 65535')
+    }
+    payload.port = String(options.port)
+  }
+  setString('endpoint')
+  setString('sse')
+  setString('message')
+  setString('token', true)
+  if (options?.retry !== undefined) {
+    if (
+      !Number.isSafeInteger(options.retry) ||
+      options.retry <= 0 ||
+      options.retry > 0xffffffff
+    ) {
+      throw new RangeError('retry must be a positive 32-bit safe integer')
+    }
+    payload.retry = String(options.retry)
+  }
+  setPositiveInteger('sessionTtlSeconds')
+  setPositiveInteger('maxRequestBytes')
+  setPositiveInteger('maxSessions')
+  setPositiveInteger('maxQueuedEvents')
+  setPositiveInteger('maxQueuedBytes')
+  if (options?.replaceSseStreamOnReconnect !== undefined) {
+    if (typeof options.replaceSseStreamOnReconnect !== 'boolean') {
+      throw new TypeError('replaceSseStreamOnReconnect must be a boolean')
+    }
+    payload.replaceSseStreamOnReconnect = String(
+      options.replaceSseStreamOnReconnect
+    )
+  }
   const oauthOptions = normalizeOAuthOptions(options?.oauth)
+  if (oauthOptions?.enabled) {
+    if (
+      typeof oauthOptions.defaultClientId !== 'string' ||
+      oauthOptions.defaultClientId.length === 0
+    ) {
+      throw new TypeError(
+        'oauth.defaultClientId is required when OAuth is enabled'
+      )
+    }
+    if (
+      !Array.isArray(oauthOptions.redirectUris) ||
+      oauthOptions.redirectUris.length === 0
+    ) {
+      throw new TypeError(
+        'oauth.redirectUris must contain at least one pre-registered URI'
+      )
+    }
+  }
   if (oauthOptions) {
     payload.oauth = JSON.stringify(oauthOptions)
   }
 
-  const result = await runtimeRequest('mcp.server.start', payload)
+  const updatesAuthorization = Boolean(
+    options && Object.prototype.hasOwnProperty.call(options, 'authorize')
+  )
+  const previousAuthorizationHandler = authHandler
+  if (updatesAuthorization) {
+    await setAuthorizationHandler(options.authorize)
+  }
+
+  let result
+  try {
+    result = await runtimeRequest('mcp.server.start', payload)
+  } catch (error) {
+    if (updatesAuthorization) {
+      await setAuthorizationHandler(previousAuthorizationHandler).catch(() => {})
+    }
+    throw error
+  }
   const data = resultData(result)
   const endpoint =
     data.endpoint || payload.endpoint || options?.endpoint || '/mcp'
@@ -1321,6 +2089,10 @@ export async function startServer (options = null) {
     metadataPath: resolveOAuthPath(
       'oauthMetadataPath',
       normalizedOAuth?.metadataPath
+    ),
+    protectedResourceMetadataPath: resolveOAuthPath(
+      'oauthProtectedResourceMetadataPath',
+      null
     )
   }
   const hasOAuthPaths = Object.values(oauth).some(
@@ -1336,12 +2108,20 @@ export async function startServer (options = null) {
   }
 }
 
+/**
+ * Stop the embedded MCP server.
+ * @returns {Promise<boolean>} Whether the server is stopped.
+ */
 export async function stopServer () {
   const result = await runtimeRequest('mcp.server.stop')
   const data = resultData(result)
   return Boolean(data.running) === false
 }
 
+/**
+ * Report whether the embedded MCP server is running.
+ * @returns {Promise<boolean>}
+ */
 export async function serverStatus () {
   const result = await runtimeRequest('mcp.server.status')
   const data = resultData(result)

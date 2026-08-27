@@ -4,12 +4,13 @@ import init, { SHARE_ENV } from './worker_threads/init.js'
 import { maybeMakeError } from './ipc.js'
 import { AsyncResource } from './async/resource.js'
 import { EventEmitter } from './events.js'
+import { Buffer } from './buffer.js'
 import location from './location.js'
 import { env } from './process.js'
 /**
 
  * A pool of known worker threads.
- * @type {<Map<string, Worker>}
+ * @type {Map<string, Worker>}
  */
 export const workers = new Map()
 
@@ -112,21 +113,23 @@ export class Pipe extends AsyncResource {
     super('Pipe')
 
     if (worker.stdout) {
-      const { emit } = worker.stdout
-      worker.stdout.emit = (...args) => {
+      const stdout = worker.stdout
+      const { emit } = stdout
+      stdout.emit = (...args) => {
         if (!this.reading) return false
         return this.runInAsyncScope(() => {
-          return emit.call(worker.stdout, ...args)
+          return emit.call(stdout, ...args)
         })
       }
     }
 
     if (worker.stderr) {
-      const { emit } = worker.stderr
-      worker.stderr.emit = (...args) => {
+      const stderr = worker.stderr
+      const { emit } = stderr
+      stderr.emit = (...args) => {
         if (!this.reading) return false
         return this.runInAsyncScope(() => {
-          return emit(worker.stderr, ...args)
+          return emit.call(stderr, ...args)
         })
       }
     }
@@ -192,6 +195,7 @@ export class Worker extends EventEmitter {
   #stdin = null
   #stdout = null
   #stderr = null
+  #online = false
 
   /**
    * `Worker` class constructor.
@@ -233,11 +237,15 @@ export class Worker extends EventEmitter {
     }
 
     if (options.stdout === true) {
-      this.#stdout = new Readable()
+      this.#stdout = new Readable({
+        map: (data) => Buffer.from(data)
+      })
     }
 
     if (options.stderr === true) {
-      this.#stderr = new Readable()
+      this.#stderr = new Readable({
+        map: (data) => Buffer.from(data)
+      })
     }
 
     this.#worker = new globalThis.Worker(url.toString())
@@ -280,6 +288,14 @@ export class Worker extends EventEmitter {
 
   get threadId () {
     return this.id
+  }
+
+  /**
+   * `true` after the worker has loaded and can receive application messages.
+   * @type {boolean}
+   */
+  get online () {
+    return this.#online
   }
 
   /**
@@ -345,6 +361,7 @@ export class Worker extends EventEmitter {
     const request = event.data?.worker_threads ?? {}
 
     if (request.online?.id) {
+      this.#online = true
       workers.set(this.id, this)
       this.#resource.runInAsyncScope(() => {
         this.emit('online')
@@ -358,18 +375,14 @@ export class Worker extends EventEmitter {
     }
 
     if (request.process?.stdout?.data && this.#stdout) {
-      queueMicrotask(() => {
-        this.#resource.runInAsyncScope(() => {
-          this.#stdout.push(request.process.stdout.data)
-        })
+      this.#resource.runInAsyncScope(() => {
+        this.#stdout.push(request.process.stdout.data)
       })
     }
 
     if (request.process?.stderr?.data && this.#stderr) {
-      queueMicrotask(() => {
-        this.#resource.runInAsyncScope(() => {
-          this.#stderr.push(request.process.stderr.data)
-        })
+      this.#resource.runInAsyncScope(() => {
+        this.#stderr.push(request.process.stderr.data)
       })
     }
 

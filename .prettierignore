@@ -15,7 +15,7 @@ api/url/urlpattern/urlpattern.js
 api/url/url/url.js
 api/fetch/fetch.js
 api/internal/streams/web.js
-npm/packages/@orocomputer/runtime-node/index.cjs
+npm/packages/@oro-computer/runtime-node/index.cjs
 
 # JavaScript is formatted by Standard, not Prettier.
 *.js
@@ -30,4 +30,4 @@ api/**/*.d.ts
 api/README.md
 api/CLI.md
 api/CONFIG.md
-npm/packages/@orocomputer/runtime-node/API.md
+npm/packages/@oro-computer/runtime-node/API.md

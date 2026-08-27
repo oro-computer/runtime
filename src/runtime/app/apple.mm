@@ -257,7 +257,7 @@ didFailToContinueUserActivityWithType: (NSString*) userActivityType
       isTest = true;
     }
 
-    argv.push_back("'" + trim(arg) + "'");
+    argv.push_back(trim(arg));
   }
 
   auto windowManagerOptions = window::ManagerOptions {};
@@ -274,7 +274,7 @@ didFailToContinueUserActivityWithType: (NSString*) userActivityType
       windowManagerOptions.features.useTestScript = true;
     }
 
-    windowManagerOptions.argv.push_back("'" + trim(arg) + "'");
+    windowManagerOptions.argv.push_back(trim(arg));
   }
 
 

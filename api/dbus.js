@@ -830,7 +830,7 @@ function installListener () {
 
   const handler = (event) => {
     const detail = event?.detail
-    const source = detail?.source
+    const source = detail?.source || detail?.params?.source
     const params = detail?.params
     if (!params) return
 

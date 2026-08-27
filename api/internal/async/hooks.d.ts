@@ -72,10 +72,10 @@ export class CoreAsyncResource {
      * Runs function `fn` in the execution context of this `CoreAsyncResource`.
      * @param {function} fn
      * @param {object=} [thisArg]
-     * @param {...any} [args]
+     * @param {...any} args
      * @return {any}
      */
-    runInAsyncScope(fn: Function, thisArg?: object | undefined, ...args?: any[]): any;
+    runInAsyncScope(fn: Function, thisArg?: object | undefined, ...args: any[]): any;
     #private;
 }
 export class TopLevelAsyncResource extends CoreAsyncResource {

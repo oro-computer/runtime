@@ -8,7 +8,6 @@
 
 #include "hotkey.hh"
 
-using oro::runtime::url::decodeURIComponent;
 using oro::runtime::config::getUserConfig;
 using oro::runtime::string::toLowerCase;
 using oro::runtime::string::replace;
@@ -681,11 +680,7 @@ namespace oro::runtime::window {
         return reply(ipc::Result::Data { message, data });
       }
 
-    #if ORO_RUNTIME_PLATFORM_LINUX
-      const auto expression = decodeURIComponent(message.get("expression"));
-    #else
       const auto expression = message.get("expression");
-    #endif
 
       if (expression.size() == 0) {
         const auto err = JSON::Object::Entries {
@@ -730,11 +725,7 @@ namespace oro::runtime::window {
     this->window->bridge->router.map("window.hotkey.unbind", [this](auto message, auto router, auto reply) mutable {
       static auto userConfig = getUserConfig();
       HotKeyBinding::ID id;
-    #if ORO_RUNTIME_PLATFORM_LINUX
-      const auto expression = decodeURIComponent(message.get("expression"));
-    #else
       const auto expression = message.get("expression");
-    #endif
 
       if (userConfig["permissions_allow_hotkeys"] == "false") {
         const auto err = JSON::Object::Entries {

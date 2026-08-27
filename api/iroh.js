@@ -488,10 +488,8 @@ export class Connection {
 
     const handler = (event) => {
       const detail = event?.detail
-      if (!detail || detail.source !== 'iroh.connectionType') return
-
-      const detailParams = detail.params
-      if (!detailParams) return
+      const detailParams = detail?.params || detail
+      if (!detailParams || detailParams.source !== 'iroh.connectionType') return
 
       const endpointId = String(
         detailParams?.data?.endpointId ?? detailParams?.err?.endpointId ?? ''

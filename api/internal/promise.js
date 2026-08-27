@@ -62,12 +62,9 @@ export class Promise extends NativePromise {
   constructor (resolver) {
     super(resolver)
     // eslint-disable-next-line
-    this[resourceSymbol] =
-      new (class Promise extends asyncHooks.CoreAsyncResource {
-        constructor () {
-          super('Promise')
-        }
-      })()
+    this[resourceSymbol] = /** @type {asyncHooks.CoreAsyncResource} */ (
+      new asyncHooks.CoreAsyncResource('Promise')
+    )
   }
 }
 

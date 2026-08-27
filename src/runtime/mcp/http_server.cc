@@ -8,17 +8,17 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include <uv.h>
 #include <vector>
 
 namespace oro::runtime::mcp {
   namespace {
-    String randomSessionId() {
-      return String("session-") + std::to_string(crypto::rand64());
-    }
+    static constexpr size_t kMaxOAuthArtifacts = 4096;
 
     bool isValidSessionIdToken(const String& value) {
       if (value.empty()) return false;
@@ -30,21 +30,104 @@ namespace oro::runtime::mcp {
       return true;
     }
 
-    String randomToken(size_t length) {
-      static constexpr char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-      static constexpr size_t alphabetSize = sizeof(alphabet) - 1;
-      String token;
-      token.reserve(length);
-      while (token.size() < length) {
-        uint64_t value = crypto::rand64();
-        for (int i = 0; i < 11 && token.size() < length; ++i) {
-          const auto index = static_cast<size_t>(value % alphabetSize);
-          token.push_back(alphabet[index]);
-          value /= alphabetSize;
+    bool decodeMirroredHeader(const String& value, String& decoded) {
+      static const String prefix = "=?base64?";
+      static const String suffix = "?=";
+      const bool hasPrefix = value.rfind(prefix, 0) == 0;
+      const bool hasSuffix = value.size() >= suffix.size() &&
+        value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+      if (!hasPrefix || !hasSuffix) {
+        if (!value.empty() &&
+            (value.front() == ' ' ||
+             value.front() == '\t' ||
+             value.back() == ' ' ||
+             value.back() == '\t')) {
+          return false;
+        }
+        for (const unsigned char character : value) {
+          if ((character < 0x20 && character != '\t') || character > 0x7e) {
+            return false;
+          }
+        }
+        decoded = value;
+        return true;
+      }
+      if (value.size() < prefix.size() + suffix.size()) {
+        return false;
+      }
+
+      const auto encoded = value.substr(
+        prefix.size(),
+        value.size() - prefix.size() - suffix.size()
+      );
+      if (encoded.size() % 4 != 0) {
+        return false;
+      }
+      for (size_t index = 0; index < encoded.size(); ++index) {
+        const unsigned char character = encoded[index];
+        const bool padding = character == '=';
+        const bool alphaNumeric =
+          (character >= 'a' && character <= 'z') ||
+          (character >= 'A' && character <= 'Z') ||
+          (character >= '0' && character <= '9');
+        if (padding && index + 2 < encoded.size()) {
+          return false;
+        }
+        if (!padding &&
+            !alphaNumeric &&
+            character != '+' &&
+            character != '/') {
+          return false;
         }
       }
-    return token;
-  }
+
+      decoded = bytes::base64::decode(encoded);
+      return bytes::base64::encode(decoded) == encoded;
+    }
+
+    bool numericHeaderMatches(const String& header, const String& expected) {
+      try {
+        size_t headerEnd = 0;
+        size_t expectedEnd = 0;
+        const auto headerValue = std::stod(header, &headerEnd);
+        const auto expectedValue = std::stod(expected, &expectedEnd);
+        return headerEnd == header.size() &&
+          expectedEnd == expected.size() &&
+          std::isfinite(headerValue) &&
+          std::floor(headerValue) == headerValue &&
+          headerValue == expectedValue;
+      } catch (...) {
+        return false;
+      }
+    }
+
+    String randomToken(size_t length) {
+      static constexpr char alphabet[] = "0123456789abcdef";
+      std::vector<uint8_t> bytes((length + 1) / 2);
+      if (uv_random(
+            nullptr,
+            nullptr,
+            bytes.data(),
+            bytes.size(),
+            0,
+            nullptr) != 0) {
+        throw std::runtime_error("Secure random number generation failed");
+      }
+
+      String token;
+      token.reserve(length);
+      for (const auto byte : bytes) {
+        token.push_back(alphabet[(byte >> 4) & 0x0f]);
+        if (token.size() < length) {
+          token.push_back(alphabet[byte & 0x0f]);
+        }
+      }
+      return token;
+    }
+
+    String randomSessionId() {
+      return String("session-") + randomToken(32);
+    }
 
     String normalizePath(String path) {
       if (path.empty()) {
@@ -411,7 +494,7 @@ namespace oro::runtime::mcp {
 
     bool containsUnsafeRedirectCharacters(const String& value) {
       for (char c : value) {
-        if (c == '\r' || c == '\n') {
+        if (static_cast<unsigned char>(c) < 0x20 || c == 0x7f) {
           return true;
         }
       }
@@ -450,7 +533,173 @@ namespace oro::runtime::mcp {
 
       return true;
     }
+
+    bool isLoopbackHost(const String& host) {
+      const auto normalized = toLower(host);
+      return normalized == "localhost" ||
+        normalized == "localhost." ||
+        normalized == "127.0.0.1" ||
+        normalized.rfind("127.", 0) == 0 ||
+        normalized == "::1" ||
+        normalized == "[::1]";
+    }
+
+    bool isValidOAuthHttpUri(const String& uri, bool allowQuery) {
+      if (uri.empty() || uri.size() > 2048 || containsUnsafeRedirectCharacters(uri)) {
+        return false;
+      }
+      try {
+        const ::oro::runtime::url::URL parsed(uri, false);
+        const auto scheme = toLower(parsed.scheme);
+        if ((scheme != "http" && scheme != "https") ||
+            parsed.hostname.empty() ||
+            !parsed.username.empty() ||
+            !parsed.password.empty() ||
+            !parsed.hash.empty() ||
+            (!allowQuery && !parsed.search.empty())) {
+          return false;
+        }
+        return scheme == "https" || isLoopbackHost(parsed.hostname);
+      } catch (...) {
+        return false;
+      }
+    }
+
+    bool isValidOAuthIssuerUri(const String& uri) {
+      if (!isValidOAuthHttpUri(uri, false)) {
+        return false;
+      }
+      try {
+        const ::oro::runtime::url::URL parsed(uri, false);
+        return parsed.pathname.empty() || parsed.pathname == "/";
+      } catch (...) {
+        return false;
+      }
+    }
+
+    bool isValidPkceValue(const String& value) {
+      if (value.size() < 43 || value.size() > 128) {
+        return false;
+      }
+      for (const unsigned char character : value) {
+        if (std::isalnum(character) ||
+            character == '-' ||
+            character == '.' ||
+            character == '_' ||
+            character == '~') {
+          continue;
+        }
+        return false;
+      }
+      return true;
+    }
+
+    bool isValidScopeValue(const String& value) {
+      for (const unsigned char character : value) {
+        if (character == ' ' ||
+            character == 0x21 ||
+            (character >= 0x23 && character <= 0x5b) ||
+            (character >= 0x5d && character <= 0x7e)) {
+          continue;
+        }
+        return false;
+      }
+      return true;
+    }
+
+    bool isScopeSubset(const String& requested, const String& supported) {
+      std::vector<String> supportedScopes;
+      std::istringstream supportedStream(supported);
+      String scope;
+      while (supportedStream >> scope) {
+        supportedScopes.push_back(scope);
+      }
+
+      std::istringstream requestedStream(requested);
+      while (requestedStream >> scope) {
+        if (std::find(
+              supportedScopes.begin(),
+              supportedScopes.end(),
+              scope) == supportedScopes.end()) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    String publicBaseUrl(const HTTPServer::Config& config) {
+      String host = config.host.empty() ? String("127.0.0.1") : config.host;
+      std::ostringstream base;
+      base << "http://";
+      if (host.find(':') != String::npos && host.front() != '[') {
+        base << '[' << host << ']';
+      } else {
+        base << host;
+      }
+      if (config.port > 0 && config.port != 80) {
+        base << ':' << config.port;
+      }
+      return base.str();
+    }
+
+    String oauthIssuer(const HTTPServer::Config& config) {
+      return config.oauth.issuer.empty()
+        ? publicBaseUrl(config)
+        : config.oauth.issuer;
+    }
+
+    String oauthResource(const HTTPServer::Config& config) {
+      if (!config.oauth.resource.empty()) {
+        return config.oauth.resource;
+      }
+      const auto endpoint = normalizePath(config.endpoint);
+      return publicBaseUrl(config) + (endpoint == "/" ? String("") : endpoint);
+    }
+
+    String protectedResourceMetadataPath(const String& resource) {
+      try {
+        const ::oro::runtime::url::URL parsed(resource, false);
+        String resourcePath = parsed.pathname;
+        if (resourcePath.empty() || resourcePath == "/") {
+          resourcePath.clear();
+        } else if (resourcePath.front() != '/') {
+          resourcePath.insert(resourcePath.begin(), '/');
+        }
+        return String("/.well-known/oauth-protected-resource") + resourcePath;
+      } catch (...) {
+        return "/.well-known/oauth-protected-resource";
+      }
+    }
+
+    String protectedResourceMetadataUrl(const HTTPServer::Config& config) {
+      const auto resource = oauthResource(config);
+      try {
+        const ::oro::runtime::url::URL parsed(resource, false);
+        return parsed.origin + protectedResourceMetadataPath(resource) + parsed.search;
+      } catch (...) {
+        return publicBaseUrl(config) + protectedResourceMetadataPath(resource);
+      }
+    }
+
+    String comparableResourceIdentifier(const String& resource) {
+      try {
+        const auto components = ::oro::runtime::url::URL::Components::parse(resource);
+        return toLower(components.scheme) + "://" + toLower(components.authority) +
+          components.pathname +
+          (components.query.empty() ? String("") : String("?") + components.query);
+      } catch (...) {
+        return resource;
+      }
+    }
+
+    bool resourcesMatch(const String& left, const String& right) {
+      return comparableResourceIdentifier(left) == comparableResourceIdentifier(right);
+    }
   }
+
+  HTTPServer::EventDispatcher::EventDispatcher(size_t maxEvents, size_t maxBytes)
+    : maxEvents(maxEvents),
+      maxBytes(maxBytes) {}
 
   bool HTTPServer::EventDispatcher::wait(httplib::DataSink& sink) {
     String payload;
@@ -474,6 +723,7 @@ namespace oro::runtime::mcp {
 
       payload = std::move(this->queue.front());
       this->queue.pop();
+      this->queuedBytes -= payload.size();
     }
 
     try {
@@ -488,21 +738,64 @@ namespace oro::runtime::mcp {
     return true;
   }
 
-  void HTTPServer::EventDispatcher::send(const String& payload) {
+  bool HTTPServer::EventDispatcher::waitOnce(httplib::DataSink& sink) {
+    String payload;
+    {
+      UniqueLock lock(this->mutex);
+      this->cond.wait(lock, [this]() {
+        return this->closed || !this->queue.empty();
+      });
+
+      if (this->closed || this->queue.empty()) {
+        return false;
+      }
+
+      payload = std::move(this->queue.front());
+      this->queue.pop();
+      this->queuedBytes -= payload.size();
+    }
+
+    try {
+      if (!sink.write(payload.c_str(), payload.size())) {
+        return false;
+      }
+      sink.os.flush();
+    } catch (...) {
+      return false;
+    }
+
+    return false;
+  }
+
+  bool HTTPServer::EventDispatcher::send(const String& payload) {
     {
       Lock lock(this->mutex);
       if (this->closed) {
-        return;
+        return false;
+      }
+      if (payload.size() > this->maxBytes ||
+          this->queue.size() >= this->maxEvents ||
+          this->queuedBytes > this->maxBytes - payload.size()) {
+        this->closed = true;
+        this->queuedBytes = 0;
+        while (!this->queue.empty()) {
+          this->queue.pop();
+        }
+        this->cond.notify_all();
+        return false;
       }
       this->queue.push(payload);
+      this->queuedBytes += payload.size();
     }
     this->cond.notify_one();
+    return true;
   }
 
   void HTTPServer::EventDispatcher::close() {
     {
       Lock lock(this->mutex);
       this->closed = true;
+      this->queuedBytes = 0;
       while (!this->queue.empty()) {
         this->queue.pop();
       }
@@ -521,12 +814,54 @@ namespace oro::runtime::mcp {
       return true;
     }
 
+    if (cfg.maxRequestBytes == 0 ||
+        cfg.maxSessions == 0 ||
+        cfg.maxQueuedEvents == 0 ||
+        cfg.maxQueuedBytes == 0) {
+      debug("MCP HTTP server limits must be greater than zero");
+      return false;
+    }
+
+    if (!isLoopbackHost(cfg.host) && cfg.token.empty() && !cfg.oauth.enabled) {
+      debug("MCP HTTP server requires authentication on non-loopback binds");
+      return false;
+    }
+
+    if (cfg.oauth.enabled) {
+      if (cfg.oauth.defaultClientId.empty() ||
+          cfg.oauth.defaultClientId.size() > 512 ||
+          containsUnsafeRedirectCharacters(cfg.oauth.defaultClientId)) {
+        debug("MCP OAuth requires a valid pre-registered defaultClientId");
+        return false;
+      }
+      if (cfg.oauth.redirectUris.empty() ||
+          std::any_of(cfg.oauth.redirectUris.begin(), cfg.oauth.redirectUris.end(), [](const String& uri) {
+            return !isValidRedirectUri(uri) || uri.size() > 2048;
+          })) {
+        debug("MCP OAuth requires at least one valid pre-registered redirect URI");
+        return false;
+      }
+      if ((!cfg.oauth.issuer.empty() && !isValidOAuthIssuerUri(cfg.oauth.issuer)) ||
+          (!cfg.oauth.resource.empty() && !isValidOAuthHttpUri(cfg.oauth.resource, true)) ||
+          cfg.oauth.defaultScope.size() > 4096 ||
+          !isValidScopeValue(cfg.oauth.defaultScope)) {
+        debug("MCP OAuth issuer, resource, or scope configuration is invalid");
+        return false;
+      }
+      if (!isLoopbackHost(cfg.host) &&
+          (cfg.oauth.issuer.empty() || cfg.oauth.resource.empty())) {
+        debug("MCP OAuth on a non-loopback bind requires explicit issuer and resource URLs");
+        return false;
+      }
+    }
+
     String endpointNormalized = normalizePath(cfg.endpoint);
     if (endpointNormalized == "/" && ::oro::runtime::string::trim(cfg.endpoint).empty()) {
       endpointNormalized = "/mcp";
     }
 
     this->server = std::make_unique<httplib::Server>();
+    this->server->set_payload_max_length(std::max<size_t>(1, cfg.maxRequestBytes));
     // cpp-httplib defaults to SO_REUSEPORT when available, which can allow multiple
     // processes to bind the same host/port. MCP sessions are in-memory and must
     // remain sticky to a single server instance, so force SO_REUSEADDR instead.
@@ -542,6 +877,10 @@ namespace oro::runtime::mcp {
       this->delegate = delegatePtr;
       this->config = cfg;
       this->config.endpoint = endpointNormalized;
+      if (this->config.oauth.enabled) {
+        this->config.oauth.protectedResourceMetadataPath =
+          protectedResourceMetadataPath(oauthResource(this->config));
+      }
     }
 
     this->server->set_exception_handler([](const auto&, auto& res, const std::exception_ptr& ep) {
@@ -571,6 +910,11 @@ namespace oro::runtime::mcp {
         this->handleSSE(req, res);
       });
       debug("MCP HTTP route registered: GET %s", endpoint.c_str());
+
+      this->server->Delete(endpoint.c_str(), [this](const auto& req, auto& res) {
+        this->handleDelete(req, res);
+      });
+      debug("MCP HTTP route registered: DELETE %s", endpoint.c_str());
 
       this->server->Options(endpoint.c_str(), [this](const auto&, auto& res) {
         this->setCorsHeaders(res);
@@ -629,6 +973,19 @@ namespace oro::runtime::mcp {
           res.status = 204;
         });
       };
+
+      Config routeConfig = cfg;
+      routeConfig.endpoint = endpointNormalized;
+      const auto resource = oauthResource(routeConfig);
+      const auto protectedMetadataPath = protectedResourceMetadataPath(resource);
+      debug("MCP HTTP route registered: GET %s (oauth protected resource metadata)", protectedMetadataPath.c_str());
+      this->server->Get(protectedMetadataPath.c_str(), [this](const auto& req, auto& res) {
+        this->handleOAuthProtectedResourceMetadata(req, res);
+      });
+      this->server->Options(protectedMetadataPath.c_str(), [this](const auto&, auto& res) {
+        this->setCorsHeaders(res);
+        res.status = 204;
+      });
 
       const auto authorizeRoutes = expandOAuthRoutes(endpointNormalized, authorizePath);
       for (const auto& route : authorizeRoutes) {
@@ -715,6 +1072,7 @@ namespace oro::runtime::mcp {
       this->delegate = nullptr;
       this->config = Config();
       this->oauthAuthorizationCodes.clear();
+      this->oauthAuthorizationRequests.clear();
       this->oauthAccessTokens.clear();
     }
 
@@ -752,8 +1110,7 @@ namespace oro::runtime::mcp {
     }
 
     const auto payload = String("event: ") + eventName + "\r\ndata: " + data + "\r\n\r\n";
-    session->dispatcher->send(payload);
-    return true;
+    return session->dispatcher->send(payload);
   }
 
   HTTPServer::Config HTTPServer::getConfig() const {
@@ -817,17 +1174,17 @@ namespace oro::runtime::mcp {
       return;
     }
 
-    if (req.method != "POST") {
-      res.status = 405;
-      res.set_header("Allow", "POST");
-      res.set_content("Method Not Allowed", "text/plain");
+    if (this->delegate == nullptr) {
+      res.status = 503;
+      res.set_content("MCP server not ready", "text/plain");
       this->setCorsHeaders(res);
       return;
     }
 
-    if (this->delegate == nullptr) {
-      res.status = 503;
-      res.set_content("MCP server not ready", "text/plain");
+    const auto contentType = toLower(req.get_header_value("Content-Type"));
+    if (contentType.find("application/json") != 0) {
+      res.status = 415;
+      res.set_content("Content-Type must be application/json", "text/plain");
       this->setCorsHeaders(res);
       return;
     }
@@ -845,93 +1202,381 @@ namespace oro::runtime::mcp {
         return;
       }
 
-      if (!parsed.is_object()) {
+      auto jsonRpcError = [this, &res, &parsed](int code, const String& message, const nlohmann::json& data = nullptr) {
+        nlohmann::json response {
+          {"jsonrpc", "2.0"},
+          {"error", {
+            {"code", code},
+            {"message", message}
+          }}
+        };
+        if (parsed.is_object() &&
+            parsed.contains("id") &&
+            (parsed["id"].is_string() || parsed["id"].is_number())) {
+          response["id"] = parsed["id"];
+        }
+        if (!data.is_null()) {
+          response["error"]["data"] = data;
+        }
         res.status = 400;
-        res.set_content("Invalid JSON-RPC payload", "text/plain");
+        res.set_content(response.dump(), "application/json");
         this->setCorsHeaders(res);
+      };
+
+      if (!parsed.is_object() ||
+          !parsed.contains("jsonrpc") ||
+          !parsed["jsonrpc"].is_string() ||
+          parsed["jsonrpc"].get<String>() != kJsonRpcVersion) {
+        jsonRpcError(static_cast<int>(ErrorCode::InvalidRequest), "Invalid JSON-RPC 2.0 request");
         return;
       }
 
       const bool hasMethod = parsed.contains("method") && parsed["method"].is_string();
       const String method = hasMethod ? parsed["method"].get<std::string>() : "";
-      const bool isInitialize = hasMethod && method == "initialize";
+      const bool isInitialize = method == "initialize";
+      const bool containsId = parsed.contains("id");
+      if (containsId && !parsed["id"].is_string() && !parsed["id"].is_number()) {
+        jsonRpcError(static_cast<int>(ErrorCode::InvalidRequest), "JSON-RPC request id must be a string or number");
+        return;
+      }
+      const bool hasId = containsId;
+      const bool isNotification = hasMethod && !hasId;
+      const bool isRequest = hasMethod && hasId;
 
-      const bool hasId = parsed.contains("id");
-      const bool idIsNull = !hasId || parsed["id"].is_null();
-      const bool isNotification = hasMethod && idIsNull;
-      const bool isRequest = hasMethod && !idIsNull;
-
-      const bool isResponse = !hasMethod &&
-        parsed.contains("jsonrpc") &&
-        parsed.contains("id") &&
-        (parsed.contains("result") || parsed.contains("error"));
-
-      const auto headerSessionId = normalizeSessionIdValue(req.get_header_value("Mcp-Session-Id"));
-      const auto querySessionId = normalizeSessionIdValue(req.get_param_value("session_id"));
-      const auto clientSessionId = !headerSessionId.empty() ? headerSessionId : querySessionId;
-      const bool clientProvidedSessionId = !clientSessionId.empty();
-
-      std::optional<String> sessionId;
-      if (clientProvidedSessionId) {
-        sessionId = this->validateSessionId(req);
-        if (!sessionId.has_value()) {
-          sessionId = this->createSessionForRequest(clientSessionId);
-        }
-      } else if (!isInitialize) {
-        res.status = 400;
-        res.set_content("Missing Mcp-Session-Id", "text/plain");
-        this->setCorsHeaders(res);
+      if ((isInitialize || method == "server/discover") && !isRequest) {
+        jsonRpcError(
+          static_cast<int>(ErrorCode::InvalidRequest),
+          method + " requires a JSON-RPC request id"
+        );
         return;
       }
 
-      if (!sessionId.has_value()) {
-        sessionId = this->createSessionForRequest();
-        if (!sessionId.has_value()) {
-          res.status = 500;
-          res.set_content("Failed to create session", "text/plain");
-          this->setCorsHeaders(res);
+      if (parsed.contains("params") && !parsed["params"].is_object()) {
+        jsonRpcError(static_cast<int>(ErrorCode::InvalidParams), "MCP request params must be an object");
+        return;
+      }
+
+      String bodyProtocolVersion;
+      nlohmann::json params = nlohmann::json::object();
+      if (parsed.contains("params") && parsed["params"].is_object()) {
+        params = parsed["params"];
+        if (params.contains("_meta") && params["_meta"].is_object()) {
+          const auto version = params["_meta"].find("io.modelcontextprotocol/protocolVersion");
+          if (version != params["_meta"].end() && version->is_string()) {
+            bodyProtocolVersion = version->get<String>();
+          }
+        }
+      }
+
+      const auto headerProtocolVersion = ::oro::runtime::string::trim(
+        req.get_header_value("MCP-Protocol-Version")
+      );
+      const bool modern = method == "server/discover" ||
+        !bodyProtocolVersion.empty() ||
+        isModernProtocolVersion(headerProtocolVersion);
+      const bool isSubscriptionListen = modern && method == "subscriptions/listen";
+
+      if (modern) {
+        if (bodyProtocolVersion.empty()) {
+          jsonRpcError(static_cast<int>(ErrorCode::HeaderMismatch), "Request metadata is missing the MCP protocol version");
+          return;
+        }
+
+        if (!isModernProtocolVersion(bodyProtocolVersion)) {
+          jsonRpcError(
+            static_cast<int>(ErrorCode::UnsupportedProtocolVersion),
+            "Unsupported MCP protocol version",
+            {{"supported", supportedProtocolVersions()},
+             {"requested", bodyProtocolVersion}}
+          );
+          return;
+        }
+
+        if (headerProtocolVersion != bodyProtocolVersion) {
+          jsonRpcError(static_cast<int>(ErrorCode::HeaderMismatch), "MCP-Protocol-Version does not match request metadata");
+          return;
+        }
+
+        const auto methodHeader = ::oro::runtime::string::trim(req.get_header_value("Mcp-Method"));
+        if (methodHeader != method) {
+          jsonRpcError(static_cast<int>(ErrorCode::HeaderMismatch), "Mcp-Method does not match the JSON-RPC method");
+          return;
+        }
+
+        const bool needsName = method == "tools/call" || method == "resources/read" || method == "prompts/get";
+        if (needsName) {
+          const char* targetField = method == "resources/read" ? "uri" : "name";
+          if (!params.contains(targetField) || !params[targetField].is_string()) {
+            jsonRpcError(static_cast<int>(ErrorCode::InvalidParams), String("Missing or invalid ") + targetField);
+            return;
+          }
+          const String expectedName = params[targetField].get<String>();
+          String nameHeader;
+          if (!req.has_header("Mcp-Name") ||
+              !decodeMirroredHeader(req.get_header_value("Mcp-Name"), nameHeader) ||
+              nameHeader != expectedName) {
+            jsonRpcError(static_cast<int>(ErrorCode::HeaderMismatch), "Mcp-Name does not match the request target");
+            return;
+          }
+        }
+
+        Vector<ToolHeader> expectedHeaders;
+        String headerError;
+        if (!this->delegate->getExpectedRequestHeaders(req.body, expectedHeaders, headerError)) {
+          jsonRpcError(
+            static_cast<int>(ErrorCode::HeaderMismatch),
+            headerError.empty() ? String("Invalid MCP parameter header declaration") : headerError
+          );
+          return;
+        }
+        for (const auto& expected : expectedHeaders) {
+          const bool supplied = req.has_header(expected.name);
+          if (!expected.present) {
+            if (supplied) {
+              jsonRpcError(
+                static_cast<int>(ErrorCode::HeaderMismatch),
+                expected.name + " must be omitted when its argument is absent or null"
+              );
+              return;
+            }
+            continue;
+          }
+          String actual;
+          if (!supplied ||
+              !decodeMirroredHeader(req.get_header_value(expected.name), actual) ||
+              (expected.integer
+                ? !numericHeaderMatches(actual, expected.value)
+                : actual != expected.value)) {
+            jsonRpcError(
+              static_cast<int>(ErrorCode::HeaderMismatch),
+              expected.name + " does not match the tool argument"
+            );
+            return;
+          }
+        }
+
+        if (!params["_meta"].contains("io.modelcontextprotocol/clientCapabilities") ||
+            !params["_meta"]["io.modelcontextprotocol/clientCapabilities"].is_object()) {
+          jsonRpcError(
+            static_cast<int>(ErrorCode::MissingRequiredClientCapability),
+            "Request metadata must include clientCapabilities",
+            {{"requiredCapabilities", nlohmann::json::object()}}
+          );
           return;
         }
       }
 
-      {
-        Lock lock(this->mutex);
-        auto it = this->sessions.find(*sessionId);
-        if (it != this->sessions.end() && it->second) {
-          it->second->lastActivity = std::chrono::steady_clock::now();
+      if (!modern &&
+          !headerProtocolVersion.empty() &&
+          !isLegacyProtocolVersion(headerProtocolVersion)) {
+        jsonRpcError(
+          static_cast<int>(ErrorCode::UnsupportedProtocolVersion),
+          "Unsupported MCP protocol version",
+          {{"supported", supportedProtocolVersions()},
+           {"requested", headerProtocolVersion}}
+        );
+        return;
+      }
+
+      std::optional<String> sessionId;
+      bool createdLegacySession = false;
+      if (modern) {
+        sessionId = this->createSessionForRequest();
+      } else {
+        const auto clientSessionId = normalizeSessionIdValue(req.get_header_value("Mcp-Session-Id"));
+        if (!clientSessionId.empty()) {
+          sessionId = this->validateSessionId(req);
+          if (!sessionId.has_value()) {
+            res.status = 404;
+            res.set_content("Unknown or expired Mcp-Session-Id", "text/plain");
+            this->setCorsHeaders(res);
+            return;
+          }
+        } else if (!isInitialize) {
+          res.status = 400;
+          res.set_content("Missing Mcp-Session-Id", "text/plain");
+          this->setCorsHeaders(res);
+          return;
+        } else {
+          sessionId = this->createSessionForRequest();
+          createdLegacySession = sessionId.has_value();
         }
       }
 
-      debug("MCP HTTP message received for session %s", sessionId->c_str());
-
-      if (isResponse) {
-        // This server does not currently issue JSON-RPC requests to clients.
-        // Accept and ignore any responses from clients to remain compliant with Streamable HTTP.
-        this->attachSessionHeader(res, *sessionId);
-        res.status = 202;
+      if (!sessionId.has_value()) {
+        res.status = 503;
+        res.set_content("MCP request capacity reached", "text/plain");
         this->setCorsHeaders(res);
         return;
+      }
+
+      std::shared_ptr<Session> session;
+      String sessionProtocolVersion;
+      bool hadStream = false;
+      {
+        Lock lock(this->mutex);
+        const auto it = this->sessions.find(*sessionId);
+        if (it != this->sessions.end() && it->second) {
+          session = it->second;
+          sessionProtocolVersion = session->protocolVersion;
+        }
+      }
+
+      if (!session) {
+        res.status = 500;
+        res.set_content("MCP request context unavailable", "text/plain");
+        this->setCorsHeaders(res);
+        return;
+      }
+
+      if (!modern &&
+          !isInitialize &&
+          !headerProtocolVersion.empty() &&
+          !sessionProtocolVersion.empty() &&
+          headerProtocolVersion != sessionProtocolVersion) {
+        jsonRpcError(
+          static_cast<int>(ErrorCode::HeaderMismatch),
+          "MCP-Protocol-Version does not match the negotiated session version"
+        );
+        return;
+      }
+
+      {
+        Lock lock(this->mutex);
+        const auto it = this->sessions.find(*sessionId);
+        if (it == this->sessions.end() || it->second != session) {
+          res.status = 404;
+          res.set_content("Unknown or expired Mcp-Session-Id", "text/plain");
+          this->setCorsHeaders(res);
+          return;
+        }
+        hadStream = session->hasStream.load();
+        if (!hadStream) {
+          session->hasStream = true;
+        }
+        session->lastActivity = std::chrono::steady_clock::now();
       }
 
       auto immediate = this->delegate->onJsonRpcRequest(*sessionId, req.body);
-      this->attachSessionHeader(res, *sessionId);
+      bool legacyInitializationSucceeded = !isInitialize;
+      if (!modern && isInitialize && immediate.has_value()) {
+        try {
+          const auto response = nlohmann::json::parse(*immediate);
+          if (response.contains("result") &&
+              response["result"].is_object() &&
+              response["result"].contains("protocolVersion") &&
+              response["result"]["protocolVersion"].is_string()) {
+            const auto negotiatedVersion = response["result"]["protocolVersion"].get<String>();
+            if (isLegacyProtocolVersion(negotiatedVersion)) {
+              legacyInitializationSucceeded = true;
+              Lock lock(this->mutex);
+              const auto it = this->sessions.find(*sessionId);
+              if (it != this->sessions.end() && it->second == session) {
+                session->protocolVersion = negotiatedVersion;
+              }
+            }
+          }
+        } catch (...) {}
+      }
+      if (!modern && isInitialize && !legacyInitializationSucceeded && createdLegacySession) {
+        this->closeSession(*sessionId);
+      }
+      if (!modern && legacyInitializationSucceeded) {
+        this->attachSessionHeader(res, *sessionId);
+      }
+
+      if (isSubscriptionListen && immediate.has_value()) {
+        bool accepted = false;
+        try {
+          const auto response = nlohmann::json::parse(*immediate);
+          accepted = response.is_object() &&
+            response.value("method", "") == "notifications/subscriptions/acknowledged";
+        } catch (...) {}
+        if (accepted) {
+          const auto response = *immediate;
+          const auto payload = String("event: message\r\ndata: ") + response + "\r\n\r\n";
+          if (session->dispatcher->send(payload)) {
+            immediate.reset();
+            this->delegate->onJsonRpcResponseQueued(*sessionId, response);
+          }
+        }
+      }
 
       if (isNotification) {
+        if (modern) {
+          this->closeSession(*sessionId);
+        } else if (!hadStream) {
+          session->hasStream = false;
+        }
         res.status = 202;
         this->setCorsHeaders(res);
         return;
       }
 
-      if (!isRequest || !immediate.has_value()) {
-        res.status = 500;
-        res.set_content("Invalid MCP request handling", "text/plain");
+      if (!isRequest) {
+        if (modern) {
+          this->closeSession(*sessionId);
+        }
+        jsonRpcError(static_cast<int>(ErrorCode::InvalidRequest), "Expected a JSON-RPC request or notification");
+        return;
+      }
+
+      if (immediate.has_value()) {
+        if (modern) {
+          this->closeSession(*sessionId);
+        } else if (!hadStream) {
+          session->hasStream = false;
+        }
+        res.status = 200;
+        if (modern) {
+          try {
+            const auto response = nlohmann::json::parse(*immediate);
+            if (response.contains("error") &&
+                response["error"].is_object() &&
+                response["error"].value("code", 0) == static_cast<int>(ErrorCode::MethodNotFound)) {
+              res.status = 404;
+            }
+          } catch (...) {}
+        }
+        res.set_content(*immediate, "application/json");
         this->setCorsHeaders(res);
         return;
       }
 
-      res.status = 200;
-      res.set_content(*immediate, "application/json");
+      if (hadStream) {
+        res.status = 202;
+        this->setCorsHeaders(res);
+        return;
+      }
+
+      const auto dispatcher = session->dispatcher;
+      res.set_header("Cache-Control", "no-cache");
+      res.set_header("Connection", "keep-alive");
       this->setCorsHeaders(res);
+      res.set_chunked_content_provider("text/event-stream", [dispatcher, isSubscriptionListen](size_t, httplib::DataSink& sink) {
+        if (isSubscriptionListen) {
+          return dispatcher->wait(sink);
+        }
+        return dispatcher->waitOnce(sink);
+      }, [this, session, dispatcher, modern](bool) {
+        dispatcher->close();
+        if (modern) {
+          this->closeSession(session->id);
+          return;
+        }
+
+        Lock lock(this->mutex);
+        const auto it = this->sessions.find(session->id);
+        if (it != this->sessions.end() && it->second == session) {
+          session->dispatcher = std::make_shared<EventDispatcher>(
+            this->config.maxQueuedEvents,
+            this->config.maxQueuedBytes
+          );
+          session->hasStream = false;
+          session->closed = false;
+          session->lastActivity = std::chrono::steady_clock::now();
+        }
+      });
     } catch (const std::exception& err) {
       res.status = 500;
       res.set_content(err.what(), "text/plain");
@@ -959,14 +1604,14 @@ namespace oro::runtime::mcp {
     std::shared_ptr<Session> session;
     std::shared_ptr<EventDispatcher> dispatcher;
 
-	    {
-	      Lock lock(this->mutex);
-	      const auto now = std::chrono::steady_clock::now();
-	      const bool replaceOnReconnect = this->config.replaceSseStreamOnReconnect;
-	      if (!requestedSessionId.empty()) {
-	        auto it = this->sessions.find(requestedSessionId);
-	        if (it != this->sessions.end() && it->second) {
-	          session = it->second;
+    {
+      Lock lock(this->mutex);
+      const auto now = std::chrono::steady_clock::now();
+      const bool replaceOnReconnect = this->config.replaceSseStreamOnReconnect;
+      if (!requestedSessionId.empty()) {
+        auto it = this->sessions.find(requestedSessionId);
+        if (it != this->sessions.end() && it->second) {
+          session = it->second;
 
           const bool activeStream = session->hasStream.load() && !session->closed.load();
           if (activeStream) {
@@ -983,51 +1628,31 @@ namespace oro::runtime::mcp {
           }
 
           if (!session->dispatcher || session->closed.load() || activeStream) {
-            session->dispatcher = std::make_shared<EventDispatcher>();
+            session->dispatcher = std::make_shared<EventDispatcher>(
+              this->config.maxQueuedEvents,
+              this->config.maxQueuedBytes
+            );
           }
           dispatcher = session->dispatcher;
           session->closed = false;
           session->lastActivity = now;
         }
-	      }
+      }
 
-	      if (session) {
-	        session->closed = false;
-	        session->hasStream = true;
-	      }
-	    }
+      if (session) {
+        session->closed = false;
+        session->hasStream = true;
+      }
+    }
 
-	    if (!session) {
-	      auto createdId = this->createSessionForRequest(requestedSessionId);
-	      if (!createdId.has_value()) {
-	        res.status = 500;
-	        res.set_content("Failed to create session", "text/plain");
-	        this->setCorsHeaders(res);
-	        return;
-	      }
+    if (!session) {
+      res.status = 404;
+      res.set_content("Unknown or expired Mcp-Session-Id", "text/plain");
+      this->setCorsHeaders(res);
+      return;
+    }
 
-	      Lock lock(this->mutex);
-	      auto it = this->sessions.find(*createdId);
-	      if (it != this->sessions.end() && it->second) {
-	        session = it->second;
-	        if (!session->dispatcher || session->closed.load()) {
-	          session->dispatcher = std::make_shared<EventDispatcher>();
-	        }
-	        dispatcher = session->dispatcher;
-	        session->closed = false;
-	        session->hasStream = true;
-	        session->lastActivity = std::chrono::steady_clock::now();
-	      }
-	    }
-
-	    if (!session) {
-	      res.status = 500;
-	      res.set_content("MCP session unavailable", "text/plain");
-	      this->setCorsHeaders(res);
-	      return;
-	    }
-
-	    debug("MCP HTTP session started: %s", session->id.c_str());
+    debug("MCP HTTP session started: %s", session->id.c_str());
 
     res.set_header("Cache-Control", "no-cache");
     res.set_header("Connection", "keep-alive");
@@ -1046,7 +1671,6 @@ namespace oro::runtime::mcp {
     }, [this, session, dispatcher](bool) {
       dispatcher->close();
 
-      bool active = false;
       {
         Lock lock(this->mutex);
         if (session->dispatcher == dispatcher) {
@@ -1057,14 +1681,27 @@ namespace oro::runtime::mcp {
         auto it = this->sessions.find(session->id);
         if (it != this->sessions.end() && it->second) {
           it->second->lastActivity = std::chrono::steady_clock::now();
-          active = it->second->hasStream.load();
         }
       }
-
-      if (this->delegate && !active) {
-        this->delegate->onSessionStopped(session->id);
-      }
     });
+  }
+
+  void HTTPServer::handleDelete(const httplib::Request& req, httplib::Response& res) {
+    if (!this->authorize(req, res)) {
+      return;
+    }
+
+    const auto sessionId = this->validateSessionId(req);
+    if (!sessionId.has_value()) {
+      res.status = 404;
+      res.set_content("Unknown or expired Mcp-Session-Id", "text/plain");
+      this->setCorsHeaders(res);
+      return;
+    }
+
+    this->closeSession(*sessionId);
+    res.status = 204;
+    this->setCorsHeaders(res);
   }
 
   void HTTPServer::handleOAuthAuthorize(const httplib::Request& req, httplib::Response& res) {
@@ -1091,16 +1728,13 @@ namespace oro::runtime::mcp {
       return;
     }
 
-    const String responseType = ::oro::runtime::string::trim(req.get_param_value("response_type"));
-    String clientId = ::oro::runtime::string::trim(req.get_param_value("client_id"));
-    String redirectUri = ::oro::runtime::string::trim(req.get_param_value("redirect_uri"));
-    String scope = ::oro::runtime::string::trim(req.get_param_value("scope"));
-    const String state = req.get_param_value("state");
-    String codeChallenge = ::oro::runtime::string::trim(req.get_param_value("code_challenge"));
-    String codeChallengeMethod = ::oro::runtime::string::trim(req.get_param_value("code_challenge_method"));
-
-    if (codeChallengeMethod.empty()) {
-      codeChallengeMethod = "plain";
+    if (req.method == "POST" &&
+        toLower(req.get_header_value("Content-Type")).find(
+          "application/x-www-form-urlencoded") != 0) {
+      res.status = 415;
+      res.set_content("Content-Type must be application/x-www-form-urlencoded", "text/plain");
+      this->setCorsHeaders(res);
+      return;
     }
 
     auto invalidRequest = [this, &res](const String& message) {
@@ -1111,107 +1745,242 @@ namespace oro::runtime::mcp {
       this->setCorsHeaders(res);
     };
 
+    const auto issuer = oauthIssuer(currentConfig);
+    const auto expectedResource = oauthResource(currentConfig);
+
+    if (req.method == "POST") {
+      if (req.params.count("authorization_request") != 1 ||
+          req.params.count("decision") != 1) {
+        invalidRequest("authorization_request and decision must each occur exactly once");
+        return;
+      }
+      const auto requestId = ::oro::runtime::string::trim(
+        req.get_param_value("authorization_request")
+      );
+      const auto decision = toLower(::oro::runtime::string::trim(
+        req.get_param_value("decision")
+      ));
+      if (requestId.empty() || decision.empty()) {
+        invalidRequest("Missing authorization_request or decision");
+        return;
+      }
+      if (decision != "approve" && decision != "deny") {
+        invalidRequest("Invalid decision");
+        return;
+      }
+
+      OAuthAuthorizationRequest authorizationRequest;
+      bool found = false;
+      const auto now = std::chrono::steady_clock::now();
+      {
+        Lock lock(this->mutex);
+        this->pruneExpiredOAuthArtifacts(now);
+        const auto it = this->oauthAuthorizationRequests.find(requestId);
+        if (it != this->oauthAuthorizationRequests.end()) {
+          authorizationRequest = it->second;
+          this->oauthAuthorizationRequests.erase(it);
+          found = true;
+        }
+      }
+      if (!found) {
+        invalidRequest("Authorization request is invalid or has expired");
+        return;
+      }
+
+      if (decision == "deny") {
+        String location = appendQueryParameter(
+          authorizationRequest.redirectUri,
+          "error",
+          "access_denied"
+        );
+        if (!authorizationRequest.state.empty()) {
+          location = appendQueryParameter(location, "state", authorizationRequest.state);
+        }
+        location = appendQueryParameter(location, "iss", issuer);
+        res.status = 302;
+        res.set_header("Location", location.c_str());
+        res.set_header("Cache-Control", "no-store");
+        res.set_header("Pragma", "no-cache");
+        res.set_content("Access denied", "text/plain");
+        this->setCorsHeaders(res);
+        return;
+      }
+
+      OAuthAuthorizationCode authorizationCode;
+      authorizationCode.code = randomToken(64);
+      authorizationCode.clientId = authorizationRequest.clientId;
+      authorizationCode.redirectUri = authorizationRequest.redirectUri;
+      authorizationCode.scope = authorizationRequest.scope;
+      authorizationCode.state = authorizationRequest.state;
+      authorizationCode.codeChallenge = authorizationRequest.codeChallenge;
+      authorizationCode.codeChallengeMethod = authorizationRequest.codeChallengeMethod;
+      authorizationCode.resource = authorizationRequest.resource;
+      const uint32_t codeLifetime = oauthConfig.codeLifetimeSeconds > 0
+        ? oauthConfig.codeLifetimeSeconds
+        : 300;
+      authorizationCode.expiresAt = now + std::chrono::seconds(codeLifetime);
+
+      {
+        Lock lock(this->mutex);
+        this->pruneExpiredOAuthArtifacts(now);
+        if (this->oauthAuthorizationCodes.size() >= kMaxOAuthArtifacts) {
+          res.status = 503;
+          res.set_content("OAuth authorization capacity reached", "text/plain");
+          this->setCorsHeaders(res);
+          return;
+        }
+        this->oauthAuthorizationCodes.insert_or_assign(
+          authorizationCode.code,
+          authorizationCode
+        );
+      }
+
+      String location = appendQueryParameter(
+        authorizationRequest.redirectUri,
+        "code",
+        authorizationCode.code
+      );
+      if (!authorizationRequest.state.empty()) {
+        location = appendQueryParameter(location, "state", authorizationRequest.state);
+      }
+      location = appendQueryParameter(location, "iss", issuer);
+
+      res.status = 302;
+      res.set_header("Location", location.c_str());
+      res.set_header("Cache-Control", "no-store");
+      res.set_header("Pragma", "no-cache");
+      res.set_content("Authorization complete", "text/plain");
+      this->setCorsHeaders(res);
+      return;
+    }
+
+    const String responseType = ::oro::runtime::string::trim(
+      req.get_param_value("response_type")
+    );
+    const String clientId = ::oro::runtime::string::trim(
+      req.get_param_value("client_id")
+    );
+    const String redirectUri = ::oro::runtime::string::trim(
+      req.get_param_value("redirect_uri")
+    );
+    const String requestedScope = ::oro::runtime::string::trim(
+      req.get_param_value("scope")
+    );
+    const String state = req.get_param_value("state");
+    const String codeChallenge = ::oro::runtime::string::trim(
+      req.get_param_value("code_challenge")
+    );
+    const String codeChallengeMethod = ::oro::runtime::string::trim(
+      req.get_param_value("code_challenge_method")
+    );
+    const String resource = ::oro::runtime::string::trim(
+      req.get_param_value("resource")
+    );
+
+    for (const auto* parameter : {
+           "response_type",
+           "client_id",
+           "redirect_uri",
+           "code_challenge",
+           "code_challenge_method",
+           "resource"
+         }) {
+      if (req.params.count(parameter) != 1) {
+        invalidRequest(String(parameter) + " must occur exactly once");
+        return;
+      }
+    }
+    if (req.params.count("scope") > 1 || req.params.count("state") > 1) {
+      invalidRequest("scope and state may occur at most once");
+      return;
+    }
+
     if (responseType != "code") {
       invalidRequest("Unsupported response_type");
       return;
     }
 
-    if (redirectUri.empty()) {
-      invalidRequest("Missing redirect_uri");
+    if (clientId != oauthConfig.defaultClientId) {
+      invalidRequest("Unknown client_id");
       return;
     }
 
-    if (!isValidRedirectUri(redirectUri)) {
-      invalidRequest("Invalid redirect_uri");
+    if (std::find(
+          oauthConfig.redirectUris.begin(),
+          oauthConfig.redirectUris.end(),
+          redirectUri) == oauthConfig.redirectUris.end()) {
+      invalidRequest("redirect_uri is not registered for this client");
       return;
     }
 
     const auto methodLower = toLower(codeChallengeMethod);
-    if (codeChallenge.empty() || (methodLower != "plain" && methodLower != "s256")) {
-      invalidRequest("Invalid code_challenge or code_challenge_method");
+    if (methodLower != "s256" || !isValidPkceValue(codeChallenge)) {
+      invalidRequest("A valid S256 code_challenge is required");
       return;
     }
 
-    const String effectiveScope = scope.empty() ? oauthConfig.defaultScope : scope;
-
-    if (req.method == "GET") {
-      auto html = this->renderAuthorizationPage(
-        req,
-        oauthConfig,
-        clientId.empty() ? oauthConfig.defaultClientId : clientId,
-        redirectUri,
-        effectiveScope,
-        state,
-        codeChallenge,
-        codeChallengeMethod
-      );
-      res.status = 200;
-      res.set_header("Content-Type", "text/html; charset=utf-8");
-      res.set_header("Cache-Control", "no-store");
-      res.set_header("Pragma", "no-cache");
-      res.set_content(html.c_str(), "text/html; charset=utf-8");
-      this->setCorsHeaders(res);
+    if (!resourcesMatch(resource, expectedResource)) {
+      invalidRequest("resource must identify this MCP server");
       return;
     }
 
-    const auto decision = toLower(::oro::runtime::string::trim(req.get_param_value("decision")));
-    if (decision.empty()) {
-      invalidRequest("Missing decision");
+    if (state.size() > 2048 || requestedScope.size() > 4096) {
+      invalidRequest("state or scope exceeds the supported length");
       return;
     }
 
-    if (decision == "deny") {
-      String location = appendQueryParameter(redirectUri, "error", "access_denied");
-      if (!state.empty()) {
-        location = appendQueryParameter(location, "state", state);
-      }
-      res.status = 302;
-      res.set_header("Location", location.c_str());
-      res.set_header("Cache-Control", "no-store");
-      res.set_header("Pragma", "no-cache");
-      res.set_content("Access denied", "text/plain");
-      this->setCorsHeaders(res);
+    const String effectiveScope = requestedScope.empty()
+      ? oauthConfig.defaultScope
+      : requestedScope;
+    if (!isScopeSubset(effectiveScope, oauthConfig.defaultScope)) {
+      invalidRequest("Requested scope is not supported");
       return;
     }
-
-    if (decision != "approve") {
-      invalidRequest("Invalid decision");
-      return;
-    }
-
-    if (clientId.empty()) {
-      invalidRequest("Missing client_id");
-      return;
-    }
-
     const auto now = std::chrono::steady_clock::now();
-    OAuthAuthorizationCode authorizationCode;
-    authorizationCode.code = randomToken(64);
-    authorizationCode.clientId = clientId;
-    authorizationCode.redirectUri = redirectUri;
-    authorizationCode.scope = effectiveScope;
-    authorizationCode.state = state;
-    authorizationCode.codeChallenge = codeChallenge;
-    authorizationCode.codeChallengeMethod = codeChallengeMethod;
+    OAuthAuthorizationRequest authorizationRequest;
+    authorizationRequest.id = randomToken(64);
+    authorizationRequest.clientId = clientId;
+    authorizationRequest.redirectUri = redirectUri;
+    authorizationRequest.scope = effectiveScope;
+    authorizationRequest.state = state;
+    authorizationRequest.codeChallenge = codeChallenge;
+    authorizationRequest.codeChallengeMethod = "S256";
+    authorizationRequest.resource = expectedResource;
     const uint32_t codeLifetime = oauthConfig.codeLifetimeSeconds > 0 ? oauthConfig.codeLifetimeSeconds : 300;
-    authorizationCode.expiresAt = now + std::chrono::seconds(codeLifetime);
+    authorizationRequest.expiresAt = now + std::chrono::seconds(codeLifetime);
 
     {
       Lock lock(this->mutex);
       this->pruneExpiredOAuthArtifacts(now);
-      this->oauthAuthorizationCodes.insert_or_assign(authorizationCode.code, authorizationCode);
+      if (this->oauthAuthorizationRequests.size() >= kMaxOAuthArtifacts) {
+        res.status = 503;
+        res.set_content("OAuth authorization capacity reached", "text/plain");
+        this->setCorsHeaders(res);
+        return;
+      }
+      this->oauthAuthorizationRequests.insert_or_assign(
+        authorizationRequest.id,
+        authorizationRequest
+      );
     }
 
-    String location = appendQueryParameter(redirectUri, "code", authorizationCode.code);
-    if (!state.empty()) {
-      location = appendQueryParameter(location, "state", state);
-    }
-
-    res.status = 302;
-    res.set_header("Location", location.c_str());
+    auto html = this->renderAuthorizationPage(
+      req,
+      oauthConfig,
+      clientId,
+      redirectUri,
+      effectiveScope,
+      state,
+      codeChallenge,
+      "S256",
+      expectedResource,
+      authorizationRequest.id
+    );
+    res.status = 200;
+    res.set_header("Content-Type", "text/html; charset=utf-8");
     res.set_header("Cache-Control", "no-store");
     res.set_header("Pragma", "no-cache");
-    res.set_content("Authorization complete", "text/plain");
+    res.set_content(html.c_str(), "text/html; charset=utf-8");
     this->setCorsHeaders(res);
   }
 
@@ -1239,6 +2008,14 @@ namespace oro::runtime::mcp {
       return;
     }
 
+    if (toLower(req.get_header_value("Content-Type")).find(
+          "application/x-www-form-urlencoded") != 0) {
+      res.status = 415;
+      res.set_content("Content-Type must be application/x-www-form-urlencoded", "text/plain");
+      this->setCorsHeaders(res);
+      return;
+    }
+
     auto errorResponse = [this, &res](const char* code, const char* description, int status = 400) {
       nlohmann::json payload;
       payload["error"] = code;
@@ -1253,6 +2030,20 @@ namespace oro::runtime::mcp {
       this->setCorsHeaders(res);
     };
 
+    for (const auto* parameter : {
+           "grant_type",
+           "code",
+           "redirect_uri",
+           "client_id",
+           "code_verifier",
+           "resource"
+         }) {
+      if (req.params.count(parameter) != 1) {
+        errorResponse("invalid_request", "Required parameters must each occur exactly once");
+        return;
+      }
+    }
+
     const String grantType = req.get_param_value("grant_type");
     if (grantType != "authorization_code") {
       errorResponse("unsupported_grant_type", "Only the authorization_code grant type is supported");
@@ -1263,8 +2054,13 @@ namespace oro::runtime::mcp {
     const String redirectUri = ::oro::runtime::string::trim(req.get_param_value("redirect_uri"));
     const String clientId = ::oro::runtime::string::trim(req.get_param_value("client_id"));
     const String codeVerifier = req.get_param_value("code_verifier");
+    const String resource = ::oro::runtime::string::trim(req.get_param_value("resource"));
 
-    if (code.empty() || redirectUri.empty() || clientId.empty() || codeVerifier.empty()) {
+    if (code.empty() ||
+        redirectUri.empty() ||
+        clientId.empty() ||
+        !isValidPkceValue(codeVerifier) ||
+        resource.empty()) {
       errorResponse("invalid_request", "Missing required parameters");
       return;
     }
@@ -1303,6 +2099,11 @@ namespace oro::runtime::mcp {
       return;
     }
 
+    if (!resourcesMatch(resource, authorizationCode.resource)) {
+      errorResponse("invalid_target", "Resource does not match the authorization grant");
+      return;
+    }
+
     if (!verifyCodeChallenge(codeVerifier, authorizationCode.codeChallenge, authorizationCode.codeChallengeMethod)) {
       errorResponse("invalid_grant", "Code verifier mismatch");
       return;
@@ -1313,18 +2114,23 @@ namespace oro::runtime::mcp {
     accessToken.token = randomToken(96);
     accessToken.clientId = clientId;
     accessToken.scope = authorizationCode.scope;
+    accessToken.resource = authorizationCode.resource;
     const uint32_t tokenLifetime = oauthConfig.tokenLifetimeSeconds > 0 ? oauthConfig.tokenLifetimeSeconds : 3600;
     accessToken.expiresAt = now + std::chrono::seconds(tokenLifetime);
 
     {
       Lock lock(this->mutex);
       this->pruneExpiredOAuthArtifacts(now);
+      if (this->oauthAccessTokens.size() >= kMaxOAuthArtifacts) {
+        errorResponse("temporarily_unavailable", "OAuth token capacity reached", 503);
+        return;
+      }
       this->oauthAccessTokens.insert_or_assign(accessToken.token, accessToken);
     }
 
     nlohmann::json payload;
     payload["access_token"] = accessToken.token.c_str();
-    payload["token_type"] = "bearer";
+    payload["token_type"] = "Bearer";
     payload["expires_in"] = tokenLifetime;
     if (!accessToken.scope.empty()) {
       payload["scope"] = accessToken.scope.c_str();
@@ -1356,22 +2162,11 @@ namespace oro::runtime::mcp {
       return;
     }
 
-    String host = currentConfig.host.empty() ? String("127.0.0.1") : currentConfig.host;
-    bool isIpv6 = host.find(':') != String::npos;
-    std::ostringstream base;
-    base << "http://";
-    if (isIpv6) {
-      base << '[' << host << ']';
-    } else {
-      base << host;
-    }
-    if (currentConfig.port > 0 && currentConfig.port != 80) {
-      base << ':' << currentConfig.port;
-    }
-    String baseUrl = base.str();
+    const String issuer = oauthIssuer(currentConfig);
+    const String resource = oauthResource(currentConfig);
 
     auto composeEndpoint = [&](const String& path) -> String {
-      String root = !oauthConfig.issuer.empty() ? oauthConfig.issuer : baseUrl;
+      String root = issuer;
       if (path.empty()) {
         return root;
       }
@@ -1396,13 +2191,15 @@ namespace oro::runtime::mcp {
     };
 
     nlohmann::json metadata;
-    metadata["issuer"] = (!oauthConfig.issuer.empty() ? oauthConfig.issuer : baseUrl).c_str();
+    metadata["issuer"] = issuer.c_str();
     metadata["authorization_endpoint"] = composeEndpoint(oauthConfig.authorizePath.empty() ? "/oauth/authorize" : oauthConfig.authorizePath).c_str();
     metadata["token_endpoint"] = composeEndpoint(oauthConfig.tokenPath.empty() ? "/oauth/token" : oauthConfig.tokenPath).c_str();
     metadata["response_types_supported"] = nlohmann::json::array({"code"});
     metadata["grant_types_supported"] = nlohmann::json::array({"authorization_code"});
-    metadata["code_challenge_methods_supported"] = nlohmann::json::array({"S256", "plain"});
+    metadata["code_challenge_methods_supported"] = nlohmann::json::array({"S256"});
     metadata["token_endpoint_auth_methods_supported"] = nlohmann::json::array({"none"});
+    metadata["authorization_response_iss_parameter_supported"] = true;
+    metadata["protected_resources"] = nlohmann::json::array({resource});
 
     const auto scopeList = scopesFromString(oauthConfig.defaultScope);
     if (!scopeList.empty()) {
@@ -1411,11 +2208,53 @@ namespace oro::runtime::mcp {
 
     res.status = 200;
     res.set_header("Cache-Control", "no-store");
-  res.set_header("Pragma", "no-cache");
-  res.set_header("Content-Type", "application/json");
-  res.set_content(metadata.dump(), "application/json");
-  this->setCorsHeaders(res);
-}
+    res.set_header("Pragma", "no-cache");
+    res.set_header("Content-Type", "application/json");
+    res.set_content(metadata.dump(), "application/json");
+    this->setCorsHeaders(res);
+  }
+
+  void HTTPServer::handleOAuthProtectedResourceMetadata(
+    const httplib::Request& req,
+    httplib::Response& res
+  ) {
+    (void)req;
+    Config currentConfig;
+    {
+      Lock lock(this->mutex);
+      currentConfig = this->config;
+    }
+
+    if (!currentConfig.oauth.enabled) {
+      res.status = 404;
+      res.set_content("Not Found", "text/plain");
+      this->setCorsHeaders(res);
+      return;
+    }
+
+    nlohmann::json metadata {
+      {"resource", oauthResource(currentConfig)},
+      {"authorization_servers", nlohmann::json::array({oauthIssuer(currentConfig)})},
+      {"bearer_methods_supported", nlohmann::json::array({"header"})},
+      {"resource_name", "Oro Runtime MCP server"}
+    };
+
+    std::vector<std::string> scopes;
+    std::istringstream stream(currentConfig.oauth.defaultScope);
+    std::string scope;
+    while (stream >> scope) {
+      scopes.push_back(scope);
+    }
+    if (!scopes.empty()) {
+      metadata["scopes_supported"] = scopes;
+    }
+
+    res.status = 200;
+    res.set_header("Cache-Control", "no-store");
+    res.set_header("Pragma", "no-cache");
+    res.set_content(metadata.dump(), "application/json");
+    this->setCorsHeaders(res);
+  }
 
   void HTTPServer::handlePing(const String& sessionId) {
     if (this->delegate) {
@@ -1435,31 +2274,24 @@ namespace oro::runtime::mcp {
   }
 
   bool HTTPServer::authorize(const httplib::Request& req, httplib::Response& res) const {
-    if (this->delegate) {
-      auto decision = this->delegate->authorize(req, res);
-      if (decision.has_value()) {
-        return *decision;
-      }
-    }
-
     String staticToken;
     OAuthConfig oauthConfig;
+    Config currentConfig;
     {
       Lock lock(this->mutex);
       staticToken = this->config.token;
       oauthConfig = this->config.oauth;
+      currentConfig = this->config;
     }
 
     const bool oauthEnabled = oauthConfig.enabled;
     const bool authEnabled = !staticToken.empty() || oauthEnabled;
 
     const auto origin = ::oro::runtime::string::trim(req.get_header_value("Origin"));
-    if (!origin.empty() && !authEnabled) {
-      // With no auth configured, reject non-loopback browser origins to avoid DNS rebinding attacks.
+    if (!origin.empty()) {
+      // Reject non-loopback browser origins to prevent DNS rebinding attacks.
       bool allowed = false;
-      if (origin == "null") {
-        allowed = true;
-      } else {
+      if (origin != "null") {
         try {
           const ::oro::runtime::url::URL originUrl(origin, false);
           const auto host = toLower(originUrl.hostname);
@@ -1475,6 +2307,13 @@ namespace oro::runtime::mcp {
         res.set_content("Forbidden", "text/plain");
         this->setCorsHeaders(res);
         return false;
+      }
+    }
+
+    if (this->delegate) {
+      auto decision = this->delegate->authorize(req, res);
+      if (decision.has_value()) {
+        return *decision;
       }
     }
 
@@ -1514,24 +2353,6 @@ namespace oro::runtime::mcp {
       }
     }
 
-    const auto queryToken = trim(req.get_param_value("token"));
-    if (!queryToken.empty()) {
-      if (!staticToken.empty() && queryToken == staticToken) {
-        staticMatch = true;
-      } else {
-        candidates.push_back(queryToken);
-      }
-    }
-
-    const auto accessTokenParam = trim(req.get_param_value("access_token"));
-    if (!accessTokenParam.empty()) {
-      if (!staticToken.empty() && accessTokenParam == staticToken) {
-        staticMatch = true;
-      } else {
-        candidates.push_back(accessTokenParam);
-      }
-    }
-
     if (staticMatch) {
       return true;
     }
@@ -1544,22 +2365,33 @@ namespace oro::runtime::mcp {
       }
     }
 
-  if (!staticToken.empty() && candidates.empty() && !oauthEnabled) {
+    if (!staticToken.empty() && candidates.empty() && !oauthEnabled) {
+      res.status = 401;
+      res.set_header("WWW-Authenticate", "Bearer");
+      res.set_content("Unauthorized", "text/plain");
+      this->setCorsHeaders(res);
+      debug("MCP HTTP request rejected (missing bearer token)");
+      return false;
+    }
+
     res.status = 401;
-    res.set_header("WWW-Authenticate", "Bearer");
+    String challenge = "Bearer";
+    if (oauthEnabled) {
+      challenge += " resource_metadata=\"" +
+        protectedResourceMetadataUrl(currentConfig) + "\"";
+      if (!oauthConfig.defaultScope.empty()) {
+        challenge += ", scope=\"" + oauthConfig.defaultScope + "\"";
+      }
+      if (!candidates.empty()) {
+        challenge += ", error=\"invalid_token\"";
+      }
+    }
+    res.set_header("WWW-Authenticate", challenge.c_str());
     res.set_content("Unauthorized", "text/plain");
     this->setCorsHeaders(res);
-    debug("MCP HTTP request rejected (missing bearer token)");
+    debug("MCP HTTP request rejected (unauthorized)");
     return false;
   }
-
-  res.status = 401;
-  res.set_header("WWW-Authenticate", "Bearer");
-  res.set_content("Unauthorized", "text/plain");
-  this->setCorsHeaders(res);
-  debug("MCP HTTP request rejected (unauthorized)");
-  return false;
-}
 
   bool HTTPServer::validateAccessToken(const String& token) const {
     if (token.empty()) {
@@ -1569,10 +2401,21 @@ namespace oro::runtime::mcp {
     const auto now = std::chrono::steady_clock::now();
     Lock lock(this->mutex);
     this->pruneExpiredOAuthArtifacts(now);
-    return this->oauthAccessTokens.find(token) != this->oauthAccessTokens.end();
+    const auto it = this->oauthAccessTokens.find(token);
+    return it != this->oauthAccessTokens.end() &&
+      resourcesMatch(it->second.resource, oauthResource(this->config));
   }
 
   void HTTPServer::pruneExpiredOAuthArtifacts(std::chrono::steady_clock::time_point now) const {
+    for (auto it = this->oauthAuthorizationRequests.begin(); it != this->oauthAuthorizationRequests.end();) {
+      if (it->second.expiresAt <= now) {
+        auto eraseIt = it++;
+        this->oauthAuthorizationRequests.erase(eraseIt);
+      } else {
+        ++it;
+      }
+    }
+
     for (auto it = this->oauthAuthorizationCodes.begin(); it != this->oauthAuthorizationCodes.end();) {
       if (it->second.expiresAt <= now) {
         auto eraseIt = it++;
@@ -1599,7 +2442,9 @@ namespace oro::runtime::mcp {
                                              const String& scope,
                                              const String& state,
                                              const String& codeChallenge,
-                                             const String& codeChallengeMethod) const {
+                                             const String& codeChallengeMethod,
+                                             const String& resource,
+                                             const String& authorizationRequestId) const {
     nlohmann::json context = nlohmann::json::object();
     context["clientId"] = clientId.c_str();
     context["redirectUri"] = redirectUri.c_str();
@@ -1607,6 +2452,8 @@ namespace oro::runtime::mcp {
     context["state"] = state.c_str();
     context["codeChallenge"] = codeChallenge.c_str();
     context["codeChallengeMethod"] = codeChallengeMethod.c_str();
+    context["resource"] = resource.c_str();
+    context["authorizationRequest"] = authorizationRequestId.c_str();
     context["method"] = req.method;
     context["path"] = req.path;
     context["remoteAddress"] = req.remote_addr;
@@ -1631,12 +2478,17 @@ namespace oro::runtime::mcp {
     }
     context["parameters"] = params;
 
-    String contextJson = context.dump();
-    const String closingTag = "</script>";
-    size_t pos = 0;
-    while ((pos = contextJson.find(closingTag, pos)) != String::npos) {
-      contextJson.insert(pos + 1, "\\");
-      pos += closingTag.size() + 1;
+    String contextJson;
+    for (const auto character : context.dump()) {
+      if (character == '<') {
+        contextJson += "\\u003c";
+      } else if (character == '>') {
+        contextJson += "\\u003e";
+      } else if (character == '&') {
+        contextJson += "\\u0026";
+      } else {
+        contextJson.push_back(character);
+      }
     }
 
     auto appendContextScript = [&](String& html) {
@@ -1672,6 +2524,8 @@ namespace oro::runtime::mcp {
       replaceAll(templateHtml, "{{STATE}}", htmlEscape(state));
       replaceAll(templateHtml, "{{CODE_CHALLENGE}}", htmlEscape(codeChallenge));
       replaceAll(templateHtml, "{{CODE_CHALLENGE_METHOD}}", htmlEscape(codeChallengeMethod));
+      replaceAll(templateHtml, "{{RESOURCE}}", htmlEscape(resource));
+      replaceAll(templateHtml, "{{AUTHORIZATION_REQUEST}}", htmlEscape(authorizationRequestId));
       appendContextScript(templateHtml);
       return templateHtml;
     }
@@ -1697,7 +2551,7 @@ namespace oro::runtime::mcp {
          << "</style></head><body>"
          << "<div class=\"container\">"
          << "<h1>Authorize Client Access</h1>"
-         << "<p>The client below is requesting permission to access your Socket MCP server.</p>"
+         << "<p>The client below is requesting permission to access your Oro MCP server.</p>"
          << "<dl class=\"details\">"
          << "<dt>Client ID</dt><dd>" << htmlEscape(clientId.empty() ? oauthConfig.defaultClientId : clientId) << "</dd>"
          << "<dt>Redirect URI</dt><dd>" << htmlEscape(redirectUri) << "</dd>";
@@ -1706,6 +2560,8 @@ namespace oro::runtime::mcp {
       html << "<dt>Scope</dt><dd>" << htmlEscape(scope) << "</dd>";
     }
 
+    html << "<dt>Resource</dt><dd>" << htmlEscape(resource) << "</dd>";
+
     if (!state.empty()) {
       html << "<dt>State</dt><dd>" << htmlEscape(state) << "</dd>";
     }
@@ -1713,13 +2569,7 @@ namespace oro::runtime::mcp {
     html << "<dt>PKCE Method</dt><dd>" << htmlEscape(codeChallengeMethod) << "</dd>"
          << "</dl>"
          << "<form method=\"post\" action=\"" << htmlEscape(req.path) << "\">"
-         << "<input type=\"hidden\" name=\"response_type\" value=\"code\" />"
-         << "<input type=\"hidden\" name=\"client_id\" value=\"" << htmlEscape(clientId.empty() ? oauthConfig.defaultClientId : clientId) << "\" />"
-         << "<input type=\"hidden\" name=\"redirect_uri\" value=\"" << htmlEscape(redirectUri) << "\" />"
-         << "<input type=\"hidden\" name=\"scope\" value=\"" << htmlEscape(scope) << "\" />"
-         << "<input type=\"hidden\" name=\"state\" value=\"" << htmlEscape(state) << "\" />"
-         << "<input type=\"hidden\" name=\"code_challenge\" value=\"" << htmlEscape(codeChallenge) << "\" />"
-         << "<input type=\"hidden\" name=\"code_challenge_method\" value=\"" << htmlEscape(codeChallengeMethod) << "\" />"
+         << "<input type=\"hidden\" name=\"authorization_request\" value=\"" << htmlEscape(authorizationRequestId) << "\" />"
          << "<div class=\"actions\">"
          << "<button type=\"submit\" name=\"decision\" value=\"approve\" class=\"primary\">Authorize</button>"
          << "<button type=\"submit\" name=\"decision\" value=\"deny\" class=\"secondary\">Deny</button>"
@@ -1762,13 +2612,27 @@ namespace oro::runtime::mcp {
   std::optional<String> HTTPServer::createSessionForRequest(const String& requestedId) {
     auto session = std::make_shared<Session>();
     session->id = isValidSessionIdToken(requestedId) ? requestedId : randomSessionId();
-    session->dispatcher = std::make_shared<EventDispatcher>();
+    size_t maxQueuedEvents = 0;
+    size_t maxQueuedBytes = 0;
+    {
+      Lock lock(this->mutex);
+      if (this->sessions.size() >= this->config.maxSessions) {
+        return std::nullopt;
+      }
+      maxQueuedEvents = this->config.maxQueuedEvents;
+      maxQueuedBytes = this->config.maxQueuedBytes;
+    }
+
+    session->dispatcher = std::make_shared<EventDispatcher>(maxQueuedEvents, maxQueuedBytes);
     session->closed = false;
     session->hasStream = false;
     session->lastActivity = std::chrono::steady_clock::now();
 
     {
       Lock lock(this->mutex);
+      if (this->sessions.size() >= this->config.maxSessions) {
+        return std::nullopt;
+      }
       this->sessions.insert_or_assign(session->id, session);
     }
 
@@ -1792,8 +2656,8 @@ void HTTPServer::setCorsHeaders(httplib::Response& res) const {
   res.headers.erase("Access-Control-Expose-Headers");
 
   res.set_header("Access-Control-Allow-Origin", "*");
-  res.set_header("Access-Control-Allow-Headers", "Authorization, Content-Type, Mcp-Session-Id");
-  res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.set_header("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id");
+  res.set_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   res.set_header("Access-Control-Expose-Headers", "Mcp-Session-Id");
 }
 }

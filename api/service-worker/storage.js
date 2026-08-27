@@ -547,7 +547,7 @@ export class SessionStorageProvider extends Provider {
   /**
    * Remove a value by `key`.
    * @param {string} key
-   * @return {string?}
+   * @return {boolean}
    * @throws DOMException
    * @throws NotFoundError
    */

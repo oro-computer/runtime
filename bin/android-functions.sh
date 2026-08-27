@@ -24,7 +24,8 @@ declare ANDROID_SDK_MANAGER_DEFAULT_SEARCH_PATHS=(
   "tools/bin"
 )
 
-declare ANDROID_PLATFORM_TOOLS_URI_TEMPLATE="https://dl.google.com/android/repository/platform-tools-latest-{os}.zip"
+declare ANDROID_PLATFORM_TOOLS_VERSION="37.0.1"
+declare ANDROID_PLATFORM_TOOLS_URI_TEMPLATE="https://dl.google.com/android/repository/platform-tools_r$ANDROID_PLATFORM_TOOLS_VERSION-{os}.zip"
 declare ANDROID_PLATFORM_TOOLS_PAGE_URI="https://developer.android.com/studio/releases/platform-tools"
 declare ANDROID_COMMAND_LINE_TOOLS_URI_TEMPLATE="https://dl.google.com/android/repository/commandlinetools-{os}-11076708_latest.zip"
 declare ANDROID_STUDIO_PAGE_URI="https://developer.android.com/studio"
@@ -32,6 +33,7 @@ declare JDK_VERSION="20.0.2"
 declare JDK_URI_TEMPLATE="https://download.java.net/java/GA/jdk$JDK_VERSION/6e380f22cbe7469fa75fb448bd903d8e/9/GPL/openjdk-$JDK_VERSION""_""{os}-{arch}_bin.{format}"
 declare GRADLE_VERSION="8.2.1"
 declare GRADLE_URI_TEMPLATE="https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"
+declare GRADLE_SHA256="03ec176d388f2aa99defcadc3ac6adf8dd2bce5145a129659537c0874dea5ad1"
 
 # TODO(mribbons): ubuntu / apt libs: apt-get install libc6:i386 libncurses5:i386 libstdc++6:i386 lib32z1 libbz2-1.0:i386
 
@@ -309,7 +311,11 @@ function get_android_paths() {
 }
 
 function build_android_platform_tools_uri() {
-  echo "${ANDROID_PLATFORM_TOOLS_URI_TEMPLATE/\{os\}/$(android_host_platform "$(host_os)")}"
+  local os="$(android_host_platform "$(host_os)")"
+  if [[ "$os" == "windows" ]]; then
+    os="win"
+  fi
+  echo "${ANDROID_PLATFORM_TOOLS_URI_TEMPLATE/\{os\}/$os}"
 }
 
 function build_android_command_line_tools_uri() {
@@ -322,6 +328,24 @@ function build_android_command_line_tools_uri() {
   fi
 
   echo "${ANDROID_COMMAND_LINE_TOOLS_URI_TEMPLATE/\{os\}/$os}"
+}
+
+function android_platform_tools_checksum() {
+  case "$(host_os)" in
+    Darwin) echo "6ae73f4de6452dc57e62ec02b68eed92a4c21661" ;;
+    Linux) echo "477254aa5f903c15cf51001717bdf347fb6b53e0" ;;
+    Win32) echo "e03e78b1d80b396f1c3358e31251cb31740e1110" ;;
+    *) return 1 ;;
+  esac
+}
+
+function android_command_line_tools_checksum() {
+  case "$(host_os)" in
+    Darwin) echo "37fb7dd41005b3b4ca6ea48ac27074b6fc4e3236" ;;
+    Linux) echo "d313adb7aedccf6cf0cfca51ec180f0059f5f8f8" ;;
+    Win32) echo "3d2917302740f476999a091bc5558837c7a863c5" ;;
+    *) return 1 ;;
+  esac
 }
 
 
@@ -347,6 +371,25 @@ function build_jdk_uri() {
   uri=${uri/\{arch\}/$arch}
   uri=${uri/\{format\}/$format}
   echo "$uri"
+}
+
+function jdk_checksum() {
+  local os="$(lower "$(host_os)")"
+  local arch="$(uname -m)"
+
+  if [[ "$arch" == "arm64" ]]; then
+    arch="aarch64"
+  elif [[ "$arch" == "x86_64" ]]; then
+    arch="x64"
+  fi
+
+  case "$os-$arch" in
+    darwin-aarch64) echo "2e6522bb574f76cd3f81156acd59115a014bf452bbe4107f0d31ff9b41b3da57" ;;
+    darwin-x64) echo "c65ba92b73d8076e2a10029a0674d40ce45c3e0183a8063dd51281e92c9f43fc" ;;
+    linux-x64) echo "beaf61959c2953310595e1162b0c626aef33d58628771033ff2936609661956c" ;;
+    win32-x64) echo "7e5870fd2e19b87cbd1981c4ff7203897384c2eb104977f40ce4951b40ab433e" ;;
+    *) return 1 ;;
+  esac
 }
 
 function build_gradle_uri() {
@@ -608,7 +651,7 @@ function android_install_sdk_manager() {
 
   write_log "v" "# Downloading $uri..."
   local uri="$(build_android_platform_tools_uri)"
-  local archive="$(download_to_tmp "$uri")"
+  local archive="$(download_to_tmp "$uri" "$(android_platform_tools_checksum)")"
   if [ -z "$archive" ]; then
     write_log "h" "not ok - Failed to download $uri"
     return 1
@@ -635,7 +678,7 @@ function android_install_sdk_manager() {
 
   archive=""
   write_log "v" "# Downloading $uri..."
-  archive="$(download_to_tmp "$uri")"
+  archive="$(download_to_tmp "$uri" "$(android_command_line_tools_checksum)")"
   if [ -z "$archive" ]; then
     write_log "h" "# Failed to download $uri"
     return 1
@@ -683,7 +726,7 @@ function android_install_jdk() {
   local uri="$(build_jdk_uri)"
   local archive=""
   write_log "h" "# Downloading $uri..."
-  archive="$(download_to_tmp "$uri")"
+  archive="$(download_to_tmp "$uri" "$(jdk_checksum)")"
   if [ "$?" != "0" ]; then
     write_log "h" "# Failed to download $uri: $archive"
     return 1
@@ -724,7 +767,7 @@ function android_install_gradle() {
   local uri="$(build_gradle_uri)"
   archive=""
   write_log "h" "# Downloading $uri..."
-  archive="$(download_to_tmp "$uri")"
+  archive="$(download_to_tmp "$uri" "$GRADLE_SHA256")"
   if [ "$?" != "0" ]; then
     write_log "h" "# Failed to download $uri: $archive"
     return 1

@@ -594,13 +594,10 @@ MAIN {
   registerWindowsURISchemeInRegistry();
 #endif
 
-  // TODO right now we forward a json parsable string as the args but this
-  // isn't the most robust way of doing this. possible a URI-encoded query
-  // string would be more in-line with how everything else works.
   for (auto const arg : std::span(argv, argc)) {
     auto s = String(arg);
 
-    argvArray.push_back("'" + replace(s, "'", "\'") + "'");
+    argvArray.push_back(s);
 
     bool helpRequested = (
       (s.find("--help") == 0) ||
@@ -970,7 +967,8 @@ MAIN {
 
     if (message.name == "process.write") {
       if (cmd.size() > 0 && process != nullptr) {
-        process->write(output);
+        // The Node adapter consumes newline-delimited IPC URLs from stdin.
+        process->write(output + "\n");
       }
       window->resolvePromise(message.seq, OK_STATE, JSON::null);
       return;

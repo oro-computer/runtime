@@ -1,16 +1,10 @@
 import diagnostics from 'oro:diagnostics'
 import { Buffer } from 'oro:buffer'
 import dgram from 'oro:dgram'
-import path from 'oro:path'
 import test from 'oro:test'
 import dns from 'oro:dns/promises'
 import fs from 'oro:fs/promises'
-import os from 'oro:os'
-
-const TMPDIR = `${os.tmpdir()}${path.sep}`
-const FIXTURES = /android/i.test(os.platform())
-  ? '/data/local/tmp/oro-test-fixtures/'
-  : `${TMPDIR}oro-test-fixtures${path.sep}`
+import FIXTURES from '../fixtures.js'
 
 test('diagnostics - channels - simple', async (t) => {
   const channel = diagnostics.channel('simple')

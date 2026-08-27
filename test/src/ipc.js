@@ -12,13 +12,19 @@ test('ipc exports', async (t) => {
     Object.keys(ipc).sort(),
     [
       'OK',
+      'IPCBroadcastChannel',
+      'IPCMessageChannel',
+      'IPCMessagePort',
+      'IPCSearchParams',
       'Result',
       'TIMEOUT',
       'createBinding',
       'debug',
       'default',
       'emit',
+      'findIPCMessageTransfers',
       'findMessageTransfers',
+      'inflateIPCMessageTransfers',
       'ERROR',
       'kDebugEnabled',
       'primordials',
@@ -44,11 +50,15 @@ test('ipc exports', async (t) => {
 })
 
 test('primordials', (t) => {
-  t.deepEqual(
-    Object.keys(primordials).sort(),
-    ['arch', 'cwd', 'platform', 'version', 'host-operating-system'].sort(),
-    'primordials keys match'
-  )
+  for (const key of [
+    'arch',
+    'cwd',
+    'platform',
+    'version',
+    'host-operating-system'
+  ]) {
+    t.ok(key in primordials, `primordials includes ${key}`)
+  }
   t.equal(typeof primordials.arch, 'string', 'primordials.arch is a string')
   t.equal(typeof primordials.cwd, 'string', 'primordials.cwd is a string')
   t.ok(

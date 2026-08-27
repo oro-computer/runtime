@@ -26,11 +26,9 @@ export function createRequire(options: CreateRequireOptions): RequireFunction;
  * @typedef {import('./package.js').PackageResolveOptions} PackageResolveOptions
  */
 /**
- * @typedef {
- *   PackageResolveOptions &
- *   PackageOptions &
- *   { origins?: string[] | URL[] }
- * } ResolveOptions
+ * @typedef {PackageResolveOptions & PackageOptions & {
+ *   origins?: string[] | URL[]
+ * }} ResolveOptions
  */
 /**
  * @typedef {ResolveOptions & {
@@ -78,8 +76,12 @@ export type CreateRequireOptions = {
 export type RequireFunction = (arg0: string) => any;
 export type PackageOptions = import("./package.js").PackageOptions;
 export type PackageResolveOptions = import("./package.js").PackageResolveOptions;
+export type ResolveOptions = PackageResolveOptions & PackageOptions & {
+    origins?: string[] | URL[];
+};
 export type RequireOptions = ResolveOptions & {
     resolvers?: RequireResolver[];
     importmap?: import("./module.js").ImportMap;
     cache?: boolean;
 };
+import URL from '../url.js';

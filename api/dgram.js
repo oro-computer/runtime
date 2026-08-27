@@ -790,7 +790,7 @@ export class Socket extends EventEmitter {
     connectState: CONNECT_STATE_DISCONNECTED,
     reuseAddr: false,
     ipv6Only: false,
-    remoteAddress: {}
+    remoteAddress: null
   }
 
   constructor (options, callback) {
@@ -959,7 +959,10 @@ export class Socket extends EventEmitter {
           })
         })
 
+        let startTimer = null
         const onopen = () => {
+          clearTimeout(startTimer)
+          this.conduit.removeEventListener('open', onopen)
           this.disableDataEventFallback()
           startReading(this, (err) => {
             this.#resource.runInAsyncScope(() => {
@@ -982,6 +985,7 @@ export class Socket extends EventEmitter {
 
         if (!this.conduit.isActive) {
           this.conduit.addEventListener('open', onopen, { once: true })
+          startTimer = setTimeout(onopen, 100)
         } else {
           onopen()
         }

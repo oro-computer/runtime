@@ -9,6 +9,13 @@ Status: Experimental. Runtime TLS is implemented via a single built-in provider 
 - Those targets still build successfully, but `oro:tls` and related TLS entry points return `NOT_IMPLEMENTED` when no provider is compiled in.
 - **GnuTLS**, **SecureTransport**, and platform **Android** TLS providers are not implemented in this repository yet.
 
+When building the runtime itself, `NO_ANDROID` and `NO_IOS` remain distinct
+target exclusions even though TLS provider availability differs by platform.
+Any non-empty `NO_ANDROID` disables only Android bootstrap/artifacts; any
+non-empty `NO_IOS` disables only iOS/iOS Simulator work on macOS. Neither
+disables a desktop TLS build, and `0`/`false` still disable the named target.
+See [Source-build environment](BUILD_ENVIRONMENT.md).
+
 ## Enabling TLS
 
 1. Build-time provider selection:

@@ -4,11 +4,17 @@
 #include <functional>
 
 #include <oro/extension.h>
-#include "src/core/core.hh"
+#include "src/runtime/platform.hh"
 
 #undef assert
 
 namespace oro::Tests {
+  using runtime::Atomic;
+  using runtime::Map;
+  using runtime::Mutex;
+  using runtime::String;
+  using runtime::Vector;
+
   class Harness;
   typedef void (TestRunner)(Harness& harness);
 
@@ -54,7 +60,7 @@ namespace oro::Tests {
       void comment (const String& comment) const;
       void label (const String& label) const;
       void log (const String& message) const;
-      void log (const Map& message) const;
+      void log (const Map<>& message) const;
       void log (const Vector<String>& message) const;
 
       void plan (unsigned int count);
@@ -74,6 +80,7 @@ namespace oro::Tests {
   void env (Harness&);
   void ini (Harness&);
   void json (Harness&);
+  void mcp (Harness&);
   void toml (Harness&);
   void platform (Harness&);
   void preload (Harness&);

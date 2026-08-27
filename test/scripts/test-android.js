@@ -1,8 +1,8 @@
-import { execFileSync, execSync as exec } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
+import { resolveOrocExecutable } from './oroc-path.js'
 
-const { ANDROID_HOME, ORO_ANDROID_CI, ORO_BIN } = process.env
+const { ANDROID_HOME, ORO_ANDROID_CI } = process.env
 const dirname = path.dirname(import.meta.url.replace('file://', ''))
 const root = path.dirname(dirname)
 const adb = ANDROID_HOME
@@ -17,29 +17,43 @@ const fixturesPath = '/data/local/tmp/oro-test-fixtures'
 
 // Resolve local oroc binary if not on PATH
 const repoRoot = path.resolve(root, '..')
-const orocCandidate = path.join(
-  repoRoot,
-  'build',
-  'x86_64-desktop',
-  'bin',
-  process.platform === 'win32' ? 'oroc.exe' : 'oroc'
-)
-const cli = ORO_BIN || (existsSync(orocCandidate) ? orocCandidate : 'oroc')
+const cli = resolveOrocExecutable(repoRoot)
 
 try {
   execFileSync(adb, ['uninstall', id], { stdio: 'inherit' })
 } catch {}
 
 if (ORO_ANDROID_CI) {
-  exec(
-    `${cli} build -r -o --test=./index.js --headless --platform=android --env=CI --env=ORO_ANDROID_CI`,
+  execFileSync(
+    cli,
+    [
+      'build',
+      '-r',
+      '-o',
+      '--test=./index.js',
+      '--headless',
+      '--platform=android',
+      '--env=CI',
+      '--env=ORO_ANDROID_CI'
+    ],
     {
       stdio: 'inherit'
     }
   )
 } else {
-  exec(
-    `${cli} build -r -o --test=./index.js --prod --headless --platform=android --env ORO_DEBUG_IPC`,
+  execFileSync(
+    cli,
+    [
+      'build',
+      '-r',
+      '-o',
+      '--test=./index.js',
+      '--prod',
+      '--headless',
+      '--platform=android',
+      '--env',
+      'ORO_DEBUG_IPC'
+    ],
     {
       stdio: 'inherit'
     }

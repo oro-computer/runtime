@@ -220,7 +220,7 @@ Creates a new window and returns an instance of ApplicationWindow.
 | opts.frameless | boolean | false | true | whether the window is frameless |
 | opts.utility | boolean | false | true | whether the window is utility (macOS only) |
 | opts.shouldExitApplicationOnClose | boolean | false | true | whether the window can exit the app |
-| opts.headless | boolean | false | true | whether the window will be headless or not (no frame) |
+| opts.headless | boolean |  | true | overrides the project headless setting for this window |
 | opts.userScript | string | null | true | A user script that will be injected into the window (desktop only) |
 | opts.protocolHandlers | string[] |  | true | An array of protocol handler schemes to register with the new window (requires service worker) |
 | opts.config | Record<string, string \\| number \\| boolean \\| (string \\| number \\| boolean)[]> |  | true | additional configuration key/value pairs |
@@ -390,7 +390,7 @@ An alias to `setSystemMenu()` for creating a tray menu.
 Set the enabled state of the system menu.
 | Argument | Type | Default | Optional | Description |
 | :---     | :--- | :---:   | :---:    | :---        |
-| value | object |  | false | an options object |
+| value | ApplicationMenuItemEnabledOptions |  | false | an options object |
 
 | Return Value | Type | Description |
 | :---         | :--- | :---        |
@@ -934,7 +934,7 @@ before using dns.lookup().
 | :---     | :--- | :---:   | :---:    | :---        |
 | hostname | string |  | false | The host name to resolve. |
 | options | LookupOptions \\| number \\| string |  | true | Lookup options or the record family. |
-| cb | function(Error, string \\| LookupAddress[], 4 \\| 6=):void |  | false | Invoked when the lookup completes. |
+| cb | function(Error, string \\| LookupAddress[], 4 \\| 6=):void |  | true | Invoked when the lookup completes. |
 
 
 # dns.promises
@@ -1284,7 +1284,7 @@ Asynchronously open a directory calling `callback` upon success or error.
 | options | object \\| function(Error \\| null, Dir \\| undefined):any |  | true |  |
 | options.encoding | string | 'utf8' | true |  |
 | options.withFileTypes | boolean | false | true |  |
-| callback | function(Error \\| null, Dir \\| undefined):any) |  | false |  |
+| callback | function(Error \\| null, Dir \\| undefined):any |  | true |  |
 
 ## `opendirSync(path, options)`
 
@@ -1359,7 +1359,7 @@ Asynchronously read all entries in a directory.
 | options | object \\| function(Error \\| null, (Dirent \\| string)[] \\| undefined):any |  | true |  |
 | options.encoding | string | 'utf8' | true |  |
 | options.withFileTypes | boolean | false | true |  |
-| callback | function(Error \\| null, (Dirent \\| string)[]):any |  | false |  |
+| callback | function(Error \\| null, (Dirent \\| string)[]):any |  | true |  |
 
 ## `readdirSync(path, options)`
 
@@ -1511,7 +1511,7 @@ Get the stats of a file
 | options.encoding | string | 'utf8' | true |  |
 | options.flag | string | 'r' | true |  |
 | options.signal | AbortSignal \\| undefined |  | true |  |
-| callback | function(Error \\| null, Stats \\| undefined):any |  | false |  |
+| callback | function(Error \\| null, Stats \\| undefined):any |  | true |  |
 
 ## `lstat(path, options, callback)`
 
@@ -1524,7 +1524,7 @@ Get the stats of a symbolic link
 | options.encoding | string | 'utf8' | true |  |
 | options.flag | string | 'r' | true |  |
 | options.signal | AbortSignal \\| undefined |  | true |  |
-| callback | function(Error \\| null, Stats \\| undefined):any |  | false |  |
+| callback | function(Error \\| null, Stats \\| undefined):any |  | true |  |
 
 ## `lstatSync(path, options)`
 
@@ -1543,7 +1543,7 @@ Creates a symlink of `src` at `dest`.
 | :---     | :--- | :---:   | :---:    | :---        |
 | src | string |  | false |  |
 | dest | string |  | false |  |
-| callback | function(Error \\| null):any |  | false |  |
+| callback | function(Error \\| null):any |  | true |  |
 
 ## `symlinkSync(src, dest, type)`
 
@@ -1594,7 +1594,7 @@ Changes ownership of link at `path` synchronously
 | options.mode | string | 0o666 | true |  |
 | options.flag | string | 'w' | true |  |
 | options.signal | AbortSignal \\| undefined |  | true |  |
-| callback | function(Error \\| null):any |  | false |  |
+| callback | function(Error \\| null):any |  | true |  |
 
 ## `writeFileSync(path, data, options)`
 
@@ -2885,6 +2885,16 @@ Plan the number of assertions.
 | expected | T |  | false |  |
 | msg | string |  | true |  |
 
+### `same(actual, expected, msg)`
+
+
+Assert that two values are deeply equivalent.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| actual | T |  | false |  |
+| expected | T |  | false |  |
+| msg | string |  | true |  |
+
 ### `notDeepEqual(actual, expected, msg)`
 
 
@@ -2927,9 +2937,36 @@ Plan the number of assertions.
 | actual | unknown |  | false |  |
 | msg | string |  | true |  |
 
+### `notOk(actual, msg)`
+
+
+Assert that a value is falsy.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| actual | unknown |  | false |  |
+| msg | string |  | true |  |
+
+### `match(actual, expected, msg)`
+
+
+Assert that a value matches a regular expression.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| actual | unknown |  | false |  |
+| expected | RegExp |  | false |  |
+| msg | string |  | true |  |
+
 ### `pass(msg)`
 
 
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| msg | string |  | true |  |
+
+### `skip(msg)`
+
+
+Mark the current test as skipped.
 | Argument | Type | Default | Optional | Description |
 | :---     | :--- | :---:   | :---:    | :---        |
 | msg | string |  | true |  |
@@ -2950,6 +2987,20 @@ Plan the number of assertions.
 | fn | Function |  | false |  |
 | expected | RegExp \\| any |  | true |  |
 | message | string |  | true |  |
+
+### `rejects(input, expected, message)`
+
+
+Assert that a promise or async function rejects.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| input | PromiseLike<any> \\| (() => any) |  | false |  |
+| expected | RegExp \\| ((error: Error) => boolean) |  | true |  |
+| message | string |  | true |  |
+
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<void> |  |
 
 ### `sleep(ms, msg)`
 

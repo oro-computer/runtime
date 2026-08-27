@@ -169,7 +169,7 @@
     "api/url/url/url.js",
     "api/fetch/fetch.js",
     "api/internal/streams/web.js",
-    "npm/packages/@orocomputer/runtime-node/index.cjs",
+    "npm/packages/@oro-computer/runtime-node/index.cjs",
     "api/index.d.ts",
     "api/index.tmp.d.ts"
   ]

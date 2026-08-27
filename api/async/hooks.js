@@ -167,7 +167,7 @@ export class AsyncHook {
 
 /**
  * Factory for creating a `AsyncHook` instance.
- * @param {AsyncHookCallbackOptions|AsyncHookCallbacks=} [callbacks]
+ * @param {AsyncHookCallbacks=} [callbacks]
  * @return {AsyncHook}
  */
 export function createHook (callbacks) {

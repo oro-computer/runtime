@@ -32,11 +32,11 @@ Oro Runtime ships a pkg-config file using the Oro name:
 
 ## NPM packages and scopes
 
-Oro Runtime publishes packages under the `@orocomputer` scope:
+Oro Runtime publishes packages under the `@oro-computer` scope:
 
-- `@orocomputer/runtime`
-- `@orocomputer/runtime-{darwin,linux,win32}-{arm64,x64}`
-- `@orocomputer/runtime-node`
+- `@oro-computer/runtime`
+- `@oro-computer/runtime-{darwin,linux,win32}-{arm64,x64}`
+- `@oro-computer/runtime-node`
 
 These package names are the npm distribution policy. They are not the same thing
 as GitHub release archive names, and they are not a promise that every package
@@ -48,6 +48,7 @@ The `Release Artifacts` workflow publishes built downstream runtime
 distributions as archives named:
 
 - `oro-runtime-<version>-linux-x64-desktop.tar.gz`
+- `oro-runtime-<version>-linux-arm64-desktop.tar.gz`
 - `oro-runtime-<version>-linux-x64-android-sdk.tar.gz`
 - `oro-runtime-<version>-macos-x64-desktop.tar.gz`
 - `oro-runtime-<version>-macos-x64-ios-sdk.tar.gz`
@@ -60,14 +61,20 @@ The `*-desktop` archives are host runtime distributions for that OS/arch. The
 host `oroc` CLI plus the corresponding Android or iOS runtime libraries needed
 to build downstream apps for those targets.
 
+The source-build controls used to produce these classes are intentionally
+separate. A non-empty `NO_ANDROID` disables only Android bootstrap/artifacts; a
+non-empty `NO_IOS` disables only iOS/iOS Simulator work on macOS. Desktop-only
+jobs set both explicitly, while each mobile SDK job enables its own family by
+leaving that family's variable unset. `0` and `false` are non-empty and still
+disable the named family. See [Source-build environment](BUILD_ENVIRONMENT.md).
+
 The release archive matrix is intentionally narrower than the npm naming policy:
 
-- GitHub-hosted release runners currently cover Linux x64, macOS x64, macOS
-  arm64, and Windows x64.
+- GitHub-hosted release runners currently cover Linux x64, Linux arm64, macOS
+  x64, macOS arm64, and Windows x64.
 - Android support is built from Linux x64 hosts.
 - iOS support is built from macOS x64 and macOS arm64 hosts.
-- Windows arm64 and Linux arm64 release archives are not emitted by the current
-  hosted workflow.
+- Windows arm64 release archives are not emitted by the current hosted workflow.
 
 ## Updating this policy
 

@@ -1,6 +1,10 @@
 #include "tests.hh"
+#include "src/runtime/string.hh"
 
 namespace oro::Tests {
+  using runtime::string::join;
+  using runtime::string::split;
+
   void string (Harness& t) {
     t.test("oro::replace()", [](auto t) {
       t.comment("TODO");

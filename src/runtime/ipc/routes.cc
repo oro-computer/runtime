@@ -68,6 +68,7 @@ using oro::runtime::url::encodeURIComponent;
 using oro::runtime::string::replace;
 using oro::runtime::string::trim;
 using oro::runtime::string::split;
+using oro::runtime::string::splitc;
 using oro::runtime::string::toLowerCase;
 using oro::runtime::crypto::rand64;
 using oro::runtime::Vector;
@@ -85,6 +86,11 @@ namespace {
 
   bool parseUint64 (const String& input, uint64_t& out) {
     if (input.empty()) return false;
+    if (!std::all_of(input.begin(), input.end(), [](unsigned char value) {
+      return std::isdigit(value) != 0;
+    })) {
+      return false;
+    }
     try {
       out = std::stoull(input);
       return true;
@@ -342,7 +348,9 @@ namespace {
 
 #define RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)                     \
   [message, reply](auto seq, auto json, auto queuedResponse) {                 \
-    reply(Result { seq, message, json, queuedResponse });                      \
+    auto result = Result { seq, message, json, queuedResponse };               \
+    normalizeResultSourceFromPayload(result);                                  \
+    reply(std::move(result));                                                   \
   }
 
 static inline String extractSourceFromPayload (const JSON::Any& value) {
@@ -528,6 +536,10 @@ namespace {
 
 static inline bool tlsServiceEnabled (Router* router) {
   return router->bridge.getRuntime()->services.tls.enabled.load();
+}
+
+static inline bool tcpServiceEnabled (Router* router) {
+  return router->bridge.getRuntime()->services.tcp.enabled.load();
 }
 
 static inline bool updateServiceEnabled (Router* router) {
@@ -2898,6 +2910,27 @@ static void mapIPCRoutes (Router *router) {
   });
 
   /**
+   * Returns usage statistics for an LLM context.
+   * @param id
+   */
+  router->map("ai.llm.context.stats", [](auto message, auto router, auto reply) {
+    auto app = App::sharedApplication();
+    auto err = validateMessageParameters(message, {"id"});
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    ai::llm::ID id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+    app->runtime.services.ai.llm.getContextStats(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
    * Adds an ai chat session message
    * @param id
    * @param prompt
@@ -3690,7 +3723,6 @@ static void mapIPCRoutes (Router *router) {
 
   /**
    * Set the application system menu item enabled state
-   * @param value - The DSL for the system tray menu
    * @param enabled - true or false
    * @param indexMain
    * @param indexSub
@@ -3698,7 +3730,7 @@ static void mapIPCRoutes (Router *router) {
   router->map("application.setSystemMenuItemEnabled", [](auto message, auto router, auto reply) {
   #if ORO_RUNTIME_PLATFORM_DESKTOP
     const auto app = App::sharedApplication();
-    const auto err = validateMessageParameters(message, {"value", "enabled", "indexMain", "indexSub"});
+    const auto err = validateMessageParameters(message, {"enabled", "indexMain", "indexSub"});
 
     if (err.type != JSON::Type::Null) {
       return reply(Result::Err { message, err });
@@ -5433,7 +5465,7 @@ static void mapIPCRoutes (Router *router) {
         return reply(Result::Err { message, err });
       }
 
-      auto args = split(message.get("args"), 0x0001);
+      auto args = splitc(message.get("args"), 0x0001);
 
       if (args.size() == 0 || args.at(0).size() == 0) {
         auto json = JSON::Object::Entries {
@@ -5458,6 +5490,7 @@ static void mapIPCRoutes (Router *router) {
       const auto options = oro::runtime::core::services::Process::SpawnOptions {
         .cwd = message.get("cwd", getcwd()),
         .env = env,
+        .replaceEnvironment = message.has("env"),
         .allowStdin = message.get("stdin") != "false",
         .allowStdout = message.get("stdout") != "false",
         .allowStderr = message.get("stderr") != "false"
@@ -5490,7 +5523,7 @@ static void mapIPCRoutes (Router *router) {
         return reply(Result::Err { message, err });
       }
 
-      auto args = split(message.get("args"), 0x0001);
+      auto args = splitc(message.get("args"), 0x0001);
 
       if (args.size() == 0 || args.at(0).size() == 0) {
         auto json = JSON::Object::Entries {
@@ -5526,6 +5559,7 @@ static void mapIPCRoutes (Router *router) {
       const auto options = oro::runtime::core::services::Process::ExecOptions {
         .cwd = message.get("cwd", getcwd()),
         .env = env,
+        .replaceEnvironment = message.has("env"),
         .allowStdout = message.get("stdout") != "false",
         .allowStderr = message.get("stderr") != "false",
         .timeout = timeout,
@@ -7193,6 +7227,30 @@ static void mapIPCRoutes (Router *router) {
   });
 
   /**
+   * Changes `mode` of a symbolic link at `path` without following it.
+   * @param path
+   * @param mode
+   * @see lchmod(2)
+   */
+  router->map("fs.lchmod", [](auto message, auto router, auto reply) {
+    auto err = validateMessageParameters(message, {"path", "mode"});
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    int mode = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(mode, "mode", std::stoi);
+
+    router->bridge.getRuntime()->services.fs.lchmod(
+      message.seq,
+      message.get("path"),
+      mode,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
    * Changes uid and gid of file at `path`.
    * @param path
    * @param uid
@@ -7437,6 +7495,28 @@ static void mapIPCRoutes (Router *router) {
   });
 
   /**
+   * Synchronizes a file's data with the storage device.
+   * @param id
+   * @see fdatasync(2)
+   */
+  router->map("fs.fdatasync", [](auto message, auto router, auto reply) {
+    auto err = validateMessageParameters(message, {"id"});
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.fs.fdatasync(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
    * Truncates opened file
    * @param id
    * @param offset
@@ -7515,6 +7595,25 @@ static void mapIPCRoutes (Router *router) {
       message.get("path"),
       mode,
       message.get("recursive") == "true",
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Creates a uniquely named temporary directory from `prefix`.
+   * @param prefix
+   * @see mkdtemp(3)
+   */
+  router->map("fs.mkdtemp", [](auto message, auto router, auto reply) {
+    auto err = validateMessageParameters(message, {"prefix"});
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    router->bridge.getRuntime()->services.fs.mkdtemp(
+      message.seq,
+      message.get("prefix"),
       RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
     );
   });
@@ -7750,6 +7849,92 @@ static void mapIPCRoutes (Router *router) {
     router->bridge.getRuntime()->services.fs.stat(
       message.seq,
       message.get("path"),
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Updates access and modification times for a file at `path`.
+   * @param path
+   * @param atime
+   * @param mtime
+   * @see utimes(2)
+   */
+  router->map("fs.utimes", [](auto message, auto router, auto reply) {
+    auto err = validateMessageParameters(message, {"path", "atime", "mtime"});
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    double atime = 0;
+    double mtime = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(atime, "atime", std::stod);
+    REQUIRE_AND_GET_MESSAGE_VALUE(mtime, "mtime", std::stod);
+
+    router->bridge.getRuntime()->services.fs.utimes(
+      message.seq,
+      message.get("path"),
+      atime,
+      mtime,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Updates access and modification times for an open file descriptor.
+   * @param id
+   * @param atime
+   * @param mtime
+   * @see futimes(2)
+   */
+  router->map("fs.futimes", [](auto message, auto router, auto reply) {
+    auto err = validateMessageParameters(message, {"id", "atime", "mtime"});
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    double atime = 0;
+    double mtime = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+    REQUIRE_AND_GET_MESSAGE_VALUE(atime, "atime", std::stod);
+    REQUIRE_AND_GET_MESSAGE_VALUE(mtime, "mtime", std::stod);
+
+    router->bridge.getRuntime()->services.fs.futimes(
+      message.seq,
+      id,
+      atime,
+      mtime,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Updates access and modification times for a symbolic link.
+   * @param path
+   * @param atime
+   * @param mtime
+   * @see lutimes(2)
+   */
+  router->map("fs.lutimes", [](auto message, auto router, auto reply) {
+    auto err = validateMessageParameters(message, {"path", "atime", "mtime"});
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    double atime = 0;
+    double mtime = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(atime, "atime", std::stod);
+    REQUIRE_AND_GET_MESSAGE_VALUE(mtime, "mtime", std::stod);
+
+    router->bridge.getRuntime()->services.fs.lutimes(
+      message.seq,
+      message.get("path"),
+      atime,
+      mtime,
       RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
     );
   });
@@ -9815,6 +10000,438 @@ static void mapIPCRoutes (Router *router) {
   });
 
   /**
+   * Creates a TCP socket.
+   * @param id Handle ID for the socket
+   */
+  router->map("tcp.create", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.create(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Closes a TCP socket.
+   * @param id Handle ID for the socket
+   */
+  router->map("tcp.close", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.close(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Binds a TCP socket to a local address and port.
+   * @param id Handle ID for the socket
+   * @param port Local port, where zero requests an ephemeral port
+   * @param address Local address (default: 0.0.0.0)
+   */
+  router->map("tcp.bind", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id", "port"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    int port = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+    REQUIRE_AND_GET_MESSAGE_VALUE(port, "port", std::stoi);
+
+    if (port < 0 || port > 65535) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Invalid 'port' given in parameters"}
+      }});
+    }
+
+    router->bridge.getRuntime()->services.tcp.bind(
+      message.seq,
+      id,
+      message.get("address", "0.0.0.0"),
+      port,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Starts listening for connections on a bound TCP socket.
+   * @param id Handle ID for the socket
+   * @param backlog Maximum pending connection backlog
+   */
+  router->map("tcp.listen", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id", "backlog"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    int backlog = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+    REQUIRE_AND_GET_MESSAGE_VALUE(backlog, "backlog", std::stoi);
+
+    if (backlog < 0) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Invalid 'backlog' given in parameters"}
+      }});
+    }
+
+    router->bridge.getRuntime()->services.tcp.listen(
+      message.seq,
+      id,
+      backlog,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Accepts a pending connection from a TCP server socket.
+   * @param serverId Handle ID for the server socket
+   * @param clientId Handle ID to assign to the accepted socket
+   */
+  router->map("tcp.accept", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"serverId", "clientId"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t serverId = 0;
+    uint64_t clientId = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(serverId, "serverId", std::stoull);
+    REQUIRE_AND_GET_MESSAGE_VALUE(clientId, "clientId", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.accept(
+      message.seq,
+      serverId,
+      clientId,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Connects a TCP socket to a remote address and port.
+   * @param id Handle ID for the socket
+   * @param port Remote port
+   * @param address Remote address (default: 127.0.0.1)
+   */
+  router->map("tcp.connect", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id", "port"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    int port = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+    REQUIRE_AND_GET_MESSAGE_VALUE(port, "port", std::stoi);
+
+    if (port <= 0 || port > 65535) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Invalid 'port' given in parameters"}
+      }});
+    }
+
+    router->bridge.getRuntime()->services.tcp.connect(
+      message.seq,
+      id,
+      message.get("address", "127.0.0.1"),
+      port,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Writes buffered bytes to a connected TCP socket.
+   * @param id Handle ID for the socket
+   */
+  router->map("tcp.write", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.write(
+      message.seq,
+      id,
+      message.buffer.shared(),
+      message.buffer.size(),
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Starts delivering bytes read from a TCP socket.
+   * @param id Handle ID for the socket
+   */
+  router->map("tcp.readStart", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.readStart(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Stops delivering bytes read from a TCP socket.
+   * @param id Handle ID for the socket
+   */
+  router->map("tcp.readStop", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.readStop(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Half-closes the writable side of a TCP socket.
+   * @param id Handle ID for the socket
+   */
+  router->map("tcp.shutdown", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.shutdown(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Enables or disables Nagle's algorithm for a TCP socket.
+   * @param id Handle ID for the socket
+   * @param on Whether TCP_NODELAY should be enabled
+   */
+  router->map("tcp.setNoDelay", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id", "on"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.setNoDelay(
+      message.seq,
+      id,
+      parseBoolValue(message.get("on")),
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Configures TCP keepalive for a socket.
+   * @param id Handle ID for the socket
+   * @param on Whether keepalive should be enabled
+   * @param delay Initial keepalive delay in seconds (default: 0)
+   */
+  router->map("tcp.setKeepAlive", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id", "on"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    uint64_t delay = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+    REQUIRE_AND_GET_MESSAGE_VALUE(delay, "delay", std::stoull, "0");
+
+    if (delay > std::numeric_limits<unsigned int>::max()) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Invalid 'delay' given in parameters"}
+      }});
+    }
+
+    router->bridge.getRuntime()->services.tcp.setKeepAlive(
+      message.seq,
+      id,
+      parseBoolValue(message.get("on")),
+      static_cast<unsigned int>(delay),
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Returns the local address of a TCP socket.
+   * @param id Handle ID for the socket
+   */
+  router->map("tcp.getSockName", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.getSockName(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
+   * Returns the remote address of a connected TCP socket.
+   * @param id Handle ID for the socket
+   */
+  router->map("tcp.getPeerName", [](auto message, auto router, auto reply) {
+    if (!tcpServiceEnabled(router)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "TCP_DISABLED"},
+        {"message", "TCP service is disabled"}
+      }});
+    }
+
+    const auto err = validateMessageParameters(message, {"id"});
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    uint64_t id = 0;
+    REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
+
+    router->bridge.getRuntime()->services.tcp.getPeerName(
+      message.seq,
+      id,
+      RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
+    );
+  });
+
+  /**
    * Binds an UDP socket to a specified port, and optionally a host
    * address (default: 0.0.0.0).
    * @param id Handle ID of underlying socket
@@ -11198,10 +11815,11 @@ static void mapIPCRoutes (Router *router) {
       });
     }
 
-    reply(Result::Data { message, window->json() });
-
-    app->dispatch([app, targetWindowIndex]() {
+    auto data = window->json();
+    app->dispatch([=]() mutable {
       app->runtime.windowManager.destroyWindow(targetWindowIndex);
+      data["status"] = window::Manager::WindowStatus::WINDOW_CLOSED;
+      reply(Result::Data { message, data });
     });
   });
 
@@ -11556,7 +12174,86 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
-      window->hide();
+      auto options = window->options;
+      if (options.userConfig["build_headless"] != "true") {
+        window->hide();
+      }
+      reply(Result::Data { message, window->json() });
+    });
+  });
+
+  /**
+   * Brings a target window to the foreground and focuses it.
+   * @param targetWindowIndex
+   */
+  router->map("window.focus", [](auto message, auto router, auto reply) {
+    const auto app = App::sharedApplication();
+    auto err = validateMessageParameters(message, {"targetWindowIndex"});
+
+    if (app == nullptr) {
+      return reply(Result::Err { message, "Application is invalid state" });
+    }
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    int targetWindowIndex;
+    REQUIRE_AND_GET_MESSAGE_VALUE(targetWindowIndex, "targetWindowIndex", std::stoi);
+
+    const auto window = app->runtime.windowManager.getWindow(targetWindowIndex);
+    const auto windowStatus = app->runtime.windowManager.getWindowStatus(targetWindowIndex);
+
+    if (!window || windowStatus == window::Manager::WindowStatus::WINDOW_NONE) {
+      return reply(Result::Err {
+        message,
+        JSON::Object::Entries {
+          {"message", "Target window not found"},
+          {"type", "NotFoundError"}
+        }
+      });
+    }
+
+    app->dispatch([=]() {
+      window->focus();
+      reply(Result::Data { message, window->json() });
+    });
+  });
+
+  /**
+   * Removes focus from a target window.
+   * @param targetWindowIndex
+   */
+  router->map("window.blur", [](auto message, auto router, auto reply) {
+    const auto app = App::sharedApplication();
+    auto err = validateMessageParameters(message, {"targetWindowIndex"});
+
+    if (app == nullptr) {
+      return reply(Result::Err { message, "Application is invalid state" });
+    }
+
+    if (err.type != JSON::Type::Null) {
+      return reply(Result::Err { message, err });
+    }
+
+    int targetWindowIndex;
+    REQUIRE_AND_GET_MESSAGE_VALUE(targetWindowIndex, "targetWindowIndex", std::stoi);
+
+    const auto window = app->runtime.windowManager.getWindow(targetWindowIndex);
+    const auto windowStatus = app->runtime.windowManager.getWindowStatus(targetWindowIndex);
+
+    if (!window || windowStatus == window::Manager::WindowStatus::WINDOW_NONE) {
+      return reply(Result::Err {
+        message,
+        JSON::Object::Entries {
+          {"message", "Target window not found"},
+          {"type", "NotFoundError"}
+        }
+      });
+    }
+
+    app->dispatch([=]() {
+      window->blur();
       reply(Result::Data { message, window->json() });
     });
   });
@@ -12112,9 +12809,76 @@ static void mapIPCRoutes (Router *router) {
     }
 
     mcp::ToolBuilder builder(message.get("name"));
+    const auto title = message.get("title");
+    if (!title.empty()) {
+      builder.title(title);
+    }
     const auto description = message.get("description");
     if (!description.empty()) {
       builder.description(description);
+    }
+
+    const auto annotations = message.get("annotations");
+    if (!annotations.empty()) {
+      try {
+        const auto value = JSON::parse(annotations);
+        if (!value.isObject()) {
+          throw JSON::Error("tool annotations must be a JSON object");
+        }
+        builder.annotations(value);
+      } catch (const JSON::Error& error) {
+        Result result(Result::Err {
+          message,
+          JSON::Object::Entries {
+            {"type", "TypeError"},
+            {"message", error.what()}
+          }
+        });
+        replyConduitAware(router, reply, std::move(result));
+        return;
+      }
+    }
+
+    const auto icons = message.get("icons");
+    if (!icons.empty()) {
+      try {
+        const auto value = JSON::parse(icons);
+        if (!value.isArray()) {
+          throw JSON::Error("tool icons must be a JSON array");
+        }
+        builder.icons(value);
+      } catch (const JSON::Error& error) {
+        Result result(Result::Err {
+          message,
+          JSON::Object::Entries {
+            {"type", "TypeError"},
+            {"message", error.what()}
+          }
+        });
+        replyConduitAware(router, reply, std::move(result));
+        return;
+      }
+    }
+
+    const auto outputSchema = message.get("outputSchema");
+    if (!outputSchema.empty()) {
+      try {
+        const auto value = JSON::parse(outputSchema);
+        if (!value.isObject()) {
+          throw JSON::Error("tool outputSchema must be a JSON object");
+        }
+        builder.outputSchema(value);
+      } catch (const JSON::Error& error) {
+        Result result(Result::Err {
+          message,
+          JSON::Object::Entries {
+            {"type", "TypeError"},
+            {"message", error.what()}
+          }
+        });
+        replyConduitAware(router, reply, std::move(result));
+        return;
+      }
     }
 
     const auto metadata = message.get("metadata");
@@ -12151,7 +12915,21 @@ static void mapIPCRoutes (Router *router) {
             replyConduitAware(router, reply, std::move(result));
             return;
           }
-          tool.inputSchema = parsedSchema.template as<JSON::Object>();
+          const auto parsedObject = parsedSchema.template as<JSON::Object>();
+          if (!parsedObject.contains("type") ||
+              !parsedObject.get("type").isString() ||
+              parsedObject.get("type").template as<JSON::String>().value() != "object") {
+            Result result(Result::Err {
+              message,
+              JSON::Object::Entries {
+                {"type", "TypeError"},
+                {"message", "tool inputSchema must declare type 'object' at its root"}
+              }
+            });
+            replyConduitAware(router, reply, std::move(result));
+            return;
+          }
+          tool.inputSchema = parsedObject;
         } catch (const JSON::Error& error) {
           Result result(Result::Err {
             message,
@@ -12164,6 +12942,19 @@ static void mapIPCRoutes (Router *router) {
           return;
         }
       }
+    }
+
+    String schemaError;
+    if (!tool.prepareSchemas(schemaError)) {
+      Result result(Result::Err {
+        message,
+        JSON::Object::Entries {
+          {"type", "TypeError"},
+          {"message", schemaError}
+        }
+      });
+      replyConduitAware(router, reply, std::move(result));
+      return;
     }
 
     const auto callback = [router, reply, message](auto seq, auto json, auto queuedResponse) {
@@ -12256,10 +13047,65 @@ static void mapIPCRoutes (Router *router) {
     if (descriptor.name.empty()) {
       descriptor.name = descriptor.uri;
     }
+    descriptor.title = message.get("title");
     descriptor.description = message.get("description");
     const auto mimeType = message.get("mimeType");
     descriptor.mimeType = mimeType.empty() ? String("application/octet-stream") : mimeType;
     descriptor.subscribable = message.get("subscribable") == "true";
+    const auto size = message.get("size");
+    if (!size.empty()) {
+      try {
+        descriptor.size = std::stoull(size);
+      } catch (...) {
+        Result result(Result::Err {
+          message,
+          JSON::Object::Entries {
+            {"type", "TypeError"},
+            {"message", "resource size must be a non-negative integer"}
+          }
+        });
+        respond(std::move(result));
+        return;
+      }
+    }
+    const auto icons = message.get("icons");
+    if (!icons.empty()) {
+      try {
+        descriptor.icons = JSON::parse(icons);
+        if (!descriptor.icons.isArray()) {
+          throw JSON::Error("resource icons must be a JSON array");
+        }
+      } catch (const JSON::Error& error) {
+        Result result(Result::Err {
+          message,
+          JSON::Object::Entries {
+            {"type", "TypeError"},
+            {"message", error.what()}
+          }
+        });
+        respond(std::move(result));
+        return;
+      }
+    }
+    const auto annotations = message.get("annotations");
+    if (!annotations.empty()) {
+      try {
+        descriptor.annotations = JSON::parse(annotations);
+        if (!descriptor.annotations.isObject()) {
+          throw JSON::Error("resource annotations must be a JSON object");
+        }
+      } catch (const JSON::Error& error) {
+        Result result(Result::Err {
+          message,
+          JSON::Object::Entries {
+            {"type", "TypeError"},
+            {"message", error.what()}
+          }
+        });
+        respond(std::move(result));
+        return;
+      }
+    }
     const auto metadata = message.get("metadata");
     if (!metadata.empty()) {
       try {
@@ -12331,7 +13177,9 @@ static void mapIPCRoutes (Router *router) {
     const auto resources = app->runtime.services.mcp.listResources();
     JSON::Array payload;
     for (const auto& resource : resources) {
-      payload.push(resource.toJSON());
+      auto serialized = resource.toJSON();
+      serialized.set("subscribable", JSON::Boolean(resource.subscribable));
+      payload.push(serialized);
     }
 
     Result result(Result::Data {
@@ -12455,16 +13303,16 @@ static void mapIPCRoutes (Router *router) {
       cfg.host = message.get("host");
     }
     if (message.has("port")) {
-      int port = cfg.port;
-      try {
-        port = std::stoi(message.get("port"));
-      } catch (...) {
-        port = cfg.port;
+      uint64_t port = 0;
+      if (!parseUint64(message.get("port"), port) || port > 65535) {
+        Result result(Result::Err {
+          message,
+          "port must be an integer from 0 through 65535"
+        });
+        respond(std::move(result));
+        return;
       }
-      if (port < 0) {
-        port = 0;
-      }
-      cfg.port = port;
+      cfg.port = static_cast<int>(port);
     }
     auto normalizeEndpoint = [](String value) {
       auto trim = [](String input) {
@@ -12543,12 +13391,59 @@ static void mapIPCRoutes (Router *router) {
       cfg.token = message.get("token");
     }
     if (message.has("retry")) {
-      try {
-        const auto retry = std::stoul(message.get("retry"));
-        if (retry > 0) {
-          cfg.retryMilliseconds = static_cast<uint32_t>(retry);
-        }
-      } catch (...) {}
+      uint64_t retry = 0;
+      if (!parseUint64(message.get("retry"), retry) ||
+          retry == 0 ||
+          retry > std::numeric_limits<uint32_t>::max()) {
+        Result result(Result::Err { message, "retry must be a positive 32-bit integer" });
+        respond(std::move(result));
+        return;
+      }
+      cfg.retryMilliseconds = static_cast<uint32_t>(retry);
+    }
+
+    auto readPositiveSize = [&message](const char* key, size_t& value) {
+      if (!message.has(key)) {
+        return true;
+      }
+      uint64_t parsed = 0;
+      if (!parseUint64(message.get(key), parsed) ||
+          parsed == 0 ||
+          parsed > std::numeric_limits<size_t>::max()) {
+        return false;
+      }
+      value = static_cast<size_t>(parsed);
+      return true;
+    };
+
+    uint64_t sessionTtlSeconds = cfg.sessionTtlSeconds;
+    if (message.has("sessionTtlSeconds")) {
+      if (!parseUint64(message.get("sessionTtlSeconds"), sessionTtlSeconds) ||
+          sessionTtlSeconds == 0 ||
+          sessionTtlSeconds > std::numeric_limits<uint32_t>::max()) {
+        Result result(Result::Err { message, "sessionTtlSeconds must be a positive 32-bit integer" });
+        respond(std::move(result));
+        return;
+      }
+      cfg.sessionTtlSeconds = static_cast<uint32_t>(sessionTtlSeconds);
+    }
+
+    if (!readPositiveSize("maxRequestBytes", cfg.maxRequestBytes) ||
+        !readPositiveSize("maxSessions", cfg.maxSessions) ||
+        !readPositiveSize("maxQueuedEvents", cfg.maxQueuedEvents) ||
+        !readPositiveSize("maxQueuedBytes", cfg.maxQueuedBytes)) {
+      Result result(Result::Err {
+        message,
+        "MCP server limits must be positive integers supported by this platform"
+      });
+      respond(std::move(result));
+      return;
+    }
+
+    if (message.has("replaceSseStreamOnReconnect")) {
+      cfg.replaceSseStreamOnReconnect = parseBoolValue(
+        message.get("replaceSseStreamOnReconnect")
+      );
     }
 
 #if __has_include(<nlohmann/json.hpp>)
@@ -12557,59 +13452,126 @@ static void mapIPCRoutes (Router *router) {
       if (!raw.empty()) {
         try {
           const auto parsed = nlohmann::json::parse(raw);
-          if (parsed.is_object()) {
-            if (parsed.contains("enabled")) {
-              const auto value = parsed["enabled"];
-              if (value.is_boolean()) {
-                cfg.oauth.enabled = value.template get<bool>();
+          if (!parsed.is_object()) {
+            throw std::invalid_argument("oauth must be a JSON object");
+          }
+          if (parsed.contains("enabled")) {
+            if (!parsed["enabled"].is_boolean()) {
+              throw std::invalid_argument("oauth.enabled must be a boolean");
+            }
+            cfg.oauth.enabled = parsed["enabled"].template get<bool>();
+          } else if (!parsed.empty()) {
+            cfg.oauth.enabled = true;
+          }
+
+          if (cfg.oauth.enabled) {
+            const auto readString = [&parsed](const char* key, String& output) {
+              if (!parsed.contains(key)) {
+                return;
               }
-            } else if (!parsed.empty()) {
-              cfg.oauth.enabled = true;
+              if (!parsed[key].is_string()) {
+                throw std::invalid_argument(String("oauth.") + key + " must be a string");
+              }
+              output = parsed[key].template get<String>();
+              if (output.empty()) {
+                throw std::invalid_argument(String("oauth.") + key + " must not be empty");
+              }
+            };
+            readString("issuer", cfg.oauth.issuer);
+            readString("resource", cfg.oauth.resource);
+            readString("defaultClientId", cfg.oauth.defaultClientId);
+            readString("defaultScope", cfg.oauth.defaultScope);
+
+            String path;
+            readString("authorizePath", path);
+            if (!path.empty()) {
+              cfg.oauth.authorizePath = normalizeEndpoint(path);
+            }
+            path.clear();
+            readString("tokenPath", path);
+            if (!path.empty()) {
+              cfg.oauth.tokenPath = normalizeEndpoint(path);
+            }
+            path.clear();
+            readString("metadataPath", path);
+            if (!path.empty()) {
+              cfg.oauth.metadataPath = normalizeEndpoint(path);
             }
 
-            if (cfg.oauth.enabled) {
-              if (parsed.contains("issuer") && parsed["issuer"].is_string()) {
-                cfg.oauth.issuer = parsed["issuer"].template get<String>();
+            if (parsed.contains("redirectUris")) {
+              if (!parsed["redirectUris"].is_array()) {
+                throw std::invalid_argument("oauth.redirectUris must be an array");
               }
-              if (parsed.contains("authorizePath") && parsed["authorizePath"].is_string()) {
-                cfg.oauth.authorizePath = normalizeEndpoint(parsed["authorizePath"].template get<String>());
+              for (const auto& redirectUri : parsed["redirectUris"]) {
+                if (!redirectUri.is_string() || redirectUri.template get<String>().empty()) {
+                  throw std::invalid_argument(
+                    "oauth.redirectUris must contain only non-empty strings"
+                  );
+                }
+                cfg.oauth.redirectUris.push_back(redirectUri.template get<String>());
               }
-              if (parsed.contains("tokenPath") && parsed["tokenPath"].is_string()) {
-                cfg.oauth.tokenPath = normalizeEndpoint(parsed["tokenPath"].template get<String>());
+            }
+
+            const auto readLifetime = [&parsed](const char* key, uint32_t& output) {
+              if (!parsed.contains(key)) {
+                return;
               }
-              if (parsed.contains("metadataPath") && parsed["metadataPath"].is_string()) {
-                cfg.oauth.metadataPath = normalizeEndpoint(parsed["metadataPath"].template get<String>());
-              }
-              if (parsed.contains("defaultClientId") && parsed["defaultClientId"].is_string()) {
-                cfg.oauth.defaultClientId = parsed["defaultClientId"].template get<String>();
-              }
-              if (parsed.contains("defaultScope") && parsed["defaultScope"].is_string()) {
-                cfg.oauth.defaultScope = parsed["defaultScope"].template get<String>();
-              }
-              if (parsed.contains("codeLifetimeSeconds") && parsed["codeLifetimeSeconds"].is_number()) {
-                const auto seconds = parsed["codeLifetimeSeconds"].template get<int64_t>();
-                if (seconds > 0) {
-                  cfg.oauth.codeLifetimeSeconds = static_cast<uint32_t>(seconds);
+              const auto& value = parsed[key];
+              uint64_t seconds = 0;
+              if (value.is_number_unsigned()) {
+                seconds = value.template get<uint64_t>();
+              } else if (value.is_number_integer()) {
+                const auto signedSeconds = value.template get<int64_t>();
+                if (signedSeconds > 0) {
+                  seconds = static_cast<uint64_t>(signedSeconds);
                 }
               }
-              if (parsed.contains("tokenLifetimeSeconds") && parsed["tokenLifetimeSeconds"].is_number()) {
-                const auto seconds = parsed["tokenLifetimeSeconds"].template get<int64_t>();
-                if (seconds > 0) {
-                  cfg.oauth.tokenLifetimeSeconds = static_cast<uint32_t>(seconds);
-                }
+              if (seconds == 0 || seconds > std::numeric_limits<uint32_t>::max()) {
+                throw std::invalid_argument(
+                  String("oauth.") + key + " must be a positive 32-bit integer"
+                );
               }
-              if (parsed.contains("screen") && parsed["screen"].is_object()) {
-                const auto& screen = parsed["screen"];
-                if (screen.contains("html") && screen["html"].is_string()) {
-                  cfg.oauth.screenHtml = screen["html"].template get<String>();
+              output = static_cast<uint32_t>(seconds);
+            };
+            readLifetime("codeLifetimeSeconds", cfg.oauth.codeLifetimeSeconds);
+            readLifetime("tokenLifetimeSeconds", cfg.oauth.tokenLifetimeSeconds);
+
+            if (parsed.contains("screen")) {
+              if (!parsed["screen"].is_object()) {
+                throw std::invalid_argument("oauth.screen must be an object");
+              }
+              const auto& screen = parsed["screen"];
+              const auto readScreenString = [&screen](const char* key, String& output) {
+                if (!screen.contains(key)) {
+                  return;
                 }
-                if (screen.contains("file") && screen["file"].is_string()) {
-                  cfg.oauth.screenFile = screen["file"].template get<String>();
+                if (!screen[key].is_string() || screen[key].template get<String>().empty()) {
+                  throw std::invalid_argument(
+                    String("oauth.screen.") + key + " must be a non-empty string"
+                  );
                 }
+                output = screen[key].template get<String>();
+              };
+              readScreenString("html", cfg.oauth.screenHtml);
+              readScreenString("file", cfg.oauth.screenFile);
+              if (!cfg.oauth.screenHtml.empty() && !cfg.oauth.screenFile.empty()) {
+                throw std::invalid_argument(
+                  "oauth.screen must specify either html or file, not both"
+                );
               }
             }
           }
-        } catch (...) {}
+        } catch (const std::exception& error) {
+          Result result(Result::Err {
+            message,
+            JSON::Object::Entries {
+              {"type", "TypeError"},
+              {"message", error.what()}
+            }
+          });
+          respond(std::move(result));
+          return;
+        }
       }
     }
 #else
@@ -12636,7 +13598,8 @@ static void mapIPCRoutes (Router *router) {
         {"endpoint", config.endpoint},
         {"oauthAuthorizePath", config.oauth.authorizePath},
         {"oauthTokenPath", config.oauth.tokenPath},
-        {"oauthMetadataPath", config.oauth.metadataPath}
+        {"oauthMetadataPath", config.oauth.metadataPath},
+        {"oauthProtectedResourceMetadataPath", config.oauth.protectedResourceMetadataPath}
       }
     });
     respond(std::move(result));
@@ -12708,7 +13671,7 @@ static void mapIPCRoutes (Router *router) {
     const auto sessionId = message.get("sessionId");
     const auto argumentsJson = message.get("arguments");
 
-    if (!app->runtime.services.mcp.invokeTool(message.seq, name, sessionId, argumentsJson, callback)) {
+    if (!app->runtime.services.mcp.invokeTool(message.seq, name, sessionId, argumentsJson, false, callback)) {
       return;
     }
 

@@ -1,6 +1,7 @@
-import { rmSync as rm, cpSync as cp, existsSync } from 'node:fs'
+import { rmSync as rm, cpSync as cp } from 'node:fs'
 import { execSync, spawn } from 'node:child_process'
 import path from 'node:path'
+import { resolveOrocExecutable } from './oroc-path.js'
 
 const dirname = path.dirname(
   import.meta.url.replace('file://', '').replace(/^\/[A-Za-z]:/, '')
@@ -9,15 +10,7 @@ const root = path.dirname(dirname)
 
 // Resolve local oroc binary if not on PATH
 const repoRoot = path.resolve(root, '..')
-const orocCandidate = path.join(
-  repoRoot,
-  'build',
-  'x86_64-desktop',
-  'bin',
-  process.platform === 'win32' ? 'oroc.exe' : 'oroc'
-)
-const { ORO_BIN } = process.env
-const cli = ORO_BIN || (existsSync(orocCandidate) ? orocCandidate : 'oroc')
+const cli = resolveOrocExecutable(repoRoot)
 
 const child = spawn(
   cli,
@@ -32,11 +25,13 @@ const child = spawn(
     'ORO_DEBUG_IPC'
   ],
   {
-    stdio: 'inherit'
+    stdio: 'inherit',
+    cwd: root
   }
 )
 
 let retries = 1000
+let fixturesReady = false
 
 const interval = setInterval(() => {
   let container = null
@@ -58,7 +53,12 @@ const interval = setInterval(() => {
   } catch (err) {
     if (--retries === 0) {
       clearInterval(interval)
-      throw err
+      console.error(
+        'Unable to determine the iOS Simulator container data directory:',
+        err
+      )
+      process.exitCode = 1
+      child.kill()
     }
   }
 
@@ -79,5 +79,27 @@ const interval = setInterval(() => {
     recursive: true
   })
 
+  fixturesReady = true
   clearInterval(interval)
 }, 200)
+
+child.once('error', (err) => {
+  console.error('Unable to start the iOS Simulator test build:', err)
+  process.exitCode = 1
+  clearInterval(interval)
+})
+
+child.once('exit', (code, signal) => {
+  clearInterval(interval)
+  if (!fixturesReady) {
+    console.error(
+      'iOS Simulator test exited before its fixture directory was prepared'
+    )
+    process.exitCode = 1
+  } else if (code !== 0) {
+    console.error(
+      `iOS Simulator test exited ${signal ? `from signal ${signal}` : `with code ${code}`}`
+    )
+    process.exitCode = code || 1
+  }
+})

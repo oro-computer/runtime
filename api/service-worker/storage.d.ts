@@ -209,14 +209,6 @@ export class MemoryStorageProvider extends Provider {
  * application and through service worker restarts.
  */
 export class SessionStorageProvider extends Provider {
-    /**
-     * Remove a value by `key`.
-     * @param {string} key
-     * @return {string?}
-     * @throws DOMException
-     * @throws NotFoundError
-     */
-    remove(key: string): string | null;
 }
 /**
  * A local storage provider that persists until the data is cleared.

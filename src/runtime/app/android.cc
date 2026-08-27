@@ -302,7 +302,7 @@ extern "C" {
           windowManagerOptions.features.useTestScript = true;
         }
 
-        windowManagerOptions.argv.push_back("'" + trim(arg) + "'");
+        windowManagerOptions.argv.push_back(trim(arg));
       }
 
       auto followSystemTheme = getConfigValue("window_follow_system_theme");

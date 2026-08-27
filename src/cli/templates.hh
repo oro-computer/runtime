@@ -33,6 +33,8 @@ environment:
   ORO_LOG_FILE                         mirror logs to a JSON file
   ORO_ALLOW_EXEC                       allow external exec during builds
   ORO_ENABLE_SANITIZERS                enable ASan/UBSan on desktop builds
+  NO_ANDROID                           source bootstrap: disable only Android work when non-empty
+  NO_IOS                               source bootstrap: disable only iOS/iOS Simulator work when non-empty
 
 general options:
   -h, --help                           print help message
@@ -51,6 +53,9 @@ notes:
   '{{cli_name}} <subcommand> --json' emits structured command results when that subcommand supports it.
   The global '{{cli_name}} --json <subcommand>' form is reserved for JSON log streaming.
   Use '--log-file=<path>' when you need machine-readable stdout plus a separate log stream.
+  NO_ANDROID and NO_IOS are independent presence flags for building the runtime source tree;
+  they do not select an application target for '{{cli_name}} build --platform'. Values such as
+  0 and false are non-empty and still disable the named target.
 
 examples:
   {{cli_name}} init my-app
@@ -486,6 +491,8 @@ notes:
   `--prod` controls packaging/debug defaults; `--package` controls whether a distributable artifact
   is produced in addition to the build output directory.
   Use `--copy` for one-off extra bundle mappings without modifying `oro.toml`.
+  NO_ANDROID and NO_IOS do not control this application build command. They are independent,
+  presence-based exclusions for runtime source bootstrap (`bin/install.sh` / `npm run relink`).
 
 common errors:
   Android builds: run `{{cli_name}} setup --platform=android` and accept SDK licenses.
@@ -633,7 +640,11 @@ options:
   --log-file=<path>                    mirror logs to a JSON file
 
 notes:
-  - Prints a curated set of CLI, runtime, toolchain, and platform variables (for example, ORO_DEBUG, ORO_VERBOSE, ORO_HOME, JAVA_HOME, ANDROID_HOME, APPLE_ID, SIGNTOOL).
+  - Prints a curated set of CLI, runtime, source-bootstrap, toolchain, and platform variables (for example, ORO_DEBUG, ORO_VERBOSE, ORO_HOME, NO_ANDROID, NO_IOS, JAVA_HOME, ANDROID_HOME, APPLE_ID, SIGNTOOL).
+  - NO_ANDROID and NO_IOS are independent presence flags for runtime source bootstrap. A non-empty
+    NO_ANDROID disables only Android work; a non-empty NO_IOS disables only iOS/iOS Simulator work
+    on macOS. Values such as 0 and false still disable the named target. They do not select the
+    application target for `{{cli_name}} build --platform`.
   - Merges [env] / env_* entries from the active configuration and from local .ororc files when present.
   - Filters out unset variables; text output prints each line as KEY=VALUE.
   - JSON output emits a flat object keyed by environment variable name.
@@ -662,28 +673,33 @@ options:
   --host=<host>                        HTTP bind host (default: 127.0.0.1)
   --port=<port>                        HTTP bind port (default: 0 for ephemeral)
   --endpoint=<path>                    HTTP endpoint path (default: /mcp; normalizes mcp,/mcp,/mcp/)
-  --token=<token>                      require bearer token (default: disabled on loopback, auto-generated otherwise)
+  --token=<token>                      require this bearer token (default: auto-generated in HTTP mode)
   --no-auth                            disable token auth (loopback only)
   --workspace=<path>                   explicit workspace root (default: current directory or <workspace-dir>)
   --config=<path>                      workspace-relative oro.toml/oro.ini path to use as the active project config
-  --read-workspace-only                restrict filesystem reads to the workspace root (disables read_file)
-  --allow-read-outside-workspace       allow reading arbitrary files outside the workspace root (default)
+  --read-workspace-only                restrict filesystem reads to the workspace root (default; compatibility flag)
+  --allow-read-outside-workspace       explicitly allow reading arbitrary files outside the workspace root
   --replace-sse-stream                 allow a new SSE connection to replace an existing one for the same session id
 
 notes:
   Stdio mode disables JSON logs and suppresses INFO output so stdout remains valid MCP JSON-RPC.
-  HTTP mode implements MCP Streamable HTTP (2025-06-18); clients must call initialize first and then
-  include Mcp-Session-Id on subsequent requests.
-  The server publishes descriptive MCP tool metadata, including standard titles, safety annotations, a custom
-  metadata object, and structured tool results to help human and AI clients choose the right operation without
+  HTTP mode supports modern MCP 2026-07-28 requests and legacy MCP 2025-11-25 and 2025-06-18 sessions.
+  Modern clients call server/discover, send per-request metadata and routing headers, and use a long-lived
+  subscriptions/listen POST for notifications; they do not initialize or send a session header. Legacy clients
+  initialize first and then include Mcp-Session-Id on subsequent requests. HTTP bearer authentication is enabled
+  by default.
+  The server publishes descriptive MCP tool metadata, including standard titles, safety annotations, extension
+  data under _meta, and structured tool results to help human and AI clients choose the right operation without
   shell parsing.
-  Use the MCP `search_docs` tool for topic-driven discovery across README, MCP, API, config, and manpage resources
-  before falling back to manual resource walking.
+  Use the MCP `search_docs` tool for topic-driven discovery across README, source-build environment, MCP,
+  API, config, and manpage resources before falling back to manual resource walking.
   When --config is omitted, the active config defaults to oro.toml and falls back to oro.ini when that is the
   only standard project config present in the workspace.
   resources/list includes the workspace root and, when present, the active config file, project-local docs under
-  conventional paths, and installed runtime-doc:/ references for shipped API, CLI, config, MCP, README, llms.txt,
-  and man1/man3/man7 docs when available.
+  conventional paths, and installed runtime-doc:/ references for shipped API, CLI, config, MCP, README,
+  BUILD_ENVIRONMENT.md, llms.txt, and man1/man3/man7 docs when available.
+  Use runtime-doc:/BUILD_ENVIRONMENT.md for the independent, presence-based NO_ANDROID and NO_IOS
+  source-bootstrap controls; neither variable selects an application build target.
   Prefer runtime-doc:/ resources for runtime behavior and API contracts, and workspace:/ resources for the current
   app's config and local docs.
 

@@ -54,6 +54,6 @@ function Assert-VersionMatch {
     }
 }
 
-$VERSION_NODE_PRIMARY = npm show ./npm/packages/@orocomputer/runtime-node version
+$VERSION_NODE_PRIMARY = npm show ./npm/packages/@oro-computer/runtime-node version
 
-Assert-VersionMatch "@orocomputer/runtime-node" $VERSION_NODE_PRIMARY
+Assert-VersionMatch "@oro-computer/runtime-node" $VERSION_NODE_PRIMARY

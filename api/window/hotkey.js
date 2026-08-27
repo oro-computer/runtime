@@ -11,12 +11,10 @@ import os from '../os.js'
  * @return {string}
  */
 export function normalizeExpression (expression) {
-  return encodeURIComponent(
-    expression
-      .split('+')
-      .map((token) => token.trim())
-      .join('+')
-  )
+  return expression
+    .split('+')
+    .map((token) => token.trim())
+    .join('+')
 }
 
 /**

@@ -1,17 +1,41 @@
 /**
- * Spawns a child process exeucting `command` with `args`
+ * Spawns a child process executing `command` directly with `args`.
  * @param {string} command
- * @param {string[]|object=} [args]
- * @param {object=} [options
+ * @param {string[]|ChildProcessOptions} [args]
+ * @param {ChildProcessOptions} [options]
  * @return {ChildProcess}
  */
-export function spawn(command: string, args?: (string[] | object) | undefined, options?: object | undefined): ChildProcess;
-export function exec(command: any, options: any, callback: any): ChildProcess & {
-    then(resolve: any, reject: any): Promise<any>;
-    catch(reject: any): Promise<any>;
-    finally(next: any): Promise<any>;
-};
-export function execSync(command: any, options: any): any;
+export function spawn(command: string, args?: string[] | ChildProcessOptions, options?: ChildProcessOptions): ChildProcess;
+/**
+ * Executes a command string through the platform shell.
+ * @param {string} command
+ * @param {ExecOptions|ExecCallback} [options]
+ * @param {ExecCallback} [callback]
+ * @return {ChildProcess & PromiseLike<{ stdout: string | Buffer, stderr: string | Buffer }>}
+ */
+export function exec(command: string, options?: ExecOptions | ExecCallback, callback?: ExecCallback): ChildProcess & PromiseLike<{
+    stdout: string | Buffer;
+    stderr: string | Buffer;
+}>;
+/**
+ * Executes a file directly with tokenized arguments.
+ * @param {string} file
+ * @param {string[]|ExecFileOptions|ExecCallback} [args]
+ * @param {ExecFileOptions|ExecCallback} [options]
+ * @param {ExecCallback} [callback]
+ * @return {ChildProcess & PromiseLike<{ stdout: string | Buffer, stderr: string | Buffer }>}
+ */
+export function execFile(file: string, args?: string[] | ExecFileOptions | ExecCallback, options?: ExecFileOptions | ExecCallback, callback?: ExecCallback): ChildProcess & PromiseLike<{
+    stdout: string | Buffer;
+    stderr: string | Buffer;
+}>;
+/**
+ * Executes a command string synchronously through the platform shell.
+ * @param {string} command
+ * @param {ExecSyncOptions} [options]
+ * @return {string|Buffer}
+ */
+export function execSync(command: string, options?: ExecSyncOptions): string | Buffer;
 export class Pipe extends AsyncResource {
     /**
      * `Pipe` class constructor.
@@ -38,21 +62,9 @@ export class ChildProcess extends EventEmitter {
     [x: number]: () => import("./gc.js").Finalizer;
     /**
      * `ChildProcess` class constructor.
-     * @param {{
-     *   env?: object,
-     *   stdin?: boolean,
-     *   stdout?: boolean,
-     *   stderr?: boolean,
-     *   signal?: AbortSignal,
-     * }=} [options]
+     * @param {ChildProcessOptions} [options]
      */
-    constructor(options?: {
-        env?: object;
-        stdin?: boolean;
-        stdout?: boolean;
-        stderr?: boolean;
-        signal?: AbortSignal;
-    } | undefined);
+    constructor(options?: ChildProcessOptions);
     /**
      * @ignore
      * @type {Pipe}
@@ -144,11 +156,12 @@ export class ChildProcess extends EventEmitter {
     /**
      * Spawns the child process. This function will throw an error if the process
      * is already spawned.
-     * @param {string} command
-     * @param {string[]=} [args]
+     * @param {string} command Executable name or path.
+     * @param {string[]|ChildProcessOptions} [args] Tokenized arguments or options.
+     * @param {ChildProcessOptions} [options] Spawn options.
      * @return {ChildProcess}
      */
-    spawn(...args?: string[] | undefined): ChildProcess;
+    spawn(command: string, args?: string[] | ChildProcessOptions, options?: ChildProcessOptions): ChildProcess;
     /**
      * `EventTarget` based `addEventListener` method.
      * @param {string} event
@@ -167,17 +180,59 @@ export class ChildProcess extends EventEmitter {
     removeEventListener(event: string, callback: (arg0: Event) => any): void;
     #private;
 }
-export function execFile(command: any, options: any, callback: any): ChildProcess & {
-    then(resolve: any, reject: any): Promise<any>;
-    catch(reject: any): Promise<any>;
-    finally(next: any): Promise<any>;
-};
 declare namespace _default {
     export { ChildProcess };
     export { spawn };
     export { execFile };
     export { exec };
+    export { execSync };
 }
 export default _default;
+export type ChildProcessOptions = {
+    /**
+     * Complete child environment. Replaces the inherited environment when provided.
+     */
+    env?: Record<string, string | number | boolean | null | undefined>;
+    /**
+     * Working directory for the child.
+     */
+    cwd?: string;
+    /**
+     * Open a writable stdin pipe.
+     */
+    stdin?: boolean;
+    /**
+     * Open a readable stdout pipe.
+     */
+    stdout?: boolean;
+    /**
+     * Open a readable stderr pipe.
+     */
+    stderr?: boolean;
+    /**
+     * Signal that terminates the child when aborted.
+     */
+    signal?: AbortSignal;
+    /**
+     * Signal used for timeout or abort termination.
+     */
+    killSignal?: number | string;
+    /**
+     * Milliseconds before terminating the child.
+     */
+    timeout?: number;
+};
+export type ExecOptions = ChildProcessOptions & {
+    encoding?: string;
+    shell?: string;
+};
+export type ExecFileOptions = ChildProcessOptions & {
+    encoding?: string;
+};
+export type ExecSyncOptions = Omit<ChildProcessOptions, "signal" | "stdin"> & {
+    encoding?: string;
+};
+export type ExecCallback = (error: Error | null, stdout: string | Buffer | null, stderr: string | Buffer | null) => void;
+import { Buffer } from './buffer.js';
 import { AsyncResource } from './async/resource.js';
 import { EventEmitter } from './events.js';

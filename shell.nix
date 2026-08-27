@@ -71,7 +71,8 @@ pkgs.mkShell {
     echo "  • pnpm: $(pnpm --version)"
     echo ""
 
-    # Set environment variables for the build
+    # These are distinct presence flags. Each disables only its named mobile
+    # target family; set both explicitly because this shell is desktop-only.
     export NO_ANDROID=1
     export NO_IOS=1
     export PREFIX="$PWD/build/prefix"
@@ -96,8 +97,8 @@ pkgs.mkShell {
 
     echo "Environment Variables:"
     echo "  • PREFIX=$PREFIX"
-    echo "  • NO_ANDROID=$NO_ANDROID"
-    echo "  • NO_IOS=$NO_IOS"
+    echo "  • NO_ANDROID=$NO_ANDROID (Android bootstrap/artifacts disabled only)"
+    echo "  • NO_IOS=$NO_IOS (iOS/iOS Simulator work disabled only)"
     echo "  • CPU_CORES=$CPU_CORES"
     echo ""
     echo "Build Commands:"
@@ -107,7 +108,7 @@ pkgs.mkShell {
     echo "  • Clean build:          make clean"
     echo ""
     echo "📝 Note: Building on NixOS - all dependencies provided via Nix"
-    echo "🔧 Android/iOS builds are disabled (desktop Linux only)"
+    echo "🔧 Desktop-only: NO_ANDROID and NO_IOS independently disable their named mobile families"
     echo ""
   '';
 

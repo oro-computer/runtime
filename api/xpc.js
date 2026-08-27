@@ -19,6 +19,10 @@ const MAX_TIMEOUT_MS = 9223372036854
  */
 
 /**
+ * @typedef {'utf8'|'utf-8'|'hex'|'base64'} XPCBufferEncoding
+ */
+
+/**
  * @typedef {object} XPCMessageTimeoutDetail
  * @property {string | null} messageId
  * @property {string | null} reason
@@ -289,7 +293,7 @@ function installListener () {
     const detail = event?.detail
     if (!detail) return
 
-    const source = detail.source || detail.type
+    const source = detail.source || detail.type || detail.params?.source
     const params = detail.params || detail.data
     if (!source || !params) return
 
@@ -818,7 +822,7 @@ export function uint64 (value) {
 /**
  * Helper to encode binary payloads as XPC data.
  * @param {Buffer | ArrayBuffer | ArrayBufferView | string} value
- * @param {BufferEncoding} [encoding='utf8']
+ * @param {XPCBufferEncoding} [encoding='utf8']
  * @returns {object}
  */
 export function data (value, encoding = 'utf8') {

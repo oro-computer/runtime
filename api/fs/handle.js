@@ -46,10 +46,16 @@ function normalizePath (path) {
     return null
   }
 
-  if (URL.canParse(path)) {
-    const url = new URL(path)
-    if (url.origin === globalThis.location.origin) {
-      path = `./${url.pathname.slice(1)}`
+  if (typeof path === 'string') {
+    try {
+      if (URL.canParse(path)) {
+        const url = new URL(path)
+        if (url.origin === globalThis.location.origin) {
+          path = `./${url.pathname.slice(1)}`
+        }
+      }
+    } catch {
+      // Relative and platform-native paths are not required to parse as URLs.
     }
   }
 
@@ -94,6 +100,10 @@ export class FileHandle extends EventEmitter {
    * @return {FileHandle}
    */
   static from (id) {
+    if (id instanceof this) {
+      return id
+    }
+
     if (
       globalThis.FileSystemFileHandle &&
       id instanceof globalThis.FileSystemFileHandle
@@ -123,7 +133,7 @@ export class FileHandle extends EventEmitter {
       throw new Error('Invalid file descriptor.')
     }
 
-    return new this({ fd, id })
+    return new this({ fd, id, autoClose: false })
   }
 
   // TODO(trevnorris): The way the comment says to use mode doesn't match
@@ -279,7 +289,11 @@ export class FileHandle extends EventEmitter {
   [gc.finalizer] (options) {
     return {
       args: [this.id, options],
-      async handle (id) {
+      async handle (id, options) {
+        if (options?.autoClose === false) {
+          return
+        }
+
         if (fds.has(id)) {
           console.warn('Closing fs.FileHandle on garbage collection')
           await ipc.request(
@@ -676,7 +690,7 @@ export class FileHandle extends EventEmitter {
     }
 
     if (this.#fileSystemHandle) {
-      const file = this.#fileSystemHandle.getFile()
+      const file = await this.#fileSystemHandle.getFile()
       const blob = file.slice(position, position + length)
       const arrayBuffer = await blob.arrayBuffer()
       bytesRead = arrayBuffer.byteLength

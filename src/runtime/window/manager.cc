@@ -9,7 +9,6 @@
 
 using oro::runtime::config::isDebugEnabled;
 using oro::runtime::config::getUserConfig;
-using oro::runtime::config::getDevHost;
 
 using oro::runtime::string::parseStringList;
 using oro::runtime::string::trim;
@@ -182,7 +181,8 @@ namespace oro::runtime::window {
         window->close();
 
         this->windows[index] = nullptr;
-        auto* runtime = &static_cast<runtime::Runtime&>(this->context);
+        auto& runtimeReference = static_cast<runtime::Runtime&>(this->context);
+        auto* runtime = &runtimeReference;
         runtime->services.cdp.onWindowDestroyed(index);
         if (window->getOptions().shouldExitApplicationOnClose) {
           runtime->dispatcher.dispatch([runtime, index, window]() {
@@ -384,34 +384,42 @@ namespace oro::runtime::window {
   }
 
   SharedPointer<Manager::ManagedWindow> Manager::createDefaultWindow (const Window::Options& options) {
-    static const auto devHost = getDevHost();
-    auto windowOptions = Window::Options {
-      .minimizable = options.minimizable,
-      .maximizable = options.maximizable,
-      .resizable = options.resizable,
-      .closable = options.closable,
-      .frameless = options.frameless,
-      .utility = options.utility,
-      .shouldExitApplicationOnClose = true,
-      .height = options.height,
-      .width = options.width,
-      .titlebarStyle = options.titlebarStyle,
-      .windowControlOffsets = options.windowControlOffsets,
-      .backgroundColorLight = options.backgroundColorLight,
-      .backgroundColorDark = options.backgroundColorDark,
-      .followSystemTheme = options.followSystemTheme,
-      .preferDarkTheme = options.preferDarkTheme,
-    };
+    Window::Options windowOptions = this->options;
+
+    windowOptions.minimizable = options.minimizable;
+    windowOptions.maximizable = options.maximizable;
+    windowOptions.resizable = options.resizable;
+    windowOptions.closable = options.closable;
+    windowOptions.frameless = options.frameless;
+    windowOptions.utility = options.utility;
+    windowOptions.shouldExitApplicationOnClose = true;
+    windowOptions.shouldPreferServiceWorker = options.shouldPreferServiceWorker;
+    windowOptions.maxHeight = options.maxHeight;
+    windowOptions.minHeight = options.minHeight;
+    windowOptions.height = options.height;
+    windowOptions.maxWidth = options.maxWidth;
+    windowOptions.minWidth = options.minWidth;
+    windowOptions.width = options.width;
+    windowOptions.radius = options.radius;
+    windowOptions.margin = options.margin;
+    windowOptions.aspectRatio = options.aspectRatio;
+    windowOptions.titlebarStyle = options.titlebarStyle;
+    windowOptions.windowControlOffsets = options.windowControlOffsets;
+    windowOptions.backgroundColorLight = options.backgroundColorLight;
+    windowOptions.backgroundColorDark = options.backgroundColorDark;
+    windowOptions.followSystemTheme = options.followSystemTheme;
+    windowOptions.preferDarkTheme = options.preferDarkTheme;
+    windowOptions.resourcesDirectory = options.resourcesDirectory;
 
     windowOptions.index = 0;
-    windowOptions.headless = (
-      options.userConfig.contains("build_headless") &&
-      options.userConfig.at("build_headless") == "true"
-    );
-
     if (options.userConfig.size() > 0) {
       windowOptions.userConfig = options.userConfig;
     }
+
+    windowOptions.headless = (
+      windowOptions.userConfig.contains("build_headless") &&
+      windowOptions.userConfig.at("build_headless") == "true"
+    );
 
     return this->createWindow(windowOptions);
   }
@@ -421,7 +429,10 @@ namespace oro::runtime::window {
     JSON::Array result;
     for (auto index : indices) {
       auto window = this->getWindow(index);
-      if (window != nullptr) {
+      if (
+        window != nullptr &&
+        window->status < WindowStatus::WINDOW_CLOSING
+      ) {
         result[i++] = window->json();
       }
     }

@@ -55,6 +55,123 @@ function toComponentString (component) {
   return String(component)
 }
 
+function normalizeWindowsPath (input) {
+  const path = String(input).replace(/\//g, '\\')
+  const trailingSeparator = path.endsWith('\\')
+  const unc = path.startsWith('\\\\')
+  const drive = (path.match(windowsDriveRegex) || [])[0] || ''
+  let absolute = unc
+  let floor = 0
+  let prefix = ''
+  let source = path
+
+  if (unc) {
+    source = source.slice(2)
+  } else if (drive) {
+    source = source.slice(drive.length)
+    absolute = source.startsWith('\\')
+    prefix = drive
+  } else if (source.startsWith('\\')) {
+    absolute = true
+  }
+
+  source = source.replace(/^\\+/, '')
+  const output = []
+
+  if (unc) {
+    const root = source.split('\\').filter(Boolean).slice(0, 2)
+    output.push(...root)
+    floor = root.length
+    source = source.split('\\').filter(Boolean).slice(2).join('\\')
+  }
+
+  for (const part of source.split('\\')) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      if (output.length > floor && output.at(-1) !== '..') {
+        output.pop()
+      } else if (!absolute) {
+        output.push(part)
+      }
+      continue
+    }
+    output.push(part)
+  }
+
+  let normalized
+  if (unc) {
+    normalized = '\\\\' + output.join('\\')
+  } else if (absolute) {
+    normalized = prefix + '\\' + output.join('\\')
+  } else {
+    normalized = prefix + output.join('\\')
+  }
+
+  if (!normalized) normalized = absolute ? '\\' : '.'
+  if (trailingSeparator && !normalized.endsWith('\\')) normalized += '\\'
+  return normalized
+}
+
+function resolveWindowsPath (components) {
+  const joined = join({ sep: '\\' }, ...components)
+  if (!joined || joined === '.') return '\\'
+
+  const normalized = normalizeWindowsPath(joined)
+  if (normalized.startsWith('\\') || windowsDriveAndSlashesRegex.test(normalized)) {
+    return normalized
+  }
+
+  const drive = (normalized.match(windowsDriveRegex) || [])[0] || ''
+  if (drive) {
+    return drive + '\\' + normalized.slice(drive.length)
+  }
+
+  return '\\' + normalized
+}
+
+function splitWindowsPath (path) {
+  const normalized = normalizeWindowsPath(path)
+  if (normalized.startsWith('\\\\')) {
+    const components = normalized.slice(2).split('\\').filter(Boolean)
+    return {
+      root: '\\\\' + components.slice(0, 2).join('\\'),
+      components: components.slice(2)
+    }
+  }
+
+  const drive = (normalized.match(windowsDriveRegex) || [])[0] || ''
+  const root = drive || (normalized.startsWith('\\') ? '\\' : '')
+  const source = normalized.slice(drive.length).replace(/^\\+/, '')
+  return { root, components: source.split('\\').filter(Boolean) }
+}
+
+function relativeWindowsPath (from, to) {
+  const resolvedFrom = resolveWindowsPath([from])
+  const resolvedTo = resolveWindowsPath([to])
+  if (resolvedFrom.toLowerCase() === resolvedTo.toLowerCase()) return ''
+
+  const fromPath = splitWindowsPath(resolvedFrom)
+  const toPath = splitWindowsPath(resolvedTo)
+  if (fromPath.root.toLowerCase() !== toPath.root.toLowerCase()) {
+    return resolvedTo
+  }
+
+  let common = 0
+  while (
+    common < fromPath.components.length &&
+    common < toPath.components.length &&
+    fromPath.components[common].toLowerCase() ===
+      toPath.components[common].toLowerCase()
+  ) {
+    common++
+  }
+
+  return [
+    ...Array(fromPath.components.length - common).fill('..'),
+    ...toPath.components.slice(common)
+  ].join('\\')
+}
+
 /**
  * The path.resolve() method resolves a sequence of paths or path segments into an absolute path.
  * @param {object} options
@@ -64,6 +181,8 @@ function toComponentString (component) {
  */
 export function resolve (options, ...components) {
   const { sep } = options
+  if (sep === '\\') return resolveWindowsPath(components)
+
   let resolved = ''
   while (components.length) {
     let component = toComponentString(components.shift()).replace(/\\/g, '/')
@@ -137,6 +256,8 @@ export function origin () {
  */
 export function relative (options, from, to) {
   const { sep } = options
+  if (sep === '\\') return relativeWindowsPath(from, to)
+
   if (from === to) return ''
   from = resolve(options, from)
   to = resolve(options, to)
@@ -213,7 +334,9 @@ export function join (options, ...components) {
     // Normalize separators on Windows
     if (isWindows) s = s.replace(/\//g, sep)
 
-    if (!url && URL.canParse(s)) {
+    const isWindowsPath =
+      isWindows && (windowsDriveRegex.test(s) || s.startsWith('\\'))
+    if (!url && !isWindowsPath && URL.canParse(s)) {
       // Capture base URL and seed with its pathname components
       url = new URL(s)
       const baseParts = url.pathname.split('/').filter(Boolean)
@@ -337,6 +460,7 @@ export function dirname (options, path) {
   }
 
   if (drive) {
+    if (resolved === '.') return `${drive}${sep}`
     return `${drive}${sep}${resolved}`
   }
 
@@ -376,6 +500,8 @@ export function extname (options, path) {
  */
 export function normalize (options, path) {
   const { sep } = options
+  if (sep === '\\') return normalizeWindowsPath(path)
+
   path = String(path)
   const [drive] = path.match(windowsDriveRegex) || []
   const isWindows = sep === '\\'

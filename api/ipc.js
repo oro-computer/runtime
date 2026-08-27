@@ -1388,15 +1388,16 @@ export async function send (command, value, options = null) {
     }
   }
 
-  if (options?.bytes) {
-    postMessage(uri, options.bytes)
-  } else {
-    postMessage(uri)
-  }
-
   return await new Promise((resolve) => {
     const event = `resolve-${params.get('index')}-${params.get('seq')}`
     globalThis.addEventListener(event, onresolve, { once: true })
+
+    if (options?.bytes) {
+      postMessage(uri, options.bytes)
+    } else {
+      postMessage(uri)
+    }
+
     function onresolve (event) {
       const result = Result.from(event.detail, null, command)
       if (debug.enabled) {
@@ -1487,13 +1488,7 @@ export async function write (command, value, buffer, options) {
 
   request.responseType = options?.responseType ?? ''
   request.open('POST', uri, true)
-  await request.send(buffer || null)
-
-  if (debug.enabled) {
-    debug.log('ipc.write:', uri, buffer || null)
-  }
-
-  return await new Promise((resolve) => {
+  const pending = new Promise((resolve) => {
     if (options?.timeout) {
       timeout = setTimeout(
         () => {
@@ -1561,6 +1556,14 @@ export async function write (command, value, buffer, options) {
       resolve(Result.from(null, err, command, headers))
     }
   })
+
+  await request.send(buffer || null)
+
+  if (debug.enabled) {
+    debug.log('ipc.write:', uri, buffer || null)
+  }
+
+  return await pending
 }
 
 /**
@@ -1632,13 +1635,7 @@ export async function request (command, value, options = null) {
 
   request.responseType = options?.responseType ?? ''
   request.open('GET', uri)
-  request.send(null)
-
-  if (debug.enabled) {
-    debug.log('ipc.request:', uri)
-  }
-
-  return await new Promise((resolve) => {
+  const pending = new Promise((resolve) => {
     if (options?.timeout) {
       timeout = setTimeout(
         () => {
@@ -1725,6 +1722,14 @@ export async function request (command, value, options = null) {
       resolve(Result.from(null, err, command, headers))
     }
   })
+
+  request.send(null)
+
+  if (debug.enabled) {
+    debug.log('ipc.request:', uri)
+  }
+
+  return await pending
 }
 
 /**

@@ -551,6 +551,25 @@ namespace oro::runtime::config {
       flattenTomlValue(document, "", separator, flattened);
       return flattened;
     }
+
+    Map<String, String> normalizeDynamicConfigKeys (
+      const Map<String, String>& flattened,
+      const String& separator
+    ) {
+      Map<String, String> normalized;
+      for (const auto& entry : flattened) {
+        // Per-model lookups normalize the model-name segment through key().
+        // Preserve every other flattened key because names such as extension
+        // identifiers may intentionally contain hyphens.
+        const auto modelPrefix = "ai_llm_model_";
+        if (separator == "_" && entry.first.starts_with(modelPrefix)) {
+          normalized[normalizeKeySegment(entry.first)] = entry.second;
+        } else {
+          normalized[entry.first] = entry.second;
+        }
+      }
+      return normalized;
+    }
   } // namespace
 
   Map<String, String> parseUserConfigSource (
@@ -564,9 +583,15 @@ namespace oro::runtime::config {
 
     switch (format) {
       case UserConfigFormat::Ini:
-        return INI::parse(source, keyPathSeparator);
+        return normalizeDynamicConfigKeys(
+          INI::parse(source, keyPathSeparator),
+          keyPathSeparator
+        );
       case UserConfigFormat::Toml:
-        return parseTomlSource(source, keyPathSeparator);
+        return normalizeDynamicConfigKeys(
+          parseTomlSource(source, keyPathSeparator),
+          keyPathSeparator
+        );
     }
 
     return {};

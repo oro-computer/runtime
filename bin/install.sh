@@ -4,6 +4,49 @@ declare root=""
 
 root="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
 
+function usage() {
+  cat <<'EOF'
+Usage: ./bin/install.sh [options]
+
+Build and stage the Oro Runtime source tree.
+
+Options:
+  -h, --help                 Show this help and exit
+  -f, --force                Force dependency and runtime rebuild work
+  -y, --yes-deps             Accept supported dependency setup prompts
+      --arch <architecture>  Override the detected host architecture
+      --link                 Link the staged runtime into the install prefix
+      --no-android-fte       Skip interactive Android first-time setup; this is
+                             not a reliable Android artifact exclusion when an
+                             Android toolchain is already configured
+      --ignore-header-mtimes Do not rebuild solely for newer header mtimes
+
+Independent mobile target exclusions:
+  NO_ANDROID=<non-empty>     Disable only Android setup, ABI libraries, and
+                             staged Android artifacts. This does not disable
+                             iOS or any desktop target.
+  NO_IOS=<non-empty>         Disable only iOS and iOS Simulator dependency,
+                             library, prebuild, and staging work on macOS. This
+                             does not disable Android or macOS desktop.
+
+These are presence flags: 0 and false are non-empty and still disable the
+named target. Leave a variable unset or empty to enable that target. Set both
+for an explicitly desktop-only source build:
+
+  NO_ANDROID=1 NO_IOS=1 ./bin/install.sh
+
+The variables control runtime source bootstrap; they do not select an
+application target for oroc build --platform. See docs/BUILD_ENVIRONMENT.md.
+EOF
+}
+
+for arg in "$@"; do
+  if [[ "$arg" == "--help" ]] || [[ "$arg" == "-h" ]]; then
+    usage
+    exit 0
+  fi
+done
+
 source "$root/bin/functions.sh"
 source "$root/bin/android-functions.sh"
 source "$root/bin/runtime-artifacts.sh"
@@ -26,10 +69,6 @@ fi
 
 if [[ -n "$NO_ANDROID" ]]; then
   unset BUILD_ANDROID
-fi
-
-if [[ -z "$NO_IOS" ]]; then
-  BUILD_IOS=1
 fi
 
 declare arch="$(host_arch)"
@@ -357,7 +396,7 @@ function _wait_for_pid_or_die () {
 if [[ "$host" != "Win32" ]]; then
   if ! quiet command -v sudo; then
     sudo () {
-      $@
+      "$@"
       return $?
     }
   fi
@@ -455,19 +494,22 @@ function _build_cli {
   fi
 
   if [[ -n "$VERBOSE" ]]; then
-    echo "# cli libs: ${libs[@]}, $(uname -s)"
+    echo "# cli libs: ${libs[*]}, $(uname -s)"
   fi
 
-  local ldflags=($("$root/bin/ldflags.sh" --arch "$arch" --platform $platform ${libs[@]}))
+  local -a ldflags=()
+  read -r -a ldflags <<< "$("$root/bin/ldflags.sh" --arch "$arch" --platform "$platform" "${libs[@]}")"
   local cflags=($("$root/bin/cflags.sh"))
 
   local test_headers=()
   if [[ -z "$ignore_header_mtimes" ]]; then
-    test_headers+=("$(find "$src"/cli/*.hh 2>/dev/null)")
+    while IFS= read -r header; do
+      test_headers+=("$header")
+    done < <(find "$src"/cli -name '*.hh' 2>/dev/null)
   fi
   test_headers+=("$src"/../VERSION.txt)
   local newest_mtime=0
-  newest_mtime="$(latest_mtime ${test_headers[@]})"
+  newest_mtime="$(latest_mtime "${test_headers[@]}")"
 
   local win_static_libs=()
   local static_libs=()
@@ -495,7 +537,7 @@ function _build_cli {
     quiet "$CXX" "${cflags[@]}"  \
       -c "${sources[$i]}"      \
       -o "${outputs[$i]}"
-    die $? "$CXX ${cflags[@]} -c \"${sources[$i]}\" -o \"${outputs[$i]}\""
+    die $? "$CXX ${cflags[*]} -c \"${sources[$i]}\" -o \"${outputs[$i]}\""
   done
 
   local exe=""
@@ -581,7 +623,7 @@ function _build_cli {
       "${ldflags[@]}"                            \
       -o "$oroc_output"
 
-    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[@]} \"${ldflags[@]}\" -o \"$BUILD_DIR/$arch-$platform/bin/oroc\""
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[*]} ${ldflags[*]} -o \"$BUILD_DIR/$arch-$platform/bin/oroc\""
     echo "ok - built the cli for desktop"
   fi
 }
@@ -627,10 +669,22 @@ function _get_web_view2() {
 
   local tmp=$(mktemp -d)
   local pwd=$(pwd)
+  local webview2_sha256="805c79e05184fab18c9fe7b8ba820c598399b97adc1fbf5b0ea490efad91d5b8"
 
   echo "# Downloading Webview2"
 
-  curl -L https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2592.51 --output "$tmp/webview2.zip"
+  curl --fail --location --silent --show-error https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2592.51 --output "$tmp/webview2.zip"
+  local observed_webview2_sha256
+  if command -v sha256sum >/dev/null 2>&1; then
+    observed_webview2_sha256="$(sha256sum "$tmp/webview2.zip" | awk '{print $1}')"
+  else
+    observed_webview2_sha256="$(shasum -a 256 "$tmp/webview2.zip" | awk '{print $1}')"
+  fi
+  if [[ "$observed_webview2_sha256" != "$webview2_sha256" ]]; then
+    echo >&2 "not ok - WebView2 archive checksum mismatch"
+    rm -rf "$tmp"
+    return 1
+  fi
   cd "$tmp" || exit 1
   unzip -q "$tmp/webview2.zip"
   mkdir -p "$BUILD_DIR/include"
@@ -655,10 +709,12 @@ function _prebuild_desktop_main () {
 
   local test_headers=()
   if [[ -z "$ignore_header_mtimes" ]]; then
-    test_headers+=("$(find "$src" -name '*.hh' 2>/dev/null)")
+    while IFS= read -r header; do
+      test_headers+=("$header")
+    done < <(find "$src" -name '*.hh' 2>/dev/null)
   fi
   local newest_mtime=0
-  newest_mtime="$(latest_mtime ${test_headers[@]})"
+  newest_mtime="$(latest_mtime "${test_headers[@]}")"
 
   local cflags=($("$root/bin/cflags.sh"))
   local test_sources=($(find "$src"/desktop/*.{cc,mm} 2>/dev/null))
@@ -682,7 +738,7 @@ function _prebuild_desktop_main () {
     quiet "$CXX" "${cflags[@]}" \
       -c "${sources[$i]}"       \
       -o "${outputs[$i]}"
-    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[@]} -c ${sources[$i]} -o ${outputs[$i]}"
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[*]} -c ${sources[$i]} -o ${outputs[$i]}"
   done
 
   echo "ok - precompiled main program for desktop"
@@ -719,7 +775,7 @@ function _prebuild_ios_main () {
     "$clang" "${cflags[@]}" \
       -c "${sources[$i]}"   \
       -o "${outputs[$i]}"
-    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[@]} -c ${sources[$i]} -o ${outputs[$i]}"
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[*]} -c ${sources[$i]} -o ${outputs[$i]}"
   done
   echo "ok - precompiled main program for iOS"
 }
@@ -755,7 +811,7 @@ function _prebuild_ios_simulator_main () {
     quiet "$clang" "${cflags[@]}" \
       -c "${sources[$i]}"         \
       -o "${outputs[$i]}"
-    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$clang ${cflags[@]} -c \"${sources[$i]}\" -o \"${outputs[$i]}\""
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$clang ${cflags[*]} -c \"${sources[$i]}\" -o \"${outputs[$i]}\""
   done
   echo "ok - precompiled main program for iOS Simulator ($arch)"
 }
@@ -775,7 +831,7 @@ function _prepare {
   mkdir -p "$ORO_HOME/share/doc/oroc"
   mkdir -p "$ORO_HOME"/{lib$d,objects}/"$arch-desktop"
 
-  if [[ "$host" = "Darwin" ]]; then
+  if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
     mkdir -p "$ORO_HOME"/{lib$d,objects}/{arm64-iPhoneOS,x86_64-iPhoneSimulator,arm64-iPhoneSimulator}
   fi
 
@@ -831,6 +887,33 @@ function _prepare {
     return 0
   }
 
+  function _clone_pinned_dependency {
+    local name="$1"
+    local url="$2"
+    local ref="$3"
+    local expected_revision="$4"
+    local destination="$5"
+
+    if [[ ! "$expected_revision" =~ ^[0-9a-f]{40}$ ]]; then
+      echo >&2 "not ok - $name expected revision must be a full 40-character Git commit"
+      return 1
+    fi
+
+    if ! git clone --depth=1 --branch "$ref" "$url" "$destination" > /dev/null 2>&1; then
+      return 1
+    fi
+
+    local observed_revision
+    observed_revision="$(git -C "$destination" rev-parse HEAD 2>/dev/null)"
+    if [[ "$observed_revision" != "$expected_revision" ]]; then
+      echo >&2 "not ok - $name revision mismatch: expected $expected_revision, found ${observed_revision:-unknown}"
+      rm -rf "$destination"
+      return 1
+    fi
+
+    return 0
+  }
+
   if [ ! -f "$BUILD_DIR/sqlite/sqlite3.c" ]; then
     if [[ -n "${SQLITE_SOURCE_DIR:-}" ]]; then
       if [ -d "$SQLITE_SOURCE_DIR" ]; then
@@ -862,6 +945,26 @@ function _prepare {
     fi
   fi
 
+  if [ ! -f "$BUILD_DIR/jsoncons/include/jsoncons/json.hpp" ]; then
+    rm -rf "$BUILD_DIR/jsoncons"
+    local rc=1
+    if [[ -n "${JSONCONS_SOURCE_DIR:-}" ]] &&
+       [ -f "$JSONCONS_SOURCE_DIR/include/jsoncons/json.hpp" ]; then
+      cp -r "$JSONCONS_SOURCE_DIR" "$BUILD_DIR/jsoncons" > /dev/null 2>&1
+      rc=$?
+    else
+      local JSONCONS_GIT_URL="${JSONCONS_GIT:-https://github.com/danielaparker/jsoncons.git}"
+      local JSONCONS_GIT_TAG="${JSONCONS_GIT_TAG:-v1.7.0}"
+      local JSONCONS_GIT_REVISION="${JSONCONS_GIT_REVISION:-cb54cdc3134a62634466bf7bcd24f1a906f4ef25}"
+      _clone_pinned_dependency "jsoncons" "$JSONCONS_GIT_URL" "$JSONCONS_GIT_TAG" "$JSONCONS_GIT_REVISION" "$BUILD_DIR/jsoncons"
+      rc=$?
+    fi
+
+    die ${rc:-1} "not ok - unable to obtain jsoncons sources (set JSONCONS_SOURCE_DIR to a local checkout or enable network)"
+
+    rm -rf "$BUILD_DIR/jsoncons/.git" 2>/dev/null
+  fi
+
   if [ ! -d "$BUILD_DIR/libsodium" ]; then
     local rc=1
     if [[ -n "$LIBSODIUM_SOURCE_DIR" ]] && [ -d "$LIBSODIUM_SOURCE_DIR" ]; then
@@ -870,15 +973,12 @@ function _prepare {
     else
       local LIBSODIUM_GIT_URL="${LIBSODIUM_GIT:-https://github.com/jedisct1/libsodium.git}"
       local LIBSODIUM_GIT_TAG="${LIBSODIUM_GIT_TAG:-1.0.20-RELEASE}"
-      git clone --depth=1 "$LIBSODIUM_GIT_URL" --branch "$LIBSODIUM_GIT_TAG" "$BUILD_DIR/libsodium" > /dev/null 2>&1
+      local LIBSODIUM_GIT_REVISION="${LIBSODIUM_GIT_REVISION:-9511c982fb1d046470a8b42aa36556cdb7da15de}"
+      _clone_pinned_dependency "libsodium" "$LIBSODIUM_GIT_URL" "$LIBSODIUM_GIT_TAG" "$LIBSODIUM_GIT_REVISION" "$BUILD_DIR/libsodium"
       rc=$?
     fi
 
     die ${rc:-1} "not ok - unable to obtain libsodium sources (set LIBSODIUM_SOURCE_DIR to a local checkout or enable network)"
-  fi
-
-  if [ -d "$BUILD_DIR/libsodium/.git" ]; then
-    (cd "$BUILD_DIR/libsodium" && git checkout 1.0.20-RELEASE >/dev/null 2>&1) || die $? "not ok - unable to checkout libsodium tag 1.0.20-RELEASE"
   fi
 
   if [ ! -d "$BUILD_DIR/zlib" ]; then
@@ -892,7 +992,8 @@ function _prepare {
     else
       local ZLIB_GIT_URL="${ZLIB_GIT:-https://github.com/madler/zlib.git}"
       local ZLIB_GIT_TAG="${ZLIB_GIT_TAG:-v1.3.1}"
-      git clone --depth=1 --branch "$ZLIB_GIT_TAG" "$ZLIB_GIT_URL" "$BUILD_DIR/zlib" > /dev/null 2>&1
+      local ZLIB_GIT_REVISION="${ZLIB_GIT_REVISION:-51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf}"
+      _clone_pinned_dependency "zlib" "$ZLIB_GIT_URL" "$ZLIB_GIT_TAG" "$ZLIB_GIT_REVISION" "$BUILD_DIR/zlib"
       rc=$?
     fi
 
@@ -941,7 +1042,8 @@ function _prepare {
     if (( rc != 0 )); then
       local LIBUV_GIT_URL="${LIBUV_GIT:-https://github.com/libuv/libuv.git}"
       local LIBUV_GIT_TAG="${LIBUV_GIT_TAG:-v1.52.1}"
-      git clone --depth=1 --branch "$LIBUV_GIT_TAG" "$LIBUV_GIT_URL" "$BUILD_DIR/uv" > /dev/null 2>&1
+      local LIBUV_GIT_REVISION="${LIBUV_GIT_REVISION:-1cfa32ff59c076ffb6ed735bbc8c18361558661f}"
+      _clone_pinned_dependency "libuv" "$LIBUV_GIT_URL" "$LIBUV_GIT_TAG" "$LIBUV_GIT_REVISION" "$BUILD_DIR/uv"
       rc=$?
     else
       if [[ -n "$VERBOSE" ]]; then
@@ -968,7 +1070,8 @@ function _prepare {
     else
       local LIBUSB_GIT_URL="${LIBUSB_GIT:-https://github.com/libusb/libusb.git}"
       local LIBUSB_GIT_TAG="${LIBUSB_GIT_TAG:-v1.0.29}"
-      git clone --depth=1 "$LIBUSB_GIT_URL" --branch "$LIBUSB_GIT_TAG" "$BUILD_DIR/libusb" > /dev/null 2>&1
+      local LIBUSB_GIT_REVISION="${LIBUSB_GIT_REVISION:-15a7ebb4d426c5ce196684347d2b7cafad862626}"
+      _clone_pinned_dependency "libusb" "$LIBUSB_GIT_URL" "$LIBUSB_GIT_TAG" "$LIBUSB_GIT_REVISION" "$BUILD_DIR/libusb"
       rc=$?
     fi
 
@@ -985,7 +1088,8 @@ function _prepare {
     else
       local ASN1C_GIT_URL="${ASN1C_GIT:-https://github.com/vlm/asn1c.git}"
       local ASN1C_GIT_TAG="${ASN1C_GIT_TAG:-v0.9.28}"
-      git clone --depth=1 --branch "$ASN1C_GIT_TAG" "$ASN1C_GIT_URL" "$BUILD_DIR/asn1c" > /dev/null 2>&1
+      local ASN1C_GIT_REVISION="${ASN1C_GIT_REVISION:-792b22b91282c28f5fd3f0574542fcb6827b72d3}"
+      _clone_pinned_dependency "asn1c" "$ASN1C_GIT_URL" "$ASN1C_GIT_TAG" "$ASN1C_GIT_REVISION" "$BUILD_DIR/asn1c"
       rc=$?
     fi
 
@@ -1016,10 +1120,12 @@ function _prepare {
       else
         local LIBIPFS_GIT_URL="${LIBIPFS_GIT:-https://github.com/scala-network/libipfs.git}"
         local LIBIPFS_GIT_BRANCH="${LIBIPFS_GIT_BRANCH:-v3.0.1}"
+        local LIBIPFS_GIT_REVISION="${LIBIPFS_GIT_REVISION:-4169320a81aaca8ea29052a79a0c0d6c1af9f1d5}"
         if [[ -n "$LIBIPFS_GIT_BRANCH" ]]; then
-          git clone --depth=1 --branch "$LIBIPFS_GIT_BRANCH" "$LIBIPFS_GIT_URL" "$BUILD_DIR/libipfs" > /dev/null 2>&1
+          _clone_pinned_dependency "libipfs" "$LIBIPFS_GIT_URL" "$LIBIPFS_GIT_BRANCH" "$LIBIPFS_GIT_REVISION" "$BUILD_DIR/libipfs"
         else
-          git clone --depth=1 "$LIBIPFS_GIT_URL" "$BUILD_DIR/libipfs" > /dev/null 2>&1
+          echo >&2 "not ok - LIBIPFS_GIT_BRANCH must identify the revision being verified"
+          false
         fi
         rc=$?
       fi
@@ -1040,7 +1146,8 @@ function _prepare {
     else
       local CRSQLITE_GIT_URL="${CRSQLITE_GIT:-https://github.com/superfly/cr-sqlite.git}"
       local CRSQLITE_GIT_TAG="${CRSQLITE_GIT_TAG:-prebuild-test.main-8b0b67d6}"
-      git clone --depth=1 "$CRSQLITE_GIT_URL" --branch "$CRSQLITE_GIT_TAG" "$BUILD_DIR/cr-sqlite" > /dev/null 2>&1
+      local CRSQLITE_GIT_REVISION="${CRSQLITE_GIT_REVISION:-8b0b67d6553d425ab5b6e30afd18b4a8eff61cf3}"
+      _clone_pinned_dependency "cr-sqlite" "$CRSQLITE_GIT_URL" "$CRSQLITE_GIT_TAG" "$CRSQLITE_GIT_REVISION" "$BUILD_DIR/cr-sqlite"
       rc=$?
     fi
 
@@ -1068,7 +1175,8 @@ function _prepare {
       else
         local MBEDTLS_GIT_URL="${MBEDTLS_GIT:-https://github.com/Mbed-TLS/mbedtls.git}"
         local MBEDTLS_GIT_BRANCH="${MBEDTLS_GIT_BRANCH:-mbedtls-3.6.4}"
-        git clone --depth=1 "$MBEDTLS_GIT_URL" --branch "$MBEDTLS_GIT_BRANCH" "$BUILD_DIR/mbedtls" > /dev/null 2>&1
+        local MBEDTLS_GIT_REVISION="${MBEDTLS_GIT_REVISION:-c765c831e5c2a0971410692f92f7a81d6ec65ec2}"
+        _clone_pinned_dependency "mbedtls" "$MBEDTLS_GIT_URL" "$MBEDTLS_GIT_BRANCH" "$MBEDTLS_GIT_REVISION" "$BUILD_DIR/mbedtls"
         rc=$?
       fi
 
@@ -1102,7 +1210,8 @@ function _prepare {
     else
       local LLAMA_GIT_URL="${LLAMA_GIT:-https://github.com/ggml-org/llama.cpp.git}"
       local LLAMA_GIT_BRANCH="${LLAMA_GIT_BRANCH:-b7117}"
-      git clone --depth=1 "$LLAMA_GIT_URL" --branch "$LLAMA_GIT_BRANCH" "$BUILD_DIR/llama" > /dev/null 2>&1
+      local LLAMA_GIT_REVISION="${LLAMA_GIT_REVISION:-2286a360ff5c6b5edd33e53b5773bdf67bc25d23}"
+      _clone_pinned_dependency "llama.cpp" "$LLAMA_GIT_URL" "$LLAMA_GIT_BRANCH" "$LLAMA_GIT_REVISION" "$BUILD_DIR/llama"
       rc=$?
     fi
     # rm -rf $BUILD_DIR/llama/.git
@@ -1118,7 +1227,8 @@ function _prepare {
     else
       local WHISPER_GIT_URL="${WHISPER_GIT:-https://github.com/ggml-org/whisper.cpp.git}"
       local WHISPER_GIT_TAG="${WHISPER_GIT_TAG:-v1.8.2}"
-      git clone --depth=1 "$WHISPER_GIT_URL" --branch "$WHISPER_GIT_TAG" "$BUILD_DIR/whisper.cpp" > /dev/null 2>&1
+      local WHISPER_GIT_REVISION="${WHISPER_GIT_REVISION:-4979e04f5dcaccb36057e059bbaed8a2f5288315}"
+      _clone_pinned_dependency "whisper.cpp" "$WHISPER_GIT_URL" "$WHISPER_GIT_TAG" "$WHISPER_GIT_REVISION" "$BUILD_DIR/whisper.cpp"
       rc=$?
     fi
 
@@ -1127,13 +1237,14 @@ function _prepare {
 
   if [ ! -d "$BUILD_DIR/iroh" ]; then
     local rc=1
-    if [[ -n "$IROH_SOURCE_DIR" ]] && [ -d "$IROH_SOURCE_DIR" ]]; then
+    if [[ -n "$IROH_SOURCE_DIR" ]] && [ -d "$IROH_SOURCE_DIR" ]; then
       cp -r "$IROH_SOURCE_DIR" "$BUILD_DIR/iroh" > /dev/null 2>&1
       rc=$?
     else
       local IROH_GIT_URL="${IROH_GIT_URL:-https://github.com/n0-computer/iroh.git}"
       local IROH_GIT_REF="${IROH_GIT_REF:-v0.93.2}"
-      git clone --depth=1 --branch "$IROH_GIT_REF" "$IROH_GIT_URL" "$BUILD_DIR/iroh" > /dev/null 2>&1
+      local IROH_GIT_REVISION="${IROH_GIT_REVISION:-b39b325f25779a29b60b77c896d81f38f06ed764}"
+      _clone_pinned_dependency "iroh" "$IROH_GIT_URL" "$IROH_GIT_REF" "$IROH_GIT_REVISION" "$BUILD_DIR/iroh"
       rc=$?
     fi
 
@@ -1435,9 +1546,19 @@ function _install {
 
     local home_doc_dir="$ORO_HOME/share/doc/oroc"
     mkdir -p "$home_doc_dir"
-    rm -f "$home_doc_dir"/*
+    for existing_doc in "$home_doc_dir"/*; do
+      if [[ -f "$existing_doc" ]] || [[ -L "$existing_doc" ]]; then
+        rm -f "$existing_doc"
+      fi
+    done
+    mkdir -p "$home_doc_dir/docs"
+    rm -f "$home_doc_dir/docs"/*
     local runtime_docs=(
       "$root/README.md:README.md"
+      "$root/LICENSE.txt:LICENSE.txt"
+      "$root/NOTICE:NOTICE"
+      "$root/THIRD_PARTY_NOTICES.md:THIRD_PARTY_NOTICES.md"
+      "$root/docs/BUILD_ENVIRONMENT.md:docs/BUILD_ENVIRONMENT.md"
       "$root/docs/LEGACY_LIMITATIONS.md:LEGACY_LIMITATIONS.md"
       "$root/docs/MCP.md:MCP.md"
       "$root/docs/llms.txt:llms.txt"
@@ -1448,12 +1569,68 @@ function _install {
       if [[ ! -f "$source_doc" ]]; then
         continue
       fi
+      mkdir -p "$(dirname "$home_doc_dir/$dest_name")"
       if (( do_link == 1 )); then
         ln -sf "$source_doc" "$home_doc_dir/$dest_name"
       else
         cp -fp "$source_doc" "$home_doc_dir/$dest_name"
       fi
     done
+
+    if (( do_link == 1 )); then
+      ln -sf "$root/LICENSE.txt" "$ORO_HOME/LICENSE.txt"
+      ln -sf "$root/NOTICE" "$ORO_HOME/NOTICE"
+      ln -sf "$root/THIRD_PARTY_NOTICES.md" "$ORO_HOME/THIRD_PARTY_NOTICES.md"
+    else
+      cp -fp "$root/LICENSE.txt" "$ORO_HOME/LICENSE.txt"
+      cp -fp "$root/NOTICE" "$ORO_HOME/NOTICE"
+      cp -fp "$root/THIRD_PARTY_NOTICES.md" "$ORO_HOME/THIRD_PARTY_NOTICES.md"
+    fi
+
+    local third_party_license_dir="$ORO_HOME/share/licenses/oro-runtime"
+    mkdir -p "$third_party_license_dir"
+    rm -f "$third_party_license_dir"/*
+    local third_party_licenses=(
+      "asn1c-LICENSE:$BUILD_DIR/asn1c/LICENSE"
+      "cr-sqlite-LICENSE:$BUILD_DIR/cr-sqlite/LICENSE"
+      "iroh-LICENSE-APACHE:$BUILD_DIR/iroh/LICENSE-APACHE"
+      "iroh-LICENSE-MIT:$BUILD_DIR/iroh/LICENSE-MIT"
+      "jsoncons-LICENSE:$BUILD_DIR/jsoncons/LICENSE"
+      "libipfs-LICENSE:$BUILD_DIR/libipfs/LICENSE"
+      "libsodium-LICENSE:$BUILD_DIR/libsodium/LICENSE"
+      "libusb-COPYING:$BUILD_DIR/libusb/COPYING"
+      "libuv-LICENSE:$BUILD_DIR/uv/LICENSE"
+      "libuv-LICENSE-docs:$BUILD_DIR/uv/LICENSE-docs"
+      "libuv-LICENSE-extra:$BUILD_DIR/uv/LICENSE-extra"
+      "llama.cpp-LICENSE:$BUILD_DIR/llama/LICENSE"
+      "llama.cpp-LICENSE-curl:$BUILD_DIR/llama/licenses/LICENSE-curl"
+      "llama.cpp-LICENSE-httplib:$BUILD_DIR/llama/licenses/LICENSE-httplib"
+      "llama.cpp-LICENSE-jsonhpp:$BUILD_DIR/llama/licenses/LICENSE-jsonhpp"
+      "llama.cpp-LICENSE-linenoise:$BUILD_DIR/llama/licenses/LICENSE-linenoise"
+      "mbedtls-LICENSE:$BUILD_DIR/mbedtls/LICENSE"
+      "mbedtls-framework-LICENSE:$BUILD_DIR/mbedtls/framework/LICENSE"
+      "whisper.cpp-LICENSE:$BUILD_DIR/whisper.cpp/LICENSE"
+      "zlib-LICENSE:$BUILD_DIR/zlib/LICENSE"
+    )
+    for license_entry in "${third_party_licenses[@]}"; do
+      local license_name="${license_entry%%:*}"
+      local license_source="${license_entry#*:}"
+      if [[ ! -f "$license_source" ]]; then
+        continue
+      fi
+      if (( do_link == 1 )); then
+        ln -sf "$license_source" "$third_party_license_dir/$license_name"
+      else
+        cp -fp "$license_source" "$third_party_license_dir/$license_name"
+      fi
+    done
+
+    if [[ "${ORO_SKIP_IROH:-0}" != "1" ]] && command -v cargo >/dev/null 2>&1; then
+      node "$root/bin/collect-cargo-licenses.js" \
+        "$root/rust/oro-iroh" \
+        "$third_party_license_dir"
+      die $? "not ok - unable to collect Cargo dependency licenses"
+    fi
   fi
 }
 
@@ -1550,6 +1727,9 @@ function _install_cli {
           fi
 
           for doc in "$source_doc_dir"/*; do
+            if [[ -d "$doc" ]] && [[ ! -L "$doc" ]]; then
+              continue
+            fi
             local doc_name="$(basename "$doc")"
             local link="$doc_dir/$doc_name"
             echo "# linking documentation to $link"
@@ -1565,6 +1745,33 @@ function _install_cli {
 
             die $rc "not ok - unable to link documentation into '$link'"
           done
+
+          local source_build_environment="$source_doc_dir/docs/BUILD_ENVIRONMENT.md"
+          if [[ -f "$source_build_environment" ]]; then
+            local build_doc_dir="$doc_dir/docs"
+            if [[ ! -d "$build_doc_dir" ]]; then
+              local status="$(mkdir -p "$build_doc_dir" 2>&1)"
+              local rc=$?
+              if [[ " $status " =~ " Permission denied " ]]; then
+                echo "warn - Failed to create documentation directory '$build_doc_dir': Trying 'sudo'"
+                sudo mkdir -p "$build_doc_dir"
+                die $? "not ok - unable to create documentation directory '$build_doc_dir'"
+              fi
+              die $rc "not ok - unable to create documentation directory '$build_doc_dir'"
+            fi
+
+            local build_doc_link="$build_doc_dir/BUILD_ENVIRONMENT.md"
+            echo "# linking documentation to $build_doc_link"
+            local status="$(ln -sf "$source_build_environment" "$build_doc_link" 2>&1)"
+            local rc=$?
+            if [[ " $status " =~ " Permission denied " ]]; then
+              echo "warn - Failed to link documentation to '$build_doc_link': Trying 'sudo'"
+              sudo rm -f "$build_doc_link"
+              sudo ln -sf "$source_build_environment" "$build_doc_link"
+              die $? "not ok - unable to link documentation into '$build_doc_link'"
+            fi
+            die $rc "not ok - unable to link documentation into '$build_doc_link'"
+          fi
         fi
       fi
     fi
@@ -2276,13 +2483,17 @@ function _compile_iroh_ffi {
   fi
 
   echo "# building oro-iroh bindings for $platform ($arch)..."
-  (cd "$crate_dir" && cargo build --release)
+  (cd "$crate_dir" && cargo build --release --locked)
   local rc=$?
   if (( rc != 0 )); then
     die $rc "not ok - oro-iroh cargo build ($platform)"
   fi
 
-  local release_dir="$crate_dir/target/release"
+  local cargo_target_dir="${CARGO_TARGET_DIR:-$crate_dir/target}"
+  if [[ "$cargo_target_dir" != /* ]] && [[ ! "$cargo_target_dir" =~ ^[A-Za-z]:[\\/] ]]; then
+    cargo_target_dir="$crate_dir/$cargo_target_dir"
+  fi
+  local release_dir="$cargo_target_dir/release"
   mkdir -p "$BUILD_DIR/$arch-$platform/lib"
   mkdir -p "$BUILD_DIR/include/iroh"
   mkdir -p "$BUILD_DIR/pkgconfig"
@@ -2324,10 +2535,15 @@ function _compile_crsqlite_loadable {
     die 1 "not ok - cargo not found; cr-sqlite build requires a Rust toolchain"
   fi
 
+  local crsqlite_cargo_target_dir="$BUILD_DIR/cr-sqlite/core/rs/bundle_static/target"
+
   case "$platform" in
     desktop)
       echo "# building cr-sqlite loadable extension for $platform ($arch)..."
-      (cd "$BUILD_DIR/cr-sqlite/core" && quiet make -j"$CPU_CORES" loadable)
+      (
+        cd "$BUILD_DIR/cr-sqlite/core" &&
+        CARGO_TARGET_DIR="$crsqlite_cargo_target_dir" quiet make -j"$CPU_CORES" loadable
+      )
       local rc=$?
       if (( rc != 0 )); then
         die $rc "not ok - cr-sqlite loadable extension build ($platform)"
@@ -2355,7 +2571,10 @@ function _compile_crsqlite_loadable {
         die 1 "not ok - cr-sqlite iOS build requested on non-Darwin host"
       fi
       echo "# building cr-sqlite iOS loadable variants..."
-      (cd "$BUILD_DIR/cr-sqlite/core" && ./all-ios-loadable.sh)
+      (
+        cd "$BUILD_DIR/cr-sqlite/core" &&
+        CARGO_TARGET_DIR="$crsqlite_cargo_target_dir" ./all-ios-loadable.sh
+      )
       local rc=$?
       die $rc "not ok - cr-sqlite iOS loadable build"
 
@@ -2460,10 +2679,16 @@ function _compile_crsqlite_loadable {
         die $? "not ok - rustup target add $android_triple ($rust_toolchain) failed"
       fi
 
-      if ! command -v cargo-ndk >/dev/null 2>&1; then
-        echo "# installing cargo-ndk (required for cr-sqlite android build)..."
-        cargo install cargo-ndk --locked
-        die $? "not ok - cargo install cargo-ndk failed"
+      local cargo_ndk_version="${CARGO_NDK_VERSION:-4.1.2}"
+      local installed_cargo_ndk_version=""
+      if command -v cargo-ndk >/dev/null 2>&1; then
+        installed_cargo_ndk_version="$(cargo ndk --version 2>/dev/null | awk '{ print $2 }')"
+      fi
+
+      if [[ "$installed_cargo_ndk_version" != "$cargo_ndk_version" ]]; then
+        echo "# installing cargo-ndk $cargo_ndk_version (required for cr-sqlite android build)..."
+        cargo install cargo-ndk --version "$cargo_ndk_version" --locked
+        die $? "not ok - cargo install cargo-ndk $cargo_ndk_version failed"
 
         if ! command -v cargo-ndk >/dev/null 2>&1; then
           die 1 "not ok - cargo-ndk installed but not found on PATH (expected in $cargo_home/bin)"
@@ -2473,7 +2698,11 @@ function _compile_crsqlite_loadable {
       export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/${NDK_VERSION}"
 
       echo "# building cr-sqlite loadable extension for android ($target / $android_triple)..."
-      (cd "$BUILD_DIR/cr-sqlite/core" && make clean && ANDROID_TARGET="$android_triple" make -j"$CPU_CORES" loadable)
+      (
+        cd "$BUILD_DIR/cr-sqlite/core" &&
+        CARGO_TARGET_DIR="$crsqlite_cargo_target_dir" make clean &&
+        CARGO_TARGET_DIR="$crsqlite_cargo_target_dir" ANDROID_TARGET="$android_triple" make -j"$CPU_CORES" loadable
+      )
       local rc=$?
       if (( rc != 0 )); then
         die $rc "not ok - cr-sqlite android loadable extension build ($target)"
@@ -3274,7 +3503,7 @@ function _compile_libsodium {
     export LDFLAGS="-arch $target -isysroot $sdk_path $min_flag"
     export CPPFLAGS="$CFLAGS"
 
-    if ![ -f Makefile ]; then
+    if ! [ -f Makefile ]; then
       local host_triple="aarch64-apple-darwin"
       if [ "$target" == "x86_64" ]; then
         host_triple="x86_64-apple-darwin"

@@ -8,54 +8,70 @@ namespace oro::Tests {
       using oro::runtime::loop::Loop;
       const int iterations = 5;
 
+      struct TimerState {
+        uv_timer_t handle {};
+        std::shared_ptr<std::promise<void>> fired;
+      };
+
       for (int i = 0; i < iterations; i++) {
-        Loop loop;
-
-        t.assert(loop.start(), "loop started");
-
-        // Schedule a one-shot timer on the loop and wait for it to close
-        std::promise<void> firedPromise;
-        auto firedFuture = firedPromise.get_future();
-
-        loop.dispatch([&loop, p = std::move(firedPromise)]() mutable {
-          auto h = new uv_timer_t;
-          uv_timer_init(loop.get(), h);
-          uv_timer_start(h, [](uv_timer_t* th) {
-            uv_timer_stop(th);
-            uv_close(reinterpret_cast<uv_handle_t*>(th), [](uv_handle_t* hh) {
-              delete reinterpret_cast<uv_timer_t*>(hh);
-            });
-          }, 5, 0);
-
-          // Nudge the loop after close callback has a chance to run
-          uv_timer_t* completion = new uv_timer_t;
-          uv_timer_init(loop.get(), completion);
-          uv_timer_start(completion, [](uv_timer_t* tt) {
-            auto loopPtr = reinterpret_cast<Loop*>(uv_loop_get_data(tt->loop));
-            uv_timer_stop(tt);
-            uv_close(reinterpret_cast<uv_handle_t*>(tt), nullptr);
-            // dispatch a no-op to ensure async wakes
-            if (loopPtr) loopPtr->dispatch([](){});
-          }, 10, 0);
-
-          // Signal completion slightly after timers are scheduled
-          std::thread([p = std::move(p)]() mutable {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            p.set_value();
-          }).detach();
+        Loop loop(Loop::Options {
+          .dedicatedThread = true
         });
 
-        // Wait for the timer to fire and close
+        t.assert(loop.start(), "loop started");
+      #if ORO_RUNTIME_PLATFORM_LINUX
+        t.assert(loop.gtk.source == nullptr, "dedicated loop does not attach a GLib source");
+      #endif
+
+        auto firedPromise = std::make_shared<std::promise<void>>();
+        auto firedFuture = firedPromise->get_future();
+
+        loop.dispatch([&loop, firedPromise]() {
+          auto timer = new TimerState {
+            .fired = firedPromise
+          };
+          timer->handle.data = timer;
+          uv_timer_init(loop.get(), &timer->handle);
+          uv_timer_start(&timer->handle, [](uv_timer_t* handle) {
+            auto state = reinterpret_cast<TimerState*>(handle->data);
+            state->fired->set_value();
+            uv_timer_stop(handle);
+            uv_close(reinterpret_cast<uv_handle_t*>(handle), [](uv_handle_t* handle) {
+              delete reinterpret_cast<TimerState*>(handle->data);
+            });
+          }, 5, 0);
+        });
+
         auto status = firedFuture.wait_for(std::chrono::milliseconds(1000));
         t.assert(status == std::future_status::ready, "timer fired within 1s");
 
-        // Stop and shutdown the loop; should drain cleanly
         t.assert(loop.stop(), "loop stopped");
         t.assert(loop.shutdown(), "loop shutdown");
       }
 
       t.assert(true, "completed iterations successfully");
     });
+
+  #if ORO_RUNTIME_PLATFORM_LINUX
+    t.test("Loop: Linux GLib source is detached during shutdown", [](auto t) {
+      using oro::runtime::loop::Loop;
+
+      Loop loop;
+      t.assert(loop.start(), "loop started");
+      t.assert(loop.gtk.source != nullptr, "main-thread loop attaches a GLib source");
+      t.assert(loop.shutdown(), "loop shutdown");
+      t.assert(loop.gtk.source == nullptr, "GLib source detached");
+    });
+  #endif
+
+    t.test("Loop: initialized loop can shut down before start", [](auto t) {
+      using oro::runtime::loop::Loop;
+
+      Loop loop(Loop::Options {
+        .dedicatedThread = true
+      });
+      t.assert(loop.init(), "loop initialized");
+      t.assert(loop.shutdown(), "initialized loop shutdown");
+    });
   }
 }
-

@@ -25,6 +25,7 @@ function runInstallProbe (label, envPatch = {}, options = {}) {
     XDG_DATA_HOME: dataHome,
     LOCALAPPDATA: '',
     NO_ANDROID: '1',
+    NO_IOS: '1',
     ORO_INSTALL_MODE: 'probe-env',
     ...envPatch
   }

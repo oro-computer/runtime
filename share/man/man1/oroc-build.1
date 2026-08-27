@@ -86,7 +86,7 @@ allow external exec during builds
 enable ASan/UBSan on desktop builds
 .SH NOTES
 .PP
-Relative paths are resolved from the project root or from the directory containing the explicit `\-\-config` file when one is supplied. `\-\-prod` controls packaging/debug defaults; `\-\-package` controls whether a distributable artifact is produced in addition to the build output directory. Use `\-\-copy` for one\-off extra bundle mappings without modifying `oro.toml`.
+Relative paths are resolved from the project root or from the directory containing the explicit `\-\-config` file when one is supplied. `\-\-prod` controls packaging/debug defaults; `\-\-package` controls whether a distributable artifact is produced in addition to the build output directory. Use `\-\-copy` for one\-off extra bundle mappings without modifying `oro.toml`. NO_ANDROID and NO_IOS do not control this application build command. They are independent, presence\-based exclusions for runtime source bootstrap (`bin/install.sh` / `npm run relink`).
 .SH COMMON ERRORS
 .PP
 Android builds: run `oroc setup \-\-platform=android` and accept SDK licenses. macOS/iOS signing: set `[ios] provisioning_profile`/specifier or `[mac.productbuild] identity` in your config file. If you see "external command execution is disabled", pass `\-\-allow\-exec` or set `ORO_ALLOW_EXEC=1`.

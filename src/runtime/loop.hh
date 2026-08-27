@@ -61,7 +61,7 @@ namespace oro::runtime::loop {
     #if ORO_RUNTIME_PLATFORM_LINUX
       struct GTK {
         GSource* source = nullptr;
-        GSourceFuncs functions;
+        GSourceFuncs functions {};
       };
 
       GTK gtk;
@@ -87,6 +87,7 @@ namespace oro::runtime::loop {
 
       Loop ();
       Loop (const Options&);
+      ~Loop ();
       Loop (const Loop&) = delete;
       Loop (Loop&&) = delete;
 

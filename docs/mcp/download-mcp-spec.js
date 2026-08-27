@@ -4,12 +4,12 @@
  * MCP specification fetcher/indexer for the Oro Runtime repo (legacy Socket paths still mapped).
  *
  * Usage:
- *   node download-mcp-spec.js           # dry-run, writes index files only
- *   node download-mcp-spec.js --fetch   # fetch remote pages and write index
- *   node download-mcp-spec.js --fetch --force  # re-fetch even if file exists
+ *   node download-mcp-spec.js                    # index the current supported spec
+ *   node download-mcp-spec.js --fetch            # fetch remote pages and write index
+ *   node download-mcp-spec.js --version=2025-06-18 # index a compatibility spec
  *
- * The script keeps a list of known specification pages for the 2025-06-18 draft
- * and stores each HTML document under docs/mcp/2025-06-18/raw/.
+ * Files are stored under docs/mcp/<version>/raw/. Existing downloads are not
+ * replaced unless --force is provided.
  */
 
 import fs from 'node:fs/promises'
@@ -17,7 +17,17 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const BASE_URL = 'https://modelcontextprotocol.io'
-const SPEC_VERSION = '2025-06-18'
+const DEFAULT_SPEC_VERSION = '2026-07-28'
+const args = process.argv.slice(2)
+const versionArg = args.find((arg) => arg.startsWith('--version='))
+const SPEC_VERSION = versionArg
+  ? versionArg.slice('--version='.length)
+  : process.env.MCP_SPEC_VERSION || DEFAULT_SPEC_VERSION
+
+if (!/^\d{4}-\d{2}-\d{2}$/.test(SPEC_VERSION)) {
+  throw new TypeError(`Invalid MCP specification version: ${SPEC_VERSION}`)
+}
+
 const SPEC_BASE_PATH = `/specification/${SPEC_VERSION}`
 
 const __filename = fileURLToPath(import.meta.url)
@@ -161,7 +171,6 @@ const pages = [
   }
 ]
 
-const args = process.argv.slice(2)
 const shouldFetch = args.includes('--fetch')
 const forceFetch = args.includes('--force')
 const verbose = args.includes('--verbose') || shouldFetch
@@ -209,7 +218,7 @@ async function fetchPage (page) {
   if (verbose) console.log(`[fetch] ${page.title} <- ${url}`)
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'socket-mcp-fetcher/1.0 (+https://socket.dev)'
+      'User-Agent': 'oro-runtime-mcp-spec-fetcher/0.1 (+https://oro.computer)'
     }
   })
 

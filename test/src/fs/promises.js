@@ -6,11 +6,9 @@ import os from 'oro:os'
 import { FileHandle } from 'oro:fs/handle'
 import { test } from 'oro:test'
 import { Dir } from 'oro:fs/dir'
+import FIXTURES from '../fixtures.js'
 
 const TMPDIR = `${os.tmpdir()}${path.sep}`
-const FIXTURES = /android/i.test(os.platform())
-  ? '/data/local/tmp/oro-test-fixtures/'
-  : `${TMPDIR}oro-test-fixtures${path.sep}`
 
 test('fs.promises.access', async (t) => {
   const { F_OK, R_OK, W_OK, X_OK } = fs.constants

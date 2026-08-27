@@ -240,11 +240,10 @@ export class LoRA {
 }
 
 /**
- * @typedef {
- *   context: Context,
- *   model: Model,
- *   lora: LoRA
- * {}} LoRAAttachmentOptions
+ * @typedef {object} LoRAAttachmentOptions
+ * @property {Context} context
+ * @property {Model} model
+ * @property {LoRA} lora
  */
 
 export class LoRAAttachment {

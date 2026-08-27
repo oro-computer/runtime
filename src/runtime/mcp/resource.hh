@@ -3,6 +3,8 @@
 
 #include "protocol.hh"
 
+#include <optional>
+
 namespace oro::runtime::mcp {
   enum class ResourceContentKind {
     Text,
@@ -12,9 +14,13 @@ namespace oro::runtime::mcp {
   struct ResourceDescriptor {
     String uri;
     String name;
+    String title;
     String description;
     String mimeType;
     bool subscribable = false;
+    std::optional<uint64_t> size;
+    JSON::Any icons = JSON::Null();
+    JSON::Any annotations = JSON::Null();
     JSON::Any metadata = JSON::Null();
 
     JSON::Object toJSON() const;

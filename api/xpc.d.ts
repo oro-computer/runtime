@@ -47,10 +47,10 @@ export function uint64(value: bigint | number | string): object;
 /**
  * Helper to encode binary payloads as XPC data.
  * @param {Buffer | ArrayBuffer | ArrayBufferView | string} value
- * @param {BufferEncoding} [encoding='utf8']
+ * @param {XPCBufferEncoding} [encoding='utf8']
  * @returns {object}
  */
-export function data(value: Buffer | ArrayBuffer | ArrayBufferView | string, encoding?: BufferEncoding): object;
+export function data(value: Buffer | ArrayBuffer | ArrayBufferView | string, encoding?: XPCBufferEncoding): object;
 /**
  * Helper to encode UUID payloads.
  * @param {string | { toString(): string }} value
@@ -77,6 +77,7 @@ export type XPCExplicitValue = {
     value?: any;
     encoding?: string;
 };
+export type XPCBufferEncoding = "utf8" | "utf-8" | "hex" | "base64";
 export type XPCMessageTimeoutDetail = {
     messageId: string | null;
     reason: string | null;

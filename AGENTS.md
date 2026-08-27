@@ -27,14 +27,15 @@
 - `npm test`: Run desktop tests (installs `test` deps, uses the Oro test runner).
 - `npm run test:android` | `npm run test:ios-simulator`: Run mobile tests.
 - `npm run test:runtime-core`: Headless core tests.
-- `npm run lint`: Authoritative repo-wide validation. Runs Standard for JS/MJS/CJS, regenerates TypeScript declarations, verifies third-party dependency fetch defaults and recursive submodule fetches use CI-safe HTTPS GitHub URLs, runs oxlint, checks Prettier-managed files, and runs cpplint.
+- `npm run lint`: Authoritative repo-wide validation. Runs Standard for JS/MJS/CJS, regenerates TypeScript declarations, verifies third-party dependency fetch defaults and recursive submodule fetches use CI-safe HTTPS GitHub URLs, checks the distinct `NO_ANDROID`/`NO_IOS` documentation contract, runs oxlint, checks Prettier-managed files, and runs cpplint.
 - `npm run lint:fix`: Applies supported auto-fixes, regenerates TypeScript declarations, and rewrites Prettier-managed files.
 - `npm run test:lint`: Compatibility alias for `npm run lint`.
 - `npm run test:lint:ci`: Compatibility alias for the CI-safe lint entrypoint with a writable Standard cache path.
 - `npm run lint:cpp` uses `python3 -m cpplint`; install the Python `cpplint` package locally when you need to run the full lint suite outside CI.
 - `npm run lint:deps` rejects SSH-style GitHub URL defaults and unsafe recursive submodule fetch paths in installer scripts so hosted CI and downstream builds do not depend on preconfigured SSH credentials.
 - `npm run relink`: Link local CLI/module for app development.
-- Prefer `VERBOSE=1 DEBUG=1 NO_ANDROID=1 npm run relink` when rebuilding so you get debug symbols, verbose logging, and skip slow Android artifacts.
+- Prefer `VERBOSE=1 DEBUG=1 NO_ANDROID=1 NO_IOS=1 npm run relink` for an explicitly desktop-only rebuild with debug symbols and verbose logging.
+- `NO_ANDROID` and `NO_IOS` are distinct presence switches. A non-empty `NO_ANDROID` disables only Android bootstrap/artifacts; a non-empty `NO_IOS` disables only iOS/iOS Simulator work on macOS. Neither implies the other, and values such as `0` or `false` still disable the named target. See `docs/BUILD_ENVIRONMENT.md`.
 - `./bin/clean.sh`: Remove generated outputs.
 - Use `ag` for repository text searches (prefer it over `rg`).
 - Third-party networking deps:

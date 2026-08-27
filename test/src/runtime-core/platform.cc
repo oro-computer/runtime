@@ -1,5 +1,9 @@
 #include "tests.hh"
-#include "src/core/platform.hh"
+#include "src/runtime/platform.hh"
+
+namespace oro {
+  using runtime::platform;
+}
 
 namespace oro::Tests {
   void platform (Harness& t) {

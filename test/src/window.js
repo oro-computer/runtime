@@ -103,6 +103,11 @@ test('formatURL', (t) => {
 
 if (!/android|ios/.test(os.platform())) {
   test('window - hotkey', async (t) => {
+    t.equal(
+      hotkey.normalizeExpression(' ctrl + k '),
+      'ctrl+k',
+      'normalizes whitespace without URI-encoding the expression'
+    )
     const binding = await hotkey.bind('ctrl + k')
     t.ok(binding && typeof binding === 'object', 'binding is an object')
     let bindings = await hotkey.getBindings()

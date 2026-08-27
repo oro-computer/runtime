@@ -382,6 +382,7 @@ export function availableMemory () {
 /**
  * The host operating system. This value can be one of:
  * - android
+ * - androidos
  * - android-emulator
  * - iphoneos
  * - iphone-simulator
@@ -391,7 +392,7 @@ export function availableMemory () {
  * - unknown
  * - win32
  * @ignore
- * @return {'android'|'android-emulator'|'iphoneos'|iphone-simulator'|'linux'|'macosx'|unix'|unknown'|win32'}
+ * @return {'android'|'androidos'|'android-emulator'|'iphoneos'|'iphone-simulator'|'linux'|'macosx'|'unix'|'unknown'|'win32'}
  */
 export function host () {
   return primordials['host-operating-system'] || 'unknown'

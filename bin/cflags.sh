@@ -115,6 +115,7 @@ cflags+=(
   -I"$root/include"
   -I"$root/build/uv/include"
   -I"$root/build"
+  -I"$root/build/jsoncons/include"
   -I"$root/build/llama"
   -I"$root/build/llama/common"
   -I"$root/build/llama/include"

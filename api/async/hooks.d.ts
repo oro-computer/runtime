@@ -1,9 +1,9 @@
 /**
  * Factory for creating a `AsyncHook` instance.
- * @param {AsyncHookCallbackOptions|AsyncHookCallbacks=} [callbacks]
+ * @param {AsyncHookCallbacks=} [callbacks]
  * @return {AsyncHook}
  */
-export function createHook(callbacks?: (AsyncHookCallbackOptions | AsyncHookCallbacks) | undefined): AsyncHook;
+export function createHook(callbacks?: AsyncHookCallbacks | undefined): AsyncHook;
 /**
  * A container for `AsyncHooks` callbacks.
  * @ignore

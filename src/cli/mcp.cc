@@ -48,6 +48,12 @@ namespace oro::cli::mcp {
   namespace {
     static constexpr size_t kDefaultMaxFileBytes = 1024 * 1024;
     static constexpr size_t kDefaultMaxToolOutputBytes = 1024 * 1024;
+    static constexpr size_t kMaxFileBytes = 16 * 1024 * 1024;
+    static constexpr size_t kMaxToolOutputBytes = 16 * 1024 * 1024;
+    static constexpr size_t kMaxWorkspaceWriteBytes = 4 * 1024 * 1024;
+    static constexpr size_t kMaxDirectoryEntries = 10000;
+    static constexpr size_t kMaxDirectoryDepth = 64;
+    static constexpr int kMaxToolTimeoutMilliseconds = 24 * 60 * 60 * 1000;
     static constexpr size_t kMaxStdioMessageBytes = 8 * 1024 * 1024;
 
     static inline bool startsWith(const oro::runtime::String& value, const char* prefix) {
@@ -819,25 +825,31 @@ namespace oro::cli::mcp {
       registry.handlers.insert_or_assign(tool.name, std::move(handler));
     }
 
-    static std::optional<oro::runtime::String> requireString(const Object& obj, const char* key, oro::runtime::String& error) {
+    static std::optional<oro::runtime::String> requireString(
+      const Object& obj,
+      const char* key,
+      oro::runtime::String& error,
+      bool allowEmpty = false
+    ) {
       if (!obj.contains(key) || !obj.get(key).isString()) {
         error = oro::runtime::String("missing required string field '") + key + "'";
         return std::nullopt;
       }
       const auto v = obj.get(key).as<String>().value();
-      if (v.size() == 0) {
+      if (!allowEmpty && v.size() == 0) {
         error = oro::runtime::String("field '") + key + "' must be non-empty";
         return std::nullopt;
       }
       return v;
     }
 
-    static size_t getOptionalSize(const Object& obj, const char* key, size_t fallback) {
+    static size_t getOptionalSize(const Object& obj, const char* key, size_t fallback, size_t maximum) {
       if (!obj.contains(key)) return fallback;
       const auto& any = obj.get(key);
       if (!any.isNumber()) return fallback;
       const auto n = any.as<Number>().value();
-      if (n < 0) return fallback;
+      if (!std::isfinite(n) || n < 0 || std::floor(n) != n) return fallback;
+      if (n > static_cast<double>(maximum)) return maximum;
       return static_cast<size_t>(n);
     }
 
@@ -997,10 +1009,22 @@ namespace oro::cli::mcp {
       const auto executable = options.cliExecutable.size() > 0 ? options.cliExecutable : options.cliDisplayName;
       result.commandLine = joinCommand(executable, args);
 
+      oro::runtime::String processCommand = executable;
+      oro::runtime::String processArgv;
+      for (size_t index = 0; index < args.size(); ++index) {
+        if (index > 0) {
+          processArgv.push_back(static_cast<char>(0x01));
+        }
+        processArgv += args[index];
+      }
+
       oro::runtime::Vector<oro::runtime::String> envs;
 
       oro::runtime::process::ProcessConfig cfg;
       cfg.bufferSize = 131072;
+      cfg.useDirectArguments = true;
+      cfg.argumentCount = args.size();
+      cfg.rawOutput = true;
 
       std::mutex mutex;
       auto pushBounded = [&](oro::runtime::String& target, const oro::runtime::String& chunk, bool addNewline) {
@@ -1018,20 +1042,16 @@ namespace oro::cli::mcp {
       };
 
       oro::runtime::process::Process process(
-        result.commandLine,
-        "",
+        processCommand,
+        processArgv,
         envs,
         cwd.string(),
-        [&](const oro::runtime::String& out) { pushBounded(result.stdoutText, out, true); },
+        [&](const oro::runtime::String& out) { pushBounded(result.stdoutText, out, false); },
         [&](const oro::runtime::String& out) { pushBounded(result.stderrText, out, false); },
         nullptr,
         true,
         cfg
       );
-
-      if (runtime::platform.win) {
-        process.shell = "cmd.exe";
-      }
 
       process.open();
 
@@ -1078,10 +1098,14 @@ namespace oro::cli::mcp {
       });
     }
 
-    static Object capabilities() {
+    static Object capabilities(bool legacy = false) {
+      Object resources(Object::Entries { {"listChanged", Boolean(false)} });
+      if (legacy) {
+        resources.set("subscribe", Boolean(false));
+      }
       return Object(Object::Entries {
         {"tools", Object(Object::Entries {{"listChanged", Boolean(false)}})},
-        {"resources", Object(Object::Entries {{"subscribe", Boolean(false)}, {"listChanged", Boolean(false)}})},
+        {"resources", resources},
         {"prompts", Object(Object::Entries {{"listChanged", Boolean(false)}})}
       });
     }
@@ -1227,6 +1251,7 @@ namespace oro::cli::mcp {
       addWorkspaceDoc("README.md", "readme", "Repository overview, release context, and high-level development guidance.");
       addWorkspaceDoc("docs/llms.txt", "llm-reference", "Compact agent-oriented map of the runtime surface, APIs, and installed reference documents.");
       addWorkspaceDoc("docs/MCP.md", "mcp-guide", "CLI/runtime MCP behavior, transport notes, and integration guidance.");
+      addWorkspaceDoc("docs/BUILD_ENVIRONMENT.md", "source-build-environment", "Runtime source-build environment controls, including the independent NO_ANDROID and NO_IOS target exclusions.");
       addWorkspaceDoc("api", "api-tree", "Workspace API reference and declaration tree for oro:* modules.");
       addWorkspaceDoc("api/README.md", "api-reference", "Generated JavaScript API reference for oro:* modules.");
       addWorkspaceDoc("api/CONFIG.md", "config-reference", "Generated configuration reference for oro.toml and .ororc keys.");
@@ -1267,6 +1292,7 @@ namespace oro::cli::mcp {
 
         const auto runtimeDocsRoot = *runtimeRoot / "share" / "doc" / "oroc";
         addRuntimeDoc(runtimeDocsRoot / "README.md", "runtime-doc:/README.md", "runtime-readme", "Installed runtime overview and project setup reference.");
+        addRuntimeDoc(runtimeDocsRoot / "docs" / "BUILD_ENVIRONMENT.md", "runtime-doc:/BUILD_ENVIRONMENT.md", "runtime-build-environment", "Installed runtime source-build environment contract, including independent Android and iOS target exclusions.");
         addRuntimeDoc(runtimeDocsRoot / "MCP.md", "runtime-doc:/MCP.md", "runtime-mcp-guide", "Installed MCP integration guide for Oro CLI and runtime workflows.");
         addRuntimeDoc(runtimeDocsRoot / "llms.txt", "runtime-doc:/llms.txt", "runtime-llm-reference", "Installed compact agent-oriented map of the runtime surface, discovery order, and reference docs.");
         addRuntimeDoc(*runtimeRoot / "api", "runtime-doc:/api", "runtime-api-tree", "Installed API directory containing generated references and declarations for oro:* modules.");
@@ -1866,8 +1892,8 @@ namespace oro::cli::mcp {
         return toolResultText("scope must be one of: all, workspace, runtime", true);
       }
 
-      const size_t maxHits = std::max<size_t>(1, std::min<size_t>(getOptionalSize(args, "max_hits", 20), 100));
-      const size_t maxFiles = std::max<size_t>(1, std::min<size_t>(getOptionalSize(args, "max_files", 400), 1000));
+      const size_t maxHits = std::max<size_t>(1, getOptionalSize(args, "max_hits", 20, 100));
+      const size_t maxFiles = std::max<size_t>(1, getOptionalSize(args, "max_files", 400, 1000));
       const auto normalizedQuery = normalizeSearchText(*query);
       const auto tokens = tokenizeSearchQuery(*query);
       if (normalizedQuery.empty() || tokens.empty()) {
@@ -2039,6 +2065,13 @@ namespace oro::cli::mcp {
 
       auto& obj = any.as<Object>();
 
+      if (!obj.contains("jsonrpc") ||
+          !obj.get("jsonrpc").isString() ||
+          obj.get("jsonrpc").as<String>().value() != runtime::mcp::kJsonRpcVersion) {
+        error = Error(ErrorCode::InvalidRequest, "jsonrpc must be exactly '2.0'");
+        return std::nullopt;
+      }
+
       if (!obj.contains("method") || !obj.get("method").isString()) {
         error = Error(ErrorCode::InvalidRequest, "missing JSON-RPC method");
         return std::nullopt;
@@ -2046,9 +2079,6 @@ namespace oro::cli::mcp {
 
       Request req;
       req.jsonrpc = runtime::mcp::kJsonRpcVersion;
-      if (obj.contains("jsonrpc") && obj.get("jsonrpc").isString()) {
-        req.jsonrpc = obj.get("jsonrpc").as<String>().value();
-      }
       req.method = obj.get("method").as<String>().value();
       if (obj.contains("params")) {
         req.params = obj.get("params");
@@ -2056,6 +2086,10 @@ namespace oro::cli::mcp {
         req.params = Null();
       }
       if (obj.contains("id")) {
+        if (!obj.get("id").isString() && !obj.get("id").isNumber()) {
+          error = Error(ErrorCode::InvalidRequest, "JSON-RPC request id must be a string or number");
+          return std::nullopt;
+        }
         req.id = obj.get("id");
       } else {
         req.id = Null();
@@ -2072,13 +2106,29 @@ namespace oro::cli::mcp {
       }
 
       Object args(Object::Entries {});
-      if (params.contains("arguments") && params.get("arguments").isObject()) {
+      if (params.contains("arguments")) {
+        if (!params.get("arguments").isObject()) {
+          return toolResultText("tool arguments must be an object", true);
+        }
         args = params.get("arguments").as<Object>();
       }
 
       auto it = ctx.tools.handlers.find(*name);
       if (it == ctx.tools.handlers.end()) {
         return toolResultText("unknown tool: " + *name, true);
+      }
+
+      for (const auto& tool : ctx.tools.tools) {
+        if (tool.name != *name) {
+          continue;
+        }
+        oro::runtime::String validationError;
+        if (!tool.validateArguments(
+              runtime::JSON::stringify(Any(args)),
+              validationError)) {
+          return toolResultText(validationError, true);
+        }
+        break;
       }
 
       try {
@@ -2088,30 +2138,31 @@ namespace oro::cli::mcp {
       }
     }
 
-	    static Object listDirectory(const fs::path& path, size_t maxEntries, bool recursive, size_t maxDepth) {
-	      Array::Entries entries;
-	      size_t count = 0;
-	      std::error_code ec;
+    static Object listDirectory(const fs::path& path, size_t maxEntries, bool recursive, size_t maxDepth) {
+      Array::Entries entries;
+      size_t count = 0;
+      std::error_code ec;
 
-	      auto shouldHideEntry = [](const oro::runtime::String& relGeneric) -> bool {
-	        if (relGeneric == ".git" || startsWith(relGeneric, ".git/")) return true;
-	        if (startsWith(relGeneric, "build/") || startsWith(relGeneric, "tmp/")) return true;
-	        return false;
-	      };
+      auto shouldHideEntry = [](const oro::runtime::String& relGeneric) -> bool {
+        if (relGeneric == ".git" || startsWith(relGeneric, ".git/")) return true;
+        if (relGeneric == "build" || startsWith(relGeneric, "build/")) return true;
+        if (relGeneric == "tmp" || startsWith(relGeneric, "tmp/")) return true;
+        return false;
+      };
 
-	      auto pushEntry = [&](const fs::directory_entry& entry, const fs::path& base) {
-	        if (count >= maxEntries) return;
-	        const auto rel = fs::relative(entry.path(), base, ec);
-	        if (ec) return;
-	        if (containsDotDot(rel)) return;
-	        const auto relGeneric = rel.lexically_normal().generic_string();
-	        if (relGeneric.empty()) return;
-	        if (shouldHideEntry(relGeneric)) return;
-	        const auto kind = entry.is_directory(ec) && !ec ? "dir" : "file";
-	        entries.push_back(Object(Object::Entries {
-	          {"path", String(relGeneric)},
-	          {"kind", String(kind)}
-	        }));
+      auto pushEntry = [&](const fs::directory_entry& entry, const fs::path& base) {
+        if (count >= maxEntries) return;
+        const auto rel = fs::relative(entry.path(), base, ec);
+        if (ec) return;
+        if (containsDotDot(rel)) return;
+        const auto relGeneric = rel.lexically_normal().generic_string();
+        if (relGeneric.empty()) return;
+        if (shouldHideEntry(relGeneric)) return;
+        const auto kind = entry.is_directory(ec) && !ec ? "dir" : "file";
+        entries.push_back(Object(Object::Entries {
+          {"path", String(relGeneric)},
+          {"kind", String(kind)}
+        }));
         count++;
       };
 
@@ -2123,34 +2174,34 @@ namespace oro::cli::mcp {
         return Object(Object::Entries {{"entries", Array(entries)}, {"truncated", Boolean(count >= maxEntries)}});
       }
 
-	      fs::recursive_directory_iterator it(path, ec);
-	      fs::recursive_directory_iterator end;
-	      for (; it != end && !ec; ++it) {
-	        if (it.depth() >= static_cast<int>(maxDepth)) {
-	          it.disable_recursion_pending();
-	        }
-	        const auto rel = fs::relative(it->path(), path, ec);
-	        if (ec) continue;
-	        if (containsDotDot(rel)) {
-	          it.disable_recursion_pending();
-	          continue;
-	        }
-	        const auto relGeneric = rel.lexically_normal().generic_string();
-	        std::error_code linkEc;
-	        if (it->is_symlink(linkEc) && !linkEc) {
-	          it.disable_recursion_pending();
-	        }
-	        std::error_code dirEc;
-	        if ((it->is_directory(dirEc) && !dirEc) &&
-	            (relGeneric == "build" || startsWith(relGeneric, "build/") ||
-	             relGeneric == "tmp" || startsWith(relGeneric, "tmp/") ||
-	             relGeneric == ".git" || startsWith(relGeneric, ".git/"))) {
-	          it.disable_recursion_pending();
-	          continue;
-	        }
-	        pushEntry(*it, path);
-	        if (count >= maxEntries) break;
-	      }
+      fs::recursive_directory_iterator it(path, ec);
+      fs::recursive_directory_iterator end;
+      for (; it != end && !ec; ++it) {
+        if (it.depth() >= static_cast<int>(maxDepth)) {
+          it.disable_recursion_pending();
+        }
+        const auto rel = fs::relative(it->path(), path, ec);
+        if (ec) continue;
+        if (containsDotDot(rel)) {
+          it.disable_recursion_pending();
+          continue;
+        }
+        const auto relGeneric = rel.lexically_normal().generic_string();
+        std::error_code linkEc;
+        if (it->is_symlink(linkEc) && !linkEc) {
+          it.disable_recursion_pending();
+        }
+        std::error_code dirEc;
+        if ((it->is_directory(dirEc) && !dirEc) &&
+            (relGeneric == "build" || startsWith(relGeneric, "build/") ||
+             relGeneric == "tmp" || startsWith(relGeneric, "tmp/") ||
+             relGeneric == ".git" || startsWith(relGeneric, ".git/"))) {
+          it.disable_recursion_pending();
+          continue;
+        }
+        pushEntry(*it, path);
+        if (count >= maxEntries) break;
+      }
 
       return Object(Object::Entries {{"entries", Array(entries)}, {"truncated", Boolean(count >= maxEntries)}});
     }
@@ -2169,7 +2220,7 @@ namespace oro::cli::mcp {
           .metadata(makeToolMetadata(
             "cli",
             "Use when you need a command that does not already have a dedicated MCP tool, or when you need full CLI parity.",
-            "Structured command execution result with exit code, timeout flag, stdout, stderr, cwd, and the exact shell command line used.",
+            "Structured command execution result with exit code, timeout flag, stdout, stderr, cwd, and a diagnostic command representation.",
             {
               R"({"args":["config","--describe","meta.version"]})",
               R"({"args":["build","--platform=ios","."],"timeout_ms":600000})"
@@ -2179,9 +2230,9 @@ namespace oro::cli::mcp {
           ))
           .addArray("args", "Arguments to pass after the CLI executable, as tokenized argv entries such as [\"build\", \"--platform=ios\", \".\"].", arrayStringItems, true)
           .addString("cwd", "Optional working directory relative to the workspace root. Defaults to the workspace root.", false)
-          .addInteger("timeout_ms", "Optional timeout in milliseconds. When reached, the process is terminated and the result is marked timed_out=true.", false)
-          .addString("stdin", "Optional stdin payload to write before closing stdin.", false)
-          .addInteger("max_output_bytes", "Maximum captured bytes for stdout and stderr individually. Defaults to 1 MiB each.", false)
+          .addIntegerRange("timeout_ms", "Optional timeout in milliseconds, up to 24 hours. When reached, the process is terminated and the result is marked timed_out=true.", 0, kMaxToolTimeoutMilliseconds, false)
+          .addStringMaxLength("stdin", "Optional stdin payload to write before closing stdin, up to 4 MiB.", kMaxWorkspaceWriteBytes, false)
+          .addIntegerRange("max_output_bytes", "Maximum captured bytes for stdout and stderr individually. Defaults to 1 MiB each and is capped at 16 MiB.", 1, kMaxToolOutputBytes, false)
           .addBoolean("quiet", "Prepend --quiet unless already present. Defaults to true.", false)
           .addBoolean("no_color", "Prepend --no-color unless already present. Defaults to true.", false)
           .build(),
@@ -2191,12 +2242,31 @@ namespace oro::cli::mcp {
           if (error.size() > 0) {
             return toolResultText(error, true);
           }
+          for (const auto& arg : cliArgs) {
+            if (arg.find('\0') != oro::runtime::String::npos ||
+                arg.find(static_cast<char>(0x01)) != oro::runtime::String::npos) {
+              return toolResultText("CLI arguments cannot contain NUL or U+0001 characters", true);
+            }
+          }
 
           const bool quiet = getOptionalBool(args, "quiet", true);
           const bool noColor = getOptionalBool(args, "no_color", true);
-          const int timeoutMs = static_cast<int>(getOptionalSize(args, "timeout_ms", 0));
+          const int timeoutMs = static_cast<int>(getOptionalSize(
+            args,
+            "timeout_ms",
+            0,
+            static_cast<size_t>(kMaxToolTimeoutMilliseconds)
+          ));
           const auto stdinText = getOptionalString(args, "stdin", "");
-          const size_t maxOutputBytes = getOptionalSize(args, "max_output_bytes", kDefaultMaxToolOutputBytes);
+          if (stdinText.size() > kMaxWorkspaceWriteBytes) {
+            return toolResultText("stdin exceeds the 4 MiB limit", true);
+          }
+          const size_t maxOutputBytes = getOptionalSize(
+            args,
+            "max_output_bytes",
+            kDefaultMaxToolOutputBytes,
+            kMaxToolOutputBytes
+          );
 
           fs::path execCwd = ctx.workspaceRoot;
           const auto cwdRel = getOptionalString(args, "cwd", "");
@@ -2213,32 +2283,32 @@ namespace oro::cli::mcp {
         }
       );
 
-	      addTool(
-	        ctx.tools,
-	        ToolBuilder("read_workspace_file")
-	          .title("Read workspace text file")
-	          .description("Read a UTF-8 text file inside the workspace. Use this for exact source inspection when you already know the relative path.")
-	          .annotations(makeToolAnnotations("Read workspace text file", true, false, true, false))
-	          .metadata(makeToolMetadata(
-	            "workspace",
-	            "Prefer this over `run_cli` for direct source reads within the project tree.",
-	            "Path, UTF-8 file content, and a truncated flag when the max byte limit is reached.",
-	            {
-	              R"({"path":"src/cli/main.cc"})",
-	              R"({"path":"oro.toml","max_bytes":65536})"
-	            },
-	            { "run_cli" },
-	            { "read", "file", "workspace", "text" }
-	          ))
-	          .addString("path", "Path relative to the workspace root.", true)
-	          .addInteger("max_bytes", "Maximum bytes to return before truncating the content. Defaults to 1 MiB.", false)
+      addTool(
+        ctx.tools,
+        ToolBuilder("read_workspace_file")
+          .title("Read workspace text file")
+          .description("Read a UTF-8 text file inside the workspace. Use this for exact source inspection when you already know the relative path.")
+          .annotations(makeToolAnnotations("Read workspace text file", true, false, true, false))
+          .metadata(makeToolMetadata(
+            "workspace",
+            "Prefer this over `run_cli` for direct source reads within the project tree.",
+            "Path, UTF-8 file content, and a truncated flag when the max byte limit is reached.",
+            {
+              R"({"path":"src/cli/main.cc"})",
+              R"({"path":"oro.toml","max_bytes":65536})"
+            },
+            { "run_cli" },
+            { "read", "file", "workspace", "text" }
+          ))
+          .addString("path", "Path relative to the workspace root.", true)
+          .addIntegerRange("max_bytes", "Maximum bytes to return before truncating the content. Defaults to 1 MiB and is capped at 16 MiB.", 1, kMaxFileBytes, false)
           .build(),
         [&](const Object& args) -> Object {
           oro::runtime::String error;
           auto rel = requireString(args, "path", error);
           if (!rel.has_value()) return toolResultText(error, true);
 
-          const size_t maxBytes = getOptionalSize(args, "max_bytes", kDefaultMaxFileBytes);
+          const size_t maxBytes = getOptionalSize(args, "max_bytes", kDefaultMaxFileBytes, kMaxFileBytes);
           auto resolved = resolveWorkspacePath(ctx.workspaceRoot, *rel, true, true, false, false, error);
           if (!resolved.has_value()) {
             return toolResultText(error, true);
@@ -2256,56 +2326,56 @@ namespace oro::cli::mcp {
             {"truncated", Boolean(truncated)}
           });
           return toolResultStructured(Any(payload));
-	        }
-	      );
+        }
+      );
 
-	      addTool(
-	        ctx.tools,
-	        ToolBuilder("workspace_info")
-	          .title("Inspect workspace MCP context")
-	          .description("Return the effective workspace root, config file path, transport, and filesystem policy used by this MCP server instance.")
-	          .annotations(makeToolAnnotations("Inspect workspace MCP context", true, false, true, false))
-	          .metadata(makeToolMetadata(
-	            "workspace",
-	            "Use first when you need to understand what directory, active project config path, and read policy the server is operating against.",
-	            "Workspace root, config path and format information, transport mode, and read-outside-workspace policy.",
-	            {},
-	            {},
-	            { "workspace", "context", "introspection" }
-	          ))
-	          .build(),
-	        [&](const Object&) -> Object {
-	          const auto configRel = resolveActiveConfigRelativePath(ctx.options, ctx.workspaceRoot).generic_string();
+      addTool(
+        ctx.tools,
+        ToolBuilder("workspace_info")
+          .title("Inspect workspace MCP context")
+          .description("Return the effective workspace root, config file path, transport, and filesystem policy used by this MCP server instance.")
+          .annotations(makeToolAnnotations("Inspect workspace MCP context", true, false, true, false))
+          .metadata(makeToolMetadata(
+            "workspace",
+            "Use first when you need to understand what directory, active project config path, and read policy the server is operating against.",
+            "Workspace root, config path and format information, transport mode, and read-outside-workspace policy.",
+            {},
+            {},
+            { "workspace", "context", "introspection" }
+          ))
+          .build(),
+        [&](const Object&) -> Object {
+          const auto configRel = resolveActiveConfigRelativePath(ctx.options, ctx.workspaceRoot).generic_string();
 
-	          std::error_code ec;
-	          auto rootCanonical = fs::weakly_canonical(ctx.workspaceRoot, ec);
-	          const auto rootPath = (ec ? ctx.workspaceRoot : rootCanonical).lexically_normal();
+          std::error_code ec;
+          auto rootCanonical = fs::weakly_canonical(ctx.workspaceRoot, ec);
+          const auto rootPath = (ec ? ctx.workspaceRoot : rootCanonical).lexically_normal();
 
-	          oro::runtime::String resolveError;
-	          auto configResolved = resolveWorkspacePath(ctx.workspaceRoot, configRel, true, true, false, false, resolveError);
+          oro::runtime::String resolveError;
+          auto configResolved = resolveWorkspacePath(ctx.workspaceRoot, configRel, true, true, false, false, resolveError);
 
-	          Object payload(Object::Entries {
-	            {"workspace_root", String(rootPath.string())},
-	            {"config_path", String(configRel)},
-	            {"config_format", String(configFormatName(detectConfigFormatForPath(configRel)))},
-	            {"config_exists", Boolean(configResolved.has_value())},
-	            {"allow_read_outside_workspace", Boolean(ctx.options.allowReadOutsideWorkspace)},
-	            {"transport", String(ctx.options.useHttp ? "http" : "stdio")}
-	          });
-	          if (configResolved.has_value()) {
-	            payload.set("config_abs", String(configResolved->string()));
-	          } else if (!resolveError.empty()) {
-	            payload.set("config_error", String(resolveError));
-	          }
+          Object payload(Object::Entries {
+            {"workspace_root", String(rootPath.string())},
+            {"config_path", String(configRel)},
+            {"config_format", String(configFormatName(detectConfigFormatForPath(configRel)))},
+            {"config_exists", Boolean(configResolved.has_value())},
+            {"allow_read_outside_workspace", Boolean(ctx.options.allowReadOutsideWorkspace)},
+            {"transport", String(ctx.options.useHttp ? "http" : "stdio")}
+          });
+          if (configResolved.has_value()) {
+            payload.set("config_abs", String(configResolved->string()));
+          } else if (!resolveError.empty()) {
+            payload.set("config_error", String(resolveError));
+          }
 
-	          return toolResultStructured(Any(payload));
-	        }
-	      );
+          return toolResultStructured(Any(payload));
+        }
+      );
 
-	      if (ctx.options.allowReadOutsideWorkspace) {
-	        addTool(
-	          ctx.tools,
-	          ToolBuilder("read_file")
+      if (ctx.options.allowReadOutsideWorkspace) {
+        addTool(
+          ctx.tools,
+          ToolBuilder("read_file")
             .title("Read absolute filesystem file")
             .description("Read a file outside the workspace by absolute path. This is intended for trusted local automation that needs host-level context such as SDK files, logs, or generated artifacts.")
             .annotations(makeToolAnnotations("Read absolute filesystem file", true, false, true, true))
@@ -2321,7 +2391,7 @@ namespace oro::cli::mcp {
               { "read", "file", "absolute-path", "host" }
             ))
             .addString("path", "Absolute path to the file.", true)
-            .addInteger("max_bytes", "Maximum bytes to return before truncation. Defaults to 1 MiB.", false)
+            .addIntegerRange("max_bytes", "Maximum bytes to return before truncation. Defaults to 1 MiB and is capped at 16 MiB.", 1, kMaxFileBytes, false)
             .build(),
           [&](const Object& args) -> Object {
             oro::runtime::String error;
@@ -2342,7 +2412,7 @@ namespace oro::cli::mcp {
               return toolResultText("path is not a file", true);
             }
 
-            const size_t maxBytes = getOptionalSize(args, "max_bytes", kDefaultMaxFileBytes);
+            const size_t maxBytes = getOptionalSize(args, "max_bytes", kDefaultMaxFileBytes, kMaxFileBytes);
             const bool binary = isDefinitelyBinaryExtension(resolved);
             bool truncated = false;
 
@@ -2390,7 +2460,7 @@ namespace oro::cli::mcp {
             { "write", "file", "workspace", "destructive" }
           ))
           .addString("path", "Path relative to the workspace root.", true)
-          .addString("content", "UTF-8 file contents to write.", true)
+          .addStringMaxLength("content", "UTF-8 file contents to write, up to 4 MiB.", kMaxWorkspaceWriteBytes, true)
           .addBoolean("overwrite", "Overwrite an existing file. Defaults to false.", false)
           .addBoolean("create_dirs", "Create parent directories when missing. Defaults to false.", false)
           .build(),
@@ -2399,8 +2469,11 @@ namespace oro::cli::mcp {
           auto rel = requireString(args, "path", error);
           if (!rel.has_value()) return toolResultText(error, true);
 
-          auto content = requireString(args, "content", error);
+          auto content = requireString(args, "content", error, true);
           if (!content.has_value()) return toolResultText(error, true);
+          if (content->size() > kMaxWorkspaceWriteBytes) {
+            return toolResultText("content exceeds the 4 MiB write limit", true);
+          }
 
           const bool overwrite = getOptionalBool(args, "overwrite", false);
           const bool createDirs = getOptionalBool(args, "create_dirs", false);
@@ -2437,15 +2510,15 @@ namespace oro::cli::mcp {
           ))
           .addString("path", "Directory path relative to workspace root. Defaults to the workspace root.", false)
           .addBoolean("recursive", "Recursively list entries. Defaults to false.", false)
-          .addInteger("max_entries", "Maximum entries to return. Defaults to 200.", false)
-          .addInteger("max_depth", "Maximum recursion depth when recursive=true. Defaults to 4.", false)
+          .addIntegerRange("max_entries", "Maximum entries to return. Defaults to 200 and is capped at 10,000.", 1, kMaxDirectoryEntries, false)
+          .addIntegerRange("max_depth", "Maximum recursion depth when recursive=true. Defaults to 4 and is capped at 64.", 0, kMaxDirectoryDepth, false)
           .build(),
         [&](const Object& args) -> Object {
           oro::runtime::String error;
           const auto rel = getOptionalString(args, "path", "");
           const bool recursive = getOptionalBool(args, "recursive", false);
-          const size_t maxEntries = getOptionalSize(args, "max_entries", 200);
-          const size_t maxDepth = getOptionalSize(args, "max_depth", 4);
+          const size_t maxEntries = getOptionalSize(args, "max_entries", 200, kMaxDirectoryEntries);
+          const size_t maxDepth = getOptionalSize(args, "max_depth", 4, kMaxDirectoryDepth);
 
           auto resolved = resolveWorkspacePath(ctx.workspaceRoot, rel, true, false, true, false, error);
           if (!resolved.has_value()) {
@@ -2476,8 +2549,8 @@ namespace oro::cli::mcp {
           ))
           .addString("query", "Topic, phrase, or keywords to search for across advertised docs and config references.", true)
           .addString("scope", "Search scope: `all` (default), `workspace`, or `runtime`.", false)
-          .addInteger("max_hits", "Maximum result rows to return. Defaults to 20, capped at 100.", false)
-          .addInteger("max_files", "Maximum files to scan while searching. Defaults to 400, capped at 1000.", false)
+          .addIntegerRange("max_hits", "Maximum result rows to return. Defaults to 20, capped at 100.", 1, 100, false)
+          .addIntegerRange("max_files", "Maximum files to scan while searching. Defaults to 400, capped at 1000.", 1, 1000, false)
           .build(),
         [&](const Object& args) -> Object {
           return searchDocs(ctx, args);
@@ -2532,13 +2605,16 @@ namespace oro::cli::mcp {
             { "write_workspace_file" },
             { "config", "write", "destructive" }
           ))
-          .addString("content", "New configuration file content.", true)
+          .addStringMaxLength("content", "New configuration file content, up to 4 MiB.", kMaxWorkspaceWriteBytes, true)
           .addBoolean("overwrite", "Overwrite an existing file. Defaults to false.", false)
           .build(),
         [&](const Object& args) -> Object {
           oro::runtime::String error;
-          auto content = requireString(args, "content", error);
+          auto content = requireString(args, "content", error, true);
           if (!content.has_value()) return toolResultText(error, true);
+          if (content->size() > kMaxWorkspaceWriteBytes) {
+            return toolResultText("content exceeds the 4 MiB write limit", true);
+          }
           const bool overwrite = getOptionalBool(args, "overwrite", false);
           const auto configRel = resolveActiveConfigRelativePath(ctx.options, ctx.workspaceRoot).generic_string();
           auto resolved = resolveWorkspacePath(ctx.workspaceRoot, configRel, false, true, false, false, error);
@@ -2846,7 +2922,7 @@ namespace oro::cli::mcp {
             { "run_cli" },
             { "update", "server", "smoke-test" }
           ))
-          .addInteger("timeout_ms", "How long to run before terminating, in milliseconds. Required.", true)
+          .addIntegerRange("timeout_ms", "How long to run before terminating, in milliseconds, up to 24 hours. Required.", 1, kMaxToolTimeoutMilliseconds, true)
           .addArray("args", "Additional arguments passed after `update server`.", arrayStringItems, false)
           .build(),
         [&](const Object& args) -> Object {
@@ -2854,8 +2930,11 @@ namespace oro::cli::mcp {
             return toolResultText("missing required integer field 'timeout_ms'", true);
           }
           const auto timeoutValue = args.get("timeout_ms").as<Number>().value();
-          if (timeoutValue <= 0) {
-            return toolResultText("'timeout_ms' must be > 0", true);
+          if (!std::isfinite(timeoutValue) ||
+              std::floor(timeoutValue) != timeoutValue ||
+              timeoutValue <= 0 ||
+              timeoutValue > kMaxToolTimeoutMilliseconds) {
+            return toolResultText("'timeout_ms' must be an integer from 1 through 86400000", true);
           }
 
           oro::runtime::String error;
@@ -2882,19 +2961,20 @@ namespace oro::cli::mcp {
       );
     }
 
-    static std::optional<Response> handleRequest(Context& ctx, const Request& req) {
-      if (req.method == "initialize") {
-        oro::runtime::String selectedProtocol = runtime::mcp::kProtocolVersion;
-        if (req.params.isObject()) {
-          const auto& params = req.params.as<Object>();
-          if (params.contains("protocolVersion") && params.get("protocolVersion").isString()) {
-            const auto requested = params.get("protocolVersion").as<String>().value();
-            if (requested.size() > 0) {
-              selectedProtocol = requested;
-            }
-          }
-        }
+    static Array mcpSupportedVersions() {
+      Array::Entries versions;
+      for (const auto& version : runtime::mcp::supportedProtocolVersions()) {
+        versions.push_back(String(version));
+      }
+      return Array(versions);
+    }
 
+    static std::optional<Response> handleRequest(
+      Context& ctx,
+      const Request& req,
+      const oro::runtime::String& negotiatedLegacyProtocolVersion
+    ) {
+      if (req.method == "initialize") {
         Object::Entries serverInfoEntries {
           {"name", String(ctx.options.cliDisplayName)},
           {"title", String("Oro Runtime CLI MCP Server")},
@@ -2906,17 +2986,37 @@ namespace oro::cli::mcp {
           "Use read_config when workspace_info reports config_exists=true or resources/list advertises the active config resource. "
           "Prefer specialized tools such as search_docs, config_get, config_describe, build_app, run_app, and get_versions over run_cli when they fit your goal, because they publish clearer intent and structured results. "
           "Successful tool calls return structuredContent alongside a text copy of the same JSON for compatibility. "
-          "Key documentation resources are advertised through resources/list from the current workspace (`workspace:/...`) and, when installed, from the runtime distribution (`runtime-doc:/...`) for README, MCP, API, CLI, config, and man1/man3/man7 references. "
+          "Key documentation resources are advertised through resources/list from the current workspace (`workspace:/...`) and, when installed, from the runtime distribution (`runtime-doc:/...`) for README, source-build environment, MCP, API, CLI, config, and man1/man3/man7 references. "
+          "For runtime source bootstrap, NO_ANDROID and NO_IOS are independent presence flags that exclude only Android or iOS/iOS Simulator work respectively; neither selects an application build target. "
           "Prefer runtime-doc resources for runtime behavior and API contracts, and workspace resources for project-specific config or local docs. "
           "Use run_cli only as a fallback for unsupported commands or advanced flag combinations."
         );
         Object::Entries resultEntries {
-          {"protocolVersion", String(selectedProtocol)},
-          {"capabilities", capabilities()},
+          {"protocolVersion", String(negotiatedLegacyProtocolVersion)},
+          {"capabilities", capabilities(true)},
           {"serverInfo", Object(serverInfoEntries)},
           {"instructions", String(instructions)}
         };
         return Response::success(req.id, Object(resultEntries));
+      }
+
+      if (req.method == "server/discover") {
+        Object serverInfo(Object::Entries {
+          {"name", String(ctx.options.cliDisplayName)},
+          {"title", String("Oro Runtime CLI MCP Server")},
+          {"version", String(runtime::VERSION_FULL_STRING)}
+        });
+        Object meta(Object::Entries {
+          {"io.modelcontextprotocol/serverInfo", serverInfo}
+        });
+        return Response::success(req.id, Object(Object::Entries {
+          {"supportedVersions", mcpSupportedVersions()},
+          {"capabilities", capabilities()},
+          {"_meta", meta},
+          {"instructions", String("Use specialized Oro tools before run_cli and keep file access scoped to the configured workspace.")},
+          {"ttlMs", Number(60000)},
+          {"cacheScope", String("private")}
+        }));
       }
 
       if (req.method == "notifications/initialized") {
@@ -3058,7 +3158,74 @@ namespace oro::cli::mcp {
       return Response::failure(req.id, Error(ErrorCode::MethodNotFound, "method not found: " + req.method));
     }
 
-    static std::optional<oro::runtime::String> handleJsonRpcPayload(Context& ctx, const oro::runtime::String& payload) {
+    static oro::runtime::String getRequestProtocolVersion(const Request& request) {
+      if (!request.params.isObject()) {
+        return "";
+      }
+
+      const auto& params = request.params.as<Object>();
+      if (!params.contains("_meta") || !params.get("_meta").isObject()) {
+        return "";
+      }
+
+      const auto& metadata = params.get("_meta").as<Object>();
+      if (!metadata.contains("io.modelcontextprotocol/protocolVersion") ||
+          !metadata.get("io.modelcontextprotocol/protocolVersion").isString()) {
+        return "";
+      }
+
+      return metadata.get("io.modelcontextprotocol/protocolVersion").as<String>().value();
+    }
+
+    static bool hasCurrentClientCapabilities(const Request& request) {
+      if (!request.params.isObject()) {
+        return false;
+      }
+
+      const auto& params = request.params.as<Object>();
+      if (!params.contains("_meta") || !params.get("_meta").isObject()) {
+        return false;
+      }
+
+      const auto& metadata = params.get("_meta").as<Object>();
+      return metadata.contains("io.modelcontextprotocol/clientCapabilities") &&
+        metadata.get("io.modelcontextprotocol/clientCapabilities").isObject();
+    }
+
+    static void prepareCurrentResponse(Context& ctx, const Request& request, Response& response) {
+      if (response.isError() || !response.result.isObject()) {
+        return;
+      }
+
+      auto& result = response.result.as<Object>();
+      result.set("resultType", String("complete"));
+
+      if (request.method == "tools/list" ||
+          request.method == "resources/list" ||
+          request.method == "resources/read" ||
+          request.method == "prompts/list") {
+        result.set("ttlMs", Number(5000));
+        result.set("cacheScope", String("private"));
+      }
+
+      Object metadata;
+      if (result.contains("_meta") && result.get("_meta").isObject()) {
+        metadata = result.get("_meta").as<Object>();
+      }
+      metadata.set("io.modelcontextprotocol/serverInfo", Object(Object::Entries {
+        {"name", String(ctx.options.cliDisplayName)},
+        {"version", String(runtime::VERSION_FULL_STRING)}
+      }));
+      result.set("_meta", metadata);
+    }
+
+    static std::optional<oro::runtime::String> handleJsonRpcPayload(
+      Context& ctx,
+      const oro::runtime::String& payload,
+      bool& legacyInitialized,
+      oro::runtime::String& legacyProtocolVersion,
+      bool& modernEra
+    ) {
       try {
         auto any = runtime::JSON::parse(payload);
         Error error;
@@ -3068,14 +3235,245 @@ namespace oro::cli::mcp {
           return runtime::JSON::stringify(Any(response.toJSON()));
         }
 
+        if (!request->params.isNull() && !request->params.isObject()) {
+          auto response = Response::failure(
+            request->id,
+            Error(ErrorCode::InvalidParams, "MCP request params must be an object")
+          );
+          return runtime::JSON::stringify(Any(response.toJSON()));
+        }
+
+        const auto protocolVersion = getRequestProtocolVersion(*request);
+        const bool currentRequest = protocolVersion == runtime::mcp::kProtocolVersion ||
+          (modernEra && protocolVersion.empty() && request->isNotification());
+
+        if (!protocolVersion.empty() && protocolVersion != runtime::mcp::kProtocolVersion) {
+          Object data(Object::Entries {
+            {"supported", mcpSupportedVersions()},
+            {"requested", String(protocolVersion)}
+          });
+          auto response = Response::failure(
+            request->id,
+            Error(ErrorCode::UnsupportedProtocolVersion, "unsupported MCP protocol version", data)
+          );
+          return runtime::JSON::stringify(Any(response.toJSON()));
+        }
+
+        if ((legacyInitialized && currentRequest) ||
+            (modernEra && !currentRequest)) {
+          Object data(Object::Entries {
+            {"supported", mcpSupportedVersions()},
+            {"requested", String(
+              currentRequest
+                ? runtime::mcp::kProtocolVersion
+                : legacyProtocolVersion
+            )}
+          });
+          auto response = Response::failure(
+            request->id,
+            Error(
+              ErrorCode::UnsupportedProtocolVersion,
+              "MCP connection cannot change protocol eras",
+              data
+            )
+          );
+          return runtime::JSON::stringify(Any(response.toJSON()));
+        }
+
+        if (currentRequest) {
+          modernEra = true;
+        }
+
+        if (currentRequest && !request->isNotification() && !hasCurrentClientCapabilities(*request)) {
+          Object data(Object::Entries {
+            {"requiredCapabilities", Object(Object::Entries {})}
+          });
+          auto response = Response::failure(
+            request->id,
+            Error(
+              ErrorCode::MissingRequiredClientCapability,
+              "request metadata must include clientCapabilities",
+              data
+            )
+          );
+          return runtime::JSON::stringify(Any(response.toJSON()));
+        }
+
+        if (request->method == "server/discover") {
+          if (!currentRequest) {
+            Object data(Object::Entries {
+              {"supported", mcpSupportedVersions()},
+              {"requested", String(protocolVersion)}
+            });
+            auto response = Response::failure(
+              request->id,
+              Error(
+                ErrorCode::UnsupportedProtocolVersion,
+                "server/discover requires MCP 2026-07-28 request metadata",
+                data
+              )
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+          modernEra = true;
+        } else if (currentRequest && request->method == "initialize") {
+          auto response = Response::failure(
+            request->id,
+            Error(ErrorCode::MethodNotFound, "initialize is not available in the modern MCP protocol")
+          );
+          return runtime::JSON::stringify(Any(response.toJSON()));
+        } else if (request->method == "initialize") {
+          if (request->isNotification()) {
+            auto response = Response::failure(
+              request->id,
+              Error(ErrorCode::InvalidRequest, "initialize requires a request id")
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+          if (legacyInitialized) {
+            auto response = Response::failure(
+              request->id,
+              Error(ErrorCode::InvalidRequest, "MCP connection is already initialized")
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+          if (!request->params.isObject()) {
+            auto response = Response::failure(
+              request->id,
+              Error(ErrorCode::InvalidParams, "initialize params must be an object")
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+
+          const auto& params = request->params.as<Object>();
+          if (!params.contains("protocolVersion") ||
+              !params.get("protocolVersion").isString() ||
+              params.get("protocolVersion").as<String>().value().empty() ||
+              !params.contains("capabilities") ||
+              !params.get("capabilities").isObject() ||
+              !params.contains("clientInfo") ||
+              !params.get("clientInfo").isObject()) {
+            auto response = Response::failure(
+              request->id,
+              Error(
+                ErrorCode::InvalidParams,
+                "initialize requires protocolVersion, capabilities, and clientInfo"
+              )
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+
+          const auto& clientInfo = params.get("clientInfo").as<Object>();
+          if (!clientInfo.contains("name") ||
+              !clientInfo.get("name").isString() ||
+              clientInfo.get("name").as<String>().value().empty() ||
+              !clientInfo.contains("version") ||
+              !clientInfo.get("version").isString() ||
+              clientInfo.get("version").as<String>().value().empty()) {
+            auto response = Response::failure(
+              request->id,
+              Error(
+                ErrorCode::InvalidParams,
+                "initialize clientInfo requires name and version"
+              )
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+
+          const auto requestedVersion = params.get("protocolVersion").as<String>().value();
+          legacyProtocolVersion = runtime::mcp::isLegacyProtocolVersion(requestedVersion)
+            ? requestedVersion
+            : oro::runtime::String(runtime::mcp::kLegacyProtocolVersion);
+        } else if (!currentRequest && request->method != "initialize" && !legacyInitialized) {
+          auto response = Response::failure(
+            request->id,
+            Error(ErrorCode::InvalidRequest, "MCP session is not initialized")
+          );
+          return runtime::JSON::stringify(Any(response.toJSON()));
+        }
+
+        if (currentRequest && request->method == "subscriptions/listen") {
+          if (request->isNotification()) {
+            auto response = Response::failure(
+              request->id,
+              Error(ErrorCode::InvalidRequest, "subscriptions/listen requires a request id")
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+          if (!request->params.isObject()) {
+            auto response = Response::failure(
+              request->id,
+              Error(ErrorCode::InvalidParams, "subscriptions/listen params must be an object")
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+          const auto& params = request->params.as<Object>();
+          if (!params.contains("notifications") || !params.get("notifications").isObject()) {
+            auto response = Response::failure(
+              request->id,
+              Error(ErrorCode::InvalidParams, "subscriptions/listen requires a notifications filter")
+            );
+            return runtime::JSON::stringify(Any(response.toJSON()));
+          }
+          const auto& notifications = params.get("notifications").as<Object>();
+          for (const auto* filter : {"toolsListChanged", "promptsListChanged", "resourcesListChanged"}) {
+            if (notifications.contains(filter) && !notifications.get(filter).isBoolean()) {
+              auto response = Response::failure(
+                request->id,
+                Error(
+                  ErrorCode::InvalidParams,
+                  oro::runtime::String(filter) + " must be a boolean"
+                )
+              );
+              return runtime::JSON::stringify(Any(response.toJSON()));
+            }
+          }
+          if (notifications.contains("resourceSubscriptions")) {
+            if (!notifications.get("resourceSubscriptions").isArray()) {
+              auto response = Response::failure(
+                request->id,
+                Error(ErrorCode::InvalidParams, "resourceSubscriptions must be an array of resource URIs")
+              );
+              return runtime::JSON::stringify(Any(response.toJSON()));
+            }
+            for (const auto& uri : notifications.get("resourceSubscriptions").as<Array>().value()) {
+              if (!uri.isString()) {
+                auto response = Response::failure(
+                  request->id,
+                  Error(ErrorCode::InvalidParams, "resourceSubscriptions entries must be strings")
+                );
+                return runtime::JSON::stringify(Any(response.toJSON()));
+              }
+            }
+          }
+
+          Object acknowledgement(Object::Entries {
+            {"jsonrpc", String(runtime::mcp::kJsonRpcVersion)},
+            {"method", String("notifications/subscriptions/acknowledged")},
+            {"params", Object(Object::Entries {
+              {"notifications", Object(Object::Entries {})},
+              {"_meta", Object(Object::Entries {
+                {"io.modelcontextprotocol/subscriptionId", request->id}
+              })}
+            })}
+          });
+          return runtime::JSON::stringify(Any(acknowledgement));
+        }
+
         if (request->isNotification()) {
-          handleRequest(ctx, *request);
+          handleRequest(ctx, *request, legacyProtocolVersion);
           return std::nullopt;
         }
 
-        auto response = handleRequest(ctx, *request);
+        auto response = handleRequest(ctx, *request, legacyProtocolVersion);
         if (!response.has_value()) {
           return std::nullopt;
+        }
+        if (request->method == "initialize" && !response->isError()) {
+          legacyInitialized = true;
+        }
+        if (currentRequest) {
+          prepareCurrentResponse(ctx, *request, *response);
         }
         return runtime::JSON::stringify(Any(response->toJSON()));
       } catch (const runtime::JSON::Error& e) {
@@ -3183,22 +3581,87 @@ namespace oro::cli::mcp {
             ctx(ctx)
         {}
 
-        void onSessionStarted(const oro::runtime::String&) override {}
-        void onSessionStopped(const oro::runtime::String&) override {}
+        void onSessionStarted(const oro::runtime::String& sessionId) override {
+          std::lock_guard<std::mutex> lock(this->stateMutex);
+          this->sessions.insert_or_assign(sessionId, SessionState {});
+        }
+
+        void onSessionStopped(const oro::runtime::String& sessionId) override {
+          std::lock_guard<std::mutex> lock(this->stateMutex);
+          this->sessions.erase(sessionId);
+        }
+
+        bool getExpectedRequestHeaders(
+          const oro::runtime::String& payload,
+          Vector<runtime::mcp::ToolHeader>& headers,
+          oro::runtime::String& error
+        ) override {
+          if (this->ctx == nullptr) {
+            return true;
+          }
+          try {
+            const auto request = nlohmann::json::parse(payload);
+            if (request.value("method", "") != "tools/call") {
+              return true;
+            }
+            const auto params = request.value("params", nlohmann::json::object());
+            const auto name = params.value("name", "");
+            for (const auto& tool : this->ctx->tools.tools) {
+              if (tool.name == name) {
+                const auto arguments = params.contains("arguments")
+                  ? params["arguments"].dump()
+                  : oro::runtime::String("{}");
+                return tool.getExpectedHTTPHeaders(arguments, headers, error);
+              }
+            }
+            return true;
+          } catch (const std::exception& exception) {
+            error = oro::runtime::String("Unable to validate MCP parameter headers: ") + exception.what();
+            return false;
+          }
+        }
 
         std::optional<oro::runtime::String> onJsonRpcRequest(const oro::runtime::String& sessionId, const oro::runtime::String& payload) override {
           if (this->ctx == nullptr) {
             return std::nullopt;
           }
-          (void)sessionId;
-          return handleJsonRpcPayload(*this->ctx, payload);
+          SessionState state;
+          {
+            std::lock_guard<std::mutex> lock(this->stateMutex);
+            const auto it = this->sessions.find(sessionId);
+            if (it != this->sessions.end()) {
+              state = it->second;
+            }
+          }
+
+          auto response = handleJsonRpcPayload(
+            *this->ctx,
+            payload,
+            state.legacyInitialized,
+            state.legacyProtocolVersion,
+            state.modernEra
+          );
+
+          {
+            std::lock_guard<std::mutex> lock(this->stateMutex);
+            this->sessions.insert_or_assign(sessionId, state);
+          }
+          return response;
         }
 
         void onPing(const oro::runtime::String&) override {}
 
       private:
+        struct SessionState {
+          bool legacyInitialized = false;
+          oro::runtime::String legacyProtocolVersion;
+          bool modernEra = false;
+        };
+
         runtime::mcp::HTTPServer* server = nullptr;
         Context* ctx = nullptr;
+        std::mutex stateMutex;
+        std::unordered_map<oro::runtime::String, SessionState> sessions;
     };
   }
 
@@ -3218,6 +3681,9 @@ namespace oro::cli::mcp {
 
     if (!options.useHttp) {
       bool useContentLength = false;
+      bool legacyInitialized = false;
+      oro::runtime::String legacyProtocolVersion;
+      bool modernEra = false;
       while (true) {
         auto msg = readStdioMessage(std::cin);
         if (!msg.has_value()) {
@@ -3225,7 +3691,13 @@ namespace oro::cli::mcp {
         }
 
         useContentLength = useContentLength || msg->usesContentLength;
-        auto response = handleJsonRpcPayload(ctx, msg->payload);
+        auto response = handleJsonRpcPayload(
+          ctx,
+          msg->payload,
+          legacyInitialized,
+          legacyProtocolVersion,
+          modernEra
+        );
         if (response.has_value()) {
           writeStdioMessage(*response, useContentLength);
         }

@@ -20,10 +20,19 @@ Register a tool that can be invoked by MCP clients.
 \fIPromise<number \\| null>\fR
 .TP
 \fBunregisterTool(name)\fR
-This is an exported `FunctionDeclaration` named `unregisterTool`, but it does not yet have a dedicated description in the generated reference.
+Unregister a tool by name.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR Whether a registered tool was removed.
 .TP
 \fBlistTools()\fR
-This is an exported `FunctionDeclaration` named `listTools`, but it does not yet have a dedicated description in the generated reference.
+List the currently registered tool descriptors.
+\fBReturns:\fR
+.br
+\fIPromise<MCPToolDescriptor[]>\fR
 .TP
 \fBregisterResource(resource)\fR
 Register a resource that can be read or subscribed to by MCP clients.
@@ -35,16 +44,45 @@ Register a resource that can be read or subscribed to by MCP clients.
 \fIPromise<number \\| null>\fR
 .TP
 \fBunregisterResource(uri)\fR
-This is an exported `FunctionDeclaration` named `unregisterResource`, but it does not yet have a dedicated description in the generated reference.
+Unregister a resource by URI.
+\fBParameters:\fR
+.br
+\fIuri\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR Whether a registered resource was removed.
 .TP
 \fBlistResources()\fR
-This is an exported `FunctionDeclaration` named `listResources`, but it does not yet have a dedicated description in the generated reference.
+List the currently registered resource descriptors.
+\fBReturns:\fR
+.br
+\fIPromise<MCPResourceDescriptor[]>\fR
 .TP
 \fBinvokeTool(name, args, options)\fR
-This is an exported `FunctionDeclaration` named `invokeTool`, but it does not yet have a dedicated description in the generated reference.
+Invoke a registered tool through the local MCP service.
+\fBParameters:\fR
+.br
+\fIname\fR (string; required)
+.br
+\fIargs\fR (Record<string, any>; optional)
+.br
+\fIoptions\fR (MCPInvocationOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR Whether the invocation was accepted.
 .TP
 \fBpublishResource(uri, result, options)\fR
-This is an exported `FunctionDeclaration` named `publishResource`, but it does not yet have a dedicated description in the generated reference.
+Publish an update to active subscriptions for a registered resource.
+\fBParameters:\fR
+.br
+\fIuri\fR (string; required)
+.br
+\fIresult\fR (MCPResourceHandlerResult; required)
+.br
+\fIoptions\fR (MCPPublishResourceOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR Whether at least one matching stream received the update.
 .TP
 \fBsetAuthorizationHandler(handler)\fR
 Configure a runtime authorization handler for incoming MCP HTTP requests. Pass a function to enable dynamic authorization or `null`/`undefined` to clear. The handler can return a boolean or an {@link MCPAuthorizationDecision} object.
@@ -64,10 +102,16 @@ Start the embedded MCP HTTP/SSE bridge.
 \fIoptions\fR (MCPStartServerOptions; optional; default null)
 \fBReturns:\fR
 .br
-\fIPromise<{ running: boolean, host: string, port: number, endpoint: string, oauth?: { authorizePath?: string \\| null, tokenPath?: string \\| null, metadataPath?: string \\| null } }>\fR
+\fIPromise<MCPStartServerResult>\fR
 .TP
 \fBstopServer()\fR
-This is an exported `FunctionDeclaration` named `stopServer`, but it does not yet have a dedicated description in the generated reference.
+Stop the embedded MCP server.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR Whether the server is stopped.
 .TP
 \fBserverStatus()\fR
-This is an exported `FunctionDeclaration` named `serverStatus`, but it does not yet have a dedicated description in the generated reference.
+Report whether the embedded MCP server is running.
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR

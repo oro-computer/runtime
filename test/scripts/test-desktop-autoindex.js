@@ -6,9 +6,10 @@ import {
   writeFileSync,
   mkdirSync
 } from 'node:fs'
-import { execSync as exec } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
+import { resolveOrocExecutable } from './oroc-path.js'
 
 const dirname = path.dirname(
   import.meta.url.replace('file://', '').replace(/^\/[A-Za-z]:/, '')
@@ -20,7 +21,7 @@ const RUNTIME_HOME_API = path.join(root, '..', 'api')
 const CONFIG_FILENAMES = ['oro.toml', 'oro.ini']
 const SKIP_EXT = '1'
 const SKIP_TEST_EXT = '1'
-const { DEBUG, TMP, TMPDIR = TMP || os.tmpdir(), ORO_BIN } = process.env
+const { DEBUG, TMP, TMPDIR = TMP || os.tmpdir() } = process.env
 
 const workdir = path.join(TMPDIR, 'oro-test-work-autoindex')
 try {
@@ -67,14 +68,7 @@ for (const filename of CONFIG_FILENAMES) {
   }
 }
 
-const orocCandidate = path.join(
-  repoRoot,
-  'build',
-  'x86_64-desktop',
-  'bin',
-  process.platform === 'win32' ? 'oroc.exe' : 'oroc'
-)
-const cli = ORO_BIN || (existsSync(orocCandidate) ? orocCandidate : 'oroc')
+const cli = resolveOrocExecutable(repoRoot)
 
 try {
   const env = {
@@ -87,14 +81,13 @@ try {
     env.ORO_HOME_API = RUNTIME_HOME_API
   }
 
-  exec(
-    `${cli} build -r --test=./index-autoindex.js ${!DEBUG ? '-o --prod' : ''}`,
-    {
-      stdio: 'inherit',
-      env,
-      cwd: workdir
-    }
-  )
+  const args = ['build', '-r', '--test=./index-autoindex.js']
+  if (!DEBUG) args.push('-o', '--prod')
+  execFileSync(cli, args, {
+    stdio: 'inherit',
+    env,
+    cwd: workdir
+  })
 } catch (err) {
   console.log({ err })
   if (process.platform === 'linux') {

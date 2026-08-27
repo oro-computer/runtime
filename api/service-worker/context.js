@@ -25,7 +25,7 @@ export class Context {
 
   /**
    * The `ExtendableEvent` for this `Context` instance.
-   * @type {ExtendableEvent}
+   * @type {import('./events.js').ExtendableEvent}
    */
   get event () {
     return this.#event

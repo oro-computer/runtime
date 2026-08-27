@@ -32,11 +32,9 @@ import URL from '../url.js'
  */
 
 /**
- * @typedef {
- *   PackageResolveOptions &
- *   PackageOptions &
- *   { origins?: string[] | URL[] }
- * } ResolveOptions
+ * @typedef {PackageResolveOptions & PackageOptions & {
+ *   origins?: string[] | URL[]
+ * }} ResolveOptions
  */
 
 /**
@@ -146,7 +144,7 @@ export function createRequire (options) {
 
   /**
    * @param {string} input
-   * @param {ResolveOptions & RequireOptions=} [options
+   * @param {ResolveOptions & RequireOptions=} [options]
    * @ignore
    */
   function applyResolvers (input, options = null) {

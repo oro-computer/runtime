@@ -1,41 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-LATEST_HASH=$(git log --pretty=format:'%h' -n 1)
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+current_version="$(tr -d '[:space:]' < "$root/VERSION.txt")"
+IFS='.' read -r major minor patch <<< "$current_version"
+suggested_version="$major.$minor.$((patch + 1))"
+next_version="${1:-}"
 
-BASE_STRING=$(cat VERSION.txt)
-BASE_LIST=($(echo $BASE_STRING | tr '.' ' '))
-V_MAJOR=${BASE_LIST[0]}
-V_MINOR=${BASE_LIST[1]}
-V_PATCH=${BASE_LIST[2]}
-echo -e "Current version: $BASE_STRING"
-echo -e "Latest commit hash: $LATEST_HASH"
-V_PATCH=$((V_PATCH + 1))
-SUGGESTED_VERSION="$V_MAJOR.$V_MINOR.$V_PATCH"
-echo -ne "Enter a version number [$SUGGESTED_VERSION]: "
-read INPUT_STRING
-if [ "$INPUT_STRING" = "" ]; then
-    INPUT_STRING=$SUGGESTED_VERSION
-fi
-echo -e "Will set new version to be $INPUT_STRING"
-echo $INPUT_STRING > VERSION.txt
-jq ".version = \"$INPUT_STRING\"" clib.json > tmp.$$.json && mv tmp.$$.json clib.json
-
-BASE_LIST=($(echo $INPUT_STRING | tr '.' ' '))
-V_MAJOR_NEW=${BASE_LIST[0]}
-V_MINOR_NEW=${BASE_LIST[1]}
-
-if [ "$V_MAJOR" -ne "$V_MAJOR_NEW" ] || [ "$V_MINOR" -ne "$V_MINOR_NEW" ]; then
-    echo "Updating CLI npm packages..."
-    for pkg in npm/packages/@orocomputer/runtime-node; do
-        (
-            cd "$pkg" && npm version "$V_MAJOR_NEW.$V_MINOR_NEW.0"
-        )
-    done
+if [[ -z "$next_version" ]]; then
+  printf 'Enter a version number [%s]: ' "$suggested_version"
+  read -r next_version
 fi
 
-# git add VERSION.txt clib.json
-# git commit -m "Bump version to ${INPUT_STRING}."
-# git tag -a -m "Tag version ${INPUT_STRING}." "v$INPUT_STRING"
-# git push origin --tags
+next_version="${next_version:-$suggested_version}"
+next_version="${next_version#v}"
 
-echo -e "Finished."
+node "$root/bin/set-release-version.js" "$next_version"
+node "$root/bin/check-release-version.js" "$next_version"
+
+printf 'Updated Oro Runtime version from %s to %s.\n' "$current_version" "$next_version"

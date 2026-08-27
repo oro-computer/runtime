@@ -1,5 +1,5 @@
 {
-  "name": "@orocomputer/runtime",
+  "name": "@oro-computer/runtime",
   "private": true,
   "src": [],
   "dependencies": {

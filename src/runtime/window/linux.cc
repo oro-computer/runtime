@@ -797,6 +797,7 @@ namespace oro::runtime::window {
       },
       .client = this->bridge->client,
       .index = options.index,
+      .argv = options.argv,
       .userScript = options.userScript,
       .userConfig = options.userConfig,
       .conduit = {
@@ -856,6 +857,7 @@ namespace oro::runtime::window {
       .features = options.features,
       .client = this->bridge->client,
       .index = options.index,
+      .argv = options.argv,
       .userScript = options.userScript,
       .userConfig = options.userConfig,
       .conduit = {
@@ -2788,16 +2790,22 @@ namespace oro::runtime::window {
 
   void Window::setAlwaysOnTop (bool enabled) {
     if (this->window) {
-      gtk_window_set_keep_above(GTK_WINDOW(this->window), enabled);
+      g_object_set_data(
+        G_OBJECT(this->window),
+        "oro-always-on-top",
+        GINT_TO_POINTER(enabled ? 1 : 0)
+      );
+      if (!this->options.headless) {
+        gtk_window_set_keep_above(GTK_WINDOW(this->window), enabled);
+      }
     }
   }
 
   bool Window::isAlwaysOnTop () {
     if (this->window) {
-      // gtk_window_get_keep_above() is not available; query property instead
-      gboolean keep_above = FALSE;
-      g_object_get(G_OBJECT(this->window), "keep-above", &keep_above, NULL);
-      return keep_above;
+      return GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(this->window), "oro-always-on-top")
+      ) != 0;
     }
     return false;
   }

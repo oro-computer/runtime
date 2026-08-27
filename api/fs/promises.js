@@ -73,8 +73,6 @@ function normalizePath (path) {
 }
 
 /**
- * @typedef {import('../buffer.js').Buffer} Buffer
- * @typedef {import('./stats.js').Stats} Stats
  * @typedef {Uint8Array|Int8Array} TypedArray
  * @ignore
  */
@@ -697,7 +695,7 @@ export async function rm (path, options) {
   options = { recursive: false, force: false, ...options }
   const { recursive, force } = options
   try {
-    const stats = await stat(path)
+    const stats = await lstat(path)
     if (stats.isDirectory()) {
       if (!recursive) throw new Error('EISDIR: recursive not set')
       const entries = await readdir(path, { withFileTypes: true })
@@ -710,10 +708,33 @@ export async function rm (path, options) {
       await (await import('./promises.js')).unlink(path)
     }
   } catch (err) {
-    if (!(force && /exist|enoent|found/i.test(err.message || String(err)))) {
+    if (
+      !(
+        force &&
+        /exist|enoent|not found|no such file/i.test(err.message || String(err))
+      )
+    ) {
       throw err
     }
   }
+}
+
+async function pathExists (path) {
+  try {
+    await lstat(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function createAlreadyExistsError (path) {
+  const err = new Error(`EEXIST: file already exists, cp '${path}'`)
+  err.code = 'EEXIST'
+  err.errno = 'EEXIST'
+  err.path = path
+  err.syscall = 'cp'
+  return err
 }
 
 /**
@@ -750,94 +771,84 @@ export async function cp (src, dest, options) {
     preserveMode,
     preserveOwner
   } = options
-  try {
-    const st = await stat(src)
-    if (st.isDirectory()) {
-      if (!recursive) throw new Error('EISDIR: recursive not set')
-      await (await import('./promises.js')).mkdir(dest, { recursive: true })
-      if (preserveMode) {
-        try {
-          const st = await stat(src)
-          await (await import('./promises.js')).chmod(dest, st.mode & 0o777)
-        } catch {}
+  const st = await stat(src)
+  if (st.isDirectory()) {
+    if (!recursive) throw new Error('EISDIR: recursive not set')
+    await (await import('./promises.js')).mkdir(dest, { recursive: true })
+    if (preserveMode) {
+      try {
+        const st = await stat(src)
+        await (await import('./promises.js')).chmod(dest, st.mode & 0o777)
+      } catch {}
+    }
+    if (preserveOwner) {
+      try {
+        const st = await stat(src)
+        await (await import('./promises.js')).chown(dest, st.uid, st.gid)
+      } catch {}
+    }
+    const entries = await readdir(src, { withFileTypes: true })
+    for (const entry of entries) {
+      const name = typeof entry === 'string' ? entry : entry.name
+      const s = joinPath(src, name)
+      const d = joinPath(dest, name)
+      if (typeof filter === 'function') {
+        if (!(await filter(s, d))) continue
       }
-      if (preserveOwner) {
-        try {
-          const st = await stat(src)
-          await (await import('./promises.js')).chown(dest, st.uid, st.gid)
-        } catch {}
-      }
-      const entries = await readdir(src, { withFileTypes: true })
-      for (const entry of entries) {
-        const name = typeof entry === 'string' ? entry : entry.name
-        const s = joinPath(src, name)
-        const d = joinPath(dest, name)
-        if (typeof filter === 'function') {
-          if (!(await filter(s, d))) continue
-        }
-        await cp(s, d, {
-          recursive,
-          dereference,
-          force,
-          preserveTimestamps,
-          filter,
-          errorOnExist,
-          preserveMode,
-          preserveOwner
-        })
-      }
-    } else {
-      if (!dereference) {
-        try {
-          const lst = await lstat(src)
-          if (lst.isSymbolicLink()) {
-            if (!force || errorOnExist) {
-              try {
-                await stat(dest)
-                if (errorOnExist) throw new Error('EEXIST: file already exists')
-                return
-              } catch {
-                /* ignore ENOENT */
-              }
-            }
-            const target = await readlink(src)
-            await (await import('./promises.js')).symlink(target, dest)
+      await cp(s, d, {
+        recursive,
+        dereference,
+        force,
+        preserveTimestamps,
+        filter,
+        errorOnExist,
+        preserveMode,
+        preserveOwner
+      })
+    }
+  } else {
+    if (!dereference) {
+      try {
+        const lst = await lstat(src)
+        if (lst.isSymbolicLink()) {
+          const destinationExists = await pathExists(dest)
+          if (destinationExists && !force) {
+            if (errorOnExist) throw createAlreadyExistsError(dest)
             return
           }
-        } catch {}
-      }
-      if (!force || errorOnExist) {
-        try {
-          await stat(dest)
-          if (errorOnExist) throw new Error('EEXIST: file already exists')
+          if (destinationExists) {
+            await rm(dest, { recursive: true, force: true })
+          }
+          const target = await readlink(src)
+          await (await import('./promises.js')).symlink(target, dest)
           return
-        } catch {}
-      }
-      await (await import('./promises.js')).copyFile(src, dest, 0)
-      if (preserveMode) {
-        try {
-          const st = await stat(src)
-          await (await import('./promises.js')).chmod(dest, st.mode & 0o777)
-        } catch {}
-      }
-      if (preserveOwner) {
-        try {
-          const st = await stat(src)
-          await (await import('./promises.js')).chown(dest, st.uid, st.gid)
-        } catch {}
-      }
-      if (preserveTimestamps) {
-        try {
-          const srcStat = await stat(src)
-          await (
-            await import('./promises.js')
-          ).utimes(dest, srcStat.atimeMs / 1000, srcStat.mtimeMs / 1000)
-        } catch {}
-      }
+        }
+      } catch {}
     }
-  } catch (err) {
-    if (!(force && /exist|enoent|found/i.test(err.message || String(err)))) {
-      throw err
+    if (!force && (await pathExists(dest))) {
+      if (errorOnExist) throw createAlreadyExistsError(dest)
+      return
+    }
+    await (await import('./promises.js')).copyFile(src, dest, 0)
+    if (preserveMode) {
+      try {
+        const st = await stat(src)
+        await (await import('./promises.js')).chmod(dest, st.mode & 0o777)
+      } catch {}
+    }
+    if (preserveOwner) {
+      try {
+        const st = await stat(src)
+        await (await import('./promises.js')).chown(dest, st.uid, st.gid)
+      } catch {}
+    }
+    if (preserveTimestamps) {
+      try {
+        const srcStat = await stat(src)
+        await (
+          await import('./promises.js')
+        ).utimes(dest, srcStat.atimeMs / 1000, srcStat.mtimeMs / 1000)
+      } catch {}
     }
   }
 }

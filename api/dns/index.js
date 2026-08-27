@@ -67,7 +67,7 @@ const dc = diagnostics.channels.group('dns', [
  * @see {@link https://nodejs.org/api/dns.html#dns_dns_lookup_hostname_options_callback}
  * @param {string} hostname - The host name to resolve.
  * @param {(LookupOptions|number|string)=} [options] - Lookup options or the record family.
- * @param {function(Error, string|LookupAddress[], 4|6=):void} cb - Invoked when the lookup completes.
+ * @param {function(Error, string|LookupAddress[], 4|6=):void} [cb] - Invoked when the lookup completes.
  * @returns {void}
  */
 export function lookup (hostname, options = {}, cb) {

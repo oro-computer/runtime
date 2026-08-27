@@ -9,6 +9,7 @@ static bool initialize (oapi_context_t* context, const void *data) {
     t.run(oro::Tests::env);
     t.run(oro::Tests::ini);
     t.run(oro::Tests::json);
+    t.run(oro::Tests::mcp);
     t.run(oro::Tests::toml);
     t.run(oro::Tests::platform);
     t.run(oro::Tests::preload);

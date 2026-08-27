@@ -564,7 +564,7 @@ export class Request {
 export class Response {
   /**
    * Creates a `Response` from JSON input
-   * @param {obejct} json
+   * @param {object} json
    * @param {ResponseOptions=} [options]
    * @return {Response}
    */

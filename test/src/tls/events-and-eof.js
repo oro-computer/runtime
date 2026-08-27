@@ -2,8 +2,9 @@ import { test } from 'oro:test'
 
 test('tls: secureConnect payload is delivered (synthetic)', async (t) => {
   const tls = await import('oro:tls')
-  const s = tls.connect({ host: 'example', port: 0, rejectUnauthorized: false })
+  const s = tls.connect({ host: '127.0.0.1', port: 9, rejectUnauthorized: false })
   let got = null
+  s.on('error', () => {})
   s.on('secureConnect', (info) => {
     got = info
   })
@@ -16,8 +17,8 @@ test('tls: secureConnect payload is delivered (synthetic)', async (t) => {
         id,
         protocol: 'TLSv1.3',
         cipher: 'TLS_AES_128_GCM_SHA256',
-        hostname: 'example',
-        subject: 'CN=example'
+        hostname: '127.0.0.1',
+        subject: 'CN=localhost'
       }
     }
   }
@@ -28,8 +29,9 @@ test('tls: secureConnect payload is delivered (synthetic)', async (t) => {
 })
 test('tls: client EOF triggers end and readStop (synthetic)', async (t) => {
   const tls = await import('oro:tls')
-  const s = tls.connect({ host: 'example', port: 0, rejectUnauthorized: false })
+  const s = tls.connect({ host: '127.0.0.1', port: 9, rejectUnauthorized: false })
   let ended = false
+  s.on('error', () => {})
   s.on('end', () => {
     ended = true
   })

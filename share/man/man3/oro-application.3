@@ -197,7 +197,7 @@ Creates a new window and returns an instance of ApplicationWindow.
 .br
 \fIopts.shouldExitApplicationOnClose\fR (boolean; optional; default false) whether the window can exit the app
 .br
-\fIopts.headless\fR (boolean; optional; default false) whether the window will be headless or not (no frame)
+\fIopts.headless\fR (boolean; optional) overrides the project headless setting for this window
 .br
 \fIopts.userScript\fR (string; optional; default null) A user script that will be injected into the window (desktop only)
 .br
@@ -319,7 +319,7 @@ An alias to `setSystemMenu()` for creating a tray menu.
 Set the enabled state of the system menu.
 \fBParameters:\fR
 .br
-\fIvalue\fR (object; required) an options object
+\fIvalue\fR (ApplicationMenuItemEnabledOptions; required) an options object
 \fBReturns:\fR
 .br
 \fIPromise<ipc.Result>\fR

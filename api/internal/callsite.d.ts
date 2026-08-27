@@ -435,11 +435,12 @@ export class CallSiteList extends Array<any> {
     }>;
     /**
      * Creates a `CallSiteList` instance from `Error` input.
+     * @ignore
      * @param {Error} error
      * @param {string} source
      * @return {CallSiteList}
      */
-    static from(error: Error, source: string): CallSiteList;
+    static fromError(error: Error, source: string): CallSiteList;
     /**
      * `CallSiteList` class constructor.
      * @param {Error} error

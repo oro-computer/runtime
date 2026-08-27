@@ -303,7 +303,7 @@ Asynchronously open a directory calling `callback` upon success or error.
 .br
 \fIoptions.withFileTypes\fR (boolean; optional; default false)
 .br
-\fIcallback\fR (function(Error \\| null, Dir \\| undefined):any); required)
+\fIcallback\fR (function(Error \\| null, Dir \\| undefined):any; optional)
 .TP
 \fBopendirSync(path, options)\fR
 Synchronously open a directory.
@@ -388,7 +388,7 @@ Asynchronously read all entries in a directory.
 .br
 \fIoptions.withFileTypes\fR (boolean; optional; default false)
 .br
-\fIcallback\fR (function(Error \\| null, (Dirent \\| string)[]):any; required)
+\fIcallback\fR (function(Error \\| null, (Dirent \\| string)[]):any; optional)
 .TP
 \fBreaddirSync(path, options)\fR
 Synchronously read all entries in a directory.
@@ -536,7 +536,7 @@ Get the stats of a file
 .br
 \fIoptions.signal\fR (AbortSignal \\| undefined; optional)
 .br
-\fIcallback\fR (function(Error \\| null, Stats \\| undefined):any; required)
+\fIcallback\fR (function(Error \\| null, Stats \\| undefined):any; optional)
 .TP
 \fBlstat(path, options, callback)\fR
 Get the stats of a symbolic link
@@ -552,7 +552,7 @@ Get the stats of a symbolic link
 .br
 \fIoptions.signal\fR (AbortSignal \\| undefined; optional)
 .br
-\fIcallback\fR (function(Error \\| null, Stats \\| undefined):any; required)
+\fIcallback\fR (function(Error \\| null, Stats \\| undefined):any; optional)
 .TP
 \fBlstatSync(path, options)\fR
 Synchronously get stats of a symbolic link
@@ -570,7 +570,7 @@ Creates a symlink of `src` at `dest`.
 .br
 \fIdest\fR (string; required)
 .br
-\fIcallback\fR (function(Error \\| null):any; required)
+\fIcallback\fR (function(Error \\| null):any; optional)
 .TP
 \fBsymlinkSync(src, dest, type)\fR
 Synchronously create a symlink
@@ -624,7 +624,7 @@ Documented function exposed by this module.
 .br
 \fIoptions.signal\fR (AbortSignal \\| undefined; optional)
 .br
-\fIcallback\fR (function(Error \\| null):any; required)
+\fIcallback\fR (function(Error \\| null):any; optional)
 .TP
 \fBwriteFileSync(path, data, options)\fR
 Writes data to a file synchronously.

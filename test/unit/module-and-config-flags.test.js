@@ -38,6 +38,6 @@ test('node-esm-loader resolves oro:* specifiers via runtime package scope', asyn
     return resolved
   })
 
-  assert.equal(result, '@orocomputer/runtime/os.js')
-  assert.deepEqual(seen, ['@orocomputer/runtime/os.js'])
+  assert.equal(result, '@oro-computer/runtime/os.js')
+  assert.deepEqual(seen, ['@oro-computer/runtime/os.js'])
 })

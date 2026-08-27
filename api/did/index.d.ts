@@ -34,7 +34,8 @@ export class DID {
     idSegments: readonly any[];
     href: string;
     toString(): string;
-    toJSON(): string;
+    /** @returns {string|Record<string, any>} */
+    toJSON(): string | Record<string, any>;
     equals(other: any): boolean;
 }
 export class DIDURL extends DID {
@@ -50,18 +51,6 @@ export class DIDURL extends DID {
     withoutParameter(name: any): DIDURL;
     withQuery(query: any): DIDURL;
     withFragment(fragment: any): DIDURL;
-    toJSON(): {
-        did: string;
-        method: any;
-        methodSpecificId: any;
-        parameters: {
-            [k: string]: any;
-        };
-        path: any;
-        query: any;
-        fragment: any;
-        href: string;
-    };
 }
 export class DIDDocument {
     static from(input: any): DIDDocument;

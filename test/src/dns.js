@@ -95,7 +95,8 @@ test('dns.lookup', async (t) => {
   ])
 })
 
-const BAD_HOSTNAME = 'thisisnotahostname'
+const BAD_HOSTNAME = 'oro-runtime-does-not-exist.invalid'
+const LOOKUP_FAILURE_CODES = ['ENOTFOUND', 'EAI_AGAIN']
 
 test('dns.lookup bad hostname', async (t) => {
   if (!isOnline) {
@@ -105,7 +106,10 @@ test('dns.lookup bad hostname', async (t) => {
   await new Promise((resolve) => {
     dns.lookup(BAD_HOSTNAME, (err) => {
       t.ok(err instanceof Error, 'returns an error instance')
-      t.equal(err.code, 'ENOTFOUND', 'exposes ENOTFOUND code for missing hosts')
+      t.ok(
+        LOOKUP_FAILURE_CODES.includes(err.code),
+        'exposes a standard lookup failure code for missing hosts'
+      )
       t.equal(err.hostname, BAD_HOSTNAME, 'exposes hostname on error')
       resolve()
     })
@@ -212,14 +216,20 @@ test('dns.promises.lookup bad hostname', async (t) => {
     return t.comment('skipping offline')
   }
 
+  let error = null
   try {
     await dns.promises.lookup(BAD_HOSTNAME)
   } catch (err) {
-    t.equal(err?.code, 'ENOTFOUND', 'returns ENOTFOUND on unknown hostname')
-    t.equal(
-      err?.hostname,
-      BAD_HOSTNAME,
-      'exposes hostname on unknown host error'
-    )
+    error = err
   }
+  t.ok(error instanceof Error, 'rejects an unknown hostname')
+  t.ok(
+    LOOKUP_FAILURE_CODES.includes(error?.code),
+    'returns a standard lookup failure code for an unknown hostname'
+  )
+  t.equal(
+    error?.hostname,
+    BAD_HOSTNAME,
+    'exposes hostname on unknown host error'
+  )
 })

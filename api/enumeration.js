@@ -88,13 +88,21 @@ export class Enumeration extends Set {
 
   /**
    * @ignore
+   * @param {any} value
+   * @return {this}
    */
-  add () {}
+  add (_value) {
+    return this
+  }
 
   /**
    * @ignore
+   * @param {any} value
+   * @return {boolean}
    */
-  delete () {}
+  delete (_value) {
+    return false
+  }
 
   /**
    * JSON represenation of a `Enumeration` instance.
@@ -108,7 +116,7 @@ export class Enumeration extends Set {
   /**
    * Internal inspect function.
    * @ignore
-   * @return {LanguageQueryResult}
+   * @return {string}
    */
   inspect () {
     const tag = this[Symbol.toStringTag]

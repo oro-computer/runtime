@@ -1,5 +1,4 @@
 #include "tests.hh"
-#include "src/core/types.hh"
 #include "./ok.hh"
 
 namespace oro::Tests {
@@ -99,7 +98,7 @@ namespace oro::Tests {
     oapi_log(0, message.c_str());
   }
 
-  void Harness::log (const Map& message) const {
+  void Harness::log (const Map<>& message) const {
     if (message.size() == 0) {
       return this->log("Map {}");
     }
@@ -181,10 +180,20 @@ namespace oro::Tests {
 
   bool Harness::equals (const int64_t left, const int64_t right, const String& message) const {
     if (left == right) {
-      ok("%lld equals %lld: %s",  left, right, message.c_str());
+      ok(
+        "%lld equals %lld: %s",
+        static_cast<long long>(left),
+        static_cast<long long>(right),
+        message.c_str()
+      );
       return true;
     } else {
-      notok("%lld does not equal %lld: %s", left, right, message.c_str());
+      notok(
+        "%lld does not equal %lld: %s",
+        static_cast<long long>(left),
+        static_cast<long long>(right),
+        message.c_str()
+      );
       return false;
     }
   }
@@ -225,10 +234,20 @@ namespace oro::Tests {
 
   bool Harness::notEquals (const int64_t left, const int64_t right, const String& message) const {
     if (left == right) {
-      notok("%lld equals %lld: %s",  left, right, message.c_str());
+      notok(
+        "%lld equals %lld: %s",
+        static_cast<long long>(left),
+        static_cast<long long>(right),
+        message.c_str()
+      );
       return false;
     } else {
-      ok("%lld does not equal %lld: %s", left, right, message.c_str());
+      ok(
+        "%lld does not equal %lld: %s",
+        static_cast<long long>(left),
+        static_cast<long long>(right),
+        message.c_str()
+      );
       return true;
     }
   }
@@ -258,7 +277,7 @@ namespace oro::Tests {
       fn();
       notok("does not throw exception: %s", message.c_str());
       return false;
-    } catch (std::exception e) {
+    } catch (const std::exception& e) {
       ok("throws exception: %s", message.c_str());
       return true;
     }

@@ -153,35 +153,35 @@ export class OutgoingMessage extends Writable {
     get writableHighWaterMark(): number;
     /**
      * @ignore
-     * @return {OutgoingMessage}
+     * @return {this}
      */
-    addTrailers(_headers: any): OutgoingMessage;
+    addTrailers(_headers: any): this;
     /**
      * @ignore
-     * @return {OutgoingMessage}
+     * @return {this}
      */
-    cork(): OutgoingMessage;
+    cork(): this;
     /**
      * @ignore
-     * @return {OutgoingMessage}
+     * @return {this}
      */
-    uncork(): OutgoingMessage;
+    uncork(): this;
     /**
      * Destroys the message.
      * Once a socket is associated with the message and is connected,
      * that socket will be destroyed as well.
      * @param {Error?} [err]
-     * @return {OutgoingMessage}
+     * @return {this}
      */
-    destroy(err?: Error | null): OutgoingMessage;
+    destroy(err?: Error | null): this;
     /**
      * Finishes the outgoing message.
      * @param {(Buffer|Uint8Array|string|function)=} [chunk]
      * @param {(string|function)=} [encoding]
      * @param {function=} [callback]
-     * @return {OutgoingMessage}
+     * @return {this}
      */
-    end(chunk?: (Buffer | Uint8Array | string | Function) | undefined, encoding?: (string | Function) | undefined, callback?: Function | undefined): OutgoingMessage;
+    end(chunk?: (Buffer | Uint8Array | string | Function) | undefined, encoding?: (string | Function) | undefined, callback?: Function | undefined): this;
     /**
      * Append a single header value for the header object.
      * @param {string} name

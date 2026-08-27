@@ -229,3 +229,5 @@ class State {
 if (globalThis.self && !globalThis.window) {
   State.init()
 }
+
+export {}

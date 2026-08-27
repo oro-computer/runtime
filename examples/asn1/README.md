@@ -4,7 +4,11 @@ This example provides an interactive workspace for the `oro:asn1` runtime servic
 
 ## Running the example
 
-1. Build or relink the runtime so the examples bundle is up to date (`npm run relink` or `npm run gen && npm test`).
+1. Build or relink the runtime so the examples bundle is up to date
+   (`NO_ANDROID=1 NO_IOS=1 npm run relink` for a desktop-only relink, or
+   `npm run gen && npm test`). `NO_ANDROID` and `NO_IOS` are independent
+   presence flags: each disables only its named mobile family, and `0`/`false`
+   still count as set. See [Source-build environment](../../docs/BUILD_ENVIRONMENT.md).
 2. Launch the Oro app with `examples/oro.toml`.
 3. Open the `asn1` entry from the examples index.
 4. Choose a built-in sample or paste ASN.1 text, tweak the options, and press **Parse ASN.1**.

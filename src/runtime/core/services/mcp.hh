@@ -28,11 +28,11 @@ namespace oro::runtime::core::services {
         Callback callback = nullptr;
       };
 
-    struct RegisteredResource {
-      ResourceId id = 0;
-      mcp::ResourceDescriptor descriptor;
-      Callback callback = nullptr;
-    };
+      struct RegisteredResource {
+        ResourceId id = 0;
+        mcp::ResourceDescriptor descriptor;
+        Callback callback = nullptr;
+      };
 
       MCP(const Options& options);
       ~MCP() override;
@@ -67,6 +67,7 @@ namespace oro::runtime::core::services {
                       const String& name,
                       const String& sessionId,
                       const String& argumentsJson,
+                      bool modern,
                       const Callback& reply);
 
       bool resolveInvocation(const String& invocationId, const String& resultJson);
@@ -93,6 +94,8 @@ namespace oro::runtime::core::services {
         String toolName;
         String sessionId;
         String seq;
+        mcp::Tool definition;
+        bool modern = false;
         Callback reply = nullptr;
       };
 
@@ -105,6 +108,7 @@ namespace oro::runtime::core::services {
         String seq;
         Callback reply = nullptr;
         nlohmann::json requestId = nullptr;
+        bool modern = false;
       };
 
       Map<String, SharedPointer<PendingResourceRead>> pendingResourceReads;
@@ -117,6 +121,17 @@ namespace oro::runtime::core::services {
 
       Map<String, SharedPointer<ResourceSubscription>> resourceSubscriptions;
       Map<String, Vector<String>> sessionSubscriptions;
+
+      struct ModernSubscription {
+        nlohmann::json requestId = nullptr;
+        nlohmann::json accepted = nlohmann::json::object();
+        Vector<String> resourceUris;
+        bool toolsListChanged = false;
+        bool resourcesListChanged = false;
+        bool started = false;
+      };
+
+      Map<String, SharedPointer<ModernSubscription>> modernSubscriptions;
       struct AuthorizationDecision {
         bool allow = false;
         int status = 401;
@@ -137,7 +152,9 @@ namespace oro::runtime::core::services {
       SharedPointer<RegisteredTool> getTool(const String& name) const;
       SharedPointer<RegisteredResource> getResource(const String& uri) const;
       String generateInvocationId();
-      void sendJsonRpcNotification(const String& sessionId, const nlohmann::json& message);
+      bool sendJsonRpcNotification(const String& sessionId, const nlohmann::json& message);
+      void notifyModernListChange(const String& filter, const String& method);
+      void notifyModernSubscriptionStarted(const String& sessionId);
       std::optional<nlohmann::json> handleJsonRpcRequest(const String& sessionId, const nlohmann::json& request);
       void removeSessionSubscriptions(const String& sessionId,
                                       const std::optional<String>& reason = std::nullopt);

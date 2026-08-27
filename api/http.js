@@ -300,7 +300,7 @@ export class OutgoingMessage extends Writable {
 
   /**
    * @ignore
-   * @return {OutgoingMessage}
+   * @return {this}
    */
   addTrailers (_headers) {
     // not supported
@@ -309,7 +309,7 @@ export class OutgoingMessage extends Writable {
 
   /**
    * @ignore
-   * @return {OutgoingMessage}
+   * @return {this}
    */
   cork () {
     // not supported
@@ -318,7 +318,7 @@ export class OutgoingMessage extends Writable {
 
   /**
    * @ignore
-   * @return {OutgoingMessage}
+   * @return {this}
    */
   uncork () {
     // not supported
@@ -330,7 +330,7 @@ export class OutgoingMessage extends Writable {
    * Once a socket is associated with the message and is connected,
    * that socket will be destroyed as well.
    * @param {Error?} [err]
-   * @return {OutgoingMessage}
+   * @return {this}
    */
   destroy (err = null) {
     super.destroy(err)
@@ -342,7 +342,7 @@ export class OutgoingMessage extends Writable {
    * @param {(Buffer|Uint8Array|string|function)=} [chunk]
    * @param {(string|function)=} [encoding]
    * @param {function=} [callback]
-   * @return {OutgoingMessage}
+   * @return {this}
    */
   end (chunk = null, encoding = null, callback = null) {
     if (typeof chunk === 'function') {

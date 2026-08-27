@@ -135,19 +135,22 @@ export async function createFile (filename, options = null) {
   )
   const type = types[0]?.mime ?? ''
 
-  const highWaterMark = Number.isFinite(options?.highWaterMark)
+  if (
+    options?.highWaterMark !== undefined &&
+    (!Number.isInteger(options.highWaterMark) || options.highWaterMark < 0)
+  ) {
+    throw new RangeError('highWaterMark must be a non-negative integer')
+  }
+
+  const highWaterMark = Number.isInteger(options?.highWaterMark)
     ? options.highWaterMark
     : Math.min(stats.size, DEFAULT_STREAM_HIGH_WATER_MARK)
 
-  let fd = options?.fd ?? null
+  const fd = options?.fd ?? null
   let blobBuffer = null
   let bytesBuffer = null
 
   const name = URL.canParse(filename) ? filename : path.basename(filename)
-
-  if (!fd) {
-    fd = await fs.open(filename)
-  }
 
   return create(
     File,
@@ -185,17 +188,9 @@ export async function createFile (filename, options = null) {
           blobBuffer = readFileSync(filename)
         }
 
-        const blob = new Blob([blobBuffer.buffer], {
+        const blob = new Blob([blobBuffer], {
           type: contentType
         })
-
-        if (start < 0) {
-          start = stats.size - start
-        }
-
-        if (end < 0) {
-          end = stats.size - end
-        }
 
         return blob.slice(start, end)
       }
@@ -234,32 +229,45 @@ export async function createFile (filename, options = null) {
 
       stream () {
         let buffer = null
+        let streamHandle = null
         let offset = 0
+
+        const close = async () => {
+          const handle = streamHandle
+          streamHandle = null
+          if (handle && !handle.closed) {
+            await handle.close()
+          }
+        }
 
         const stream = new ReadableStream({
           async start (controller) {
-            const fd = await fs.open(filename)
-            fd.once('close', () => controller.close())
+            streamHandle = await fs.open(filename)
             if (highWaterMark === 0) {
-              await fd.close()
-              await controller.close()
+              await close()
+              controller.close()
               return
             }
 
             buffer = new Uint8Array(highWaterMark)
-            const result = await fd.read(buffer, 0, highWaterMark, offset)
+            const result = await streamHandle.read(
+              buffer,
+              0,
+              highWaterMark,
+              offset
+            )
             offset += result.bytesRead
 
             if (result.bytesRead === 0) {
-              await controller.close()
+              await close()
+              controller.close()
             } else {
               controller.enqueue(buffer.slice(0, result.bytesRead))
             }
           },
 
           async cancel () {
-            await fd.close()
-            fd = null
+            await close()
           },
 
           async pull (controller) {
@@ -269,7 +277,7 @@ export async function createFile (filename, options = null) {
               const { byobRequest } = /** @type {ReadableStreamBYOBRequest} */ (
                 controller
               )
-              const result = await fd.read(
+              const result = await streamHandle.read(
                 // @ts-ignore
                 byobRequest.view.buffer,
                 byobRequest.view.byteOffset,
@@ -281,14 +289,21 @@ export async function createFile (filename, options = null) {
               byobRequest.respond(result.bytesRead)
 
               if (result.bytesRead === 0) {
-                await controller.close()
+                await close()
+                controller.close()
               }
             } else {
-              const result = await fd.read(buffer, 0, highWaterMark, offset)
+              const result = await streamHandle.read(
+                buffer,
+                0,
+                highWaterMark,
+                offset
+              )
               offset += result.bytesRead
 
               if (result.bytesRead === 0) {
-                await controller.close()
+                await close()
+                controller.close()
               } else {
                 controller.enqueue(buffer.slice(0, result.bytesRead))
               }

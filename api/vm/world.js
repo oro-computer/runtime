@@ -180,3 +180,5 @@ globalThis.addEventListener('message', async (event) => {
     return realm.postMessage({ type: 'world.destroy', id })
   }
 })
+
+export {}

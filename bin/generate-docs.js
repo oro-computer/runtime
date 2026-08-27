@@ -17,7 +17,7 @@ const RAW_VERSION = (await fs.readFile('./VERSION.txt', 'utf8')).trim()
 const CLI_NAME = (process.env.DOCS_CLI_NAME ?? 'oroc').trim()
 
 const JS_INTERFACE_DIR = 'api'
-const RUNTIME_NODE_DIR = 'npm/packages/@orocomputer/runtime-node'
+const RUNTIME_NODE_DIR = 'npm/packages/@oro-computer/runtime-node'
 const CLI_MANPAGE_DIR = 'share/man/man1'
 const API_MANPAGE_DIR = 'share/man/man3'
 const GUIDE_MANPAGE_DIR = 'share/man/man7'
