@@ -12,6 +12,6 @@ Authoritative references:
 - [MCP 2025-06-18 compatibility specification](https://modelcontextprotocol.io/specification/2025-06-18)
 
 Run `node docs/mcp/download-mcp-spec.js` to regenerate an index for the current protocol. Add
-`--fetch` to cache the published HTML, or `--version=2025-06-18` to target the legacy protocol.
+`--fetch` to cache the published HTML, or `--version=2025-06-18` to target that dated protocol revision.
 Downloaded pages and generated indexes are ignored local reference material; do not commit them.
 The official schema remains the source of truth.

@@ -1559,7 +1559,7 @@ function _install {
       "$root/NOTICE:NOTICE"
       "$root/THIRD_PARTY_NOTICES.md:THIRD_PARTY_NOTICES.md"
       "$root/docs/BUILD_ENVIRONMENT.md:docs/BUILD_ENVIRONMENT.md"
-      "$root/docs/LEGACY_LIMITATIONS.md:LEGACY_LIMITATIONS.md"
+      "$root/docs/LIMITATIONS.md:LIMITATIONS.md"
       "$root/docs/MCP.md:MCP.md"
       "$root/docs/llms.txt:llms.txt"
     )

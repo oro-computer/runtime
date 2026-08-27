@@ -1,6 +1,6 @@
 # Window Management
 
-This guide covers common window operations available in Oro Runtime across desktop and mobile platforms (legacy Socket terminology is noted where users may still encounter it).
+This guide covers common window operations available in Oro Runtime across desktop and mobile platforms.
 
 APIs live under `oro:window` and are typically used via an `ApplicationWindow` instance returned from `oro:application` helpers.
 

@@ -54,7 +54,7 @@ const cache = new (class {
 })()
 
 /**
- * Returns the operating system CPU architecture for which Socket was compiled.
+ * Returns the operating system CPU architecture for which Oro Runtime was compiled.
  * @returns {string} - 'arm64', 'ia32', 'x64', or 'unknown'
  */
 export function arch () {

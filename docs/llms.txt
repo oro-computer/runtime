@@ -66,7 +66,7 @@ MCP discovery model
 
 Configuration model
 - Primary project config: `oro.toml`
-- Legacy fallback config: `oro.ini` when `oro.toml` is absent
+- INI fallback config: `oro.ini` when `oro.toml` is absent
 - Local developer overrides/secrets: `.ororc`
 - Treat config as part of the runtime contract:
   - build/resource roots

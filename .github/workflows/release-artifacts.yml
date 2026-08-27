@@ -44,6 +44,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
+      artifact_matrix: ${{ steps.matrix.outputs.artifact_matrix }}
       commit_sha: ${{ steps.source.outputs.commit_sha }}
       version: ${{ steps.source.outputs.version }}
     steps:
@@ -61,6 +62,118 @@ jobs:
           fi
           echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
           echo "version=${RELEASE_LABEL#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Select release artifact runners
+        id: matrix
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_ARTIFACT_ID: ${{ github.event.inputs.artifact_id || 'all' }}
+        run: |
+          matrix_json="$(jq -cn '{
+            include: [
+              {
+                name: "Linux x64 Desktop",
+                artifact_id: "linux-x64-desktop",
+                archive_ext: "tar.gz",
+                runs_on: "ubuntu-24.04",
+                build_android: false,
+                release_support: "desktop",
+                exclude_android: true,
+                exclude_ios: true,
+                build_windows: false
+              },
+              {
+                name: "Linux x64 Android SDK",
+                artifact_id: "linux-x64-android-sdk",
+                archive_ext: "tar.gz",
+                runs_on: "ubuntu-24.04",
+                build_android: true,
+                release_support: "android",
+                exclude_android: false,
+                exclude_ios: true,
+                build_windows: false
+              },
+              {
+                name: "Linux arm64 Desktop",
+                artifact_id: "linux-arm64-desktop",
+                archive_ext: "tar.gz",
+                runs_on: "ubuntu-24.04-arm",
+                build_android: false,
+                release_support: "desktop",
+                exclude_android: true,
+                exclude_ios: true,
+                build_windows: false
+              },
+              {
+                name: "macOS x64 Desktop",
+                artifact_id: "macos-x64-desktop",
+                archive_ext: "tar.gz",
+                runs_on: "macos-15-intel",
+                build_android: false,
+                release_support: "desktop",
+                exclude_android: true,
+                exclude_ios: true,
+                build_windows: false
+              },
+              {
+                name: "macOS x64 iOS SDK",
+                artifact_id: "macos-x64-ios-sdk",
+                archive_ext: "tar.gz",
+                runs_on: "macos-15-intel",
+                build_android: false,
+                release_support: "ios",
+                exclude_android: true,
+                exclude_ios: false,
+                build_windows: false
+              },
+              {
+                name: "macOS arm64 Desktop",
+                artifact_id: "macos-arm64-desktop",
+                archive_ext: "tar.gz",
+                runs_on: "macos-14",
+                build_android: false,
+                release_support: "desktop",
+                exclude_android: true,
+                exclude_ios: true,
+                build_windows: false
+              },
+              {
+                name: "macOS arm64 iOS SDK",
+                artifact_id: "macos-arm64-ios-sdk",
+                archive_ext: "tar.gz",
+                runs_on: "macos-14",
+                build_android: false,
+                release_support: "ios",
+                exclude_android: true,
+                exclude_ios: false,
+                build_windows: false
+              },
+              {
+                name: "Windows x64",
+                artifact_id: "windows-x64-desktop",
+                archive_ext: "zip",
+                runs_on: "windows-2022",
+                build_android: false,
+                release_support: "desktop",
+                exclude_android: true,
+                exclude_ios: true,
+                build_windows: true
+              }
+            ]
+          }')"
+
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' && "$REQUESTED_ARTIFACT_ID" != 'all' ]]; then
+            matrix_json="$(jq --arg id "$REQUESTED_ARTIFACT_ID" \
+              '{include: [.include[] | select(.artifact_id == $id)]}' \
+              <<< "$matrix_json")"
+          fi
+
+          if (( $(jq '.include | length' <<< "$matrix_json") == 0 )); then
+            echo >&2 "Unknown release artifact target: $REQUESTED_ARTIFACT_ID"
+            exit 1
+          fi
+          echo "artifact_matrix=$(jq -c . <<< "$matrix_json")" >> "$GITHUB_OUTPUT"
 
       - name: Verify annotated release tag signature
         if: startsWith(github.ref, 'refs/tags/')
@@ -107,11 +220,13 @@ jobs:
         run: node ./bin/check-release-version.js "$RELEASE_LABEL"
 
   verify-release:
-    name: Verify full supported platform matrix
+    name: Verify release source
     needs: validate-release
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml
+    with:
+      run_cross_platform: false
 
   build-release-artifacts:
     name: Build ${{ matrix.name }}
@@ -124,85 +239,15 @@ jobs:
       id-token: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: Linux x64 Desktop
-            artifact_id: linux-x64-desktop
-            archive_ext: tar.gz
-            runs_on: ubuntu-24.04
-            build_android: false
-            release_support: desktop
-            exclude_android: true
-            exclude_ios: true
-            build_windows: false
-          - name: Linux x64 Android SDK
-            artifact_id: linux-x64-android-sdk
-            archive_ext: tar.gz
-            runs_on: ubuntu-24.04
-            build_android: true
-            release_support: android
-            exclude_android: false
-            exclude_ios: true
-            build_windows: false
-          - name: Linux arm64 Desktop
-            artifact_id: linux-arm64-desktop
-            archive_ext: tar.gz
-            runs_on: ubuntu-24.04-arm
-            build_android: false
-            release_support: desktop
-            exclude_android: true
-            exclude_ios: true
-            build_windows: false
-          - name: macOS x64 Desktop
-            artifact_id: macos-x64-desktop
-            archive_ext: tar.gz
-            runs_on: macos-15-intel
-            build_android: false
-            release_support: desktop
-            exclude_android: true
-            exclude_ios: true
-            build_windows: false
-          - name: macOS x64 iOS SDK
-            artifact_id: macos-x64-ios-sdk
-            archive_ext: tar.gz
-            runs_on: macos-15-intel
-            build_android: false
-            release_support: ios
-            exclude_android: true
-            exclude_ios: false
-            build_windows: false
-          - name: macOS arm64 Desktop
-            artifact_id: macos-arm64-desktop
-            archive_ext: tar.gz
-            runs_on: macos-14
-            build_android: false
-            release_support: desktop
-            exclude_android: true
-            exclude_ios: true
-            build_windows: false
-          - name: macOS arm64 iOS SDK
-            artifact_id: macos-arm64-ios-sdk
-            archive_ext: tar.gz
-            runs_on: macos-14
-            build_android: false
-            release_support: ios
-            exclude_android: true
-            exclude_ios: false
-            build_windows: false
-          - name: Windows x64
-            artifact_id: windows-x64-desktop
-            archive_ext: zip
-            runs_on: windows-2022
-            build_android: false
-            release_support: desktop
-            exclude_android: true
-            exclude_ios: true
-            build_windows: true
+      matrix: ${{ fromJSON(needs.validate-release.outputs.artifact_matrix) }}
 
     env:
       ARTIFACT_ID: ${{ matrix.artifact_id }}
       ARCHIVE_EXT: ${{ matrix.archive_ext }}
       BUILD_ANDROID: ${{ matrix.build_android }}
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
       EXCLUDE_ANDROID: ${{ matrix.exclude_android }}
       EXCLUDE_IOS: ${{ matrix.exclude_ios }}
       RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
@@ -235,7 +280,71 @@ jobs:
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
-          java-version: '20.0.2'
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            bin/android-functions.sh
+            bin/generate-gradle-files.sh
+
+      - name: Resolve Android SDK cache root
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_android
+        id: android-sdk
+        shell: bash
+        run: echo "root=$ANDROID_HOME" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Android build SDK cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_android
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ${{ steps.android-sdk.outputs.root }}/build-tools/36.0.0
+            ${{ steps.android-sdk.outputs.root }}/cmdline-tools/23.0
+            ${{ steps.android-sdk.outputs.root }}/ndk/29.0.14206865
+            ${{ steps.android-sdk.outputs.root }}/platform-tools
+            ${{ steps.android-sdk.outputs.root }}/platforms/android-37*
+          key: android-build-sdk-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bin/android-functions.sh') }}
+
+      - name: Restore native compiler cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        id: native-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-${{ github.sha }}
+          restore-keys: |
+            release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-
+
+      - name: Restore Rust dependency cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_android
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+          key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/**/Cargo.toml') }}
+          restore-keys: |
+            cargo-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Linux build dependencies
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            build-essential \
+            ccache \
+            clang-18 \
+            curl \
+            git \
+            libdbus-1-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libsystemd-dev \
+            libtool \
+            libwebkit2gtk-4.1-dev \
+            pkg-config
 
       - name: Install macOS build dependencies
         if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os == 'macOS'
@@ -243,22 +352,21 @@ jobs:
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: |
-          brew install automake libtool pkg-config
+          brew install automake ccache libtool pkg-config
 
-      - name: Enable pnpm
-        if: env.RUN_SELECTED_ARTIFACT == 'true'
+      - name: Configure native compiler cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
         shell: bash
-        run: corepack enable
-
-      - name: Install root dependencies
-        if: env.RUN_SELECTED_ARTIFACT == 'true'
-        shell: bash
-        run: pnpm install --frozen-lockfile
-
-      - name: Regenerate shipped docs and typings
-        if: env.RUN_SELECTED_ARTIFACT == 'true'
-        shell: bash
-        run: npm run gen
+        run: |
+          if [[ "$RUNNER_OS" == 'Linux' ]]; then
+            echo /usr/lib/ccache >> "$GITHUB_PATH"
+          else
+            echo "$(brew --prefix ccache)/libexec" >> "$GITHUB_PATH"
+          fi
+          echo 'CMAKE_C_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
+          echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
+          ccache --max-size 500M
+          ccache --zero-stats
 
       - name: Build staged runtime distribution (Unix)
         if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
@@ -300,6 +408,16 @@ jobs:
           $env:NO_ANDROID = "1"
           .\bin\install.ps1 -yesdeps -verbose
 
+      - name: Save native compiler cache
+        if: >-
+          env.RUN_SELECTED_ARTIFACT == 'true' &&
+          runner.os != 'Windows' &&
+          steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+
       - name: Smoke test staged runtime (Unix)
         if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
         shell: bash
@@ -309,6 +427,11 @@ jobs:
         run: |
           ./bin/ci_version_check.sh
           "$ORO_CLI_BIN" help >/dev/null
+
+      - name: Report native compiler cache
+        if: always() && env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        shell: bash
+        run: ccache --show-stats || true
 
       - name: Smoke test staged runtime (Windows)
         if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_windows

@@ -348,8 +348,8 @@ function compareSemVer (a, b) {
   try {
     return semver.compare(String(a ?? ''), String(b ?? ''))
   } catch {
-    // Preserve legacy behaviour for non-SemVer strings by treating them
-    // as equal so they neither win nor lose comparisons outright.
+    // Treat non-SemVer strings as equal so they neither win nor lose
+    // comparisons outright.
     return 0
   }
 }

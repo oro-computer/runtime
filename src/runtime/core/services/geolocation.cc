@@ -265,7 +265,7 @@ using oro::runtime::config::getUserConfig;
 
 -       (void) locationManager: (CLLocationManager*) locationManager
   didChangeAuthorizationStatus: (CLAuthorizationStatus) status {
-  // XXX(@jwerle): this is a legacy callback
+  // XXX(@jwerle): this callback-style bridge remains synchronous
   [self locationManagerDidChangeAuthorization: locationManager];
 }
 

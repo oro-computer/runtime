@@ -2,8 +2,7 @@
 
 This repository now lives at `https://github.com/oro-computer/runtime`.
 Known platform and feature limitations are summarized in
-[docs/LEGACY_LIMITATIONS.md](docs/LEGACY_LIMITATIONS.md), which keeps its
-historical filename so older links continue to resolve after the rename.
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 When linking to the project, use `https://github.com/oro-computer/runtime` for
 the source repository and `https://oro.computer/runtime` for the website.

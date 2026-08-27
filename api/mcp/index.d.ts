@@ -465,7 +465,7 @@ export type MCPStartServerOptions = {
      */
     retry?: number;
     /**
-     * Seconds to retain an inactive legacy session.
+     * Seconds to retain an inactive MCP 2025 session.
      */
     sessionTtlSeconds?: number;
     /**
@@ -485,7 +485,7 @@ export type MCPStartServerOptions = {
      */
     maxQueuedBytes?: number;
     /**
-     * Allow a reconnect to replace an existing legacy SSE stream for the same session.
+     * Allow a reconnect to replace an existing MCP 2025 SSE stream for the same session.
      */
     replaceSseStreamOnReconnect?: boolean;
     authorize?: (request: MCPAuthorizationRequest) => boolean | MCPAuthorizationDecision | Promise<boolean | MCPAuthorizationDecision>;

@@ -1601,7 +1601,7 @@ namespace oro::runtime::window {
         return FALSE;
 
         //
-        // TODO: refactor the legacy drag/drop plumbing to match the WebView path.
+        // TODO: refactor the native drag/drop plumbing to match the WebView path.
         //
         // char* target_uri = g_file_get_uri(drag_info->target_location);
 

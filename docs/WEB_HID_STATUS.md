@@ -59,7 +59,7 @@ Legend: ✅ Ready │ ⏳ Planned │ ❌ Missing / blocked
    - Vendor-specific device – exercises feature reports.
 
 2. **Test Harness:**
-   - Add Oro desktop integration tests to open a HID device, listen for input, send a feature report, and assert payloads (legacy Socket suites remain available during the rename).
+   - Add Oro desktop integration tests to open a HID device, listen for input, send a feature report, and assert payloads.
    - For Android, leverage instrumentation tests that dispatch synthetic USB intents.
 
 3. **Manual Procedures:**
@@ -68,7 +68,7 @@ Legend: ✅ Ready │ ⏳ Planned │ ❌ Missing / blocked
 
 4. **CI Considerations:**
    - Simulators lack HID hardware, so smoke tests should mock IPC responses.
-   - Real-device regression tests can run on dedicated lab machines using the Oro test runner (legacy Socket mode sticks around for older pipelines).
+   - Real-device regression tests can run on dedicated lab machines using the Oro test runner.
 
 ## Automated Coverage Strategy
 

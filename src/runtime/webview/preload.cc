@@ -89,10 +89,10 @@ namespace oro::runtime::webview {
       }
     }
 
-    auto resolveEnv = [](const char* preferred, const char* legacy) -> String {
+    auto resolveEnv = [](const char* preferred, const char* deprecated) -> String {
       auto value = runtime::env::get(preferred);
       if (value.size() == 0) {
-        value = runtime::env::get(legacy);
+        value = runtime::env::get(deprecated);
       }
       return value;
     };

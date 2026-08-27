@@ -1368,7 +1368,7 @@ namespace oro::runtime::mcp {
 
       if (!modern &&
           !headerProtocolVersion.empty() &&
-          !isLegacyProtocolVersion(headerProtocolVersion)) {
+          !isMcp2025ProtocolVersion(headerProtocolVersion)) {
         jsonRpcError(
           static_cast<int>(ErrorCode::UnsupportedProtocolVersion),
           "Unsupported MCP protocol version",
@@ -1379,7 +1379,7 @@ namespace oro::runtime::mcp {
       }
 
       std::optional<String> sessionId;
-      bool createdLegacySession = false;
+      bool createdMcp2025Session = false;
       if (modern) {
         sessionId = this->createSessionForRequest();
       } else {
@@ -1399,7 +1399,7 @@ namespace oro::runtime::mcp {
           return;
         } else {
           sessionId = this->createSessionForRequest();
-          createdLegacySession = sessionId.has_value();
+          createdMcp2025Session = sessionId.has_value();
         }
       }
 
@@ -1458,7 +1458,7 @@ namespace oro::runtime::mcp {
       }
 
       auto immediate = this->delegate->onJsonRpcRequest(*sessionId, req.body);
-      bool legacyInitializationSucceeded = !isInitialize;
+      bool mcp2025InitializationSucceeded = !isInitialize;
       if (!modern && isInitialize && immediate.has_value()) {
         try {
           const auto response = nlohmann::json::parse(*immediate);
@@ -1467,8 +1467,8 @@ namespace oro::runtime::mcp {
               response["result"].contains("protocolVersion") &&
               response["result"]["protocolVersion"].is_string()) {
             const auto negotiatedVersion = response["result"]["protocolVersion"].get<String>();
-            if (isLegacyProtocolVersion(negotiatedVersion)) {
-              legacyInitializationSucceeded = true;
+            if (isMcp2025ProtocolVersion(negotiatedVersion)) {
+              mcp2025InitializationSucceeded = true;
               Lock lock(this->mutex);
               const auto it = this->sessions.find(*sessionId);
               if (it != this->sessions.end() && it->second == session) {
@@ -1478,10 +1478,10 @@ namespace oro::runtime::mcp {
           }
         } catch (...) {}
       }
-      if (!modern && isInitialize && !legacyInitializationSucceeded && createdLegacySession) {
+      if (!modern && isInitialize && !mcp2025InitializationSucceeded && createdMcp2025Session) {
         this->closeSession(*sessionId);
       }
-      if (!modern && legacyInitializationSucceeded) {
+      if (!modern && mcp2025InitializationSucceeded) {
         this->attachSessionHeader(res, *sessionId);
       }
 

@@ -718,9 +718,9 @@ oroc mcp [options] [<workspace-dir>]
 
 ### notes
 Stdio mode disables JSON logs and suppresses INFO output so stdout remains valid MCP JSON-RPC.
-HTTP mode supports modern MCP 2026-07-28 requests and legacy MCP 2025-11-25 and 2025-06-18 sessions.
-Modern clients call server/discover, send per-request metadata and routing headers, and use a long-lived
-subscriptions/listen POST for notifications; they do not initialize or send a session header. Legacy clients
+HTTP mode supports MCP 2026-07-28 requests and MCP 2025-11-25 and 2025-06-18 sessions.
+MCP 2026-07-28 clients call server/discover, send per-request metadata and routing headers, and use a long-lived
+subscriptions/listen POST for notifications; they do not initialize or send a session header. MCP 2025 clients
 initialize first and then include Mcp-Session-Id on subsequent requests. HTTP bearer authentication is enabled
 by default.
 The server publishes descriptive MCP tool metadata, including standard titles, safety annotations, extension

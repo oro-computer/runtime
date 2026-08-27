@@ -158,6 +158,6 @@ test('crypto.murmur3 typed arrays hash raw bytes', (t) => {
   t.equal(
     crypto.murmur3('abc'),
     1437992374,
-    'crypto.murmur3 preserves legacy string hashing'
+    'crypto.murmur3 preserves the documented string hash'
   )
 })

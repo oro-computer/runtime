@@ -1,6 +1,6 @@
 # Oro Runtime Architecture
 
-This document provides a detailed view of the Oro Runtime internals (with notes for legacy Socket compatibility), including its threading model, IPC pipeline, services layer, resource loading, lifecycle, and security boundaries. It is intended for contributors and advanced users integrating or extending the native runtime.
+This document provides a detailed view of the Oro Runtime internals, including its threading model, IPC pipeline, services layer, resource loading, lifecycle, and security boundaries. It is intended for contributors and advanced users integrating or extending the native runtime.
 
 Contents
 

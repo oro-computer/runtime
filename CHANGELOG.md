@@ -33,8 +33,8 @@ releases and will be documented here.
 - Validate tool schemas at registration and tool inputs and outputs at execution
   with standards-compliant JSON Schema 2020-12 handling, explicit alternate
   dialect support, bounded input size/depth, and stable error results.
-- Support arbitrary JSON values in modern `structuredContent`, preserve their
-  serialized text representation, and adapt non-object results for legacy clients.
+- Support arbitrary JSON values in MCP 2026 `structuredContent`, preserve their
+  serialized text representation, and adapt non-object results for MCP 2025 clients.
 - Scope file reads to the workspace and require a generated bearer token in
   CLI HTTP mode by default.
 - Harden embedded HTTP OAuth with protected-resource discovery, pre-registered
@@ -80,6 +80,11 @@ releases and will be documented here.
 - Support Node.js 22 and 24 with pnpm 11 and pinned GitHub Actions.
 - Build and test Linux x64 and arm64, Android x86_64 and arm64-v8a, macOS and
   iOS on Intel and Apple Silicon, and Windows x64 on native hosted runners.
+- Cache pnpm, npm test-harness, pip, Gradle, Cargo, and native compiler outputs;
+  gate native jobs behind lint; and run shared integration suites once while
+  retaining targeted Android, iOS, macOS, Windows, and architecture coverage.
+- Allocate only the requested release runner for single-artifact manual smoke
+  builds instead of starting the complete matrix to skip unselected jobs.
 - Resolve test CLI paths from the actual host architecture so arm64 validation
   does not depend on x86_64 build directories.
 - Add release, contribution, security, support, governance, issue, and pull

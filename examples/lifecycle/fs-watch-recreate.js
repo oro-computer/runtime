@@ -5,7 +5,7 @@ import fs from 'oro:fs'
 import os from 'oro:os'
 import path from 'oro:path'
 
-// Choose files you want to watch. This example uses `oro.toml` (or the legacy
+// Choose files you want to watch. This example uses `oro.toml` (or the `oro.ini`
 // `oro.ini` shim) if present, otherwise falls back to a temp file.
 const CONFIG_CANDIDATES = ['oro.toml', 'oro.ini']
 const demoTmp = path.join(os.tmpdir(), `oro-watch-${Date.now()}.txt`)

@@ -672,7 +672,7 @@ namespace oro::runtime::core::services::usb {
       return JSON::Object::Entries {{ "data", JSON::Object::Entries {{ "ok", true }} }};
     }
 
-    String makeLegacyDeviceId(uint8_t bus, uint8_t address) {
+    String makeAddressDeviceId(uint8_t bus, uint8_t address) {
       return String(std::to_string(bus)) + ":" + std::to_string(address);
     }
 
@@ -752,7 +752,7 @@ namespace oro::runtime::core::services::usb {
       } else {
         const uint8_t bus = libusb_get_bus_number(device);
         const uint8_t address = libusb_get_device_address(device);
-        segments.push_back(String("legacy-") + makeLegacyDeviceId(bus, address));
+        segments.push_back(String("address-") + makeAddressDeviceId(bus, address));
       }
 
       char vendorBuf[5] = {0};
@@ -959,48 +959,17 @@ namespace oro::runtime::core::services::usb {
           bool authorizationChanged = false;
           {
             Lock lock(this->mutex);
-            Set<String> identifiers;
-            identifiers.insert(deviceId);
-
-            constexpr const char* legacyPrefix = "usb:legacy-";
-            constexpr size_t legacyPrefixLength = sizeof("usb:legacy-") - 1;
-            String rawLegacyId;
-            if (deviceId.rfind(legacyPrefix, 0) == 0 && deviceId.size() > legacyPrefixLength) {
-              rawLegacyId = deviceId.substr(legacyPrefixLength);
-              identifiers.insert(rawLegacyId);
-            }
-
-            auto addKnownLegacyIds = [&](const String& key) {
-              const auto known = this->knownDescriptors.find(key);
-              if (known != this->knownDescriptors.end()) {
-                const String legacy = makeLegacyDeviceId(known->second.busNumber, known->second.deviceAddress);
-                if (!legacy.empty()) {
-                  identifiers.insert(legacy);
-                  identifiers.insert(String(legacyPrefix) + legacy);
-                }
+            if (auto it = this->devices.find(deviceId); it != this->devices.end()) {
+              this->closeUnlocked(it->second);
+              if (it->second.device) {
+                libusb_unref_device(it->second.device);
+                it->second.device = nullptr;
               }
-            };
-
-            addKnownLegacyIds(deviceId);
-            if (!rawLegacyId.empty()) {
-              addKnownLegacyIds(rawLegacyId);
+              this->devices.erase(it);
             }
 
-            for (const auto& id : identifiers) {
-              if (auto it = this->devices.find(id); it != this->devices.end()) {
-                this->closeUnlocked(it->second);
-                if (it->second.device) {
-                  libusb_unref_device(it->second.device);
-                  it->second.device = nullptr;
-                }
-                this->devices.erase(it);
-              }
-            }
-
-            for (const auto& id : identifiers) {
-              authorizationChanged = this->authorizedDevices.erase(id) > 0 || authorizationChanged;
-              this->knownDescriptors.erase(id);
-            }
+            authorizationChanged = this->authorizedDevices.erase(deviceId) > 0;
+            this->knownDescriptors.erase(deviceId);
           }
           if (authorizationChanged) {
             this->persistAuthorizedToState();
@@ -1397,9 +1366,7 @@ namespace oro::runtime::core::services::usb {
 
             const uint8_t bus = libusb_get_bus_number(dev);
             const uint8_t address = libusb_get_device_address(dev);
-            const String legacyId = makeLegacyDeviceId(bus, address);
-            const String stableCandidate = makeStableDeviceId(dev, desc);
-            const String deviceId = stableCandidate.empty() ? String("usb:legacy-") + legacyId : stableCandidate;
+            const String deviceId = makeStableDeviceId(dev, desc);
             seen.insert(deviceId);
 
             DeviceDescriptor descriptor;
@@ -1413,8 +1380,6 @@ namespace oro::runtime::core::services::usb {
             descriptor.protocolCode = desc.bDeviceProtocol;
             descriptor.opened = false;
             descriptor.authorized = false;
-
-            bool promoteLegacyAuthorization = false;
 
             {
               Lock lock(this->mutex);
@@ -1435,15 +1400,6 @@ namespace oro::runtime::core::services::usb {
 
               if (this->authorizedDevices.count(deviceId) > 0) {
                 descriptor.authorized = true;
-              } else if (this->authorizedDevices.count(legacyId) > 0) {
-                descriptor.authorized = true;
-                promoteLegacyAuthorization = true;
-              }
-            }
-
-            if (promoteLegacyAuthorization) {
-              if (this->replaceAuthorization(legacyId, deviceId)) {
-                authorizedModified = true;
               }
             }
 
@@ -1477,7 +1433,6 @@ namespace oro::runtime::core::services::usb {
                 addedDevices.push_back(descriptor);
               }
               this->knownDescriptors[descriptor.deviceId] = descriptor;
-              this->knownDescriptors.erase(legacyId);
             }
           }
 
@@ -1626,8 +1581,6 @@ namespace oro::runtime::core::services::usb {
       Map<String, DeviceDescriptor> knownDescriptors;
       std::optional<RequestState> pendingRequest;
       String stateScope;
-      bool replaceAuthorization(const String& legacyId, const String& stableId);
-
       void closeUnlocked(DeviceState& state) {
         if (state.handle) {
           libusb_close(state.handle);
@@ -1757,18 +1710,6 @@ namespace oro::runtime::core::services::usb {
         return JSON::Object(entries);
       }
     };
-
-  bool LibusbBackend::replaceAuthorization(const String& legacyId, const String& stableId) {
-    bool modified = false;
-    {
-      Lock lock(this->mutex);
-      if (this->authorizedDevices.erase(legacyId) > 0) {
-        this->authorizedDevices.insert(stableId);
-        modified = true;
-      }
-    }
-    return modified;
-  }
 
   std::unique_ptr<USB::Backend> makeUSBBackend(USB& service) {
     return std::make_unique<LibusbBackend>(service);

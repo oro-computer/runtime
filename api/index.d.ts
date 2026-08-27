@@ -296,7 +296,7 @@ declare module "oro:url/index" {
     };
     /**
      * Resolve a target URL/path `to` against a base `from`.
-     * Mirrors Node's legacy `url.resolve()` semantics.
+     * Mirrors Node.js `url.resolve()` semantics.
      *
      * Example:
      * ```js
@@ -2860,7 +2860,7 @@ declare module "oro:path/well-known" {
 
 declare module "oro:os" {
     /**
-     * Returns the operating system CPU architecture for which Socket was compiled.
+     * Returns the operating system CPU architecture for which Oro Runtime was compiled.
      * @returns {string} - 'arm64', 'ia32', 'x64', or 'unknown'
      */
     export function arch(): string;
@@ -3921,7 +3921,6 @@ declare module "oro:process" {
     }
     /**
      * @typedef {Object} ProcessVersionsMap
-     * @property {string} socket - Legacy `process.versions.socket` identifier (frozen at Oro 0.6.0).
      * @property {string} oro - Current Oro Runtime semantic version.
      * @property {string} [uv]
      * @property {string} [llama]
@@ -4001,10 +4000,6 @@ declare module "oro:process" {
     export const env: ProcessEnvironmentBinding;
     export default process;
     export type ProcessVersionsMap = {
-        /**
-         * - Legacy `process.versions.socket` identifier (frozen at Oro 0.6.0).
-         */
-        socket: string;
         /**
          * - Current Oro Runtime semantic version.
          */
@@ -9675,7 +9670,6 @@ declare module "oro:application" {
     }
     /**
      * Oro Runtime semantic version metadata mirrored from `process.versions.oro`.
-     * The legacy `process.versions.socket` string remains frozen for compatibility.
      * @type {object} - an object containing the version information
      */
     export const runtimeVersion: object;
@@ -19395,7 +19389,7 @@ declare module "oro:mcp/index" {
          */
         retry?: number;
         /**
-         * Seconds to retain an inactive legacy session.
+         * Seconds to retain an inactive MCP 2025 session.
          */
         sessionTtlSeconds?: number;
         /**
@@ -19415,7 +19409,7 @@ declare module "oro:mcp/index" {
          */
         maxQueuedBytes?: number;
         /**
-         * Allow a reconnect to replace an existing legacy SSE stream for the same session.
+         * Allow a reconnect to replace an existing MCP 2025 SSE stream for the same session.
          */
         replaceSseStreamOnReconnect?: boolean;
         authorize?: (request: MCPAuthorizationRequest) => boolean | MCPAuthorizationDecision | Promise<boolean | MCPAuthorizationDecision>;

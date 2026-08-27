@@ -105,7 +105,7 @@ namespace fs = std::filesystem;
 #define ORO_RUNTIME_BUILD_TIME 0
 #endif
 
-// Avoid collision with legacy DEBUG macro from runtime config.hh
+// Avoid collision with the global DEBUG macro from runtime config.hh
 #ifdef DEBUG
 #undef DEBUG
 #endif
@@ -193,8 +193,7 @@ inline String prettyJson (const String& input);
 static std::map<String, String> collectDependencyVersions () {
   std::map<String, String> versions;
 
-  // Frozen legacy Socket identifier and current Oro Runtime version.
-  versions["socket"] = "0.6.0";
+  // Current Oro Runtime and CLI versions.
   versions["oro"] = runtime::VERSION_STRING;
   versions["oroc"] = VERSION_STRING;
 
@@ -5200,9 +5199,10 @@ struct AndroidCliState {
   String androidHome;
   // android, android-emulator
   String targetPlatform;
-  // android-34 or current platform number
+  // Android SDK package identifier, for example android-37.0.
   String platform;
   StringStream avdmanager;
+  String avdName;
   bool oroAvdExists = false;
   bool emulatorRunning = false;
   StringStream emulator;
@@ -5270,20 +5270,28 @@ bool getAdbPath (AndroidCliState &state) {
 }
 
 bool setupAndroidAvd (AndroidCliState& state) {
-  String package = state.quote + "system-images;" + state.platform + ";google_apis;" + replace(platform.arch, "arm64", "arm64-v8a") + state.quote;
+  const auto systemImageArch = replace(platform.arch, "arm64", "arm64-v8a");
+  String package = state.quote + "system-images;" + state.platform + ";google_apis;" + systemImageArch + state.quote;
   const String cliName(gCliDisplayName);
+  state.avdName = "OROAVD_API_" + replace(state.platform, "\\.", "_") + "_" + systemImageArch;
 
-  state.avdmanager << state.androidHome;
   if (env::get("ANDROID_SDK_MANAGER").size() > 0) {
-    state.avdmanager << "/" << replace(env::get("ANDROID_SDK_MANAGER"), "sdkmanager", "avdmanager");
+    state.avdmanager
+      << state.androidHome
+      << state.slash
+      << replace(env::get("ANDROID_SDK_MANAGER"), "sdkmanager", "avdmanager");
   } else {
-    if (!platform.win) {
-      if (std::system(("avdmanager list " + state.devNull).c_str()) != 0) {
-        state.avdmanager << "/cmdline-tools/latest/bin/";
-      }
-    } else {
-      state.avdmanager << "\\cmdline-tools\\latest\\bin\\";
-    }
+    state.avdmanager
+      << state.androidHome
+      << state.slash
+      << "cmdline-tools"
+      << state.slash
+      << "latest"
+      << state.slash
+      << "bin"
+      << state.slash
+      << "avdmanager"
+      << (platform.win ? ".bat" : "");
   }
 
   if (!fs::exists(state.avdmanager.str())) {
@@ -5297,14 +5305,63 @@ bool setupAndroidAvd (AndroidCliState& state) {
     logError("failed to run Android Virtual Device (avdmanager). Run '" + cliName + " setup --platform=android' and ensure SDK tools are installed. See README (Troubleshooting)");
     return false;
   }
-  state.oroAvdExists = avdListResult.output.find("OROAVD") != String::npos;
+  state.oroAvdExists = avdListResult.output.find(state.avdName) != String::npos;
+
+  const auto emulatorPath = (
+    state.androidHome +
+    state.slash +
+    "emulator" +
+    state.slash +
+    "emulator" +
+    (platform.win ? ".exe" : "")
+  );
+
+  if (!state.oroAvdExists || !fs::exists(emulatorPath)) {
+    StringStream sdkmanager;
+    sdkmanager << state.androidHome << state.slash;
+    if (env::get("ANDROID_SDK_MANAGER").size() > 0) {
+      sdkmanager << env::get("ANDROID_SDK_MANAGER");
+    } else {
+      sdkmanager
+        << "cmdline-tools"
+        << state.slash
+        << "latest"
+        << state.slash
+        << "bin"
+        << state.slash
+        << "sdkmanager"
+        << (platform.win ? ".bat" : "");
+    }
+
+    if (!fs::exists(sdkmanager.str())) {
+      logError("failed to locate Android SDK Manager: " + sdkmanager.str() + ". Run '" + cliName + " setup --platform=android'.");
+      return false;
+    }
+
+    String installCommand = (
+      state.quote +
+      sdkmanager.str() +
+      state.quote +
+      " " +
+      state.quote +
+      "emulator" +
+      state.quote +
+      " " +
+      package
+    );
+    logInfo("Installing Android emulator package for " + state.platform + " (" + systemImageArch + ")...");
+    if (std::system(installCommand.c_str()) != 0) {
+      logError("failed to install the Android emulator package. Accept Android SDK licenses and retry: " + installCommand);
+      return false;
+    }
+  }
 
   state.avdmanager
     << " create avd "
     << "--device 30 " // use pixel 6 pro, better for promos than --device 5 (desktop large)
     << "--force "
-    << "--name OROAVD "
-    << ("--abi google_apis/" + replace(platform.arch, "arm64", "arm64-v8a")) << " "
+    << "--name " << state.avdName << " "
+    << ("--abi google_apis/" + systemImageArch) << " "
     << "--package " << package;
 
   if (!state.oroAvdExists) {
@@ -5313,7 +5370,7 @@ bool setupAndroidAvd (AndroidCliState& state) {
       logVerbose(state.avdmanager.str());
     }
     if (createResult.exitCode != 0) {
-      logError("Failed to create OROAVD: " + createResult.output);
+      logError("Failed to create " + state.avdName + ": " + createResult.output);
       return false;
     }
   }
@@ -5352,7 +5409,7 @@ bool startAndroidEmulator (AndroidCliState& state) {
   logInfo("Starting emulator...");
   state.androidEmulatorProcess = new Process(
     state.emulator.str(),
-    " @OROAVD -gpu swiftshader_indirect", // platform-33: swiftshader not supported below platform-32
+    " @" + state.avdName + " -gpu swiftshader_indirect",
     state.androidHome,
     [&state, &emulatorOutput](String const& out) {
       if (state.verbose) {
@@ -7977,7 +8034,7 @@ int main (int argc, char* argv[]) {
         }
 
         logWarn(
-          "TLS was requested for " + targetName + ", but this legacy repository does not ship a built-in TLS provider there. "
+          "TLS was requested for " + targetName + ", but this repository does not ship a built-in TLS provider there. "
           "Building without TLS support; oro:tls and related TLS entry points will return NOT_IMPLEMENTED on this target."
         );
         env::set("ORO_TLS_PROVIDER", "");
@@ -8898,7 +8955,7 @@ int main (int argc, char* argv[]) {
 
           const auto extensionKey = "build_extensions_" + extension;
           const auto scopedExtensionKey = "build_extensions_android_" + extension;
-          const auto legacyScopedExtensionKey = extensionKey + "_android";
+          const auto suffixScopedExtensionKey = extensionKey + "_android";
           auto source = settings[extensionKey + "_source"];
           if (source.size() == 0) {
             source = settings[scopedExtensionKey + "_source"];
@@ -8907,7 +8964,7 @@ int main (int argc, char* argv[]) {
           fs::current_path(targetPath);
 
           if (source.size() == 0) {
-            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, legacyScopedExtensionKey}) {
+            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, suffixScopedExtensionKey}) {
               if (fs::is_directory(settings[sourceKey])) {
                 source = settings[sourceKey];
                 settings[sourceKey] = "";
@@ -9089,7 +9146,7 @@ int main (int argc, char* argv[]) {
               trim(
                 settings[extensionKey] + " " +
                 settings[scopedExtensionKey] + " " +
-                settings[legacyScopedExtensionKey]
+                settings[suffixScopedExtensionKey]
               ),
               ' '
             )
@@ -9602,14 +9659,14 @@ int main (int argc, char* argv[]) {
 
           const auto extensionKey = "build_extensions_" + extension;
           const auto scopedExtensionKey = "build_extensions_ios_" + extension;
-          const auto legacyScopedExtensionKey = extensionKey + "_ios";
+          const auto suffixScopedExtensionKey = extensionKey + "_ios";
           auto source = settings[extensionKey + "_source"];
           if (source.size() == 0) {
             source = settings[scopedExtensionKey + "_source"];
           }
 
           if (source.size() == 0) {
-            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, legacyScopedExtensionKey}) {
+            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, suffixScopedExtensionKey}) {
               if (fs::is_directory(settings[sourceKey])) {
                 source = settings[sourceKey];
                 settings[sourceKey] = "";
@@ -9682,7 +9739,7 @@ int main (int argc, char* argv[]) {
             trim(
               settings[extensionKey] + " " +
               settings[scopedExtensionKey] + " " +
-              settings[legacyScopedExtensionKey]
+              settings[suffixScopedExtensionKey]
             ),
             ' '
           );
@@ -10376,7 +10433,7 @@ int main (int argc, char* argv[]) {
             try {
               fs::copy_file(runtimeExtensionOutput, aliasPath, fs::copy_options::overwrite_existing);
             } catch (const fs::filesystem_error& ex) {
-              logWarn("failed to prepare legacy desktop extension alias '" + aliasPath.string() + "': " + ex.what());
+              logWarn("failed to prepare desktop extension alias '" + aliasPath.string() + "': " + ex.what());
             }
           }
         }
@@ -10835,8 +10892,9 @@ int main (int argc, char* argv[]) {
       StringStream sdkmanager;
       StringStream packages;
       StringStream gradlew;
-      String ndkVersion = "27.2.12479018";
-      String androidPlatform = "android-34";
+      String ndkVersion = "29.0.14206865";
+      String androidNativePlatform = "android-26";
+      String androidSdkPlatform = "android-37.0";
 
       if (platform.unix) {
         gradlew
@@ -10849,10 +10907,15 @@ int main (int argc, char* argv[]) {
         << " "
         << quote << "ndk;" << ndkVersion << quote << " "
         << quote << "platform-tools" << quote << " "
-        << quote << "platforms;" << androidPlatform << quote << " "
-        << quote << "emulator" << quote << " "
-        << quote << "system-images;" << androidPlatform << ";google_apis;x86_64" << quote << " "
-        << quote << "system-images;" << androidPlatform << ";google_apis;arm64-v8a" << quote << " ";
+        << quote << "platforms;" << androidSdkPlatform << quote << " "
+        << quote << "build-tools;36.0.0" << quote << " ";
+
+      if (flagBuildForAndroidEmulator) {
+        packages
+          << quote << "emulator" << quote << " "
+          << quote << "system-images;" << androidSdkPlatform << ";google_apis;"
+          << replace(platform.arch, "arm64", "arm64-v8a") << quote << " ";
+      }
 
       sdkmanager
         << packages.str();
@@ -10971,7 +11034,7 @@ int main (int argc, char* argv[]) {
             << " NDK_PROJECT_PATH=" << _main
             << " NDK_APPLICATION_MK=" << app_mk
             << (flagDebugMode ? " NDK_DEBUG=1" : "")
-            << " APP_PLATFORM=" << androidPlatform
+            << " APP_PLATFORM=" << androidNativePlatform
             << " NDK_LIBS_OUT=" << jniLibs;
 
           if (!(debugEnv || verboseEnv)) ndkBuildArgs << " >" << (!platform.win ? "/dev/null" : "NUL") << " 2>&1";
@@ -11037,7 +11100,7 @@ int main (int argc, char* argv[]) {
       androidState.androidHome = androidHome;
       androidState.verbose = debugEnv || verboseEnv;
       androidState.devNull = devNull;
-      androidState.platform = androidPlatform;
+      androidState.platform = androidSdkPlatform;
       androidState.appPath = app;
       androidState.quote = quote;
       androidState.slash = slash;
@@ -11095,14 +11158,14 @@ int main (int argc, char* argv[]) {
 
           const auto extensionKey = "build_extensions_" + extension;
           const auto scopedExtensionKey = "build_extensions_" + os + "_" + extension;
-          const auto legacyScopedExtensionKey = extensionKey + "_" + os;
+          const auto suffixScopedExtensionKey = extensionKey + "_" + os;
           auto source = settings[extensionKey + "_source"];
           if (source.size() == 0) {
             source = settings[scopedExtensionKey + "_source"];
           }
 
           if (source.size() == 0) {
-            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, legacyScopedExtensionKey}) {
+            for (const auto& sourceKey : {extensionKey, scopedExtensionKey, suffixScopedExtensionKey}) {
               source = settings[sourceKey];
               if (source.size() > 0) {
                 if (fs::is_directory(source)) {
@@ -11260,7 +11323,7 @@ int main (int argc, char* argv[]) {
             trim(
               settings[extensionKey] + " " +
               settings[scopedExtensionKey] + " " +
-              settings[legacyScopedExtensionKey]
+              settings[suffixScopedExtensionKey]
             ),
             ' '
           );
@@ -13019,7 +13082,7 @@ int main (int argc, char* argv[]) {
     String quote = !platform.win ? "'" : "\"";
     String slash = !platform.win ? "/" : "\\";
 
-    auto androidPlatform = "android-34";
+    auto androidPlatform = "android-37.0";
     AndroidCliState androidState;
     androidState.androidHome = getAndroidHome();
     androidState.verbose = flagVerboseMode || debugEnv || verboseEnv;
@@ -13780,7 +13843,7 @@ int main (int argc, char* argv[]) {
       std::cout << std::endl;
 
       if (meta->deprecated) {
-        std::cout << "  note: deprecated or legacy-only key" << std::endl;
+        std::cout << "  note: deprecated key" << std::endl;
       }
 
       exit(0);

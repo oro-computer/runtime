@@ -769,7 +769,6 @@ export function isPaused () {
 
 /**
  * Oro Runtime semantic version metadata mirrored from `process.versions.oro`.
- * The legacy `process.versions.socket` string remains frozen for compatibility.
  * @type {object} - an object containing the version information
  */
 export const runtimeVersion = primordials.version

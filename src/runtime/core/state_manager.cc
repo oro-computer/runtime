@@ -300,7 +300,7 @@ namespace oro::runtime::core {
     this->stateDirectory = stateDir;
     if (!overrideDir.empty()) {
       debug(
-        "StateManager: using state directory %s (set via ORO_STATE_DIR or legacy ORO_RUNTIME_STATE_DIR)",
+        "StateManager: using state directory %s (set via ORO_STATE_DIR or deprecated ORO_RUNTIME_STATE_DIR)",
         this->stateDirectory.string().c_str()
       );
     } else {

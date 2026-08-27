@@ -19,7 +19,7 @@ Parse a URL\-like input into a structured object. \- When `options === true`, in
 Example: parse('https://user:pass@example.com:8080/a/b?x=1#h') // => { // protocol: 'https:', hostname: 'example.com', origin: 'https://example.com:8080', // username: 'user', password: 'pass', port: '8080', pathname: '/a/b', // search: '?x=1', hash: '#h', path: '/a/b', href: 'https://user:pass@example.com:8080/a/b?x=1#h', // auth: 'user:pass', searchParams: URLSearchParams, query: 'x=1' // }
 .TP
 \fBresolve(from, to)\fR
-Resolve a target URL/path `to` against a base `from`. Mirrors Node's legacy `url.resolve()` semantics.
+Resolve a target URL/path `to` against a base `from`. Mirrors Node.js `url.resolve()` semantics.
 .br
 Example: resolve('http://example.com/a/b', '../c') // => 'http://example.com/c' resolve('/a/b', 'c') // => '/a/b/c'
 .TP

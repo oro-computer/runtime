@@ -365,7 +365,7 @@ int lastY = 0;
 
   /*
 
-  // TODO: refactor the legacy native multi-file drag/drop implementation.
+  // TODO: refactor the native multi-file drag/drop implementation.
 
   if (draggablePayload.size() == 0) {
     return;

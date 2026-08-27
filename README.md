@@ -48,6 +48,12 @@ Use `VERBOSE=1 DEBUG=1 NO_ANDROID=1 NO_IOS=1 npm run relink` for an explicitly d
 debug build linked into your development environment. See [Contributing](CONTRIBUTING.md) for
 validation and platform prerequisites.
 
+When Android is enabled, source bootstrap installs the SDK, NDK, and build tools
+needed to compile both supported Android ABIs. It does not download an emulator
+or system image. Emulator workflows provision one image matching the host
+architecture on demand; see the
+[source-build environment contract](docs/BUILD_ENVIRONMENT.md#android-build-and-emulator-packages).
+
 ## Canonical Links
 
 - Source repository: https://github.com/oro-computer/runtime
@@ -62,11 +68,11 @@ validation and platform prerequisites.
 - `api/README.md`: generated JavaScript API reference for public `oro:*` modules.
 - `api/index.d.ts`: generated TypeScript declarations for the shipped public API.
 - `api/CLI.md`: generated CLI reference.
-- `api/CONFIG.md`: generated configuration reference for `oro.toml`, legacy `oro.ini`, and `.ororc`.
+- `api/CONFIG.md`: generated configuration reference for `oro.toml`, the `oro.ini` fallback, and `.ororc`.
 - `share/man/man1`: `oroc` command manuals.
 - `share/man/man3`: JavaScript and C API manuals.
 - `share/man/man7`: concepts, IPC, route catalogs, and workflow guides.
-- `share/doc/oroc/{README.md,MCP.md,llms.txt,LEGACY_LIMITATIONS.md}` and
+- `share/doc/oroc/{README.md,MCP.md,llms.txt,LIMITATIONS.md}` and
   `share/doc/oroc/docs/BUILD_ENVIRONMENT.md`: installed high-level reference docs.
 
 ## Start Here
@@ -83,7 +89,7 @@ validation and platform prerequisites.
 - Prefer public high-level modules such as `oro:application`, `oro:window`, `oro:fs/promises`, and `oro:secure-storage` before dropping to `oro:ipc`.
 - Use section 3 manpages and `api/index.d.ts` for exact contracts.
 - Use section 7 manpages for concepts, transport guidance, and route catalogs.
-- Treat configuration as part of the API contract. `oro.toml`, legacy `oro.ini`, and `.ororc` often explain runtime behavior that would otherwise look surprising.
+- Treat configuration as part of the API contract. `oro.toml`, the `oro.ini` fallback, and `.ororc` often explain runtime behavior that would otherwise look surprising.
 - Platform support varies. Check the installed docs for capability limits before assuming desktop, mobile, and browser-like surfaces are equivalent.
 
 ## Automation And Agents
@@ -96,11 +102,11 @@ validation and platform prerequisites.
 
 ## Need To Know
 
-- `oro.toml` is the primary config format. `oro.ini` remains supported for legacy projects when `oro.toml` is absent.
+- `oro.toml` is the primary config format. `oro.ini` is used as a fallback when `oro.toml` is absent.
 - Do not assume a default service-worker mode. Respect the project config and the installed runtime docs.
 - Autoindex is opt-in.
 - The runtime does not guarantee `SharedArrayBuffer` or `Atomics.wait`; code that depends on shared memory needs a safe fallback.
-- For current platform gaps and compatibility caveats, see [Runtime Limitations](docs/LEGACY_LIMITATIONS.md).
+- For current platform gaps and compatibility caveats, see [Runtime Limitations](docs/LIMITATIONS.md).
 
 ## License
 

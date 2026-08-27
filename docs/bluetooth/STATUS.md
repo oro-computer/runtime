@@ -1,6 +1,6 @@
 # Web Bluetooth – Project Status
 
-This document tracks the current end-to-end status of the new Web Bluetooth implementation in Oro Runtime (with legacy Socket compatibility noted where relevant). It is updated as functionality lands across platforms.
+This document tracks the current end-to-end status of Web Bluetooth in Oro Runtime. It is updated as functionality lands across platforms.
 
 Last updated: 2025-09-17
 

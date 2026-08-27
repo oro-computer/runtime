@@ -20,33 +20,50 @@ Triggers:
 
 Jobs overview:
 
+- **Determine required coverage** classifies the changed paths. Documentation-only changes run lint
+  without allocating native build runners.
 - **Lint** validates all workflow files with `actionlint`, runs tooling unit tests, and executes the
-  authoritative repository lint contract through `npm run test:lint:ci` on Linux.
-- **Test platform** builds a fresh staged runtime and exercises the applicable desktop, runtime-core,
-  iOS Simulator, or Android Emulator tests on every supported host axis.
+  authoritative repository lint contract through `npm run test:lint:ci` on Linux. Native jobs wait
+  for this inexpensive gate, so a static failure does not consume platform-runner build hours.
+- **Tooling unit tests / Node 22** is a lightweight compatibility check; it does not rebuild the native
+  runtime.
+- **Linux x64 integration / Node 24** is the comprehensive runtime lane. It runs the desktop,
+  child-process, MCP, and runtime-core suites once.
+- **Build and test platform** builds every other supported host or mobile family. Architecture-only
+  lanes smoke-test the staged CLI, while Android, iOS, macOS, and Windows run only the tests that can
+  reveal behavior specific to that platform.
 
 The release packaging workflow lives at
 `.github/workflows/release-artifacts.yml` with the name **Release Artifacts**.
 It is distinct from the test workflow above and is used to publish downstream
 runtime distributions on release tags or manual dispatches. Manual dispatches
 can build either the full matrix or one selected `artifact_id` for pre-release
-smoke validation on hosted runners. A release-tag run calls the same CI workflow
-and waits for every lint and platform-test leg before any release archive build.
+smoke validation on hosted runners. A targeted dispatch expands to only that
+runner instead of allocating and then skipping the other seven matrix jobs. A
+release-tag run calls the same CI workflow
+for lint, Node compatibility, and comprehensive Linux integration validation. It
+does not first duplicate every cross-platform build: the release artifact matrix
+immediately afterward builds and smoke-tests those exact platform outputs.
 
 ## Test matrix
 
 | Matrix leg | Hosted runner | Native host | Mobile coverage | Node.js |
 | --- | --- | --- | --- | --- |
-| Linux x64 | `ubuntu-24.04` | x86_64 | none | 22 and 24 |
-| Linux arm64 | `ubuntu-24.04-arm` | arm64 | none | 24 |
-| Android | `ubuntu-24.04` | x86_64 | Android x86_64 and arm64-v8a | 24 |
-| macOS + iOS x64 | `macos-15-intel` | x86_64 | iOS device and Simulator libraries; Simulator tests | 24 |
-| macOS + iOS arm64 | `macos-14` | arm64 | iOS device and Simulator libraries; Simulator tests | 24 |
-| Windows x64 | `windows-2022` | x86_64 | none | 24 |
+| Linux x64 integration | `ubuntu-24.04` | x86_64 | none | 24; all shared integration suites |
+| Node compatibility | `ubuntu-24.04` | no native build | none | 22; tooling unit tests |
+| Linux arm64 | `ubuntu-24.04-arm` | arm64 | none | 24; build and CLI smoke test |
+| Android | `ubuntu-24.04` | x86_64 | Android x86_64 and arm64-v8a | 24; Emulator tests |
+| macOS + iOS x64 | `macos-15-intel` | x86_64 | iOS device and Simulator libraries | 24; build and CLI smoke test |
+| macOS + iOS arm64 | `macos-14` | arm64 | iOS device and Simulator libraries | 24; macOS and Simulator tests |
+| Windows x64 | `windows-2022` | x86_64 | none | 24; Windows desktop and child-process tests |
 
-Every desktop leg runs `npm test`, `npm run test:child-process`, `npm run test:mcp`, and
-`npm run test:runtime-core`. The Android leg runs `npm run test:android-emulator`; each Apple leg
-boots an available iPhone Simulator and runs `npm run test:ios-simulator`.
+The Linux x64 integration lane runs `npm test`, `npm run test:child-process`,
+`npm run test:mcp`, and `npm run test:runtime-core`. These shared suites are not repeated on every
+host. Windows repeats the desktop and child-process suites because process and path behavior is
+platform-specific. Apple Silicon repeats the desktop suite and boots an iPhone Simulator. The
+Android lane runs `npm run test:android-emulator`. Linux arm64 and Intel macOS are architecture build
+checks: they validate the staged target family and launch the resulting CLI without installing the
+test harness.
 
 Android is intentionally cross-built on the Ubuntu x64 runner. The Android NDK distributes Linux
 host tools for x86_64, while Oro emits both supported Android target ABIs from that host. The
@@ -77,6 +94,34 @@ Target inclusion is declared independently on every matrix leg:
 After every build, CI checks the staged target directories against the declared family and rejects
 mobile libraries in desktop-only output. The shared test launcher resolves `build/x86_64-desktop`
 or `build/arm64-desktop` from the actual Node host architecture instead of assuming x64.
+
+## Cache policy
+
+CI caches inputs that are expensive to reproduce but does not cache the repository's complete
+`build/` tree. That tree can exceed the GitHub cache quota by itself and contains absolute-path build
+metadata that is unsafe to move between hosted runners.
+
+- `actions/setup-node` restores pnpm's content-addressed store using `pnpm-lock.yaml`.
+- Test lanes restore npm's download cache using `test/package-lock.json`; `npm ci` still creates a
+  clean dependency tree on every runner.
+- `actions/setup-python` restores the pip cache for the pinned cpplint requirement.
+- Unix native lanes restore a 500 MB ccache partition scoped by OS, architecture, and target family.
+- Android restores Gradle and Cargo dependency caches from their pinned build inputs. It also
+  restores a shared build-SDK cache containing the pinned command-line tools, Platform-Tools,
+  Platform 37.0, Build Tools 36.0.0, and NDK r29. The emulator test has a separate cache for its
+  x86_64 emulator binary, system image, and versioned AVD so packaging workflows do not download or
+  retain test-only emulator data.
+
+Dependency cache keys include the lockfile or toolchain input that controls their contents. Native
+compiler keys include the OS, architecture, and target family; ccache also validates the compiler
+content. They restore the newest compatible prior key and publish a commit-specific successor, so
+changed sources can reuse unchanged objects without sharing objects across incompatible targets. A
+cache miss changes performance only; all installs and builds remain complete and independently
+validated.
+
+The workflow's changed-file classifier skips native jobs only when every changed path is Markdown,
+a license file, or a generated man page. Workflow dispatches, release calls, new branches, and any
+source, test, tool, dependency, or workflow change conservatively run native coverage.
 
 Contributors should still follow `CONTRIBUTING.md` for local builds. The hosted labels above are
 standard GitHub-hosted x64, arm64, Intel macOS, Apple Silicon, and Windows runners; no self-hosted
@@ -140,7 +185,8 @@ release only after all exact archive checksums and SPDX documents validate and n
   - Trigger `workflow_dispatch` on **Release Artifacts**.
   - Leave `artifact_id=all` to build the full hosted release matrix, or choose a
     single artifact target such as `linux-x64-desktop` or `windows-x64-desktop`
-    when you only need to validate one packaging leg.
+    when you only need to validate one packaging leg. A single-target dispatch
+    allocates only its selected runner.
 
 ## Reading results and debugging failures
 
@@ -155,7 +201,7 @@ release only after all exact archive checksums and SPDX documents validate and n
   - Standard output still lists the concrete file paths and rule violations that
     must be fixed when JavaScript style fails.
 - Platform test failures:
-  - The applicable **Test platform** matrix leg emits:
+  - The applicable **Linux x64 integration** or **Build and test platform** leg emits:
     - Build output from `./bin/install.sh` (including missing dependency hints).
     - Test runner output from `npm test` and `npm run test:runtime-core`.
   - Common issues:

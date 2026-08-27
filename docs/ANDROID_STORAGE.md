@@ -1,6 +1,6 @@
 # Android Storage Defaults
 
-Oro Runtime scopes all Android file access to the app’s private storage (legacy Socket behavior is still honored during the transition) unless
+Oro Runtime scopes all Android file access to the app’s private storage unless
 you explicitly broker additional locations. The native bootstrap wires the
 following directories when the activity starts:
 

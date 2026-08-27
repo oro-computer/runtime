@@ -1098,9 +1098,9 @@ namespace oro::cli::mcp {
       });
     }
 
-    static Object capabilities(bool legacy = false) {
+    static Object capabilities(bool mcp2025 = false) {
       Object resources(Object::Entries { {"listChanged", Boolean(false)} });
-      if (legacy) {
+      if (mcp2025) {
         resources.set("subscribe", Boolean(false));
       }
       return Object(Object::Entries {
@@ -2972,7 +2972,7 @@ namespace oro::cli::mcp {
     static std::optional<Response> handleRequest(
       Context& ctx,
       const Request& req,
-      const oro::runtime::String& negotiatedLegacyProtocolVersion
+      const oro::runtime::String& negotiatedMcp2025ProtocolVersion
     ) {
       if (req.method == "initialize") {
         Object::Entries serverInfoEntries {
@@ -2992,7 +2992,7 @@ namespace oro::cli::mcp {
           "Use run_cli only as a fallback for unsupported commands or advanced flag combinations."
         );
         Object::Entries resultEntries {
-          {"protocolVersion", String(negotiatedLegacyProtocolVersion)},
+          {"protocolVersion", String(negotiatedMcp2025ProtocolVersion)},
           {"capabilities", capabilities(true)},
           {"serverInfo", Object(serverInfoEntries)},
           {"instructions", String(instructions)}
@@ -3222,8 +3222,8 @@ namespace oro::cli::mcp {
     static std::optional<oro::runtime::String> handleJsonRpcPayload(
       Context& ctx,
       const oro::runtime::String& payload,
-      bool& legacyInitialized,
-      oro::runtime::String& legacyProtocolVersion,
+      bool& mcp2025Initialized,
+      oro::runtime::String& mcp2025ProtocolVersion,
       bool& modernEra
     ) {
       try {
@@ -3259,14 +3259,14 @@ namespace oro::cli::mcp {
           return runtime::JSON::stringify(Any(response.toJSON()));
         }
 
-        if ((legacyInitialized && currentRequest) ||
+        if ((mcp2025Initialized && currentRequest) ||
             (modernEra && !currentRequest)) {
           Object data(Object::Entries {
             {"supported", mcpSupportedVersions()},
             {"requested", String(
               currentRequest
                 ? runtime::mcp::kProtocolVersion
-                : legacyProtocolVersion
+                : mcp2025ProtocolVersion
             )}
           });
           auto response = Response::failure(
@@ -3330,7 +3330,7 @@ namespace oro::cli::mcp {
             );
             return runtime::JSON::stringify(Any(response.toJSON()));
           }
-          if (legacyInitialized) {
+          if (mcp2025Initialized) {
             auto response = Response::failure(
               request->id,
               Error(ErrorCode::InvalidRequest, "MCP connection is already initialized")
@@ -3381,10 +3381,10 @@ namespace oro::cli::mcp {
           }
 
           const auto requestedVersion = params.get("protocolVersion").as<String>().value();
-          legacyProtocolVersion = runtime::mcp::isLegacyProtocolVersion(requestedVersion)
+          mcp2025ProtocolVersion = runtime::mcp::isMcp2025ProtocolVersion(requestedVersion)
             ? requestedVersion
-            : oro::runtime::String(runtime::mcp::kLegacyProtocolVersion);
-        } else if (!currentRequest && request->method != "initialize" && !legacyInitialized) {
+            : oro::runtime::String(runtime::mcp::kMcp2025ProtocolVersion);
+        } else if (!currentRequest && request->method != "initialize" && !mcp2025Initialized) {
           auto response = Response::failure(
             request->id,
             Error(ErrorCode::InvalidRequest, "MCP session is not initialized")
@@ -3461,16 +3461,16 @@ namespace oro::cli::mcp {
         }
 
         if (request->isNotification()) {
-          handleRequest(ctx, *request, legacyProtocolVersion);
+          handleRequest(ctx, *request, mcp2025ProtocolVersion);
           return std::nullopt;
         }
 
-        auto response = handleRequest(ctx, *request, legacyProtocolVersion);
+        auto response = handleRequest(ctx, *request, mcp2025ProtocolVersion);
         if (!response.has_value()) {
           return std::nullopt;
         }
         if (request->method == "initialize" && !response->isError()) {
-          legacyInitialized = true;
+          mcp2025Initialized = true;
         }
         if (currentRequest) {
           prepareCurrentResponse(ctx, *request, *response);
@@ -3637,8 +3637,8 @@ namespace oro::cli::mcp {
           auto response = handleJsonRpcPayload(
             *this->ctx,
             payload,
-            state.legacyInitialized,
-            state.legacyProtocolVersion,
+            state.mcp2025Initialized,
+            state.mcp2025ProtocolVersion,
             state.modernEra
           );
 
@@ -3653,8 +3653,8 @@ namespace oro::cli::mcp {
 
       private:
         struct SessionState {
-          bool legacyInitialized = false;
-          oro::runtime::String legacyProtocolVersion;
+          bool mcp2025Initialized = false;
+          oro::runtime::String mcp2025ProtocolVersion;
           bool modernEra = false;
         };
 
@@ -3681,8 +3681,8 @@ namespace oro::cli::mcp {
 
     if (!options.useHttp) {
       bool useContentLength = false;
-      bool legacyInitialized = false;
-      oro::runtime::String legacyProtocolVersion;
+      bool mcp2025Initialized = false;
+      oro::runtime::String mcp2025ProtocolVersion;
       bool modernEra = false;
       while (true) {
         auto msg = readStdioMessage(std::cin);
@@ -3694,8 +3694,8 @@ namespace oro::cli::mcp {
         auto response = handleJsonRpcPayload(
           ctx,
           msg->payload,
-          legacyInitialized,
-          legacyProtocolVersion,
+          mcp2025Initialized,
+          mcp2025ProtocolVersion,
           modernEra
         );
         if (response.has_value()) {

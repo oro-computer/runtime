@@ -2,12 +2,11 @@
  *  \brief Oro Runtime bindings for UniFFI-backed iroh features.
  *
  *  This header defines the in-progress C ABI the native runtime depends on when
- *  bridging to the Rust implementation in `rust/oro-iroh`. It purposefully
- *  drops the legacy `irohnet.h` surface and documents the capabilities we
- *  expect to replace during the UniFFI migration.
+ *  bridging to the Rust implementation in `rust/oro-iroh`. It documents the
+ *  capabilities exposed during the UniFFI migration.
  *
  *  NOTE: Timeout-aware operations, ticket helpers, and extended telemetry hooks
- *  will be added as the Rust layer grows parity with the legacy surface.
+ *  will be added as the Rust layer expands its supported surface.
  *
  *  Ownership rules:
  *    - `char*` returned from functions must be freed with `oro_iroh_string_free`.

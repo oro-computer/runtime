@@ -26,20 +26,20 @@ namespace oro::runtime::mcp {
     return version == kProtocolVersion;
   }
 
-  bool isLegacyProtocolVersion(const String& version) {
-    return version == kLegacyProtocolVersion ||
-      version == kOlderLegacyProtocolVersion;
+  bool isMcp2025ProtocolVersion(const String& version) {
+    return version == kMcp2025ProtocolVersion ||
+      version == kEarlierMcp2025ProtocolVersion;
   }
 
   bool isSupportedProtocolVersion(const String& version) {
-    return isModernProtocolVersion(version) || isLegacyProtocolVersion(version);
+    return isModernProtocolVersion(version) || isMcp2025ProtocolVersion(version);
   }
 
   Vector<String> supportedProtocolVersions() {
     return {
       kProtocolVersion,
-      kLegacyProtocolVersion,
-      kOlderLegacyProtocolVersion
+      kMcp2025ProtocolVersion,
+      kEarlierMcp2025ProtocolVersion
     };
   }
 

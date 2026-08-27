@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * MCP specification fetcher/indexer for the Oro Runtime repo (legacy Socket paths still mapped).
+ * MCP specification fetcher/indexer for the Oro Runtime repository.
  *
  * Usage:
  *   node download-mcp-spec.js                    # index the current supported spec

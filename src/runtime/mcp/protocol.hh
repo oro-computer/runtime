@@ -18,12 +18,12 @@ namespace oro::runtime::mcp {
   using types::Vector;
 
   inline constexpr const char* kProtocolVersion = "2026-07-28";
-  inline constexpr const char* kLegacyProtocolVersion = "2025-11-25";
-  inline constexpr const char* kOlderLegacyProtocolVersion = "2025-06-18";
+  inline constexpr const char* kMcp2025ProtocolVersion = "2025-11-25";
+  inline constexpr const char* kEarlierMcp2025ProtocolVersion = "2025-06-18";
   inline constexpr const char* kJsonRpcVersion = "2.0";
 
   bool isModernProtocolVersion(const String& version);
-  bool isLegacyProtocolVersion(const String& version);
+  bool isMcp2025ProtocolVersion(const String& version);
   bool isSupportedProtocolVersion(const String& version);
   Vector<String> supportedProtocolVersions();
 

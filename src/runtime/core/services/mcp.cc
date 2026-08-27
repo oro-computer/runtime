@@ -1378,9 +1378,9 @@ namespace oro::runtime::core::services {
           {"message", "initialize requires capabilities and clientInfo with name and version"}
         };
       } else {
-        const auto negotiatedVersion = mcp::isLegacyProtocolVersion(requestedVersion)
+        const auto negotiatedVersion = mcp::isMcp2025ProtocolVersion(requestedVersion)
           ? requestedVersion
-          : String(mcp::kLegacyProtocolVersion);
+          : String(mcp::kMcp2025ProtocolVersion);
         {
           Lock lock(this->mutex);
           this->sessionState[sessionId] = true;
@@ -1641,7 +1641,7 @@ namespace oro::runtime::core::services {
       if (modern) {
         response["error"] = {
           {"code", static_cast<int>(mcp::ErrorCode::InvalidParams)},
-          {"message", "Legacy resource subscriptions are not available in MCP 2026-07-28"}
+          {"message", "resources/subscribe is not available in MCP 2026-07-28"}
         };
         return response;
       }

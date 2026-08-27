@@ -78,6 +78,28 @@ Android SDK is installed or `ORO_ANDROID_CI` requests Android setup.
 `NO_IOS` suppresses the Apple-mobile paths even when the host is capable of
 building them. Unset the corresponding variable to opt the target back in.
 
+## Android build and emulator packages
+
+Android source builds install only packages required to compile runtime
+artifacts: Android SDK Platform 37.0, Build Tools 36.0.0, Platform-Tools,
+Command-line Tools 23.0, and NDK r29. The generated Android project uses Android
+Gradle plugin 9.3.2 with Gradle 9.5.0 and Java 17 bytecode. These versions are
+an Android-documented compatibility set; do not advance one component without checking the
+Android Gradle plugin compatibility table and synchronizing the shell bootstrap
+and generated project templates.
+
+The app compiles and targets API 37 while retaining `minSdk 26`. Native
+runtime libraries therefore use NDK API 26 as their ABI floor; the SDK used to
+compile application sources must not be reused as the NDK minimum platform.
+
+The normal `./bin/install.sh` and `npm run relink` paths do not install the
+Android Emulator or any system image. Those downloads are test/run
+dependencies, not build dependencies. `npm run test:android-emulator` installs
+the emulator and exactly one Google APIs system image matching the host
+architecture when its versioned AVD is absent. Likewise, an application build
+for `android-emulator` requests one host-compatible image, while an `android`
+device build does not.
+
 ## Related source-build controls
 
 - `DEBUG=<non-empty>` enables debug runtime artifacts. On Windows it also

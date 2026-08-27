@@ -552,7 +552,7 @@ namespace oro::runtime::ai::server {
 
     const auto& prefix = options.routePrefix;
 
-    // Minimal routing for MVP + legacy aliases
+    // Oro, OpenAI-compatible, and Ollama-compatible routes.
     if (path == prefix + "/health") {
       return handleHealth(req, statusCode, headers, body, llm);
     } else if (path == prefix + "/metrics") {
@@ -565,7 +565,7 @@ namespace oro::runtime::ai::server {
     } else if (path == prefix + "/detokenize") {
       return handleDetokenize(req, statusCode, headers, body, llm);
     } else if (path == prefix + "/models" || path == prefix + "/api/tags") {
-      return handleModelsLegacy(req, statusCode, headers, body, llm);
+      return handleModelListAliases(req, statusCode, headers, body, llm);
     } else if (path == prefix + "/v1/models") {
       return handleModelsV1(req, statusCode, headers, body, llm);
     } else if (
@@ -1806,7 +1806,7 @@ namespace oro::runtime::ai::server {
     return true;
   }
 
-  bool LlamaServer::handleModelsLegacy(
+  bool LlamaServer::handleModelListAliases(
     serviceworker::Request& req,
     int& statusCode,
     http::Headers& headers,
@@ -1820,7 +1820,7 @@ namespace oro::runtime::ai::server {
 
     headers.set("content-type", "application/json; charset=utf-8");
 
-    JSON::Array modelsLegacy;
+    JSON::Array ollamaModels;
     JSON::Array data;
     const auto now = (int64_t)(time(nullptr));
 
@@ -1841,7 +1841,7 @@ namespace oro::runtime::ai::server {
           {"parameter_size", ""},
           {"quantization_level", ""}
         };
-        modelsLegacy.push(JSON::Object::Entries {
+        ollamaModels.push(JSON::Object::Entries {
           {"name", model->name},
           {"model", model->name},
           {"modified_at", ""},
@@ -1868,7 +1868,7 @@ namespace oro::runtime::ai::server {
     }
 
     const auto json = JSON::Object::Entries {
-      {"models", modelsLegacy},
+      {"models", ollamaModels},
       {"object", "list"},
       {"data", data}
     };

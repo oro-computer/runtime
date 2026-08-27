@@ -382,7 +382,7 @@ fi
 
 if [[ "$host" == "Darwin" && "$platform" == "desktop" ]] || (( TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR || TARGET_OS_ANDROID || TARGET_ANDROID_EMULATOR )); then
   if [[ -n "$tls_provider" ]]; then
-    echo "warn - ignoring TLS provider '$tls_provider' for legacy $platform builds; continuing without a built-in TLS provider and oro:tls will return NOT_IMPLEMENTED" >&2
+    echo "warn - ignoring TLS provider '$tls_provider' for $platform builds; continuing without a built-in TLS provider and oro:tls will return NOT_IMPLEMENTED" >&2
     tls_provider=""
   fi
 fi

@@ -90,19 +90,30 @@ if [ ! -f "$sdkmanager" ]; then
   exit_and_write_code 1
 fi
 
-if [ ! -f "$emulator" ]; then
-  echo "not ok - Unable to locate emulator."
-  exit_and_write_code 1
+if [[ -z "$ANDROID_SDK_PLATFORM" ]]; then
+  ANDROID_SDK_PLATFORM="37.0"
 fi
 
-write_code 0
+case "$(uname -m)" in
+  arm64|aarch64) android_system_image_arch="arm64-v8a" ;;
+  x86_64|amd64) android_system_image_arch="x86_64" ;;
+  *)
+    echo "not ok - Unsupported Android emulator host architecture: $(uname -m)"
+    exit_and_write_code 1
+    ;;
+esac
 
-[[ -z "$ANDROID_PLATFORM" ]] && ANDROID_PLATFORM=34
+avd_name="OROAVD_API_${ANDROID_SDK_PLATFORM//./_}_$android_system_image_arch"
+pkg="system-images;android-$ANDROID_SDK_PLATFORM;google_apis;$android_system_image_arch"
+avd_exists=""
 
-if ! "$avdmanager" list avd | grep 'Name: OROAVD$'; then
-  echo "Downloading AVD image..."
-  pkg="system-images;android-$ANDROID_PLATFORM;google_apis;$(uname -m | sed -E 's/(arm64|aarch64)/arm64-v8a/g')"
-  yes | "$sdkmanager" "$pkg"
+if "$avdmanager" list avd | grep -F "Name: $avd_name" >/dev/null; then
+  avd_exists=1
+fi
+
+if [[ ! -f "$emulator" ]] || [[ -z "$avd_exists" ]]; then
+  echo "Ensuring the Android emulator and $pkg are installed..."
+  yes | "$sdkmanager" "emulator" "$pkg"
   rc=$?
   (( rc != 0 )) && exit_and_write_code $rc
 
@@ -110,22 +121,29 @@ if ! "$avdmanager" list avd | grep 'Name: OROAVD$'; then
   yes | "$sdkmanager" --licenses
   rc=$?
   (( rc != 0 )) && exit_and_write_code $rc
+fi
 
+if [ ! -f "$emulator" ]; then
+  echo "not ok - Unable to locate emulator after SDK package installation: $emulator"
+  exit_and_write_code 1
+fi
+
+if [[ -z "$avd_exists" ]]; then
   echo "Creating AVD..."
-  "$avdmanager" --clear-cache create avd -n OROAVD -k "$pkg" -d 1 --force
+  "$avdmanager" --clear-cache create avd -n "$avd_name" -k "$pkg" -d 1 --force
   rc=$?
   (( rc != 0 )) && exit_and_write_code $rc
 fi
 
 [[ -z "$EMULATOR_FLAGS" ]] && EMULATOR_FLAGS=()
 
-# Android platform support prep, older versions don't support -gpu swiftshader_indirect
-(( ANDROID_PLATFORM > 31 )) && EMULATOR_FLAGS+=("-gpu" "swiftshader_indirect")
+EMULATOR_FLAGS+=("-gpu" "swiftshader_indirect")
 # fixes adb: failed to install cmd: Can't find service: package
 
+write_code 0
 echo "Starting Android emulator..."
 if [[ -z "$CI" ]]; then
-  "$emulator" @OROAVD         \
+  "$emulator" "@$avd_name"    \
     "${EMULATOR_FLAGS[@]}"    \
     -camera-back none         \
     -no-boot-anim             \
@@ -133,7 +151,7 @@ if [[ -z "$CI" ]]; then
     -noaudio                  \
     >/dev/null
 else
-  "$emulator" @OROAVD         \
+  "$emulator" "@$avd_name"    \
     "${EMULATOR_FLAGS[@]}"    \
     -camera-back none         \
     -no-boot-anim             \

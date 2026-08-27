@@ -468,7 +468,7 @@ namespace oro::runtime::mcp {
     return JSON::Object(entries);
   }
 
-  JSON::Object Tool::toJSON(bool modern) const {
+  JSON::Object Tool::toJSON(bool currentProtocol) const {
     JSON::Object::Entries entries {
       {"name", JSON::String(this->name)},
       {"description", JSON::String(this->description)},
@@ -483,14 +483,14 @@ namespace oro::runtime::mcp {
       entries.insert({"annotations", this->annotations});
     }
 
-    bool legacyObjectOutputSchema = false;
+    bool mcp2025ObjectOutputSchema = false;
     if (this->outputSchema.isObject()) {
       const auto& schema = this->outputSchema.as<JSON::Object>();
-      legacyObjectOutputSchema = schema.contains("type") &&
+      mcp2025ObjectOutputSchema = schema.contains("type") &&
         schema.get("type").isString() &&
         schema.get("type").as<JSON::String>().value() == "object";
     }
-    if (!this->outputSchema.isNull() && (modern || legacyObjectOutputSchema)) {
+    if (!this->outputSchema.isNull() && (currentProtocol || mcp2025ObjectOutputSchema)) {
       entries.insert({"outputSchema", this->outputSchema});
     }
 

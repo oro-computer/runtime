@@ -14,12 +14,9 @@ import os from './os.js'
 
 let didEmitExitEvent = false
 let cwd = primordials.cwd
-// Freeze the legacy socket version identifier.
-const LEGACY_SOCKET_VERSION = '0.6.0'
 
 /**
  * @typedef {Object} ProcessVersionsMap
- * @property {string} socket - Legacy `process.versions.socket` identifier (frozen at Oro 0.6.0).
  * @property {string} oro - Current Oro Runtime semantic version.
  * @property {string} [uv]
  * @property {string} [llama]
@@ -227,15 +224,11 @@ class Process extends EventEmitter {
   }
 
   /**
-   * Reports the frozen legacy `process.versions.socket` identifier plus current Oro Runtime
-   * and native library versions.
+   * Reports current Oro Runtime and native library versions.
    * @returns {ProcessVersionsMap}
    */
   get versions () {
-    const versions = {
-      socket: LEGACY_SOCKET_VERSION,
-      oro: this.version
-    }
+    const versions = { oro: this.version }
 
     const libraries = {
       uv: primordials.uv?.version,

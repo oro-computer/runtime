@@ -476,7 +476,7 @@ class BluetoothDevice extends EventTarget {
     this.id = String(id)
     this.name = name || null
     this.gatt = new BluetoothRemoteGATTServer(this)
-    this.gattServer = this.gatt // legacy alias seen in the wild
+    this.gattServer = this.gatt // Web Bluetooth compatibility alias
     this.uuids = Array.isArray(services)
       ? services.map((s) => String(s).toLowerCase())
       : []

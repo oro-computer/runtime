@@ -91,7 +91,7 @@ namespace oro::runtime::config {
     // Value type hint used for formatting and validation.
     ConfigValueType type;
 
-    // True when the key is deprecated or legacy-only.
+    // True when the key is deprecated.
     bool deprecated;
   };
 

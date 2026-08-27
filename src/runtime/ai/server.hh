@@ -75,7 +75,7 @@ namespace oro::runtime::ai::server {
         ai::llm::Manager& llm
       );
 
-      bool handleModelsLegacy(
+      bool handleModelListAliases(
         serviceworker::Request& req,
         int& statusCode,
         http::Headers& headers,

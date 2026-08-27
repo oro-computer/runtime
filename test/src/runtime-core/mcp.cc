@@ -64,14 +64,14 @@ namespace oro::Tests {
     );
     t.assert(
       !tool.toJSON(false).contains("outputSchema"),
-      "legacy MCP descriptors omit non-object output schemas"
+      "MCP 2025 descriptors omit non-object output schemas"
     );
 
-    runtime::mcp::Tool legacyObjectTool;
-    legacyObjectTool.outputSchema = JSON::parse(R"({"type":"object"})");
+    runtime::mcp::Tool mcp2025ObjectTool;
+    mcp2025ObjectTool.outputSchema = JSON::parse(R"({"type":"object"})");
     t.assert(
-      legacyObjectTool.toJSON(false).contains("outputSchema"),
-      "legacy MCP descriptors retain object output schemas"
+      mcp2025ObjectTool.toJSON(false).contains("outputSchema"),
+      "MCP 2025 descriptors retain object output schemas"
     );
 
     runtime::mcp::Tool invalidSchemaTool;

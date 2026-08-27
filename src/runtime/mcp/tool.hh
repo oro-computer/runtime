@@ -49,7 +49,7 @@ namespace oro::runtime::mcp {
     std::shared_ptr<const CompiledJSONSchema> compiledInputSchema;
     std::shared_ptr<const CompiledJSONSchema> compiledOutputSchema;
 
-    JSON::Object toJSON(bool modern = true) const;
+    JSON::Object toJSON(bool currentProtocol = true) const;
     bool prepareSchemas(String& error);
     bool validateArguments(const String& value, String& error) const;
     bool validateResult(const String& value, String& error) const;

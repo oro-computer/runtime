@@ -24,8 +24,8 @@ the internal platform-package dependency ranges and requires a matching changelo
 Pushing a signed `v<version>` tag starts `.github/workflows/release-artifacts.yml`. It:
 
 1. verifies the signed tag and synchronized release metadata;
-2. calls the reusable CI workflow and waits for lint, generated-output checks, and every supported
-   host/mobile test leg;
+2. calls the reusable CI workflow and waits for lint, generated-output checks, Node compatibility,
+   and the comprehensive Linux integration lane;
 3. builds supported desktop and mobile-SDK distributions on their native runners;
 4. smoke tests the staged `oroc` executable;
 5. creates archives, SHA-256 checksum files, and SPDX SBOMs;
@@ -152,8 +152,9 @@ for the account-side fields and current registry requirements.
 Once activation is complete, pushing one annotated, verified signed `v<version>` tag is the only
 release trigger. A CI or build failure publishes nothing. A failure before the npm job publishes
 nothing. A partial npm failure is recoverable by rerunning the same workflow because published
-tarballs are integrity-checked. The GitHub release remains absent until the full test matrix, all
-npm packages, and all release assets pass. Published npm versions and signed tags are immutable;
+tarballs are integrity-checked. The GitHub release remains absent until CI validation, every exact
+release-platform build, all npm packages, and all release assets pass. Published npm versions and
+signed tags are immutable;
 correct a defect with a new patch version.
 
 Follow [RELEASE_CHECKLIST.md](../../RELEASE_CHECKLIST.md) for the complete release gate and

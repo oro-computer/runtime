@@ -14,7 +14,7 @@ alongside safe workspace/config file access helpers.
 The server is tuned for both human-operated clients and agentic tools:
 
 - `server/discover` returns the server description, version, capabilities, and instructions for
-  modern clients. Legacy clients use `initialize`.
+  MCP 2026-07-28 clients. MCP 2025-11-25 and 2025-06-18 clients use `initialize`.
 - `tools/list` publishes human-readable titles, JSON input schemas, icons, standard
   safety annotations, and extension data under `_meta`.
 - Successful tool calls may return any JSON value in `structuredContent`. Arrays, primitives,
@@ -24,7 +24,7 @@ The server is tuned for both human-operated clients and agentic tools:
   Unsupported dialects, invalid schemas, and external references are rejected without network
   access. Input and output validation is bounded to 64 nested levels and 10,000 JSON values.
 - Successful structured results are validated against `outputSchema` before they are returned.
-  For legacy clients, only object-root output schemas are advertised and non-object structured
+  For MCP 2025 clients, only object-root output schemas are advertised and non-object structured
   values are wrapped in `{ "value": ... }` on the wire.
 - Modern responses identify their result shape through the top-level `resultType` field.
 
@@ -61,11 +61,11 @@ Notes:
   paths through arrays, composition, conditionals, or `$ref` are rejected during registration.
   Only singular `string`, `integer`, and `boolean` property types are supported, integer values
   must stay in the JavaScript safe range, and header names must be unique ASCII HTTP tokens.
-- Legacy `2025-11-25` and `2025-06-18` clients continue to use `initialize`,
+- MCP `2025-11-25` and `2025-06-18` clients use `initialize`,
   `Mcp-Session-Id`, and GET SSE streams. The server returns the requested version when it is
   supported, otherwise it offers `2025-11-25` as its newest handshake-era revision.
-  Unknown legacy session IDs return `404`; the server never silently creates a replacement
-  session. Only one GET SSE stream is active per legacy session unless `--replace-sse-stream` is
+  Unknown MCP 2025 session IDs return `404`; the server never silently creates a replacement
+  session. Only one GET SSE stream is active per MCP 2025 session unless `--replace-sse-stream` is
   used.
 - HTTP mode requires bearer authentication by default and prints a cryptographically random token
   in its startup JSON. Pass `--token` to choose the token. `--no-auth` is an explicit loopback-only
@@ -132,7 +132,7 @@ Use `search_docs` when you know the topic you want but not the exact file or man
 For a new workspace or agent session, the lowest-friction sequence is:
 
 1. Call `server/discover` with MCP `2026-07-28` request metadata and read the returned
-   `instructions`. A legacy `2025-11-25` or `2025-06-18` client calls `initialize` instead.
+   `instructions`. An MCP `2025-11-25` or `2025-06-18` client calls `initialize` instead.
 2. Call `workspace_info` to confirm the workspace root, config path, config_exists status, and filesystem policy.
 3. Call `search_docs` when you already have a topic in mind (for example `ios signing`, `update manifest`, or `json logs`).
 4. Call `resources/list` or `list_workspace` to discover docs and project layout.

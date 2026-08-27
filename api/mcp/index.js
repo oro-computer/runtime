@@ -263,12 +263,12 @@ import ipc, { IPCSearchParams, Result } from '../ipc.js'
  * @property {string} [message]
  * @property {string} [token]
  * @property {number} [retry] Positive 32-bit SSE retry interval in milliseconds.
- * @property {number} [sessionTtlSeconds=600] Seconds to retain an inactive legacy session.
+ * @property {number} [sessionTtlSeconds=600] Seconds to retain an inactive MCP 2025 session.
  * @property {number} [maxRequestBytes=16777216] Maximum HTTP request body size.
  * @property {number} [maxSessions=1024] Maximum concurrent HTTP session contexts.
  * @property {number} [maxQueuedEvents=1024] Maximum queued events per SSE stream.
  * @property {number} [maxQueuedBytes=8388608] Maximum queued event bytes per SSE stream.
- * @property {boolean} [replaceSseStreamOnReconnect=false] Allow a reconnect to replace an existing legacy SSE stream for the same session.
+ * @property {boolean} [replaceSseStreamOnReconnect=false] Allow a reconnect to replace an existing MCP 2025 SSE stream for the same session.
  * @property {(request: MCPAuthorizationRequest) => boolean | MCPAuthorizationDecision | Promise<boolean | MCPAuthorizationDecision>} [authorize]
  * @property {MCPOAuthOptions | boolean} [oauth]
  */

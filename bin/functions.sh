@@ -242,8 +242,9 @@ function build_env_data() {
   echo "JAVA_HOME=\"$(escape_path "$JAVA_HOME")\""
   echo "ANDROID_SDK_MANAGER=\"$(escape_path "$ANDROID_SDK_MANAGER")\""
   echo "GRADLE_HOME=\"$(escape_path "$GRADLE_HOME")\""
-  # Should not use these for general calls
-  echo "ANDROID_SDK_MANAGER_JAVA_OPTS=\"-XX:+IgnoreUnrecognizedVMOptions --add-modules java.se.ee\""
+  # Reserved for local SDK manager workarounds; current command-line tools do
+  # not require removed Java EE modules.
+  echo "ANDROID_SDK_MANAGER_JAVA_OPTS=\"\""
   echo "ANDROID_SDK_MANAGER_ACCEPT_LICENSES=\"$ANDROID_SDK_MANAGER_ACCEPT_LICENSES\""
 }
 
@@ -599,48 +600,40 @@ function determine_package_manager () {
   echo "$package_manager"
 }
 
+function find_cxx () {
+  local compiler=""
+  local compiler_path=""
+
+  for compiler in clang++ clang++-{26..14} g++; do
+    compiler_path="$(command -v "$compiler" 2>/dev/null)" || continue
+
+    if [[ ! -f "$compiler_path" ]] || [[ ! -x "$compiler_path" ]]; then
+      continue
+    fi
+
+    # ROCm ships a private LLVM toolchain for GPU workloads. It must only be
+    # used when the caller selects it explicitly through CXX.
+    if [[ "$compiler_path" == /opt/rocm/* ]] || [[ "$compiler_path" == /opt/rocm-*/* ]]; then
+      continue
+    fi
+
+    echo "$compiler_path"
+    return 0
+  done
+
+  return 1
+}
+
 function determine_cxx () {
   local package_manager="$(determine_package_manager)"
-  local dpkg=""
-
-  command -v dpkg >/dev/null 2>&1 && dpkg="dpkg"
 
   read_env_data
 
   if [ ! "$CXX" ]; then
-    # TODO(@jwerle): yum support
-    if [[ "$(host_os)" == "Linux" ]] && [ -n "$dpkg" ]; then
-      tmp="$(mktemp)"
-      {
-        dpkg -S clang 2>&1| grep "clang++" | cut -d" " -f 2 | while read clang; do
-        # Convert clang++ paths to path#version strings
-        bin_version="#$("$clang" --version|head -n1)#$clang"
-        echo "$bin_version";
-      done
-      } | sort -r | sed '/^##/d' | cut -d"#" -f 3 | head -n1 > "$tmp" # sort by version, remove lines without version, then cut out bin out to get the highest installed clang version
-      CXX="$(cat "$tmp")"
-      rm -f "$tmp"
-
-      if [[ -z "$CXX" ]]; then
-        echo >&2 "not ok - missing build tools, try \"sudo $package_manager clang-14\""
-        return 1
-      fi
-    elif command -v clang++ >/dev/null 2>&1; then
-      CXX="$(command -v clang++)"
-    elif command -v clang++-16 >/dev/null 2>&1; then
-      CXX="$(command -v clang++-16)"
-    elif command -v clang++-15 >/dev/null 2>&1; then
-      CXX="$(command -v clang++-15)"
-    elif command -v clang++-14 >/dev/null 2>&1; then
-      CXX="$(command -v clang++-14)"
-    elif command -v clang++-13 >/dev/null 2>&1; then
-      CXX="$(command -v clang++-13)"
-    elif command -v clang++-12 >/dev/null 2>&1; then
-      CXX="$(command -v clang++-12)"
-    elif command -v clang++-11 >/dev/null 2>&1; then
-      CXX="$(command -v clang++-11)"
-    elif command -v g++ >/dev/null 2>&1; then
-      CXX="$(command -v g++)"
+    CXX="$(find_cxx)" || CXX=""
+    if [[ -z "$CXX" ]]; then
+      echo >&2 "not ok - missing build tools, try \"sudo $package_manager clang\""
+      return 1
     fi
 
     if [ "$host" = "Win32" ]; then
@@ -676,6 +669,63 @@ function determine_cxx () {
   fi
 }
 
+function linux_build_dependencies_available() {
+  local cxx="${CXX:-}"
+  local dependency=""
+  local missing=()
+  local pkg_config_modules=(
+    dbus-1
+    gio-unix-2.0
+    gtk+-3.0
+    libsoup-3.0
+    libsystemd
+    webkit2gtk-4.1
+  )
+
+  if ! command -v pkg-config >/dev/null 2>&1; then
+    missing+=("pkg-config")
+  fi
+
+  if [[ -z "$cxx" ]]; then
+    cxx="$(find_cxx)" || cxx=""
+  fi
+
+  if [[ -z "$cxx" ]]; then
+    missing+=("C++ compiler")
+  elif [[ "$cxx" == */* ]]; then
+    if [[ ! -f "$cxx" ]] || [[ ! -x "$cxx" ]]; then
+      missing+=("C++ compiler ($cxx)")
+    elif ! printf '#include <string>\nint main() { std::string value; return value.size(); }\n' |
+      "$cxx" -std=c++20 -x c++ - -o /dev/null >/dev/null 2>&1; then
+      missing+=("working C++20 compiler and linker ($cxx)")
+    fi
+  elif ! command -v "$cxx" >/dev/null 2>&1; then
+    missing+=("C++ compiler ($cxx)")
+  elif ! printf '#include <string>\nint main() { std::string value; return value.size(); }\n' |
+    "$cxx" -std=c++20 -x c++ - -o /dev/null >/dev/null 2>&1; then
+    missing+=("working C++20 compiler and linker ($cxx)")
+  fi
+
+  if command -v pkg-config >/dev/null 2>&1; then
+    for dependency in "${pkg_config_modules[@]}"; do
+      if ! pkg-config --exists "$dependency" 2>/dev/null; then
+        missing+=("pkg-config:$dependency")
+      fi
+    done
+  fi
+
+  if (( ${#missing[@]} > 0 )); then
+    write_log "h" "Missing Linux build dependencies: ${missing[*]}"
+    return 1
+  fi
+
+  if [[ -z "${CXX:-}" ]]; then
+    CXX="$cxx"
+  fi
+
+  return 0
+}
+
 function first_time_experience_setup() {
   export BUILD_ANDROID="1"
   local target="$1"
@@ -684,58 +734,60 @@ function first_time_experience_setup() {
     unset BUILD_ANDROID
   fi
 
-  determine_cxx
-
   if [ -z "$target" ] || [[ "$target" == "linux" ]]; then
     if [[ "$(host_os)" == "Linux" ]]; then
       local package_manager="$(determine_package_manager)"
-      echo "Installing $(host_os) dependencies..."
+      if linux_build_dependencies_available; then
+        write_log "v" "ok - Linux build dependencies are already installed."
+      else
+        echo "Installing $(host_os) dependencies..."
 
-      if [[ "$package_manager" == "apt install" ]]; then
-        log_and_run sudo apt update || return $?
-        log_and_run sudo apt install -y   \
-          build-essential                 \
-          clang-14                        \
-          git                             \
-          libgtk-3-dev                    \
-          libwebkit2gtk-4.1-dev           \
-          libc++abi-14-dev                \
-          libc++-14-dev                   \
-          libdbus-1-dev                   \
-          libsoup-3.0-dev                 \
-          libsystemd-dev                  \
-          pkg-config                      \
-          || return $?
-      elif [[ "$package_manager" == "pacman -S" ]]; then
-        log_and_run sudo pacman -Syu      \
-          clang-14                        \
-          base-devel                      \
-          git                             \
-          libc++1-14                      \
-          libc++abi-14                    \
-          libdbus                         \
-          libsystemd                      \
-          pkgconf                         \
-          webkit2gtk-4.1                  \
-          || return $?
-      elif [[ "$package_manager" == "dnf install" ]]; then
-        log_and_run sudo dnf install      \
-          automake                        \
-          clang14-devel                   \
-          clang14-libs                    \
-          dbus-devel                      \
-          gcc                             \
-          gcc-c++                         \
-          kernel-devel                    \
-          libcxx-devel                    \
-          libcxxabi-devel                 \
-          libsystemd-devel                \
-          make                            \
-          webkit2gtk4.1-devel             \
-          || return $?
-      elif [[ "$package_manager" == "yum install" ]]; then
-        echo "warn - yum package manager is not suppored yet. Please try to install dependencies manually."
-        exit 1
+        if [[ "$package_manager" == "apt install" ]]; then
+          log_and_run sudo apt update || return $?
+          log_and_run sudo apt install -y   \
+            build-essential                 \
+            clang-14                        \
+            git                             \
+            libgtk-3-dev                    \
+            libwebkit2gtk-4.1-dev           \
+            libc++abi-14-dev                \
+            libc++-14-dev                   \
+            libdbus-1-dev                   \
+            libsoup-3.0-dev                 \
+            libsystemd-dev                  \
+            pkg-config                      \
+            || return $?
+        elif [[ "$package_manager" == "pacman -S" ]]; then
+          log_and_run sudo pacman -Syu      \
+            clang-14                        \
+            base-devel                      \
+            git                             \
+            libc++1-14                      \
+            libc++abi-14                    \
+            libdbus                         \
+            libsystemd                      \
+            pkgconf                         \
+            webkit2gtk-4.1                  \
+            || return $?
+        elif [[ "$package_manager" == "dnf install" ]]; then
+          log_and_run sudo dnf install      \
+            automake                        \
+            clang14-devel                   \
+            clang14-libs                    \
+            dbus-devel                      \
+            gcc                             \
+            gcc-c++                         \
+            kernel-devel                    \
+            libcxx-devel                    \
+            libcxxabi-devel                 \
+            libsystemd-devel                \
+            make                            \
+            webkit2gtk4.1-devel             \
+            || return $?
+        elif [[ "$package_manager" == "yum install" ]]; then
+          echo "warn - yum package manager is not suppored yet. Please try to install dependencies manually."
+          exit 1
+        fi
       fi
     fi
   fi
@@ -755,9 +807,20 @@ function first_time_experience_setup() {
 function main() {
   while (( $# > 0 )); do
     declare arg="$1"; shift
-    [[ "$arg" == "--fte" ]] && first_time_experience_setup $@
-    [[ "$arg" == "--update-env-data" ]] && update_env_data "$@"
-    return $?
+    case "$arg" in
+      --fte)
+        first_time_experience_setup "$@"
+        return $?
+        ;;
+      --update-env-data)
+        update_env_data "$@"
+        return $?
+        ;;
+      *)
+        echo >&2 "not ok - unknown functions.sh argument: $arg"
+        return 64
+        ;;
+    esac
   done
   return 0
 }

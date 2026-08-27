@@ -218,7 +218,7 @@ export function parse (input, options = null) {
 
 /**
  * Resolve a target URL/path `to` against a base `from`.
- * Mirrors Node's legacy `url.resolve()` semantics.
+ * Mirrors Node.js `url.resolve()` semantics.
  *
  * Example:
  * ```js

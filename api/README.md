@@ -408,7 +408,6 @@ Predicate function to determine if application is in a "paused" state.
 
 
 Oro Runtime semantic version metadata mirrored from `process.versions.oro`.
-The legacy `process.versions.socket` string remains frozen for compatibility.
 ## debug
 
 
@@ -2406,7 +2405,7 @@ import { arch, platform } from 'oro:os'
 ## `arch()`
 
 
-Returns the operating system CPU architecture for which Socket was compiled.
+Returns the operating system CPU architecture for which Oro Runtime was compiled.
 | Return Value | Type | Description |
 | :---         | :--- | :---        |
 | Not specified | string | 'arm64', 'ia32', 'x64', or 'unknown' |
@@ -2786,8 +2785,7 @@ string keys to string values. The exported `env` object itself is the
 ### `versions()`
 
 
-Reports the frozen legacy `process.versions.socket` identifier plus current Oro Runtime
-and native library versions.
+Reports current Oro Runtime and native library versions.
 | Return Value | Type | Description |
 | :---         | :--- | :---        |
 | Not specified | ProcessVersionsMap |  |

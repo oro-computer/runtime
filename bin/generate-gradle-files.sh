@@ -10,58 +10,54 @@ rm -f "$root/build.gradle" "$root/gradle.properties"
 ## build.gradle
 cat > "$root/build.gradle" << GRADLE
 buildscript {
-  ext.kotlin_version = '1.9.20'
   repositories {
     google()
     mavenCentral()
-    maven { url "https://plugins.gradle.org/m2/" }
   }
 
   dependencies {
-    classpath 'com.android.tools.build:gradle:7.4.1'
-    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:\$kotlin_version"
-    classpath "org.jetbrains.kotlin:kotlin-android-extensions:\$kotlin_version"
+    classpath 'com.android.tools.build:gradle:9.3.2'
   }
 }
 
 allprojects {
-  ext.kotlin_version = '1.9.20'
   repositories {
     google()
     mavenCentral()
-    maven { url "https://plugins.gradle.org/m2/" }
   }
 }
 
-apply plugin: 'org.jetbrains.kotlin.android'
 apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android-extensions'
-apply plugin: 'kotlin-android'
 
 android {
-  compileSdkVersion 34
-  ndkVersion "27.2.12479018"
+  namespace "oro.runtime"
+  compileSdk 37
+  ndkVersion "29.0.14206865"
   flavorDimensions "default"
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
 
   defaultConfig {
     applicationId "oro.runtime"
-    minSdkVersion 26
-    targetSdkVersion 34
+    minSdk 26
+    targetSdk 37
     versionCode 1
     versionName "0.0.1"
   }
 
   sourceSets {
     main {
-      java {
-        srcDir 'src'
+      kotlin {
+        srcDir "src"
       }
     }
   }
 }
 
 dependencies {
-  implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:\$kotlin_version"
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
   implementation 'androidx.fragment:fragment-ktx:1.7.1'
@@ -78,9 +74,6 @@ org.gradle.jvmargs=-Xmx2048m
 org.gradle.parallel=true
 
 android.useAndroidX=true
-android.enableJetifier=true
-android.experimental.legacyTransform.forceNonIncremental=true
-
 kotlin.code.style=official
 GRADLE
 

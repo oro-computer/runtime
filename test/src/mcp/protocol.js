@@ -4,11 +4,11 @@ import mcp from 'oro:mcp'
 import { fetch } from './http-client.js'
 
 const currentProtocolVersion = '2026-07-28'
-const latestLegacyProtocolVersion = '2025-11-25'
-const olderLegacyProtocolVersion = '2025-06-18'
-const legacyProtocolVersions = [
-  latestLegacyProtocolVersion,
-  olderLegacyProtocolVersion
+const latestMcp2025ProtocolVersion = '2025-11-25'
+const earlierMcp2025ProtocolVersion = '2025-06-18'
+const mcp2025ProtocolVersions = [
+  latestMcp2025ProtocolVersion,
+  earlierMcp2025ProtocolVersion
 ]
 
 function mirrorHeader (value) {
@@ -228,13 +228,13 @@ test('mcp: current protocol discovery, descriptors, validation, calls, and resou
     )
     t.ok(
       discovery.payload.result.supportedVersions.includes(
-        latestLegacyProtocolVersion
+        latestMcp2025ProtocolVersion
       ),
       'latest handshake protocol is advertised'
     )
     t.ok(
       discovery.payload.result.supportedVersions.includes(
-        olderLegacyProtocolVersion
+        earlierMcp2025ProtocolVersion
       ),
       'older supported handshake protocol is advertised'
     )
@@ -267,7 +267,7 @@ test('mcp: current protocol discovery, descriptors, validation, calls, and resou
       'tool output schema is advertised'
     )
     t.same(tool._meta, toolMeta, 'tool metadata uses the standard _meta field')
-    t.equal(tool.metadata, undefined, 'legacy metadata field is not emitted')
+    t.equal(tool.metadata, undefined, 'non-standard metadata field is not emitted')
     t.equal(
       tools.payload.result.resultType,
       'complete',
@@ -382,7 +382,7 @@ test('mcp: current protocol discovery, descriptors, validation, calls, and resou
         (entry) => entry.type === 'text' &&
           entry.text === '["value",1,true,null]'
       ),
-      'array results include serialized text for legacy model visibility'
+      'array results include serialized text for MCP 2025 model visibility'
     )
 
     const nullResult = await postModern(
@@ -404,7 +404,7 @@ test('mcp: current protocol discovery, descriptors, validation, calls, and resou
       nullResult.payload.result.content.some(
         (entry) => entry.type === 'text' && entry.text === 'null'
       ),
-      'null results include serialized text for legacy model visibility'
+      'null results include serialized text for MCP 2025 model visibility'
     )
 
     const rejected = await postModern(
@@ -693,7 +693,7 @@ test('mcp: current subscriptions use a long-lived POST stream', async (t) => {
   }
 })
 
-test('mcp: legacy sessions negotiate supported versions and remain pinned', async (t) => {
+test('mcp: 2025 sessions negotiate supported versions and remain pinned', async (t) => {
   let serverStarted = false
 
   try {
@@ -701,7 +701,7 @@ test('mcp: legacy sessions negotiate supported versions and remain pinned', asyn
     serverStarted = true
     const endpoint =
       'http://' + server.host + ':' + server.port + server.endpoint
-    for (const protocolVersion of legacyProtocolVersions) {
+    for (const protocolVersion of mcp2025ProtocolVersions) {
       const initializeResponse = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -756,9 +756,9 @@ test('mcp: legacy sessions negotiate supported versions and remain pinned', asyn
       t.equal(listResponse.status, 200, protocolVersion + ' session request succeeds')
       t.ok(Array.isArray(list.result.tools), protocolVersion + ' tools/list returns tools')
 
-      const mismatchedVersion = protocolVersion === latestLegacyProtocolVersion
-        ? olderLegacyProtocolVersion
-        : latestLegacyProtocolVersion
+      const mismatchedVersion = protocolVersion === latestMcp2025ProtocolVersion
+        ? earlierMcp2025ProtocolVersion
+        : latestMcp2025ProtocolVersion
       const mismatchResponse = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -810,11 +810,11 @@ test('mcp: legacy sessions negotiate supported versions and remain pinned', asyn
     })
     const fallback = await fallbackResponse.json()
     const fallbackSessionId = fallbackResponse.headers.get('mcp-session-id')
-    t.equal(fallbackResponse.status, 200, 'unknown legacy offer is negotiated')
+    t.equal(fallbackResponse.status, 200, 'unknown initialization offer is negotiated')
     t.equal(
       fallback.result.protocolVersion,
-      latestLegacyProtocolVersion,
-      'unknown legacy offer falls back to the latest handshake protocol'
+      latestMcp2025ProtocolVersion,
+      'unknown initialization offer falls back to the latest handshake protocol'
     )
 
     const unknownSessionResponse = await fetch(endpoint, {
@@ -833,13 +833,13 @@ test('mcp: legacy sessions negotiate supported versions and remain pinned', asyn
     t.equal(
       unknownSessionResponse.status,
       404,
-      'unknown legacy sessions are never recreated implicitly'
+      'unknown MCP 2025 sessions are never recreated implicitly'
     )
 
     const deleteResponse = await fetch(endpoint, {
       method: 'DELETE',
       headers: {
-        'MCP-Protocol-Version': latestLegacyProtocolVersion,
+        'MCP-Protocol-Version': latestMcp2025ProtocolVersion,
         'Mcp-Session-Id': fallbackSessionId
       }
     })

@@ -245,7 +245,7 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
       cmdline += quote_arg(args[i]);
     }
   } else {
-    // Legacy command-string mode.
+    // Command-string invocation mode.
     Vector<String> args;
     if (this->argv.size() > 0) {
       for (const auto& token : oro::runtime::string::splitc(this->argv, (char) 0x01)) {

@@ -22,6 +22,10 @@ target. Use both only for a desktop-only runtime rebuild, and do not set the
 variable for a mobile target you intend to test. See
 [Source-build environment](../docs/BUILD_ENVIRONMENT.md).
 
+The Android emulator target installs the emulator and one Google APIs system
+image matching the host architecture if its versioned AVD is not already
+available. A normal runtime build or relink does not download emulator packages.
+
 ### Developer Ergonomics
 
 - `--quick` skips native test extensions, reuses the staged workdir/fixtures, and disables the strict lifecycle pass for faster iteration.

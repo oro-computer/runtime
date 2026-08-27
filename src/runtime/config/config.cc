@@ -1774,11 +1774,11 @@ namespace oro::runtime::config {
         false
       },
 
-      // Native build inputs (legacy)
+      // Deprecated native build inputs
       {
         "native_files",
         "native.files",
-        "Legacy list of native source files to add to the compile step (prefer build.extensions.*).",
+        "Deprecated list of native source files to add to the compile step (prefer build.extensions.*).",
         "",
         ConfigValueType::String,
         true
@@ -1786,7 +1786,7 @@ namespace oro::runtime::config {
       {
         "native_headers",
         "native.headers",
-        "Legacy list of native header include directories (prefer build.extensions.*).",
+        "Deprecated list of native header include directories (prefer build.extensions.*).",
         "",
         ConfigValueType::String,
         true
@@ -2024,14 +2024,6 @@ namespace oro::runtime::config {
         "true",
         ConfigValueType::Bool,
         false
-      },
-      {
-        "permission_allow_autoplay",
-        "permissions.allow_autoplay_legacy",
-        "Legacy alias for autoplay permission; prefer permissions_allow_autoplay.",
-        "",
-        ConfigValueType::Bool,
-        true
       },
       {
         "permissions_allow_otp",

@@ -156,7 +156,7 @@ namespace {
       }
     }
 
-    // Legacy env toggles
+    // Environment feature toggles
     if (oro::runtime::env::get("ORO_ENABLE_MBEDTLS") == "1") {
       return Provider::mbedTLS;
     }

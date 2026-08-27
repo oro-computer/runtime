@@ -117,6 +117,8 @@ export const firstTimeExperienceSetup = async () => {
     console.log('# Checking build dependencies...')
   }
 
+  const preferredEnvPath = path.join(installPath, preferredEnvFilename)
+
   // @ts-ignore
   const child = spawn(...spawnArgs)
 
@@ -126,13 +128,16 @@ export const firstTimeExperienceSetup = async () => {
   })
 
   if (exitCode !== 0) {
+    // This path did not exist before setup, so a file here contains only
+    // configuration written by the failed child.
+    if (fs.existsSync(preferredEnvPath)) {
+      fs.unlinkSync(preferredEnvPath)
+    }
     throw new Error(`Oro dependency setup failed with exit code ${exitCode}`)
   }
 
   // If fte didn't create a configuration file, make an empty one to prevent
   // user being prompted again
-  // @ts-ignore
-  const preferredEnvPath = path.join(installPath, preferredEnvFilename)
   if (!fs.existsSync(preferredEnvPath)) {
     fs.writeFileSync(preferredEnvPath, '')
   }

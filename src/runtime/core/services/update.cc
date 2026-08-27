@@ -135,7 +135,7 @@ namespace oro::runtime::core::services {
 
       if (!ok) {
         // Fall back to a conservative comparison that treats unparsable
-        // versions as equal. This preserves legacy behaviour where non‑SemVer
+        // versions as equal. This preserves the defined behavior where non-SemVer
         // version strings were effectively treated as "0.0.0" and avoids
         // rejecting manifests outright when a single descriptor is malformed.
         return 0;

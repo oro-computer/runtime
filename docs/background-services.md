@@ -186,7 +186,7 @@ Key points:
 ## Testing Strategy
 
 - **Unit**: new runtime service tests covering registration validation and state persistence.
-- **Integration**: Oro runner suites verifying message passing and timeout behaviours (legacy Socket suites still run until the deprecation window closes).
+- **Integration**: Oro runner suites verifying message passing and timeout behaviours.
 - **Platform**:
   - Android instrumentation verifying WorkManager scheduling and service restart.
   - iOS simulator tests using `BGTaskScheduler` debug APIs.

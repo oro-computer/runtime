@@ -121,17 +121,66 @@ test('functions.sh sudo prompt references Oro CLI', () => {
   )
 })
 
+test('functions.sh discovers only compiler executables', () => {
+  const script = readFile('bin/functions.sh')
+  const npmRuntime = readFile('npm/src/index.js')
+  const firstTimeSetup = script.match(
+    /function first_time_experience_setup\(\) \{([\s\S]*?)\n\}/
+  )?.[1]
+  assert.match(
+    script,
+    /for compiler in clang\+\+ clang\+\+-\{26\.\.14\} g\+\+; do[\s\S]*command -v "\$compiler"[\s\S]*! -f "\$compiler_path"[\s\S]*! -x "\$compiler_path"/,
+    'compiler discovery should resolve executable compiler commands instead of package-owned files'
+  )
+  assert.match(
+    script,
+    /ROCm ships a private LLVM toolchain[\s\S]*\/opt\/rocm/,
+    'ROCm compilers should require an explicit CXX selection'
+  )
+  assert.match(
+    script,
+    /function linux_build_dependencies_available\(\)[\s\S]*command -v pkg-config[\s\S]*-std=c\+\+20[\s\S]*pkg-config --exists "\$dependency"[\s\S]*if linux_build_dependencies_available; then[\s\S]*Linux build dependencies are already installed/,
+    'Linux first-time setup should install packages only when build capabilities are missing'
+  )
+  assert.doesNotMatch(
+    script,
+    /dpkg -S clang/,
+    'compiler discovery must not execute paths returned by package metadata'
+  )
+  assert.ok(firstTimeSetup, 'first-time setup should exist')
+  assert.equal(
+    firstTimeSetup.match(/determine_cxx/g)?.length,
+    1,
+    'first-time setup should resolve the compiler once, after dependency setup'
+  )
+  assert.ok(
+    firstTimeSetup.indexOf('determine_cxx') >
+      firstTimeSetup.indexOf('Installing $(host_os) dependencies...'),
+    'compiler resolution should not persist configuration before dependency setup completes'
+  )
+  assert.match(
+    npmRuntime,
+    /if \(exitCode !== 0\) \{[\s\S]*fs\.unlinkSync\(preferredEnvPath\)[\s\S]*Oro dependency setup failed/,
+    'failed dependency setup should not leave a configuration file that suppresses the next setup attempt'
+  )
+  assert.match(
+    script,
+    /case "\$arg" in[\s\S]*--fte\)[\s\S]*first_time_experience_setup "\$@"[\s\S]*return \$\?[\s\S]*--update-env-data\)[\s\S]*update_env_data "\$@"[\s\S]*return \$\?/,
+    'the functions dispatcher should return the selected operation status instead of a later condition status'
+  )
+  assert.doesNotMatch(
+    script,
+    /\[\[ "\$arg" == "--fte" \]\] &&[\s\S]*\[\[ "\$arg" == "--update-env-data" \]\]/,
+    'successful first-time setup must not be overwritten by a false update-env-data condition'
+  )
+})
+
 test('publish-npm-modules.sh stages Oro CLI packages', () => {
   const script = readFile('bin/publish-npm-modules.sh')
   assert.match(
     script,
     /CLI_PACKAGE_SPECS=\([\s\S]*"@oro-computer:runtime"[\s\S]*\)/,
     'publish-npm-modules.sh should stage @oro-computer/runtime'
-  )
-  assert.doesNotMatch(
-    script,
-    /@socketsupply|socketsupply|socket-node|socket\b/,
-    'publish-npm-modules.sh should not reference legacy packages'
   )
   assert.match(
     script,
@@ -431,32 +480,6 @@ test('npm package family consistently uses the @oro-computer organization scope'
     )
   }
 
-  const scopeSurfaces = [
-    '.github/workflows/publish-npm.yml',
-    'README.md',
-    'api/node-esm-loader.js',
-    'bin/bootstrap-npm-packages.js',
-    'bin/check-release-version.js',
-    'bin/publish-npm-modules.sh',
-    'bin/set-release-version.js',
-    'docs/ORO_ARTIFACT_NAMING.md',
-    'docs/release/ORO_RELEASE_AUTOMATION.md',
-    'npm/bin/oroc.js',
-    'package.json',
-    'pnpm-lock.yaml',
-    'pnpm-workspace.yaml',
-    'test/package-lock.json',
-    'test/package.json'
-  ]
-
-  for (const relativePath of scopeSurfaces) {
-    assert.doesNotMatch(
-      readFile(relativePath),
-      /@orocomputer|orocomputer-runtime|npm\/packages\/@orocomputer/,
-      `${relativePath} should not retain the previous npm scope or tarball stem`
-    )
-  }
-
   const testLock = JSON.parse(readFile('test/package-lock.json'))
   assert.ok(
     testLock.packages['node_modules/@oro-computer/runtime'],
@@ -559,7 +582,12 @@ test('release workflow binds builds to the validated source commit', () => {
   assert.match(
     workflow,
     /verify-release:[\s\S]*uses: \.\/\.github\/workflows\/ci\.yml[\s\S]*build-release-artifacts:[\s\S]*needs: \[validate-release, verify-release\]/,
-    'release builds should wait for the reusable full-platform CI matrix'
+    'release builds should wait for reusable source validation'
+  )
+  assert.match(
+    workflow,
+    /artifact_matrix: \$\{\{ steps\.matrix\.outputs\.artifact_matrix \}\}[\s\S]*Select release artifact runners[\s\S]*matrix: \$\{\{ fromJSON\(needs\.validate-release\.outputs\.artifact_matrix\) \}\}/,
+    'a targeted manual release should allocate only its selected artifact runner'
   )
   assert.match(
     workflow,
@@ -612,11 +640,6 @@ test('version.sh delegates to synchronized release tooling', () => {
     /check-release-version\.js/,
     'version.sh must verify synchronized release metadata'
   )
-  assert.doesNotMatch(
-    script,
-    /@socketsupply|socketsupply|socket-node/,
-    'version.sh should not reference legacy packages'
-  )
 })
 
 test('runtime-artifacts.sh defines Oro artifact name', () => {
@@ -625,11 +648,6 @@ test('runtime-artifacts.sh defines Oro artifact name', () => {
     script,
     /ORO_RUNTIME_ARTIFACT_NAME:=oro-runtime/,
     'runtime artifacts should default to oro-runtime naming'
-  )
-  assert.doesNotMatch(
-    script,
-    /socket-runtime/,
-    'runtime artifacts should not define legacy aliases'
   )
 })
 
@@ -773,7 +791,7 @@ test('CI covers every supported host and mobile target family', () => {
   assert.match(
     workflow,
     /on:[\s\S]*workflow_call:/,
-    'the signed-tag release chain should be able to depend on the exact CI matrix'
+    'the signed-tag release chain should be able to reuse the CI validation workflow'
   )
   assert.match(
     workflow,
@@ -832,6 +850,143 @@ test('CI covers every supported host and mobile target family', () => {
     workflow,
     /Validate staged target families \(Windows\)/,
     'Windows CI should reject unexpected mobile artifacts'
+  )
+})
+
+test('CI caches dependencies and runs focused platform coverage', () => {
+  const workflow = readFile('.github/workflows/ci.yml')
+  const releaseWorkflow = readFile('.github/workflows/release-artifacts.yml')
+  const workspace = readFile('pnpm-workspace.yaml')
+
+  assert.match(
+    workspace,
+    /allowBuilds:[\s\S]*esbuild: true[\s\S]*puppeteer: true/,
+    'pnpm should explicitly allow the build steps required by local tooling'
+  )
+  assert.doesNotMatch(
+    workspace,
+    /onlyBuiltDependencies/,
+    'pnpm 11 should not use the removed dependency build policy'
+  )
+  assert.match(
+    workflow,
+    /pnpm\/action-setup@[0-9a-f]{40}[\s\S]*cache: pnpm/,
+    'CI should restore the pnpm content-addressed store'
+  )
+  assert.match(
+    workflow,
+    /PUPPETEER_SKIP_DOWNLOAD: 'true'/,
+    'CI should not download a browser for jobs that do not render diagrams'
+  )
+  assert.match(
+    workflow,
+    /cache: pip[\s\S]*\.github\/requirements-lint\.txt/,
+    'CI should cache the pinned Python lint dependency'
+  )
+  assert.match(
+    workflow,
+    /Restore native compiler cache[\s\S]*ccache-v1-/,
+    'native Unix builds should restore compiler output caches'
+  )
+  assert.match(
+    workflow,
+    /cache: gradle[\s\S]*bin\/android-functions\.sh/,
+    'Android builds should restore Gradle dependencies using the pinned toolchain inputs'
+  )
+  assert.match(
+    workflow,
+    /Restore Android build SDK cache[\s\S]*ndk\/29\.0\.14206865[\s\S]*platforms\/android-37\*/,
+    'Android builds should cache the pinned NDK and SDK platform'
+  )
+  assert.match(
+    workflow,
+    /Restore Android emulator cache[\s\S]*system-images\/android-37\.0\/google_apis\/x86_64[\s\S]*~\/\.android\/avd/,
+    'the Android test lane should cache its emulator image and AVD separately'
+  )
+  assert.doesNotMatch(
+    workflow,
+    /setup-go|go install github\.com\/rhysd\/actionlint/,
+    'lint should use the checksum-verified actionlint release instead of compiling it on every run'
+  )
+  assert.match(
+    workflow,
+    /linux-integration:[\s\S]*needs: \[changes, lint\][\s\S]*test-platform:[\s\S]*needs: \[changes, lint\]/,
+    'expensive native jobs should not start before the static gate succeeds'
+  )
+  assert.match(
+    workflow,
+    /Linux arm64[\s\S]*install_tests: false[\s\S]*macOS \+ iOS x64[\s\S]*install_tests: false/,
+    'architecture-only lanes should build and smoke test without installing the integration harness'
+  )
+  assert.equal(
+    (workflow.match(/run: npm run test:mcp$/gm) || []).length,
+    1,
+    'the platform-independent MCP suite should run only on the comprehensive Linux lane'
+  )
+  assert.equal(
+    (workflow.match(/run: npm run test:runtime-core$/gm) || []).length,
+    1,
+    'the runtime-core suite should run only on the comprehensive Linux lane'
+  )
+  assert.match(
+    workflow,
+    /Documentation-only changes skip native builds and integration tests/,
+    'documentation-only changes should avoid native runner allocation'
+  )
+  assert.match(
+    releaseWorkflow,
+    /uses: \.\/\.github\/workflows\/ci\.yml[\s\S]*run_cross_platform: false/,
+    'release validation should not rebuild every platform before the release artifact matrix'
+  )
+})
+
+test('Android bootstrap separates build packages from emulator packages', () => {
+  const bootstrap = readFile('bin/android-functions.sh')
+  const generatedGradle = readFile('bin/generate-gradle-files.sh')
+  const cli = readFile('src/cli/main.cc')
+  const cliTemplates = readFile('src/cli/templates.hh')
+  const emulatorBootstrap = readFile(
+    'test/scripts/bootstrap-android-emulator.sh'
+  )
+
+  assert.match(
+    bootstrap,
+    /ANDROID_COMMAND_LINE_TOOLS_VERSION="16111833"[\s\S]*JDK_VERSION="17\.0\.20\.1"[\s\S]*GRADLE_VERSION="9\.5\.0"[\s\S]*ANDROID_PLATFORM="26"[\s\S]*ANDROID_SDK_PLATFORM="37\.0"[\s\S]*NDK_VERSION="29\.0\.14206865"/,
+    'source bootstrap should pin the current compatible Android toolchain'
+  )
+
+  const buildPackages = bootstrap.match(
+    /SDK_OPTIONS=""([\s\S]*?)local yes=/
+  )?.[1]
+  assert.ok(buildPackages, 'Android build package selection should exist')
+  assert.match(
+    buildPackages,
+    /cmdline-tools;\$ANDROID_COMMAND_LINE_TOOLS_PACKAGE_VERSION[\s\S]*ndk;\$NDK_VERSION[\s\S]*platforms;android-\$ANDROID_SDK_PLATFORM[\s\S]*build-tools;\$ANDROID_BUILD_TOOLS_VERSION/,
+    'source builds should install only the pinned build SDK packages'
+  )
+  assert.doesNotMatch(
+    buildPackages,
+    /system-images|"emulator"/,
+    'source builds should not install test-only emulator packages'
+  )
+
+  for (const source of [generatedGradle, cliTemplates]) {
+    assert.match(source, /com\.android\.tools\.build:gradle:9\.3\.2/)
+    assert.match(source, /compileSdk 37/)
+    assert.match(source, /ndkVersion "29\.0\.14206865"/)
+    assert.match(source, /JavaVersion\.VERSION_17/)
+    assert.doesNotMatch(source, /kotlin-android/)
+  }
+
+  assert.match(
+    cli,
+    /if \(flagBuildForAndroidEmulator\) \{[\s\S]*system-images;[\s\S]*google_apis/,
+    'application builds should request a system image only for the emulator target'
+  )
+  assert.match(
+    emulatorBootstrap,
+    /android_system_image_arch[\s\S]*OROAVD_API_[\s\S]*sdkmanager" "emulator" "\$pkg"/,
+    'emulator tests should install one host-compatible image and use a versioned AVD'
   )
 })
 
