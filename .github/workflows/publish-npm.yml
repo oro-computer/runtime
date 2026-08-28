@@ -294,7 +294,7 @@ jobs:
         shell: bash
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
-        run: brew install automake ccache libtool pkg-config
+        run: brew install automake ccache libomp libtool pkg-config
 
       - name: Configure native compiler cache
         if: ${{ !inputs.reuse_release_artifacts && runner.os != 'Windows' }}

@@ -3131,7 +3131,8 @@ function _compile_libusb {
         quiet MSBuild.exe "$libusb_project" \
           "-m:$CPU_CORES" \
           "-p:Configuration=$config" \
-          "-p:Platform=$msbuild_platform"
+          "-p:Platform=$msbuild_platform" \
+          "-p:DisableSpecificWarnings=5287"
         die $? "not ok - libusb MSBuild build (Win32)"
 
         mkdir -p "$BUILD_DIR/$target-$platform/lib$suffix"

@@ -391,7 +391,7 @@ jobs:
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: |
-          brew install automake ccache libtool pkg-config
+          brew install automake ccache libomp libtool pkg-config
 
       - name: Configure native compiler cache
         if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'

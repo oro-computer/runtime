@@ -95,10 +95,11 @@ compile application sources must not be reused as the NDK minimum platform.
 The normal `./bin/install.sh` and `npm run relink` paths do not install the
 Android Emulator or any system image. Those downloads are test/run
 dependencies, not build dependencies. `npm run test:android-emulator` installs
-the emulator and exactly one Google APIs system image matching the host
-architecture when its versioned AVD is absent. Likewise, an application build
-for `android-emulator` requests one host-compatible image, while an `android`
-device build does not.
+only missing emulator components and exactly one Google APIs system image
+matching the host architecture, then creates a versioned AVD when it is absent.
+Setup and boot waits emit progress and have bounded timeouts. Likewise, an
+application build for `android-emulator` requests one host-compatible image,
+while an `android` device build does not.
 
 ## Related source-build controls
 

@@ -105,15 +105,25 @@ esac
 
 avd_name="OROAVD_API_${ANDROID_SDK_PLATFORM//./_}_$android_system_image_arch"
 pkg="system-images;android-$ANDROID_SDK_PLATFORM;google_apis;$android_system_image_arch"
+system_image_dir="$ANDROID_HOME/system-images/android-$ANDROID_SDK_PLATFORM/google_apis/$android_system_image_arch"
 avd_exists=""
 
 if "$avdmanager" list avd | grep -F "Name: $avd_name" >/dev/null; then
   avd_exists=1
 fi
 
-if [[ ! -f "$emulator" ]] || [[ -z "$avd_exists" ]]; then
-  echo "Ensuring the Android emulator and $pkg are installed..."
-  yes | "$sdkmanager" "emulator" "$pkg"
+emulator_packages=()
+if [[ ! -f "$emulator" ]]; then
+  emulator_packages+=("emulator")
+fi
+if [[ ! -f "$system_image_dir/package.xml" ]] && \
+   [[ ! -f "$system_image_dir/source.properties" ]]; then
+  emulator_packages+=("$pkg")
+fi
+
+if (( ${#emulator_packages[@]} > 0 )); then
+  echo "Installing missing Android emulator packages: ${emulator_packages[*]}"
+  yes | "$sdkmanager" "${emulator_packages[@]}"
   rc=$?
   (( rc != 0 )) && exit_and_write_code $rc
 
@@ -125,6 +135,12 @@ fi
 
 if [ ! -f "$emulator" ]; then
   echo "not ok - Unable to locate emulator after SDK package installation: $emulator"
+  exit_and_write_code 1
+fi
+
+if [[ ! -f "$system_image_dir/package.xml" ]] && \
+   [[ ! -f "$system_image_dir/source.properties" ]]; then
+  echo "not ok - Android system image was not installed at $system_image_dir"
   exit_and_write_code 1
 fi
 

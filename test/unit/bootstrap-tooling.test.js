@@ -1022,6 +1022,11 @@ test('Windows libusb builds use the upstream Visual Studio project', () => {
     /msvc\/libusb_static\.vcxproj[\s\S]*command -v MSBuild\.exe[\s\S]*-p:Configuration=\$config[\s\S]*-p:Platform=\$msbuild_platform/,
     'Windows builds should compile the project shipped by the pinned libusb source'
   )
+  assert.match(
+    libusbCompiler,
+    /-p:DisableSpecificWarnings=5287/,
+    'the pinned libusb build should tolerate the new MSVC enum warning'
+  )
   assert.doesNotMatch(
     libusbCompiler,
     /cmake -S \.\. -B \./,
@@ -1377,6 +1382,11 @@ test('CI caches dependencies and runs focused platform coverage', () => {
       /Setup Windows native compiler cache[\s\S]*mozilla-actions\/sccache-action@[0-9a-f]{40} # v0\.0\.11[\s\S]*version: v0\.17\.0[\s\S]*RUSTC_WRAPPER=sccache[\s\S]*CMAKE_CXX_COMPILER_LAUNCHER=sccache/,
       'Windows native builds should cache C, C++, and Rust compiler outputs'
     )
+    assert.match(
+      nativeWorkflow,
+      /brew install automake ccache libomp libtool pkg-config/,
+      'macOS builds should install the OpenMP runtime staged with desktop artifacts'
+    )
   }
   assert.match(
     readFile('bin/install.sh'),
@@ -1478,6 +1488,7 @@ test('Android bootstrap separates build packages from emulator packages', () => 
   const emulatorBootstrap = readFile(
     'test/scripts/bootstrap-android-emulator.sh'
   )
+  const emulatorTest = readFile('test/scripts/test-android-emulator.sh')
 
   assert.match(
     bootstrap,
@@ -1515,8 +1526,18 @@ test('Android bootstrap separates build packages from emulator packages', () => 
   )
   assert.match(
     emulatorBootstrap,
-    /android_system_image_arch[\s\S]*OROAVD_API_[\s\S]*sdkmanager" "emulator" "\$pkg"/,
-    'emulator tests should install one host-compatible image and use a versioned AVD'
+    /android_system_image_arch[\s\S]*OROAVD_API_[\s\S]*emulator_packages[\s\S]*system_image_dir[\s\S]*sdkmanager" "\$\{emulator_packages\[@\]\}"/,
+    'emulator tests should install only missing host-compatible packages and use a versioned AVD'
+  )
+  assert.match(
+    emulatorTest,
+    /ORO_ANDROID_EMULATOR_SETUP_TIMEOUT_SECONDS:-600[\s\S]*kill -0 "\$bootstrap_pid"[\s\S]*if \[\[ "\$bootstrap_exit_code" != "0" \]\][\s\S]*exit "\$bootstrap_exit_code"/,
+    'emulator setup failures should terminate predictably'
+  )
+  assert.match(
+    emulatorTest,
+    /ORO_ANDROID_EMULATOR_BOOT_TIMEOUT_SECONDS:-300[\s\S]*Android Emulator failed to boot[\s\S]*exit "\$bootstrap_exit_code"[\s\S]*Android Emulator boot timed out/,
+    'emulator boot failures and timeouts should terminate predictably'
   )
 })
 

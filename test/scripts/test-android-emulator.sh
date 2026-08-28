@@ -60,13 +60,45 @@ temp="$(mktemp)"
 ${SHELL:-sh} -c "$root/scripts/bootstrap-android-emulator.sh $temp" & bootstrap_pid=$!
 
 bootstrap_exit_code=""
+bootstrap_wait_count=0
+bootstrap_timeout="${ORO_ANDROID_EMULATOR_SETUP_TIMEOUT_SECONDS:-600}"
 while [ -z "$bootstrap_exit_code" ]; do
-  # Wait for exit code
   bootstrap_exit_code="$(cat "$temp")"
-  sleep 0.5
+  if [[ -n "$bootstrap_exit_code" ]]; then
+    break
+  fi
+
+  if ! kill -0 "$bootstrap_pid" 2>/dev/null; then
+    wait "$bootstrap_pid"
+    bootstrap_exit_code=$?
+    if (( bootstrap_exit_code == 0 )); then
+      bootstrap_exit_code=1
+    fi
+    echo "Android emulator setup exited before reporting readiness: $bootstrap_exit_code"
+    rm "$temp"
+    exit "$bootstrap_exit_code"
+  fi
+
+  if (( bootstrap_wait_count >= bootstrap_timeout )); then
+    echo "Android emulator setup timed out after ${bootstrap_timeout}s."
+    kill "$bootstrap_pid" 2>/dev/null || true
+    wait "$bootstrap_pid" 2>/dev/null || true
+    rm "$temp"
+    exit 124
+  fi
+
+  if (( bootstrap_wait_count > 0 && bootstrap_wait_count % 30 == 0 )); then
+    echo "Waiting for Android emulator setup: ${bootstrap_wait_count}s/${bootstrap_timeout}s"
+  fi
+
+  sleep 1
+  (( bootstrap_wait_count++ ))
 done
 
-[ "$bootstrap_exit_code" != "0" ] && (rm "$temp"; exit "$bootstrap_exit_code")
+if [[ "$bootstrap_exit_code" != "0" ]]; then
+  rm "$temp"
+  exit "$bootstrap_exit_code"
+fi
 
 # reset bootstrap exit code, we will use it again
 bootstrap_exit_code=""
@@ -75,18 +107,35 @@ echo > "$temp"
 echo "info: Waiting for Android Emulator to boot"
 
 boot_completed=""
+boot_wait_count=0
+boot_timeout="${ORO_ANDROID_EMULATOR_BOOT_TIMEOUT_SECONDS:-300}"
 while [[ "$boot_completed" != "1" ]] ; do
   boot_completed="$($adb shell getprop sys.boot_completed 2>/dev/null)"
   # reliable cross platform method of waiting for background process asynchronously
   bootstrap_exit_code="$(cat "$temp")"
   if [[ -n "$bootstrap_exit_code" ]] && [[ "$bootstrap_exit_code" != "0" ]]; then
-    # emuator already exited
+    # emulator already exited
     echo "Android Emulator failed to boot."
-    wait $bootstrap_pid
+    wait "$bootstrap_pid" 2>/dev/null || true
     rm "$temp"
-    exit $?
+    exit "$bootstrap_exit_code"
   fi
-  sleep 0.5
+
+  if (( boot_wait_count >= boot_timeout )); then
+    echo "Android Emulator boot timed out after ${boot_timeout}s."
+    "$adb" devices || true
+    kill "$bootstrap_pid" 2>/dev/null || true
+    wait "$bootstrap_pid" 2>/dev/null || true
+    rm "$temp"
+    exit 124
+  fi
+
+  if (( boot_wait_count > 0 && boot_wait_count % 30 == 0 )); then
+    echo "Waiting for Android Emulator to boot: ${boot_wait_count}s/${boot_timeout}s"
+  fi
+
+  sleep 1
+  (( boot_wait_count++ ))
 done
 echo "info: Android Emulator booted"
 

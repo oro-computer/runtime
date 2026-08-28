@@ -152,10 +152,18 @@ export function createRequire (options) {
       input = input.slice(4)
     }
 
-    const resolvers = Array.from([])
-      .concat(options?.resolvers)
-      .concat(allResolvers)
-      .filter(Boolean)
+    // Module.resolvers is mutable, so include its current contents for require
+    // functions that were created before a global resolver was registered.
+    const resolvers = Array.from(
+      new Set(
+        Array.from([])
+          .concat(options?.resolvers)
+          .concat(module.resolvers)
+          .concat(allResolvers)
+          .concat(main.resolvers)
+          .filter(isFunction)
+      )
+    )
 
     return next(input)
 
