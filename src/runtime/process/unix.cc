@@ -25,6 +25,27 @@ extern char **environ;
 namespace oro::runtime::process {
   static StringStream initial;
 
+  static void clearProcessEnvironment () noexcept {
+    #if defined(__APPLE__)
+      while (environ != nullptr && environ[0] != nullptr) {
+        const char* entry = environ[0];
+        const char* separator = strchr(entry, '=');
+        if (separator == nullptr || separator == entry) {
+          _exit(EXIT_FAILURE);
+        }
+
+        const String name(entry, static_cast<size_t>(separator - entry));
+        if (unsetenv(name.c_str()) != 0) {
+          _exit(EXIT_FAILURE);
+        }
+      }
+    #else
+      if (clearenv() != 0) {
+        _exit(EXIT_FAILURE);
+      }
+    #endif
+  }
+
   Process::Data::Data () noexcept
     : id(-1)
   {}
@@ -299,7 +320,7 @@ namespace oro::runtime::process {
           argumentPointers.push_back(nullptr);
 
           if (this->config.replaceEnvironment) {
-            clearenv();
+            clearProcessEnvironment();
           }
           for (const auto& kv : this->env) {
             putenv(const_cast<char*>(kv.c_str()));
@@ -336,7 +357,7 @@ namespace oro::runtime::process {
         }
 
         if (this->config.replaceEnvironment) {
-          clearenv();
+          clearProcessEnvironment();
         }
         // Apply environment values in the child prior to exec.
         for (const auto& kv : this->env) {

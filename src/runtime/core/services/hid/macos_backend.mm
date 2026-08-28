@@ -1,4 +1,8 @@
 #if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
 #include "macos_backend.hh"
 
 #import <Foundation/Foundation.h>

@@ -282,6 +282,23 @@ jobs:
           go-version: '1.23.2'
           cache: false
 
+      - name: Setup Windows native compiler cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os == 'Windows'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Configure Windows native compiler cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os == 'Windows'
+        shell: bash
+        run: |
+          {
+            echo 'SCCACHE_GHA_ENABLED=true'
+            echo 'RUSTC_WRAPPER=sccache'
+            echo 'CMAKE_C_COMPILER_LAUNCHER=sccache'
+            echo 'CMAKE_CXX_COMPILER_LAUNCHER=sccache'
+          } >> "$GITHUB_ENV"
+
       - name: Setup Java for Android builds
         if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_android
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -322,7 +339,7 @@ jobs:
             release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-
 
       - name: Restore Rust dependency cache
-        if: env.RUN_SELECTED_ARTIFACT == 'true' && matrix.build_android
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
@@ -331,6 +348,17 @@ jobs:
           key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/**/Cargo.toml') }}
           restore-keys: |
             cargo-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Restore Go build cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true'
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            .cache/go-build
+            .cache/go-mod
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bin/install.sh') }}
+          restore-keys: |
+            go-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install Linux build dependencies
         if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os == 'Linux'

@@ -166,6 +166,23 @@ jobs:
           go-version: '1.23.2'
           cache: false
 
+      - name: Setup Windows native compiler cache
+        if: runner.os == 'Windows'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Configure Windows native compiler cache
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          {
+            echo 'SCCACHE_GHA_ENABLED=true'
+            echo 'RUSTC_WRAPPER=sccache'
+            echo 'CMAKE_C_COMPILER_LAUNCHER=sccache'
+            echo 'CMAKE_CXX_COMPILER_LAUNCHER=sccache'
+          } >> "$GITHUB_ENV"
+
       - name: Setup Java for Android package
         if: matrix.build_android
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -206,7 +223,6 @@ jobs:
             npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-
 
       - name: Restore Rust dependency cache
-        if: matrix.build_android
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
@@ -215,6 +231,16 @@ jobs:
           key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/**/Cargo.toml') }}
           restore-keys: |
             cargo-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Restore Go build cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            .cache/go-build
+            .cache/go-mod
+          key: go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bin/install.sh') }}
+          restore-keys: |
+            go-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -373,15 +399,17 @@ jobs:
           ref: ${{ needs.validate-tag.outputs.commit_sha }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          cache: true
+          cache-dependency-path: pnpm-lock.yaml
+          install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.x
           registry-url: https://registry.npmjs.org
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline

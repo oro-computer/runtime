@@ -763,15 +763,27 @@ test('quick desktop tests refresh sources in reused workdirs', () => {
 
 test('Rust build outputs honor caller target directories without contaminating cr-sqlite', () => {
   const script = readFile('bin/install.sh')
+  const crsqliteCompiler = script.match(
+    /function _compile_crsqlite_loadable \{([\s\S]*?)\n\}/
+  )?.[1]
+  assert.ok(
+    crsqliteCompiler,
+    'the cr-sqlite loadable-extension compiler function should exist'
+  )
   assert.match(
     script,
     /cargo_target_dir="\$\{CARGO_TARGET_DIR:-\$crate_dir\/target\}"/,
     'oro-iroh artifacts should be located from CARGO_TARGET_DIR'
   )
   assert.match(
-    script,
+    crsqliteCompiler,
     /CARGO_TARGET_DIR="\$crsqlite_cargo_target_dir" quiet make/,
     'cr-sqlite should use its vendored target directory'
+  )
+  assert.match(
+    crsqliteCompiler,
+    /Win32[\s\S]*CI_GCC=clang[\s\S]*rs_lib_loadable=\.\/rs\/bundle_static\/target\/release\/crsql_bundle_static\.lib[\s\S]*CARGO_TARGET_DIR="\$crsqlite_cargo_target_dir" quiet make "\$\{crsqlite_make_args\[@\]\}"/,
+    'Windows cr-sqlite builds should use Clang and the MSVC static-library filename'
   )
 })
 
@@ -784,6 +796,134 @@ test('Cargo license collection is locked, offline, and target-aware', () => {
     /'--filter-platform',[\s\S]*targetTriple/,
     'license collection should inventory the selected host dependency graph'
   )
+})
+
+test('iOS llama cross-builds do not probe host BLAS', () => {
+  const installer = readFile('bin/install.sh')
+  const llamaCompiler = installer.match(
+    /function _compile_llama \{([\s\S]*?)\n\}/
+  )?.[1]
+  assert.ok(llamaCompiler, 'the llama compiler function should exist')
+
+  const iosCompiler = llamaCompiler.match(
+    /elif \[ "\$platform" == "iPhoneOS" \] \|\| \[ "\$platform" == "iPhoneSimulator" \]; then([\s\S]*?)elif \[ "\$platform" == "android" \]; then/
+  )?.[1]
+  assert.ok(iosCompiler, 'the iOS llama compiler branch should exist')
+  assert.match(
+    iosCompiler,
+    /-DGGML_BLAS=OFF/,
+    'iOS llama builds should disable the host-oriented BLAS backend'
+  )
+})
+
+test('Apple runtime sources exclude APIs unavailable to iOS builds', () => {
+  const hidBackend = readFile(
+    'src/runtime/core/services/hid/macos_backend.mm'
+  )
+  const xpcBackend = readFile('src/runtime/core/services/xpc.mm')
+  const cookies = readFile('src/runtime/webview/cookies.cc')
+  const process = readFile('src/runtime/process/unix.cc')
+
+  assert.match(
+    hidBackend,
+    /#include <TargetConditionals\.h>[\s\S]*#if defined\(__APPLE__\) && !TARGET_OS_IPHONE/,
+    'the IOKit HID backend should compile only for macOS'
+  )
+  assert.match(
+    xpcBackend,
+    /#if TARGET_OS_IPHONE[\s\S]*handle = xpc_connection_create\([\s\S]*#else[\s\S]*xpc_connection_create_mach_service/,
+    'iOS XPC builds should not reference the unavailable Mach-service constructor'
+  )
+  assert.match(
+    cookies,
+    /\.secure = static_cast<bool>\(nsCookie\.isSecure\)[\s\S]*\.httpOnly = static_cast<bool>\(nsCookie\.isHTTPOnly\)/,
+    'Objective-C BOOL cookie properties should be explicitly converted to C++ bool'
+  )
+  assert.match(
+    process,
+    /#if defined\(__APPLE__\)[\s\S]*unsetenv\(name\.c_str\(\)\)[\s\S]*#else[\s\S]*clearenv\(\)/,
+    'Apple process launches should clear inherited variables without unavailable clearenv'
+  )
+})
+
+test('llama dependency builds omit standalone utilities and command-line tools', () => {
+  const installer = readFile('bin/install.sh')
+  const llamaCompiler = installer.match(
+    /function _compile_llama \{([\s\S]*?)\n\}/
+  )?.[1]
+  assert.ok(llamaCompiler, 'the llama compiler function should exist')
+  assert.match(
+    llamaCompiler,
+    /-DLLAMA_BUILD_TOOLS=OFF/,
+    'dependency builds should not compile unused llama command-line tools'
+  )
+  assert.match(
+    llamaCompiler,
+    /-DLLAMA_BUILD_COMMON=OFF/,
+    'dependency builds should not compile the unused llama common utility library'
+  )
+})
+
+test('fresh Android libuv builds do not fail after successful compilation', () => {
+  const installer = readFile('bin/install.sh')
+  const libuvCompiler = installer.match(
+    /function _compile_libuv_android \{([\s\S]*?)\n\}/
+  )?.[1]
+  assert.ok(libuvCompiler, 'the Android libuv compiler function should exist')
+  assert.match(
+    libuvCompiler,
+    /rm -f -- "\$static_library"/,
+    'removing an absent stale archive should leave the compile worker successful'
+  )
+})
+
+test('verbose non-interactive builds retain detected CPU parallelism', () => {
+  const functions = readFile('bin/functions.sh')
+  const cpuSelector = functions.match(
+    /function set_cpu_cores\(\) \{([\s\S]*?)\n\}/
+  )?.[1]
+  assert.ok(cpuSelector, 'the CPU core selector should exist')
+  assert.doesNotMatch(
+    cpuSelector,
+    /VERBOSE[\s\S]*! -t 1[\s\S]*CPU_CORES=1/,
+    'verbose CI and npm builds should not be serialized to one CPU'
+  )
+  assert.match(
+    cpuSelector,
+    /CPU_CORES < 1[\s\S]*CPU_CORES=1/,
+    'invalid CPU detection should still fall back to one core'
+  )
+})
+
+test('native dependency builds do not perform serial work before parallel builds', () => {
+  const installer = readFile('bin/install.sh')
+  const llamaCompiler = installer.match(
+    /function _compile_llama \{([\s\S]*?)\n\}/
+  )?.[1]
+  const libuvCompiler = installer.match(
+    /function _compile_libuv \{([\s\S]*?)\n\}/
+  )?.[1]
+  assert.ok(llamaCompiler, 'the llama compiler function should exist')
+  assert.ok(libuvCompiler, 'the libuv compiler function should exist')
+  assert.doesNotMatch(
+    llamaCompiler,
+    /cmake --build build &&[\s\S]*cmake --build build -- -j"\$CPU_CORES"/,
+    'llama should not complete a serial build before requesting parallel work'
+  )
+  assert.doesNotMatch(
+    libuvCompiler,
+    /quiet make\s+die \$\? "not ok - libuv desktop make"[\s\S]*quiet make "-j\$CPU_CORES"/,
+    'libuv should not complete a serial build before requesting parallel work'
+  )
+  for (const buildDirectory of ['.', '"$STAGING_DIR/build/"']) {
+    assert.match(
+      installer,
+      new RegExp(
+        `cmake --build ${buildDirectory.replaceAll('$', '\\$')} --config \\$config --parallel "\\$CPU_CORES"`
+      ),
+      `Windows CMake builds in ${buildDirectory} should use detected CPU parallelism`
+    )
+  }
 })
 
 test('CI covers every supported host and mobile target family', () => {
@@ -856,6 +996,7 @@ test('CI covers every supported host and mobile target family', () => {
 test('CI caches dependencies and runs focused platform coverage', () => {
   const workflow = readFile('.github/workflows/ci.yml')
   const releaseWorkflow = readFile('.github/workflows/release-artifacts.yml')
+  const publishWorkflow = readFile('.github/workflows/publish-npm.yml')
   const workspace = readFile('pnpm-workspace.yaml')
 
   assert.match(
@@ -870,8 +1011,13 @@ test('CI caches dependencies and runs focused platform coverage', () => {
   )
   assert.match(
     workflow,
-    /pnpm\/action-setup@[0-9a-f]{40}[\s\S]*cache: pnpm/,
-    'CI should restore the pnpm content-addressed store'
+    /pnpm\/setup@[0-9a-f]{40} # v2\.0\.2[\s\S]*runtime: node@24[\s\S]*cache: true[\s\S]*install: false/,
+    'CI should use the current pnpm setup action and cache its content-addressed store'
+  )
+  assert.match(
+    publishWorkflow,
+    /pnpm\/setup@[0-9a-f]{40} # v2\.0\.2[\s\S]*cache: true[\s\S]*install: false/,
+    'npm packaging should use the same cached pnpm setup action without installing implicitly'
   )
   assert.match(
     workflow,
@@ -887,6 +1033,33 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     workflow,
     /Restore native compiler cache[\s\S]*ccache-v1-/,
     'native Unix builds should restore compiler output caches'
+  )
+  assert.match(
+    workflow,
+    /linux-integration:[\s\S]*Restore Rust dependency cache[\s\S]*test-platform:/,
+    'Linux integration should cache Rust registry and Git dependencies'
+  )
+  assert.doesNotMatch(
+    `${workflow}\n${releaseWorkflow}\n${publishWorkflow}`,
+    /Restore Rust dependency cache\s+if: [^\n]*build_android/,
+    'Rust dependency caches should apply to desktop and mobile native builds'
+  )
+  assert.match(
+    workflow,
+    /Restore Go build cache[\s\S]*\.cache\/go-build[\s\S]*\.cache\/go-mod[\s\S]*hashFiles\('bin\/install\.sh'\)/,
+    'native CI should preserve Go build and module caches across runs'
+  )
+  for (const nativeWorkflow of [workflow, releaseWorkflow, publishWorkflow]) {
+    assert.match(
+      nativeWorkflow,
+      /Setup Windows native compiler cache[\s\S]*mozilla-actions\/sccache-action@[0-9a-f]{40} # v0\.0\.11[\s\S]*version: v0\.17\.0[\s\S]*RUSTC_WRAPPER=sccache[\s\S]*CMAKE_CXX_COMPILER_LAUNCHER=sccache/,
+      'Windows native builds should cache C, C++, and Rust compiler outputs'
+    )
+  }
+  assert.match(
+    readFile('bin/install.sh'),
+    /GOCACHE:-\$root\/\.cache\/go-build\/\$goos-\$goarch[\s\S]*GOMODCACHE:-\$root\/\.cache\/go-mod/,
+    'libipfs should build against workflow-cacheable Go directories'
   )
   assert.match(
     workflow,

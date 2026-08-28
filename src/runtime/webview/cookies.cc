@@ -614,8 +614,8 @@ namespace oro::runtime::webview::cookies {
             .value = value,
             .domain = cookieDomain,
             .path = cookiePath,
-            .secure = nsCookie.isSecure,
-            .httpOnly = nsCookie.isHTTPOnly,
+            .secure = static_cast<bool>(nsCookie.isSecure),
+            .httpOnly = static_cast<bool>(nsCookie.isHTTPOnly),
             .expiresMs = nsCookie.expiresDate != nil
               ? static_cast<int64_t>(nsCookie.expiresDate.timeIntervalSince1970) * 1000
               : -1

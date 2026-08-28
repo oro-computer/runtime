@@ -192,13 +192,6 @@ function set_cpu_cores() {
     CPU_CORES=1
   fi
 
-  # GNU Make 3.81 on macOS does not support synchronized parallel output,
-  # so verbose logs captured to a file become unreadable when multiple jobs
-  # interleave diagnostics into the same stream.
-  if [[ -n "$VERBOSE" ]] && [[ ! -t 1 ]]; then
-    CPU_CORES=1
-  fi
-
   echo $CPU_CORES
 }
 

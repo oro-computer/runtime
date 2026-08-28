@@ -1,5 +1,6 @@
 #if defined(__APPLE__)
 
+#import <TargetConditionals.h>
 #import <xpc/xpc.h>
 #import <dispatch/dispatch.h>
 #import <uuid/uuid.h>
@@ -234,6 +235,17 @@ namespace oro::runtime::core::services {
             cb(seq, makeError("xpc.connect", "TypeError", error), QueuedResponse{});
             return;
           }
+
+#if TARGET_OS_IPHONE
+          if (options.type == "mach-service") {
+            cb(seq, makeError(
+              "xpc.connect",
+              "NotSupportedError",
+              "Mach-service XPC connections are unavailable on iOS"
+            ), QueuedResponse{});
+            return;
+          }
+#endif
 
           auto connection = this->createConnection(options);
           if (!connection) {
@@ -578,6 +590,21 @@ namespace oro::runtime::core::services {
           xpc_connection_t handle = nullptr;
           dispatch_queue_t queue = dispatch_queue_create("oro.runtime.xpc.connection", DISPATCH_QUEUE_SERIAL);
 
+#if TARGET_OS_IPHONE
+          if (options.type == "mach-service") {
+#if !__has_feature(objc_arc)
+            if (queue) {
+              dispatch_release(queue);
+            }
+#endif
+            return nullptr;
+          }
+          (void) flags;
+          handle = xpc_connection_create(
+            options.service.c_str(),
+            queue
+          );
+#else
           if (options.type == "mach-service") {
             handle = xpc_connection_create_mach_service(
               options.service.c_str(),
@@ -590,6 +617,7 @@ namespace oro::runtime::core::services {
               queue
             );
           }
+#endif
 
           if (!handle) {
 #if !__has_feature(objc_arc)

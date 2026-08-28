@@ -1873,7 +1873,7 @@ function _compile_libuv_android {
         quiet "$clang" "${cflags[@]}" -c "$src_directory/$source" -o "$output_directory/$object" || exit 1
         echo "ok - built $source -> $object ($arch-$platform)"
         # Can't write back to variable in block, remove final library to force rebuild
-        rm "$static_library" 2>/dev/null
+        rm -f -- "$static_library"
       fi
     } & compile_pids+=("$!")
   done
@@ -2003,7 +2003,9 @@ function _compile_llama {
   mkdir -p ../bin
 
   local cmake_args=(
+    -DLLAMA_BUILD_COMMON=OFF
     -DLLAMA_BUILD_TESTS=OFF
+    -DLLAMA_BUILD_TOOLS=OFF
     -DLLAMA_BUILD_SERVER=OFF
     -DLLAMA_BUILD_EXAMPLES=OFF
     -DLLAMA_CURL=OFF
@@ -2040,7 +2042,6 @@ function _compile_llama {
         export OBJCXXFLAGS="$cflags"
 
         _cmake_configure . build -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" "${cmake_args[@]}" &&
-        quiet cmake --build build &&
         quiet cmake --build build -- -j"$CPU_CORES"
       )
       rc=$?
@@ -2058,7 +2059,7 @@ function _compile_llama {
         quiet command -v cmake
         die $? "not ok - missing cmake, \"$(advice 'cmake')\""
         _cmake_configure .. . "${cmake_args[@]}"
-        quiet cmake --build . --config $config
+        quiet cmake --build . --config $config --parallel "$CPU_CORES"
         mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
         quiet echo "copy_if_newer $STAGING_DIR/build/$config/llama.lib "$BUILD_DIR/$target-$platform/lib$d/llama.lib""
         copy_if_newer "$STAGING_DIR/build/$config/llama.lib" "$BUILD_DIR/$target-$platform/lib$d/llama.lib"
@@ -2094,8 +2095,9 @@ function _compile_llama {
       export CC="$cc"
       export SDKROOT="$sdkroot"
 
-      _cmake_configure . build -DCMAKE_SYSTEM_NAME="iOS" -DCMAKE_OSX_ARCHITECTURES="$target" -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" -DLLAMA_NATIVE=OFF -DGGML_ARM_DOTPROD=ON "${cmake_args[@]}" &&
-      cmake --build build &&
+      # FindBLAS performs host-style link probes that cannot validate a simulator
+      # architecture different from the macOS runner. iOS uses Accelerate/Metal.
+      _cmake_configure . build -DCMAKE_SYSTEM_NAME="iOS" -DCMAKE_OSX_ARCHITECTURES="$target" -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" -DLLAMA_NATIVE=OFF -DGGML_ARM_DOTPROD=ON -DGGML_BLAS=OFF "${cmake_args[@]}" &&
       cmake --build build -- -j"$CPU_CORES" &&
       cmake --install build
     )
@@ -2225,8 +2227,6 @@ function _compile_libuv {
           die $? "not ok - desktop configure"
         fi
 
-        quiet make
-        die $? "not ok - libuv desktop make"
         quiet make "-j$CPU_CORES"
         die $? "not ok - libuv desktop make -j$CPU_CORES"
         quiet make install
@@ -2244,7 +2244,7 @@ function _compile_libuv {
         quiet cmake .. -DBUILD_TESTING=OFF -DLIBUV_BUILD_SHARED=OFF
         die $? "not ok - libuv cmake configure (Win32)"
         cd "$STAGING_DIR" || exit 1
-        quiet cmake --build "$STAGING_DIR/build/" --config $config
+        quiet cmake --build "$STAGING_DIR/build/" --config $config --parallel "$CPU_CORES"
         die $? "not ok - libuv cmake build (Win32)"
         mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
         quiet echo "copy_if_newer $STAGING_DIR/build/$config/libuv.lib "$BUILD_DIR/$target-$platform/lib$d/libuv.lib""
@@ -2384,7 +2384,7 @@ function _compile_whisper {
         _cmake_configure .. . "${cmake_args[@]}"
         die $? "not ok - libwhisper.lib (desktop) configure"
 
-        quiet cmake --build . --config $config
+        quiet cmake --build . --config $config --parallel "$CPU_CORES"
         die $? "not ok - libwhisper.lib (desktop) build"
 
         mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
@@ -2585,9 +2585,20 @@ function _compile_crsqlite_loadable {
   case "$platform" in
     desktop)
       echo "# building cr-sqlite loadable extension for $platform ($arch)..."
+      local -a crsqlite_make_args=(-j"$CPU_CORES" loadable)
+      if [[ "$host" == "Win32" ]]; then
+        # Rust's MSVC target emits a .lib archive, while the upstream Makefile
+        # assumes Unix's lib*.a name and defaults to an unprovisioned gcc.
+        crsqlite_make_args=(
+          "CI_GCC=clang"
+          "rs_lib_loadable=./rs/bundle_static/target/release/crsql_bundle_static.lib"
+          -j"$CPU_CORES"
+          loadable
+        )
+      fi
       (
         cd "$BUILD_DIR/cr-sqlite/core" &&
-        CARGO_TARGET_DIR="$crsqlite_cargo_target_dir" quiet make -j"$CPU_CORES" loadable
+        CARGO_TARGET_DIR="$crsqlite_cargo_target_dir" quiet make "${crsqlite_make_args[@]}"
       )
       local rc=$?
       if (( rc != 0 )); then
@@ -2898,7 +2909,7 @@ function _compile_libusb {
           -DLIBUSB_BUILD_EXAMPLES=OFF
         die $? "not ok - libusb cmake configure (Win32)"
 
-        quiet cmake --build . --config $config
+        quiet cmake --build . --config $config --parallel "$CPU_CORES"
         die $? "not ok - libusb cmake build (Win32)"
 
         mkdir -p "$BUILD_DIR/$target-$platform/lib$suffix"
@@ -2983,8 +2994,8 @@ function _compile_libipfs {
   mkdir -p "$BUILD_DIR/libipfs/include"
   mkdir -p "$BUILD_DIR/$target-$platform/lib"
 
-  local gocache="$source/.gocache/$goos-$goarch"
-  local gomodcache="$source/.gomodcache"
+  local gocache="${GOCACHE:-$root/.cache/go-build/$goos-$goarch}"
+  local gomodcache="${GOMODCACHE:-$root/.cache/go-mod}"
   local output_base="libipfs-${goos}-${goarch}"
   local archive_path="$source/bin/${output_base}.a"
   local header_path="$source/bin/${output_base}.h"

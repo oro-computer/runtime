@@ -47,6 +47,9 @@ lerna-debug.log*
 
 # Node.js things
 node_modules/
+# CommonJS resolver fixtures intentionally model installed package trees.
+!test/src/commonjs/node_modules/
+!test/src/commonjs/node_modules/**
 .pnpm-store/
 package-lock.json
 !test/package-lock.json
