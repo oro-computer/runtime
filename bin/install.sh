@@ -85,6 +85,51 @@ LIPO=""
 declare CWD=$(pwd)
 declare PREFIX="${PREFIX:-"/usr/local"}"
 declare BUILD_DIR="$CWD/build"
+declare -a apple_mobile_targets=()
+
+function _configure_apple_mobile_targets() {
+  apple_mobile_targets=()
+
+  if [[ "$host" != "Darwin" ]] || [[ -n "$NO_IOS" ]]; then
+    return
+  fi
+
+  local requested_targets="${ORO_CI_APPLE_MOBILE_TARGETS:-}"
+  if [[ -z "$requested_targets" ]]; then
+    requested_targets="arm64-iPhoneOS x86_64-iPhoneSimulator"
+    if [[ "$arch" = "arm64" ]]; then
+      requested_targets+=" arm64-iPhoneSimulator"
+    fi
+  fi
+
+  local target=""
+  local enabled_target=""
+  local duplicate=0
+  for target in $requested_targets; do
+    case "$target" in
+      arm64-iPhoneOS|x86_64-iPhoneSimulator|arm64-iPhoneSimulator) ;;
+      *) die 1 "not ok - unsupported Apple-mobile target: $target" ;;
+    esac
+
+    duplicate=0
+    for enabled_target in "${apple_mobile_targets[@]}"; do
+      if [[ "$enabled_target" == "$target" ]]; then
+        duplicate=1
+        break
+      fi
+    done
+
+    if (( !duplicate )); then
+      apple_mobile_targets+=("$target")
+    fi
+  done
+
+  if (( ${#apple_mobile_targets[@]} == 0 )); then
+    die 1 "not ok - no Apple-mobile targets were selected"
+  fi
+
+  echo "# Apple-mobile targets: ${apple_mobile_targets[*]}"
+}
 
 while (( $# > 0 )); do
   declare arg="$1"; shift
@@ -117,6 +162,8 @@ while (( $# > 0 )); do
 
   args+=("$arg")
 done
+
+_configure_apple_mobile_targets
 
 if [[ "$host" = "Linux" ]]; then
   if [ -n "$WSL_DISTRO_NAME" ] || uname -r | grep 'Microsoft'; then
@@ -720,12 +767,11 @@ function _build_runtime_library() {
   local runtime_pids=()
 
   if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
-    runtime_arches+=("$arch" "x86_64")
-    runtime_platforms+=("ios" "ios-simulator")
-    if [[ "$arch" = "arm64" ]] && [[ -z "$NO_IOS" ]]; then
-      runtime_arches+=("$arch")
-      runtime_platforms+=("ios-simulator")
-    fi
+    local apple_target=""
+    for apple_target in "${apple_mobile_targets[@]}"; do
+      runtime_arches+=("${apple_target%%-*}")
+      runtime_platforms+=("${apple_target#*-}")
+    done
   fi
 
   if [[ -n "$BUILD_ANDROID" ]]; then
@@ -958,7 +1004,10 @@ function _prepare {
   mkdir -p "$ORO_HOME"/{lib$d,objects}/"$arch-desktop"
 
   if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
-    mkdir -p "$ORO_HOME"/{lib$d,objects}/{arm64-iPhoneOS,x86_64-iPhoneSimulator,arm64-iPhoneSimulator}
+    local apple_target=""
+    for apple_target in "${apple_mobile_targets[@]}"; do
+      mkdir -p "$ORO_HOME"/{lib$d,objects}/"$apple_target"
+    done
   fi
 
   if [[ -n $BUILD_ANDROID ]]; then
@@ -3063,28 +3112,40 @@ function _compile_libusb {
 
       local output_lib="$BUILD_DIR/$target-$platform/lib$suffix/libusb-1.0.lib"
       if ! test -f "$output_lib"; then
-        mkdir -p "$STAGING_DIR/build/"
-        cd "$STAGING_DIR/build/" || exit 1
+        local msbuild_platform=""
+        case "$target" in
+          x86_64|amd64) msbuild_platform="x64" ;;
+          arm64|aarch64) msbuild_platform="ARM64" ;;
+          x86|i686) msbuild_platform="Win32" ;;
+          *) die 1 "not ok - unsupported Windows libusb architecture: $target" ;;
+        esac
 
-        quiet command -v cmake
-        die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+        local libusb_project="$STAGING_DIR/msvc/libusb_static.vcxproj"
+        if [[ ! -f "$libusb_project" ]]; then
+          die 1 "not ok - libusb MSBuild project not found at $libusb_project"
+        fi
 
-        quiet cmake -S .. -B . \
-          -DLIBUSB_BUILD_SHARED_LIBS=OFF \
-          -DBUILD_SHARED_LIBS=OFF \
-          -DLIBUSB_BUILD_TESTING=OFF \
-          -DLIBUSB_BUILD_EXAMPLES=OFF
-        die $? "not ok - libusb cmake configure (Win32)"
+        quiet command -v MSBuild.exe
+        die $? "not ok - missing MSBuild.exe; install the Visual C++ build tools"
 
-        quiet cmake --build . --config $config --parallel "$CPU_CORES"
-        die $? "not ok - libusb cmake build (Win32)"
+        quiet MSBuild.exe "$libusb_project" \
+          "-m:$CPU_CORES" \
+          "-p:Configuration=$config" \
+          "-p:Platform=$msbuild_platform"
+        die $? "not ok - libusb MSBuild build (Win32)"
 
         mkdir -p "$BUILD_DIR/$target-$platform/lib$suffix"
 
-        local staged_lib="$STAGING_DIR/build/$config/libusb-1.0.lib"
-        if [[ ! -f "$staged_lib" ]]; then
-          staged_lib="$STAGING_DIR/build/libusb-1.0.lib"
-        fi
+        local staged_lib=""
+        local staged_lib_candidate=""
+        for staged_lib_candidate in "$STAGING_DIR"/build/*/"$msbuild_platform"/"$config"/lib/libusb-1.0.lib; do
+          if [[ -f "$staged_lib_candidate" ]] &&
+             { [[ -z "$staged_lib" ]] ||
+               (( $(stat_mtime "$staged_lib_candidate") > $(stat_mtime "$staged_lib") )); }; then
+            staged_lib="$staged_lib_candidate"
+          fi
+        done
+
         if [[ -f "$staged_lib" ]]; then
           copy_if_newer "$staged_lib" "$output_lib"
         else
@@ -3092,7 +3153,7 @@ function _compile_libusb {
         fi
 
         if [[ -n "$DEBUG" ]]; then
-          local staged_pdb="$STAGING_DIR/build/$config/libusb-1.0.pdb"
+          local staged_pdb="${staged_lib%.lib}.pdb"
           if [[ -f "$staged_pdb" ]]; then
             copy_if_newer "$staged_pdb" "$BUILD_DIR/$target-$platform/lib$suffix/libusb-1.0.pdb"
           fi
@@ -3869,9 +3930,9 @@ if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
   quiet xcode-select -p
   die $? "not ok - xcode needs to be installed from the mac app store: https://apps.apple.com/us/app/xcode/id497799835"
 
-  _compile_llama_metal arm64 iPhoneOS
-  _compile_llama_metal arm64 iPhoneSimulator
-  _compile_llama_metal x86_64 iPhoneSimulator
+  for apple_target in "${apple_mobile_targets[@]}"; do
+    _compile_llama_metal "${apple_target%%-*}" "${apple_target#*-}"
+  done
 fi
 
 _compile_llama
@@ -3920,29 +3981,18 @@ if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
 
   _setSDKVersion iPhoneOS
 
-  _queue_target_dependency "libuv (arm64 iPhoneOS)" _compile_libuv arm64 iPhoneOS
-  _queue_target_dependency "libusb (arm64 iPhoneOS)" _compile_libusb arm64 iPhoneOS
-  _queue_target_dependency "libsodium (arm64 iPhoneOS)" _compile_libsodium arm64 iPhoneOS
-  _queue_target_dependency "zlib (arm64 iPhoneOS)" _compile_zlib arm64 iPhoneOS
-  _queue_target_dependency "llama (arm64 iPhoneOS)" _compile_llama arm64 iPhoneOS
-  _queue_target_dependency "whisper (arm64 iPhoneOS)" _compile_whisper arm64 iPhoneOS
   _queue_target_dependency "cr-sqlite (iOS)" _compile_crsqlite_loadable ios
 
-  _queue_target_dependency "libuv (x86_64 iPhoneSimulator)" _compile_libuv x86_64 iPhoneSimulator
-  _queue_target_dependency "libusb (x86_64 iPhoneSimulator)" _compile_libusb x86_64 iPhoneSimulator
-  _queue_target_dependency "libsodium (x86_64 iPhoneSimulator)" _compile_libsodium x86_64 iPhoneSimulator
-  _queue_target_dependency "zlib (x86_64 iPhoneSimulator)" _compile_zlib x86_64 iPhoneSimulator
-  _queue_target_dependency "llama (x86_64 iPhoneSimulator)" _compile_llama x86_64 iPhoneSimulator
-  _queue_target_dependency "whisper (x86_64 iPhoneSimulator)" _compile_whisper x86_64 iPhoneSimulator
-
-  if [[ "$arch" = "arm64" ]]; then
-    _queue_target_dependency "libuv (arm64 iPhoneSimulator)" _compile_libuv arm64 iPhoneSimulator
-    _queue_target_dependency "libusb (arm64 iPhoneSimulator)" _compile_libusb arm64 iPhoneSimulator
-    _queue_target_dependency "libsodium (arm64 iPhoneSimulator)" _compile_libsodium arm64 iPhoneSimulator
-    _queue_target_dependency "zlib (arm64 iPhoneSimulator)" _compile_zlib arm64 iPhoneSimulator
-    _queue_target_dependency "llama (arm64 iPhoneSimulator)" _compile_llama arm64 iPhoneSimulator
-    _queue_target_dependency "whisper (arm64 iPhoneSimulator)" _compile_whisper arm64 iPhoneSimulator
-  fi
+  for apple_target in "${apple_mobile_targets[@]}"; do
+    target_arch="${apple_target%%-*}"
+    target_platform="${apple_target#*-}"
+    _queue_target_dependency "libuv ($apple_target)" _compile_libuv "$target_arch" "$target_platform"
+    _queue_target_dependency "libusb ($apple_target)" _compile_libusb "$target_arch" "$target_platform"
+    _queue_target_dependency "libsodium ($apple_target)" _compile_libsodium "$target_arch" "$target_platform"
+    _queue_target_dependency "zlib ($apple_target)" _compile_zlib "$target_arch" "$target_platform"
+    _queue_target_dependency "llama ($apple_target)" _compile_llama "$target_arch" "$target_platform"
+    _queue_target_dependency "whisper ($apple_target)" _compile_whisper "$target_arch" "$target_platform"
+  done
 
   _wait_for_target_dependencies "not ok - desktop or iOS dependency build failed"
   echo "ok - built iOS dependency libraries"
@@ -4018,11 +4068,13 @@ echo "arch: $arch"
 
 if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
   if test -d "$(xcrun -sdk iphoneos -show-sdk-path 2>/dev/null)"; then
-    _prebuild_ios_main & pids+=($!)
-    _prebuild_ios_simulator_main "x86_64" & pids+=($!)
-    if [[ "$arch" = "arm64" ]]; then
-      _prebuild_ios_simulator_main "arm64" iPhoneSimulator & pids+=($!)
-    fi
+    for apple_target in "${apple_mobile_targets[@]}"; do
+      if [[ "${apple_target#*-}" == "iPhoneOS" ]]; then
+        _prebuild_ios_main & pids+=($!)
+      else
+        _prebuild_ios_simulator_main "${apple_target%%-*}" & pids+=($!)
+      fi
+    done
   fi
 fi
 
@@ -4034,12 +4086,9 @@ done
 _install "$(host_arch)" desktop
 
 if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
-  _install arm64 iPhoneOS
-  _install x86_64 iPhoneSimulator
-
-  if [[ "$arch" = "arm64" ]]; then
-    _install arm64 iPhoneSimulator
-  fi
+  for apple_target in "${apple_mobile_targets[@]}"; do
+    _install "${apple_target%%-*}" "${apple_target#*-}"
+  done
 fi
 
 if [[ -n "$BUILD_ANDROID" ]]; then

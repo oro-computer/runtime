@@ -296,7 +296,7 @@ jobs:
             echo 'CMAKE_C_COMPILER_LAUNCHER=ccache'
             echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache'
           } >> "$GITHUB_ENV"
-          ccache --max-size 500M
+          ccache --max-size 1G
           ccache --zero-stats
           mkdir -p "$XDG_RUNTIME_DIR"
           chmod 700 "$XDG_RUNTIME_DIR"
@@ -394,6 +394,7 @@ jobs:
             id: macos-ios-x64
             runs_on: macos-15-intel
             release_support: ios
+            apple_mobile_targets: x86_64-iPhoneSimulator
             build_android: false
             exclude_android: true
             exclude_ios: false
@@ -407,6 +408,7 @@ jobs:
             id: macos-ios-arm64
             runs_on: macos-14
             release_support: ios
+            apple_mobile_targets: arm64-iPhoneOS arm64-iPhoneSimulator
             build_android: false
             exclude_android: true
             exclude_ios: false
@@ -440,6 +442,7 @@ jobs:
       GDK_BACKEND: x11
       GSK_RENDERER: cairo
       LIBGL_ALWAYS_SOFTWARE: '1'
+      ORO_CI_APPLE_MOBILE_TARGETS: ${{ matrix.apple_mobile_targets }}
       ORO_CI_ID: ${{ matrix.id }}
       ORO_PRUNE_IROH_BUILD_OUTPUTS: ${{ matrix.build_android }}
       ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS: ${{ matrix.build_android }}
@@ -601,7 +604,7 @@ jobs:
           fi
           echo 'CMAKE_C_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
-          ccache --max-size 500M
+          ccache --max-size 1G
           ccache --zero-stats
 
       - name: Prepare Linux headless runtime directory
@@ -698,13 +701,28 @@ jobs:
                 echo >&2 'Apple CI unexpectedly contains an Android target directory'
                 exit 1
               fi
-              required_ios_targets=(arm64-iPhoneOS x86_64-iPhoneSimulator)
-              if [[ "$RUNNER_ARCH" == "ARM64" ]]; then
-                required_ios_targets+=(arm64-iPhoneSimulator)
+              read -r -a required_ios_targets <<< "$ORO_CI_APPLE_MOBILE_TARGETS"
+              if (( ${#required_ios_targets[@]} == 0 )); then
+                echo >&2 'Apple CI has no assigned iOS targets'
+                exit 1
               fi
               for target in "${required_ios_targets[@]}"; do
                 if [[ ! -d "$ORO_HOME/lib/$target" ]]; then
                   echo >&2 "Apple CI is missing required iOS target: $target"
+                  exit 1
+                fi
+              done
+              for path in "${ios_targets[@]}"; do
+                target="$(basename "$path")"
+                expected=false
+                for required_target in "${required_ios_targets[@]}"; do
+                  if [[ "$target" == "$required_target" ]]; then
+                    expected=true
+                    break
+                  fi
+                done
+                if [[ "$expected" != "true" ]]; then
+                  echo >&2 "Apple CI built an unassigned iOS target: $target"
                   exit 1
                 fi
               done

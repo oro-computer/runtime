@@ -1010,6 +1010,25 @@ test('fresh Android libuv builds do not fail after successful compilation', () =
   )
 })
 
+test('Windows libusb builds use the upstream Visual Studio project', () => {
+  const installer = readFile('bin/install.sh')
+  const libusbCompiler = installer.match(
+    /function _compile_libusb \{([\s\S]*?)\n\}/
+  )?.[1]
+
+  assert.ok(libusbCompiler, 'the libusb compiler function should exist')
+  assert.match(
+    libusbCompiler,
+    /msvc\/libusb_static\.vcxproj[\s\S]*command -v MSBuild\.exe[\s\S]*-p:Configuration=\$config[\s\S]*-p:Platform=\$msbuild_platform/,
+    'Windows builds should compile the project shipped by the pinned libusb source'
+  )
+  assert.doesNotMatch(
+    libusbCompiler,
+    /cmake -S \.\. -B \./,
+    'Windows builds should not require a top-level CMake project that libusb does not ship'
+  )
+})
+
 test('verbose non-interactive builds retain detected CPU parallelism', () => {
   const functions = readFile('bin/functions.sh')
   const cpuSelector = functions.match(
@@ -1058,6 +1077,49 @@ test('runtime target builds share the detected CPU budget', () => {
     runtimeBuilder,
     /compile_status[\s\S]*failed to compile runtime objects/,
     'runtime compiler subprocess failures should propagate to the installer'
+  )
+})
+
+test('CI shards Apple-mobile builds without changing installer defaults', () => {
+  const installer = readFile('bin/install.sh')
+  const workflow = readFile('.github/workflows/ci.yml')
+  const appleTargetSelector = installer.match(
+    /function _configure_apple_mobile_targets\(\) \{([\s\S]*?)\n\}/
+  )?.[1]
+
+  assert.ok(
+    appleTargetSelector,
+    'the Apple-mobile target selector should exist'
+  )
+  assert.match(
+    appleTargetSelector,
+    /ORO_CI_APPLE_MOBILE_TARGETS[\s\S]*arm64-iPhoneOS x86_64-iPhoneSimulator[\s\S]*arm64-iPhoneSimulator/,
+    'normal source builds should retain the complete host-eligible Apple target set'
+  )
+  assert.match(
+    installer,
+    /function _build_runtime_library\(\)[\s\S]*for apple_target in "\$\{apple_mobile_targets\[@\]\}"[\s\S]*runtime_arches\+=/,
+    'runtime compilation should use the selected Apple target shard'
+  )
+  assert.match(
+    installer,
+    /for apple_target in "\$\{apple_mobile_targets\[@\]\}"; do[\s\S]*_queue_target_dependency "llama \(\$apple_target\)"/,
+    'Apple dependency builds should use the same selected target shard'
+  )
+  assert.match(
+    workflow,
+    /macOS \+ iOS x64[\s\S]*apple_mobile_targets: x86_64-iPhoneSimulator[\s\S]*macOS \+ iOS arm64[\s\S]*apple_mobile_targets: arm64-iPhoneOS arm64-iPhoneSimulator/,
+    'Intel and Apple Silicon CI should not rebuild each other\'s mobile targets'
+  )
+  assert.match(
+    workflow,
+    /read -r -a required_ios_targets <<< "\$ORO_CI_APPLE_MOBILE_TARGETS"[\s\S]*Apple CI built an unassigned iOS target/,
+    'CI should validate both missing and unexpectedly duplicated Apple targets'
+  )
+  assert.equal(
+    workflow.match(/ccache --max-size 1G/g)?.length,
+    2,
+    'native CI lanes should retain enough compiler output to avoid cache churn'
   )
 })
 
@@ -1122,7 +1184,7 @@ test('mobile dependency builders share the detected CPU budget', () => {
   )
   assert.match(
     installer,
-    /_queue_target_dependency "libwhisper desktop[\s\S]*_queue_target_dependency "llama \(arm64 iPhoneOS\)"[\s\S]*_wait_for_target_dependencies "not ok - desktop or iOS dependency build failed"/,
+    /_queue_target_dependency "libwhisper desktop[\s\S]*_queue_target_dependency "llama \(\$apple_target\)"[\s\S]*_wait_for_target_dependencies "not ok - desktop or iOS dependency build failed"/,
     'Apple-mobile dependencies should run through the bounded scheduler'
   )
   assert.match(
@@ -1152,15 +1214,16 @@ test('native dependency builds do not perform serial work before parallel builds
     /quiet make\s+die \$\? "not ok - libuv desktop make"[\s\S]*quiet make "-j\$CPU_CORES"/,
     'libuv should not complete a serial build before requesting parallel work'
   )
-  for (const buildDirectory of ['.', '"$STAGING_DIR/build/"']) {
-    assert.match(
-      installer,
-      new RegExp(
-        `cmake --build ${buildDirectory.replaceAll('$', '\\$')} --config \\$config --parallel "\\$CPU_CORES"`
-      ),
-      `Windows CMake builds in ${buildDirectory} should use detected CPU parallelism`
-    )
-  }
+  assert.match(
+    installer,
+    /cmake --build \. --config \$config --parallel "\$CPU_CORES"/,
+    'Windows CMake builds should use detected CPU parallelism'
+  )
+  assert.match(
+    installer,
+    /MSBuild\.exe[\s\S]*"-m:\$CPU_CORES"/,
+    'Windows MSBuild projects should use detected CPU parallelism'
+  )
 })
 
 test('CI covers every supported host and mobile target family', () => {
@@ -1195,8 +1258,8 @@ test('CI covers every supported host and mobile target family', () => {
   )
   assert.match(
     workflow,
-    /android\)[\s\S]*arm64-v8a-android x86_64-android[\s\S]*ios\)[\s\S]*arm64-iPhoneOS x86_64-iPhoneSimulator[\s\S]*arm64-iPhoneSimulator/,
-    'CI should fail if a promised Android ABI or iOS device/simulator target is missing'
+    /android\)[\s\S]*arm64-v8a-android x86_64-android[\s\S]*ios\)[\s\S]*required_ios_targets[\s\S]*Apple CI is missing required iOS target/,
+    'CI should fail if an assigned Android ABI or iOS target is missing'
   )
   assert.match(
     workflow,

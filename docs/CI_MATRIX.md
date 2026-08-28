@@ -53,8 +53,8 @@ immediately afterward builds and smoke-tests those exact platform outputs.
 | Node compatibility | `ubuntu-24.04` | no native build | none | 22; tooling unit tests |
 | Linux arm64 | `ubuntu-24.04-arm` | arm64 | none | 24; build and CLI smoke test |
 | Android | `ubuntu-24.04` | x86_64 | Android x86_64 and arm64-v8a | 24; Emulator tests |
-| macOS + iOS x64 | `macos-15-intel` | x86_64 | iOS device and Simulator libraries | 24; build and CLI smoke test |
-| macOS + iOS arm64 | `macos-14` | arm64 | iOS device and Simulator libraries | 24; macOS and Simulator tests |
+| macOS + iOS x64 | `macos-15-intel` | x86_64 | x86_64 iOS Simulator library | 24; build and CLI smoke test |
+| macOS + iOS arm64 | `macos-14` | arm64 | arm64 iOS device and Simulator libraries | 24; macOS and Simulator tests |
 | Windows x64 | `windows-2022` | x86_64 | none | 24; Windows desktop and child-process tests |
 
 The Linux x64 integration lane runs `npm test`, `npm run test:child-process`,
@@ -81,6 +81,11 @@ Target inclusion is declared independently on every matrix leg:
 - Android leaves `NO_ANDROID` empty, sets `NO_IOS=1`, and enables the explicit non-interactive
   Android CI controls.
 - macOS and iOS set `NO_ANDROID=1` and leave `NO_IOS` empty.
+- The two Apple lanes shard mobile targets with `ORO_CI_APPLE_MOBILE_TARGETS`:
+  Intel builds the x86_64 Simulator target, while Apple Silicon builds the
+  arm64 device and Simulator targets. This CI-only selector prevents the two
+  hosts from rebuilding identical mobile libraries; it does not change the
+  public `NO_IOS` contract or the complete target set produced by default.
 - `NO_ANDROID` and `NO_IOS` are independent presence switches, not a combined mobile toggle.
   Non-empty values including `0` and `false` disable their respective targets; an enabled target's
   variable must be unset or empty. See [Source-build environment](BUILD_ENVIRONMENT.md).
@@ -105,7 +110,7 @@ metadata that is unsafe to move between hosted runners.
 - Test lanes restore npm's download cache using `test/package-lock.json`; `npm ci` still creates a
   clean dependency tree on every runner.
 - `actions/setup-python` restores the pip cache for the pinned cpplint requirement.
-- Unix native lanes restore a 500 MB ccache partition scoped by OS, architecture, and target family.
+- Unix native lanes restore a 1 GB ccache partition scoped by OS, architecture, and target family.
 - Android restores Gradle and Cargo dependency caches from their pinned build inputs. It also
   restores a shared build-SDK cache containing the pinned command-line tools, Platform-Tools,
   Platform 37.0, Build Tools 36.0.0, and NDK r29. The emulator test has a separate cache for its
