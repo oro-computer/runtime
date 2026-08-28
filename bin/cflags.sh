@@ -131,10 +131,15 @@ fi
 cflags+=(
   -I"$root/build/include"
   -DSODIUM_STATIC
-  -DORO_RUNTIME_BUILD_TIME="$(date '+%s')"
-  -DORO_RUNTIME_VERSION_HASH=$(git rev-parse --short=8 HEAD)
-  -DORO_RUNTIME_VERSION=$(cat "$root/VERSION.txt")
 )
+
+if [[ -z "${ORO_EXCLUDE_BUILD_METADATA:-}" ]]; then
+  cflags+=(
+    -DORO_RUNTIME_BUILD_TIME="$(date '+%s')"
+    -DORO_RUNTIME_VERSION_HASH=$(git rev-parse --short=8 HEAD)
+    -DORO_RUNTIME_VERSION=$(cat "$root/VERSION.txt")
+  )
+fi
 
 iroh_manifest="$root/build/iroh/iroh/Cargo.toml"
 if [[ ! -f "$iroh_manifest" ]]; then

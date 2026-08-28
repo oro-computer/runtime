@@ -232,7 +232,7 @@ jobs:
     name: Build ${{ matrix.name }}
     needs: [validate-release, verify-release]
     runs-on: ${{ matrix.runs_on }}
-    timeout-minutes: 180
+    timeout-minutes: 120
     permissions:
       attestations: write
       contents: read
@@ -253,6 +253,8 @@ jobs:
       RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
       RELEASE_SUPPORT: ${{ matrix.release_support }}
       REQUESTED_ARTIFACT_ID: ${{ github.event.inputs.artifact_id }}
+      ORO_PRUNE_IROH_BUILD_OUTPUTS: ${{ matrix.build_android }}
+      ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS: ${{ matrix.build_android }}
       ORO_SKIP_PATH_PROMPT: '1'
       RUN_SELECTED_ARTIFACT: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.artifact_id == 'all' || github.event.inputs.artifact_id == matrix.artifact_id }}
 
@@ -334,9 +336,11 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-${{ github.sha }}
+          key: release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-${{ needs.validate-release.outputs.commit_sha }}-${{ github.run_attempt }}
           restore-keys: |
+            release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-${{ needs.validate-release.outputs.commit_sha }}-
             release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-
+            release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore Rust dependency cache
         if: env.RUN_SELECTED_ARTIFACT == 'true'
@@ -445,8 +449,10 @@ jobs:
 
       - name: Save native compiler cache
         if: >-
+          !cancelled() &&
           env.RUN_SELECTED_ARTIFACT == 'true' &&
           runner.os != 'Windows' &&
+          steps.native-cache.outcome == 'success' &&
           steps.native-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
@@ -662,6 +668,8 @@ jobs:
             ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.${{ matrix.archive_ext }}.sha256
             ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}.spdx.json
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   verify-release-assets:
     name: Verify complete release asset set
@@ -702,6 +710,7 @@ jobs:
       ref: ${{ github.ref_name }}
       version: ${{ needs.validate-release.outputs.version }}
       publish: true
+      reuse_release_artifacts: true
 
   publish-github-release:
     name: Publish GitHub release

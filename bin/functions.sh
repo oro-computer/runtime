@@ -157,7 +157,7 @@ function log_and_run () {
 
 function die {
   local status=$1
-  if (( status != 0 && status != 127 )); then
+  if (( status != 0 )); then
     for pid in "${pids[@]}"; do
       kill TERM $pid >/dev/null 2>&1
       kill -9 $pid >/dev/null 2>&1

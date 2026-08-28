@@ -247,15 +247,50 @@ function _cmake_build_dir_needs_refresh () {
   return 1
 }
 
+function _cmake_configuration_signature () {
+  local source_dir="$1"
+  local build_dir="$2"
+  shift 2
+
+  local source_path=""
+  local build_path=""
+  source_path="$(cd "$source_dir" 2>/dev/null && pwd -P)"
+  build_path="$(mkdir -p "$build_dir" && cd "$build_dir" 2>/dev/null && pwd -P)"
+
+  printf 'schema=oro-cmake-v1\n'
+  printf 'source=%q\n' "$source_path"
+  printf 'build=%q\n' "$build_path"
+  printf 'CC=%q\n' "${CC:-}"
+  printf 'CXX=%q\n' "${CXX:-}"
+  printf 'CFLAGS=%q\n' "${CFLAGS:-}"
+  printf 'CXXFLAGS=%q\n' "${CXXFLAGS:-}"
+  printf 'OBJCFLAGS=%q\n' "${OBJCFLAGS:-}"
+  printf 'OBJCXXFLAGS=%q\n' "${OBJCXXFLAGS:-}"
+  printf 'LDFLAGS=%q\n' "${LDFLAGS:-}"
+
+  local argument=""
+  for argument in "$@"; do
+    printf 'arg=%q\n' "$argument"
+  done
+}
+
 function _cmake_configure () {
   local source_dir="$1"
   local build_dir="$2"
   shift 2
 
   local refresh=0
+  local cache_file="$build_dir/CMakeCache.txt"
+  local configuration_file="$build_dir/.oro-cmake-configuration"
+  local configuration=""
+  configuration="$(_cmake_configuration_signature "$source_dir" "$build_dir" "$@")"
+
   if (( force )); then
     refresh=1
   elif _cmake_build_dir_needs_refresh "$source_dir" "$build_dir"; then
+    refresh=1
+  elif [[ -f "$cache_file" ]] && [[ -f "$configuration_file" ]] && \
+       [[ "$(cat "$configuration_file")" != "$configuration" ]]; then
     refresh=1
   fi
 
@@ -265,15 +300,21 @@ function _cmake_configure () {
     fi
 
     if _cmake_supports_fresh; then
-      quiet cmake --fresh -S "$source_dir" -B "$build_dir" "$@"
-      return $?
+      quiet cmake --fresh -S "$source_dir" -B "$build_dir" "$@" || return $?
+    else
+      quiet cmake -E rm -f "$build_dir/CMakeCache.txt" || return $?
+      quiet cmake -E remove_directory "$build_dir/CMakeFiles" || return $?
+      quiet cmake -S "$source_dir" -B "$build_dir" "$@" || return $?
     fi
-
-    quiet cmake -E rm -f "$build_dir/CMakeCache.txt" || return $?
-    quiet cmake -E remove_directory "$build_dir/CMakeFiles" || return $?
+  else
+    quiet cmake -S "$source_dir" -B "$build_dir" "$@" || return $?
   fi
 
-  quiet cmake -S "$source_dir" -B "$build_dir" "$@"
+  if [[ ! -f "$configuration_file" ]] || [[ "$(cat "$configuration_file")" != "$configuration" ]]; then
+    printf '%s\n' "$configuration" > "$configuration_file"
+  fi
+
+  return 0
 }
 
 function _darwin_third_party_warning_flags () {
@@ -379,18 +420,61 @@ function _resolve_darwin_libomp () {
   printf '%s' "$libomp_path"
 }
 
-function _wait_for_pid_or_die () {
-  local pid="$1"
-  local message="$2"
+function _wait_for_queued_dependency () {
+  local pid="${pids[0]:-}"
+  local label="${pid_labels[0]:-target dependency}"
+  local rc=0
 
-  if [[ -z "$pid" ]]; then
-    return 0
+  if [[ -n "$pid" ]]; then
+    wait "$pid" 2>/dev/null
+    rc=$?
   fi
 
-  wait "$pid" 2>/dev/null
-  local rc=$?
-  die $rc "$message"
-  return $rc
+  pids=("${pids[@]:1}")
+  pid_labels=("${pid_labels[@]:1}")
+
+  if (( rc != 0 )); then
+    echo >&2 "not ok - $label build failed"
+  fi
+  return "$rc"
+}
+
+function _queue_target_dependency () {
+  local label="$1"
+  shift
+
+  local builder_limit="$CPU_CORES"
+  local builder_jobs=1
+  if (( CPU_CORES >= 4 )); then
+    builder_limit=2
+    builder_jobs=$(( CPU_CORES / builder_limit ))
+  fi
+
+  while (( ${#pids[@]} >= builder_limit )); do
+    _wait_for_queued_dependency
+    die $? "not ok - target dependency build failed"
+  done
+
+  (
+    export CPU_CORES="$builder_jobs"
+    export CARGO_BUILD_JOBS="$builder_jobs"
+    "$@"
+  ) &
+  pids+=("$!")
+  pid_labels+=("$label")
+}
+
+function _wait_for_target_dependencies () {
+  local message="$1"
+  local status=0
+
+  while (( ${#pids[@]} > 0 )); do
+    if ! _wait_for_queued_dependency; then
+      status=1
+    fi
+  done
+
+  die "$status" "$message"
 }
 
 if [[ "$host" != "Win32" ]]; then
@@ -631,27 +715,62 @@ function _build_cli {
 function _build_runtime_library() {
   local arch="$(host_arch)"
   echo "# building runtime library"
+  local -a runtime_arches=("$arch")
+  local -a runtime_platforms=("desktop")
   local runtime_pids=()
-  "$root/bin/build-runtime-library.sh" --arch "$arch" --platform desktop $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
 
   if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
-    "$root/bin/build-runtime-library.sh" --arch "$arch" --platform ios $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
-    "$root/bin/build-runtime-library.sh" --arch x86_64 --platform ios-simulator $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
+    runtime_arches+=("$arch" "x86_64")
+    runtime_platforms+=("ios" "ios-simulator")
     if [[ "$arch" = "arm64" ]] && [[ -z "$NO_IOS" ]]; then
-      "$root/bin/build-runtime-library.sh" --arch "$arch" --platform ios-simulator $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
+      runtime_arches+=("$arch")
+      runtime_platforms+=("ios-simulator")
     fi
   fi
 
   if [[ -n "$BUILD_ANDROID" ]]; then
     for abi in $(android_supported_abis); do
-      "$root/bin/build-runtime-library.sh" --platform android --arch "$abi" $pass_force $pass_ignore_header_mtimes & runtime_pids+=($!)
+      runtime_arches+=("$abi")
+      runtime_platforms+=("android")
     done
   fi
 
+  local runtime_target_count=${#runtime_arches[@]}
+  local runtime_jobs=$(( CPU_CORES / runtime_target_count ))
+  local runtime_job_remainder=$(( CPU_CORES % runtime_target_count ))
+  if (( runtime_jobs < 1 )); then
+    runtime_jobs=1
+    runtime_job_remainder=0
+  fi
+
+  local runtime_status=0
+  local runtime_rc=0
+  local target_jobs=0
+  local index=0
+  echo "# distributing $CPU_CORES compile jobs across $runtime_target_count runtime targets"
+
+  for index in "${!runtime_arches[@]}"; do
+    target_jobs=$runtime_jobs
+    if (( index < runtime_job_remainder )); then
+      ((target_jobs += 1))
+    fi
+
+    ORO_RUNTIME_BUILD_JOBS="$target_jobs" \
+      "$root/bin/build-runtime-library.sh" \
+        --arch "${runtime_arches[$index]}" \
+        --platform "${runtime_platforms[$index]}" \
+        $pass_force $pass_ignore_header_mtimes & runtime_pids+=("$!")
+  done
+
   for pid in "${runtime_pids[@]}"; do
     wait "$pid" 2>/dev/null
-    die $? "not ok - unable to build runtime library"
+    runtime_rc=$?
+    if (( runtime_rc != 0 )); then
+      runtime_status=1
+    fi
   done
+
+  die "$runtime_status" "not ok - unable to build runtime library"
 }
 
 function _get_web_view2() {
@@ -760,7 +879,7 @@ function _prebuild_ios_main () {
   local objects="$BUILD_DIR/$arch-$platform/objects"
 
   local clang="$(xcrun -sdk iphoneos -find clang++)"
-  local cflags=($(TARGET_OS_IPHONE=1 "$root/bin/cflags.sh"))
+  local cflags=($(TARGET_OS_IPHONE=1 ARCH="$arch" "$root/bin/cflags.sh"))
   local test_sources=($(find "$src"/ios/*.mm 2>/dev/null))
   local sources=()
   local outputs=()
@@ -782,7 +901,7 @@ function _prebuild_ios_main () {
     "$clang" "${cflags[@]}" \
       -c "${sources[$i]}"   \
       -o "${outputs[$i]}"
-    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[*]} -c ${sources[$i]} -o ${outputs[$i]}"
+    die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$clang ${cflags[*]} -c ${sources[$i]} -o ${outputs[$i]}"
   done
   echo "ok - precompiled main program for iOS"
 }
@@ -1974,6 +2093,29 @@ function _compile_llama_metal {
   echo "ok - metal built for $platform"
 }
 
+function _prune_disabled_llama_outputs {
+  local staging_dir="$1"
+  local install_dir="$2"
+
+  # These CMake trees and executables belong only to targets disabled by
+  # _compile_llama. Preserve src/ and ggml/ so library-only incremental builds
+  # continue to reuse their compiled objects.
+  rm -rf \
+    "$staging_dir/build/bin" \
+    "$staging_dir/build/common" \
+    "$staging_dir/build/tools" \
+    "$staging_dir/build/vendor"
+
+  local -a stale_installed_tools=()
+  shopt -s nullglob
+  stale_installed_tools=("$install_dir/bin"/llama-*)
+  shopt -u nullglob
+
+  if (( ${#stale_installed_tools[@]} > 0 )); then
+    rm -f -- "${stale_installed_tools[@]}"
+  fi
+}
+
 function _compile_llama {
   local target=$1
   local hosttarget=$1
@@ -2011,6 +2153,8 @@ function _compile_llama {
     -DLLAMA_CURL=OFF
     -DBUILD_SHARED_LIBS=OFF
   )
+
+  _prune_disabled_llama_outputs "$STAGING_DIR" "$BUILD_DIR/$target-$platform"
 
   if [[ "$platform" == "desktop" ]] && ! _toolchain_supports_openmp; then
     cmake_args+=(-DGGML_OPENMP=OFF -DGGML_OPENMP_ENABLED=OFF)
@@ -2564,7 +2708,35 @@ function _compile_iroh_ffi {
     fi
   done
 
+  # Android CI builds two ABI trees alongside the desktop CLI. Once the FFI
+  # library is staged, its multi-gigabyte Cargo target is no longer needed.
+  # Keep incremental outputs for normal developer builds.
+  if [[ "${ORO_PRUNE_IROH_BUILD_OUTPUTS:-false}" == "true" ]] || \
+     [[ "${ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS:-false}" == "true" ]]; then
+    echo "# pruning staged oro-iroh Cargo build outputs..."
+    (cd "$crate_dir" && cargo clean --target-dir "$cargo_target_dir")
+    rc=$?
+    if (( rc != 0 )); then
+      die $rc "not ok - unable to prune staged oro-iroh Cargo build outputs"
+    fi
+  fi
+
   return 0
+}
+
+function _crsqlite_rust_toolchain {
+  local rust_toolchain="nightly-2023-10-05"
+  local rust_toolchain_file="$BUILD_DIR/cr-sqlite/core/rs/bundle_static/rust-toolchain.toml"
+
+  if [[ -f "$rust_toolchain_file" ]]; then
+    local parsed_toolchain=""
+    parsed_toolchain="$(grep -E '^[[:space:]]*channel[[:space:]]*=' "$rust_toolchain_file" | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')"
+    if [[ -n "$parsed_toolchain" ]]; then
+      rust_toolchain="$parsed_toolchain"
+    fi
+  fi
+
+  echo "$rust_toolchain"
 }
 
 function _compile_crsqlite_loadable {
@@ -2588,9 +2760,11 @@ function _compile_crsqlite_loadable {
       local -a crsqlite_make_args=(-j"$CPU_CORES" loadable)
       if [[ "$host" == "Win32" ]]; then
         # Rust's MSVC target emits a .lib archive, while the upstream Makefile
-        # assumes Unix's lib*.a name and defaults to an unprovisioned gcc.
+        # assumes Unix's lib*.a name, defaults to an unprovisioned gcc, and
+        # unconditionally adds the unsupported -fPIC flag.
         crsqlite_make_args=(
           "CI_GCC=clang"
+          "LOADABLE_CFLAGS=-std=c99 -shared -Wall"
           "rs_lib_loadable=./rs/bundle_static/target/release/crsql_bundle_static.lib"
           -j"$CPU_CORES"
           loadable
@@ -2717,15 +2891,8 @@ function _compile_crsqlite_loadable {
         die 1 "not ok - rustup not found; required to install the pinned Rust toolchain for cr-sqlite"
       fi
 
-      local rust_toolchain="nightly-2023-10-05"
-      local rust_toolchain_file="$BUILD_DIR/cr-sqlite/core/rs/bundle_static/rust-toolchain.toml"
-      if [[ -f "$rust_toolchain_file" ]]; then
-        local parsed_toolchain=""
-        parsed_toolchain="$(grep -E '^[[:space:]]*channel[[:space:]]*=' "$rust_toolchain_file" | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')"
-        if [[ -n "$parsed_toolchain" ]]; then
-          rust_toolchain="$parsed_toolchain"
-        fi
-      fi
+      local rust_toolchain=""
+      rust_toolchain="$(_crsqlite_rust_toolchain)"
 
       echo "# ensuring Rust toolchain for cr-sqlite android builds ($rust_toolchain / $android_triple)..."
       if ! rustup toolchain list | awk '{ print $1 }' | grep -q "^${rust_toolchain}"; then
@@ -3722,51 +3889,24 @@ fi
 
 _compile_crsqlite_loadable
 
-{
-  _compile_whisper
-  echo "ok - built libwhisper for desktop ($(host_arch))"
-} & _compile_whisper_pid=$!
+_queue_target_dependency "libwhisper desktop ($(host_arch))" _compile_whisper
+_queue_target_dependency "libuv desktop ($(host_arch))" _compile_libuv
+_queue_target_dependency "libusb desktop ($(host_arch))" _compile_libusb
 
-# Although we're passing -j$CPU_CORES on non Win32, we still don't get max utiliztion on macos. Start this before fat libs.
-{
-  _compile_libuv
-  echo "ok - built libuv for desktop ($(host_arch))"
-} & _compile_libuv_pid=$!
-
-{
-  _compile_libusb
-  echo "ok - built libusb for desktop ($(host_arch))"
-} & _compile_libusb_pid=$!
-
-  if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]]; then
-  {
-    _compile_libipfs
-    echo "ok - built libipfs for desktop ($(host_arch))"
-  } & _compile_libipfs_pid=$!
+if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]]; then
+  _queue_target_dependency "libipfs desktop ($(host_arch))" _compile_libipfs
 else
-  _compile_libipfs_pid=""
   echo "warn - skipping libipfs build (ORO_SKIP_LIBIPFS=1)"
 fi
 
-{
-  _compile_libsodium
-  echo "ok - built libsodium for desktop ($(host_arch))"
-} & _compile_libsodium_pid=$!
+_queue_target_dependency "libsodium desktop ($(host_arch))" _compile_libsodium
 
 if [[ "$host" = "Linux" ]]; then
-  {
-    _compile_mbedtls
-    echo "ok - built mbedtls for desktop ($(host_arch))"
-  } & _compile_mbedtls_pid=$!
-else
-  _compile_mbedtls_pid=""
+  _queue_target_dependency "mbedtls desktop ($(host_arch))" _compile_mbedtls
 fi
 
 # Build vendored zlib for desktop; mobile platforms are wired up below.
-{
-  _compile_zlib
-  echo "ok - built zlib for desktop ($(host_arch))"
-} & _compile_zlib_pid=$!
+_queue_target_dependency "zlib desktop ($(host_arch))" _compile_zlib
 
 if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
   quiet xcode-select -p
@@ -3780,84 +3920,81 @@ if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
 
   _setSDKVersion iPhoneOS
 
-  _compile_libuv arm64 iPhoneOS & pids+=($!) && pid_labels+=("libuv (arm64 iPhoneOS)")
-  _compile_libusb arm64 iPhoneOS & pids+=($!) && pid_labels+=("libusb (arm64 iPhoneOS)")
-  _compile_libsodium arm64 iPhoneOS & pids+=($!) && pid_labels+=("libsodium (arm64 iPhoneOS)")
-  _compile_zlib arm64 iPhoneOS & pids+=($!) && pid_labels+=("zlib (arm64 iPhoneOS)")
-  _compile_llama arm64 iPhoneOS
-  _compile_whisper arm64 iPhoneOS & pids+=($!) && pid_labels+=("whisper (arm64 iPhoneOS)")
-  _compile_crsqlite_loadable ios
+  _queue_target_dependency "libuv (arm64 iPhoneOS)" _compile_libuv arm64 iPhoneOS
+  _queue_target_dependency "libusb (arm64 iPhoneOS)" _compile_libusb arm64 iPhoneOS
+  _queue_target_dependency "libsodium (arm64 iPhoneOS)" _compile_libsodium arm64 iPhoneOS
+  _queue_target_dependency "zlib (arm64 iPhoneOS)" _compile_zlib arm64 iPhoneOS
+  _queue_target_dependency "llama (arm64 iPhoneOS)" _compile_llama arm64 iPhoneOS
+  _queue_target_dependency "whisper (arm64 iPhoneOS)" _compile_whisper arm64 iPhoneOS
+  _queue_target_dependency "cr-sqlite (iOS)" _compile_crsqlite_loadable ios
 
-  _compile_libuv x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("libuv (x86_64 iPhoneSimulator)")
-  _compile_libusb x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("libusb (x86_64 iPhoneSimulator)")
-  _compile_libsodium x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("libsodium (x86_64 iPhoneSimulator)")
-  _compile_zlib x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("zlib (x86_64 iPhoneSimulator)")
-  _compile_llama x86_64 iPhoneSimulator
-  _compile_whisper x86_64 iPhoneSimulator & pids+=($!) && pid_labels+=("whisper (x86_64 iPhoneSimulator)")
+  _queue_target_dependency "libuv (x86_64 iPhoneSimulator)" _compile_libuv x86_64 iPhoneSimulator
+  _queue_target_dependency "libusb (x86_64 iPhoneSimulator)" _compile_libusb x86_64 iPhoneSimulator
+  _queue_target_dependency "libsodium (x86_64 iPhoneSimulator)" _compile_libsodium x86_64 iPhoneSimulator
+  _queue_target_dependency "zlib (x86_64 iPhoneSimulator)" _compile_zlib x86_64 iPhoneSimulator
+  _queue_target_dependency "llama (x86_64 iPhoneSimulator)" _compile_llama x86_64 iPhoneSimulator
+  _queue_target_dependency "whisper (x86_64 iPhoneSimulator)" _compile_whisper x86_64 iPhoneSimulator
 
   if [[ "$arch" = "arm64" ]]; then
-    _compile_libuv arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("libuv (arm64 iPhoneSimulator)")
-    _compile_libusb arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("libusb (arm64 iPhoneSimulator)")
-    _compile_libsodium arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("libsodium (arm64 iPhoneSimulator)")
-    _compile_zlib arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("zlib (arm64 iPhoneSimulator)")
-    _compile_llama arm64 iPhoneSimulator
-    _compile_whisper arm64 iPhoneSimulator & pids+=($!) && pid_labels+=("whisper (arm64 iPhoneSimulator)")
+    _queue_target_dependency "libuv (arm64 iPhoneSimulator)" _compile_libuv arm64 iPhoneSimulator
+    _queue_target_dependency "libusb (arm64 iPhoneSimulator)" _compile_libusb arm64 iPhoneSimulator
+    _queue_target_dependency "libsodium (arm64 iPhoneSimulator)" _compile_libsodium arm64 iPhoneSimulator
+    _queue_target_dependency "zlib (arm64 iPhoneSimulator)" _compile_zlib arm64 iPhoneSimulator
+    _queue_target_dependency "llama (arm64 iPhoneSimulator)" _compile_llama arm64 iPhoneSimulator
+    _queue_target_dependency "whisper (arm64 iPhoneSimulator)" _compile_whisper arm64 iPhoneSimulator
   fi
 
-  declare ios_dependency_status=0
-  declare ios_dependency_rc=0
-  for index in "${!pids[@]}"; do
-    wait "${pids[$index]}"
-    ios_dependency_rc=$?
-    if (( ios_dependency_rc != 0 )); then
-      echo >&2 "not ok - ${pid_labels[$index]} build failed"
-      ios_dependency_status=1
-    fi
-  done
-  pids=()
-  pid_labels=()
-
-  die "$ios_dependency_status" "not ok - iOS dependency build failed"
+  _wait_for_target_dependencies "not ok - desktop or iOS dependency build failed"
   echo "ok - built iOS dependency libraries"
 
   unset PLATFORM CC CXX STRIP LD CPP CFLAGS CXXFLAGS AR RANLIB \
     CPPFLAGS LDFLAGS SDKROOT IPHONEOS_DEPLOYMENT_TARGET
+
+  # iOS dependency helpers select SDK-specific compilers. Restore the host
+  # compiler before the desktop CLI and main program are built.
+  determine_cxx || exit $?
 fi
 
-# Wait for background builds to finish before packaging assets.
-_wait_for_pid_or_die "${_compile_whisper_pid:-}" "not ok - libwhisper desktop build failed"
-_wait_for_pid_or_die "${_compile_libuv_pid:-}" "not ok - libuv desktop build failed"
-_wait_for_pid_or_die "${_compile_libusb_pid:-}" "not ok - libusb desktop build failed"
-_wait_for_pid_or_die "${_compile_libipfs_pid:-}" "not ok - libipfs desktop build failed"
-_wait_for_pid_or_die "${_compile_libsodium_pid:-}" "not ok - libsodium desktop build failed"
-_wait_for_pid_or_die "${_compile_mbedtls_pid:-}" "not ok - mbedtls desktop build failed"
-_wait_for_pid_or_die "${_compile_zlib_pid:-}" "not ok - zlib desktop build failed"
+# Apple builds drain desktop and mobile dependencies together above. Other
+# hosts finish the bounded desktop dependency pool before mobile targets.
+if (( ${#pids[@]} > 0 )); then
+  _wait_for_target_dependencies "not ok - desktop dependency build failed"
+fi
 
 if [[ -n "$BUILD_ANDROID" ]]; then
-  pid_labels=()
   for abi in $(android_supported_abis); do
-    _compile_libuv_android "$abi" & pids+=($!) && pid_labels+=("libuv android ($abi)")
-    _compile_libusb_android "$abi" & pids+=($!) && pid_labels+=("libusb android ($abi)")
-    _compile_libsodium_android "$abi" & pids+=($!) && pid_labels+=("libsodium android ($abi)")
-    _compile_zlib "$abi" android & pids+=($!) && pid_labels+=("zlib android ($abi)")
-    _compile_llama "$abi" android
-    _compile_whisper "$abi" android & pids+=($!) && pid_labels+=("whisper android ($abi)")
-    _compile_crsqlite_loadable android "$abi"
+    _queue_target_dependency "libuv android ($abi)" _compile_libuv_android "$abi"
+    _queue_target_dependency "libusb android ($abi)" _compile_libusb_android "$abi"
+    _queue_target_dependency "libsodium android ($abi)" _compile_libsodium_android "$abi"
+    _queue_target_dependency "zlib android ($abi)" _compile_zlib "$abi" android
+    _queue_target_dependency "llama android ($abi)" _compile_llama "$abi" android
+    _queue_target_dependency "whisper android ($abi)" _compile_whisper "$abi" android
+    _queue_target_dependency "cr-sqlite android ($abi)" _compile_crsqlite_loadable android "$abi"
+    _wait_for_target_dependencies "not ok - Android dependency build failed ($abi)"
   done
+
+  if [[ "${ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS:-false}" == "true" ]]; then
+    echo "# pruning transient Android Rust build outputs..."
+    rm -rf "$BUILD_DIR/cr-sqlite/core/rs/bundle_static/target"
+
+    declare crsqlite_rust_toolchain=""
+    crsqlite_rust_toolchain="$(_crsqlite_rust_toolchain)"
+    if command -v rustup >/dev/null 2>&1 && \
+       rustup toolchain list | awk '{ print $1 }' | grep -q "^${crsqlite_rust_toolchain}"; then
+      rustup toolchain uninstall "$crsqlite_rust_toolchain"
+      die $? "not ok - unable to prune cr-sqlite Rust toolchain $crsqlite_rust_toolchain"
+    fi
+
+    if [[ "${RUSTUP_HOME:-}" == "$BUILD_DIR/.rustup" ]]; then
+      unset RUSTUP_HOME
+    fi
+  fi
 fi
 
-# Runtime compilation expects headers from the Android dependency builds (notably
-# libsodium) to be staged in build/<abi>-android/include.
-for index in "${!pids[@]}"; do
-  message="not ok - android dependency build failed"
-  if [[ -n "${pid_labels[$index]:-}" ]]; then
-    message="not ok - ${pid_labels[$index]} build failed"
-  fi
-
-  _wait_for_pid_or_die "${pids[$index]}" "$message"
-done
-pids=()
-pid_labels=()
+if [[ "${ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS:-false}" == "true" ]]; then
+  echo "# available disk after Android dependency cleanup"
+  df -h "$BUILD_DIR" || true
+fi
 
 mkdir -p  "$ORO_HOME"/uv/{src/unix,include}
 cp -fr "$BUILD_DIR"/uv/LICENSE "$ORO_HOME"/uv/LICENSE
@@ -3906,10 +4043,11 @@ if [[ "$host" = "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
 fi
 
 if [[ -n "$BUILD_ANDROID" ]]; then
+  pid_labels=()
   for abi in $(android_supported_abis); do
-    _install "$abi" android & pids+=($!)
+    _install "$abi" android & pids+=($!) && pid_labels+=("runtime install android ($abi)")
   done
-  wait
+  _wait_for_target_dependencies "not ok - Android runtime install failed"
 fi
 
 _install_cli

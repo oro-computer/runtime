@@ -9,6 +9,11 @@ source "$root/bin/functions.sh"
 source "$root/bin/runtime-artifacts.sh"
 export CPU_CORES=$(set_cpu_cores)
 
+declare runtime_build_jobs="${ORO_RUNTIME_BUILD_JOBS:-$CPU_CORES}"
+if ! [[ "$runtime_build_jobs" =~ ^[0-9]+$ ]] || (( runtime_build_jobs < 1 )); then
+  runtime_build_jobs=1
+fi
+
 declare runtime_artifact_name="$ORO_RUNTIME_ARTIFACT_NAME"
 declare -a runtime_artifact_aliases=()
 if [[ -n "${ORO_RUNTIME_ARTIFACT_ALIASES+x}" ]]; then
@@ -269,7 +274,11 @@ if [[ -z "$clang_c" ]]; then
   exit 1
 fi
 
-cflags+=($(ARCH="$arch" "$root/bin/cflags.sh"))
+cflags+=($(ORO_EXCLUDE_BUILD_METADATA=1 ARCH="$arch" "$root/bin/cflags.sh"))
+declare -a runtime_metadata_cflags=(
+  -DORO_RUNTIME_VERSION_HASH=$(git rev-parse --short=8 HEAD)
+  -DORO_RUNTIME_VERSION=$(cat "$root/VERSION.txt")
+)
 
 if [[ "$platform" = "android" ]]; then
   cflags+=("$clang_target")
@@ -398,7 +407,9 @@ function build_linux_desktop_extension_object () {
 function main () {
   trap onsignal INT TERM
   local i=0
-  local max_concurrency=$CPU_CORES
+  local max_concurrency=$runtime_build_jobs
+  local compile_status=0
+  local compile_rc=0
 
   mkdir -p "$output_directory/include"
   cp -rf "$root/include"/* "$output_directory/include"
@@ -411,8 +422,12 @@ function main () {
   fi
 
   for source in "${sources[@]}"; do
-    if (( ${#pids[@]} > (( 2 * max_concurrency )) )); then
+    if (( ${#pids[@]} >= max_concurrency )); then
       wait "${pids[0]}" 2>/dev/null
+      compile_rc=$?
+      if (( compile_rc != 0 )); then
+        compile_status=1
+      fi
       pids=("${pids[@]:1}")
     fi
 
@@ -427,6 +442,12 @@ function main () {
       declare source_ext="${source##*.}"
       declare compiler="$clang"
       declare -a compile_flags=("${cflags[@]}")
+
+      # Commit metadata is defined in one translation unit so a new revision
+      # does not invalidate every otherwise unchanged runtime object in ccache.
+      if [[ "$source" == "$root/src/runtime/version.cc" ]]; then
+        compile_flags+=("${runtime_metadata_cflags[@]}")
+      fi
 
       if [[ "$source_ext" = "c" ]]; then
         compiler="$clang_c"
@@ -475,7 +496,17 @@ function main () {
 
   for pid in "${pids[@]}"; do
     wait "$pid" 2>/dev/null
+    compile_rc=$?
+    if (( compile_rc != 0 )); then
+      compile_status=1
+    fi
   done
+  pids=()
+
+  if (( compile_status != 0 )); then
+    echo >&2 "not ok - failed to compile runtime objects ($arch-$platform)"
+    return 1
+  fi
 
   declare base_lib="$canonical_runtime_lib_prefix"
   declare static_library="$root/build/$arch-$platform/lib$d/$base_lib$d.a"
@@ -492,7 +523,7 @@ function main () {
   # Build the static library. To avoid duplicate member names (e.g. many
   # files named manager.o, server.o, socket.o across subfolders) replacing
   # each other within the archive ("ar r" replaces by basename), we stage
-  # uniquely named copies derived from the relative path.
+  # uniquely named filesystem entries for each object.
   #
   local build_static=0
   local static_library_mtime=$(stat_mtime "$static_library")
@@ -509,30 +540,45 @@ function main () {
   done
 
   if (( build_static )); then
-    # Stage unique-named object copies for archiving
+    # Stage unique-named object entries for archiving
     local stage_dir="$output_directory/.archive_objects"
     rm -rf "$stage_dir"
     mkdir -p "$stage_dir"
 
-    # Generate a unique filename for each object based on its path under output_directory
+    # Generate a unique filename for each object. The ordinal guarantees unique
+    # archive member names without creating path-length-sensitive flattened names.
     local staged_list=()
+    local stage_index=0
     for obj in "${objects[@]}"; do
-      # Compute relative path under $output_directory when possible
-      local rel="$obj"
-      if [[ "$obj" == "$output_directory"/* ]]; then
-        rel="${obj#"$output_directory"/}"
-      fi
-      # Sanitize to a unique flat name: replace '/' and '.' with '_'
-      local flat="$(echo "$rel" | tr '/.' '__')"
+      local flat=""
+      flat="$(printf '%06d_%s' "$stage_index" "$(basename "$obj")")"
       local dst="$stage_dir/$flat"
-      # Copy (not link) to avoid ar following symlinks unpredictably across platforms
-      cp -f "$obj" "$dst" || exit 1
+
+      # A hard link gives ar a unique member name without duplicating the object
+      # bytes. Both paths are under the same target directory, so they normally
+      # share a filesystem. Fall back to a copy where hard links are unavailable.
+      if ! ln "$obj" "$dst" 2>/dev/null; then
+        cp -f "$obj" "$dst" || exit 1
+      fi
+
       staged_list+=("$dst")
+      ((stage_index += 1))
     done
 
     # Create the archive from the staged unique object files
     rm -f "$static_library"
-    $ar crs "$static_library" "${staged_list[@]}"
+    local archive_rc=0
+    $ar crs "$static_library" "${staged_list[@]}" || archive_rc=$?
+
+    # The archive contains the object bytes, so staging is never an incremental
+    # build input. Remove it immediately, including after an archive failure.
+    rm -rf "$stage_dir"
+
+    if (( archive_rc != 0 )); then
+      rm -f "$static_library"
+      echo "failed to build $static_library"
+      exit "$archive_rc"
+    fi
 
     if [ -f "$static_library" ]; then
       echo "ok - built static library ($arch-$platform): $(basename "$static_library")"

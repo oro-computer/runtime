@@ -361,6 +361,11 @@ test('npm publish workflow uses exact tarballs, OIDC, and the signed source', ()
   )
   assert.match(
     workflow,
+    /reuse_release_artifacts:[\s\S]*default: false[\s\S]*runtime_artifact_id: linux-x64-android-sdk/,
+    'standalone packaging should rebuild by default while release calls can reuse verified runtimes'
+  )
+  assert.match(
+    workflow,
     /environment: npm-publish[\s\S]*id-token: write/,
     'only the final publication job should enter the npm OIDC environment'
   )
@@ -412,8 +417,23 @@ test('npm publish workflow uses exact tarballs, OIDC, and the signed source', ()
   )
   assert.equal(
     workflow.match(/--dry-run --pack-destination/g)?.length,
-    3,
-    'both platform branches and the top-level job should always produce inspectable tarballs before publication'
+    4,
+    'source-build, artifact-reuse, Windows, and top-level branches should produce inspectable tarballs before publication'
+  )
+  assert.match(
+    workflow,
+    /Download verified release runtime distribution[\s\S]*Stage verified release runtime \(Unix\)[\s\S]*--strip-components=1[\s\S]*Pack verified release runtime \(Unix\)[\s\S]*--no-rebuild --no-remove-oro-home/,
+    'tag publication should package the already-built release runtime instead of compiling it again'
+  )
+  assert.match(
+    workflow,
+    /Stage verified release runtime \(Windows\)[\s\S]*Expand-Archive[\s\S]*ORO_NPM_STAGING_HOME/,
+    'Windows tag publication should stage the verified release archive before packing'
+  )
+  assert.match(
+    workflow,
+    /compression-level: 0[\s\S]*retention-days: 14/,
+    'precompressed npm tarballs should avoid redundant artifact compression and long-lived staging storage'
   )
   assert.match(
     workflow,
@@ -576,8 +596,13 @@ test('release workflow binds builds to the validated source commit', () => {
   )
   assert.match(
     workflow,
-    /uses: \.\/\.github\/workflows\/publish-npm\.yml[\s\S]*publish: true/,
-    'a signed release tag should invoke npm publication automatically'
+    /uses: \.\/\.github\/workflows\/publish-npm\.yml[\s\S]*publish: true[\s\S]*reuse_release_artifacts: true/,
+    'a signed release tag should publish npm packages from the verified runtime artifacts'
+  )
+  assert.match(
+    workflow,
+    /Upload workflow artifact[\s\S]*compression-level: 0[\s\S]*retention-days: 14/,
+    'release artifacts should avoid recompressing archives and expire workflow staging copies'
   )
   assert.match(
     workflow,
@@ -667,6 +692,55 @@ test('runtime library rebuilds first-party objects after header changes', () => 
     script,
     /newest_header_mtime > \$\(stat_mtime "\$destination"\)/,
     'the Linux desktop extension should be invalidated by newer headers'
+  )
+  assert.match(
+    script,
+    /if ! ln "\$obj" "\$dst"[\s\S]*cp -f "\$obj" "\$dst"/,
+    'archive staging should avoid object-byte copies where hard links are supported'
+  )
+  assert.match(
+    script,
+    /\$ar crs[\s\S]*archive_rc=\$\?[\s\S]*rm -rf "\$stage_dir"/,
+    'archive staging should be removed after both successful and failed archive attempts'
+  )
+})
+
+test('build cleanup separates disposable staging from expensive caches', () => {
+  const script = readFile('bin/clean.sh')
+  assert.match(
+    script,
+    /--staging[\s\S]*--cache[\s\S]*--dry-run/,
+    'cleanup should expose explicit staging, cache, and inspection modes'
+  )
+  assert.match(
+    script,
+    /--help[\s\S]*usage[\s\S]*unknown option/,
+    'cleanup should describe supported modes and reject unknown destructive input'
+  )
+  assert.match(
+    script,
+    /-name \.archive_objects[\s\S]*llama\/build\/bin/,
+    'staging cleanup should include runtime archive copies and disabled Llama outputs'
+  )
+  assert.match(
+    script,
+    /rust\/oro-iroh\/target[\s\S]*libipfs\/\.gocache[\s\S]*bundle_static\/target/,
+    'cache cleanup should include the large Rust and legacy Go build caches'
+  )
+  assert.match(
+    script,
+    /if \(\( dry_run \)\)[\s\S]*would clean/,
+    'dry-run cleanup should report targets without removing them'
+  )
+  assert.match(
+    script,
+    /elif \(\( do_clean_env_only \)\); then\s+:/,
+    'environment-only cleanup should preserve compiled targets and caches'
+  )
+  assert.match(
+    script,
+    /if \(\( do_clean_llama \)\)[\s\S]*llama\/build[\s\S]*if \(\( ! do_clean_llama \)\); then/,
+    'targeted Llama cleanup should not discard unrelated runtime outputs'
   )
 })
 
@@ -776,14 +850,29 @@ test('Rust build outputs honor caller target directories without contaminating c
     'oro-iroh artifacts should be located from CARGO_TARGET_DIR'
   )
   assert.match(
+    script,
+    /ORO_PRUNE_IROH_BUILD_OUTPUTS:-false[\s\S]*cargo clean --target-dir "\$cargo_target_dir"/,
+    'mobile CI should be able to reclaim oro-iroh outputs after staging the library'
+  )
+  assert.match(
+    script,
+    /function _crsqlite_rust_toolchain[\s\S]*rust-toolchain\.toml[\s\S]*parsed_toolchain/,
+    'cr-sqlite cleanup should derive the pinned toolchain from its checked-in configuration'
+  )
+  assert.match(
+    script,
+    /pruning transient Android Rust build outputs[\s\S]*bundle_static\/target[\s\S]*rustup toolchain uninstall "\$crsqlite_rust_toolchain"/,
+    'Android CI should prune cr-sqlite intermediates after the final ABI is staged'
+  )
+  assert.match(
     crsqliteCompiler,
     /CARGO_TARGET_DIR="\$crsqlite_cargo_target_dir" quiet make/,
     'cr-sqlite should use its vendored target directory'
   )
   assert.match(
     crsqliteCompiler,
-    /Win32[\s\S]*CI_GCC=clang[\s\S]*rs_lib_loadable=\.\/rs\/bundle_static\/target\/release\/crsql_bundle_static\.lib[\s\S]*CARGO_TARGET_DIR="\$crsqlite_cargo_target_dir" quiet make "\$\{crsqlite_make_args\[@\]\}"/,
-    'Windows cr-sqlite builds should use Clang and the MSVC static-library filename'
+    /Win32[\s\S]*CI_GCC=clang[\s\S]*LOADABLE_CFLAGS=-std=c99 -shared -Wall[\s\S]*rs_lib_loadable=\.\/rs\/bundle_static\/target\/release\/crsql_bundle_static\.lib[\s\S]*CARGO_TARGET_DIR="\$crsqlite_cargo_target_dir" quiet make "\$\{crsqlite_make_args\[@\]\}"/,
+    'Windows cr-sqlite builds should use MSVC-compatible Clang flags and the MSVC static-library filename'
   )
 })
 
@@ -813,6 +902,31 @@ test('iOS llama cross-builds do not probe host BLAS', () => {
     iosCompiler,
     /-DGGML_BLAS=OFF/,
     'iOS llama builds should disable the host-oriented BLAS backend'
+  )
+})
+
+test('Apple prebuilds restore host tools and select target headers', () => {
+  const installer = readFile('bin/install.sh')
+  const functions = readFile('bin/functions.sh')
+  const iosPrebuild = installer.match(
+    /function _prebuild_ios_main \(\) \{([\s\S]*?)\n\}/
+  )?.[1]
+
+  assert.ok(iosPrebuild, 'the iOS main prebuild function should exist')
+  assert.match(
+    iosPrebuild,
+    /TARGET_OS_IPHONE=1 ARCH="\$arch" "\$root\/bin\/cflags\.sh"/,
+    'iOS device flags should select arm64 staged dependency headers on Intel hosts'
+  )
+  assert.match(
+    installer,
+    /unset PLATFORM CC CXX[\s\S]*determine_cxx \|\| exit \$\?/,
+    'the host compiler should be restored after iOS dependency builds'
+  )
+  assert.match(
+    functions,
+    /function die \{[\s\S]*if \(\( status != 0 \)\); then/,
+    'fatal build commands should reject command-not-found status 127'
   )
 })
 
@@ -862,6 +976,25 @@ test('llama dependency builds omit standalone utilities and command-line tools',
     /-DLLAMA_BUILD_COMMON=OFF/,
     'dependency builds should not compile the unused llama common utility library'
   )
+  assert.match(
+    installer,
+    /function _prune_disabled_llama_outputs[\s\S]*build\/bin[\s\S]*build\/common[\s\S]*build\/tools[\s\S]*build\/vendor/,
+    'disabled Llama targets should not retain stale CMake outputs'
+  )
+})
+
+test('CMake cache invalidation tracks build inputs without forcing legacy caches cold', () => {
+  const installer = readFile('bin/install.sh')
+  assert.match(
+    installer,
+    /function _cmake_configuration_signature[\s\S]*schema=oro-cmake-v1[\s\S]*CFLAGS=%q[\s\S]*arg=%q/,
+    'CMake fingerprints should include the source, toolchain flags, and configure arguments'
+  )
+  assert.match(
+    installer,
+    /-f "\$cache_file"[\s\S]*-f "\$configuration_file"[\s\S]*!= "\$configuration"[\s\S]*refresh=1/,
+    'only previously fingerprinted caches should be refreshed after a configuration change'
+  )
 })
 
 test('fresh Android libuv builds do not fail after successful compilation', () => {
@@ -892,6 +1025,110 @@ test('verbose non-interactive builds retain detected CPU parallelism', () => {
     cpuSelector,
     /CPU_CORES < 1[\s\S]*CPU_CORES=1/,
     'invalid CPU detection should still fall back to one core'
+  )
+})
+
+test('runtime target builds share the detected CPU budget', () => {
+  const installer = readFile('bin/install.sh')
+  const runtimeBuilder = readFile('bin/build-runtime-library.sh')
+  const runtimeOrchestrator = installer.match(
+    /function _build_runtime_library\(\) \{([\s\S]*?)\n\}/
+  )?.[1]
+
+  assert.ok(
+    runtimeOrchestrator,
+    'the runtime target orchestrator should exist'
+  )
+  assert.match(
+    runtimeOrchestrator,
+    /CPU_CORES \/ runtime_target_count[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$target_jobs"/,
+    'parallel target families should divide the detected CPU budget'
+  )
+  assert.match(
+    runtimeBuilder,
+    /ORO_RUNTIME_BUILD_JOBS:-\$CPU_CORES[\s\S]*pids\[@\]\} >= max_concurrency/,
+    'each runtime builder should enforce its assigned compile-job budget'
+  )
+  assert.doesNotMatch(
+    runtimeBuilder,
+    /2 \* max_concurrency/,
+    'runtime object compilation should not oversubscribe its assigned budget'
+  )
+  assert.match(
+    runtimeBuilder,
+    /compile_status[\s\S]*failed to compile runtime objects/,
+    'runtime compiler subprocess failures should propagate to the installer'
+  )
+})
+
+test('runtime metadata changes invalidate one cacheable object', () => {
+  const cflags = readFile('bin/cflags.sh')
+  const runtimeBuilder = readFile('bin/build-runtime-library.sh')
+  const runtimeHeader = readFile('src/runtime/version.hh')
+  const runtimeSource = readFile('src/runtime/version.cc')
+
+  assert.match(
+    cflags,
+    /ORO_EXCLUDE_BUILD_METADATA[\s\S]*ORO_RUNTIME_BUILD_TIME[\s\S]*ORO_RUNTIME_VERSION_HASH/,
+    'shared compiler flags should support excluding volatile build metadata'
+  )
+  assert.match(
+    runtimeBuilder,
+    /ORO_EXCLUDE_BUILD_METADATA=1[\s\S]*runtime_metadata_cflags[\s\S]*source" == "\$root\/src\/runtime\/version\.cc"[\s\S]*compile_flags\+=\("\$\{runtime_metadata_cflags\[@\]\}"\)/,
+    'runtime libraries should apply revision metadata only to version.cc'
+  )
+  assert.match(
+    runtimeHeader,
+    /extern const String VERSION_FULL_STRING[\s\S]*extern const String VERSION_HASH_STRING[\s\S]*extern const String VERSION_STRING/,
+    'runtime consumers should reference one metadata-bearing translation unit'
+  )
+  assert.match(
+    runtimeSource,
+    /VERSION_FULL_STRING[\s\S]*ORO_RUNTIME_VERSION_HASH[\s\S]*VERSION_STRING/,
+    'version.cc should retain full, hash, and semantic runtime version reporting'
+  )
+})
+
+test('parallel Android installs propagate every ABI failure', () => {
+  const installer = readFile('bin/install.sh')
+  assert.match(
+    installer,
+    /runtime install android \(\$abi\)[\s\S]*_wait_for_target_dependencies "not ok - Android runtime install failed"/,
+    'Android staging should wait for and validate each ABI-specific installer'
+  )
+  assert.doesNotMatch(
+    installer,
+    /_install "\$abi" android[\s\S]{0,160}\n\s*wait\s*\n/,
+    'Android staging should not use a bare wait that discards child status'
+  )
+})
+
+test('mobile dependency builders share the detected CPU budget', () => {
+  const installer = readFile('bin/install.sh')
+  const scheduler = installer.match(
+    /function _queue_target_dependency \(\) \{([\s\S]*?)\n\}/
+  )?.[1]
+
+  assert.ok(scheduler, 'the target dependency scheduler should exist')
+  assert.match(
+    scheduler,
+    /CPU_CORES >= 4[\s\S]*builder_limit=2[\s\S]*builder_jobs=\$\(\( CPU_CORES \/ builder_limit \)\)[\s\S]*pids\[@\]\} >= builder_limit/,
+    'typical CI runners should execute two dependency builders with divided compiler budgets'
+  )
+  assert.match(
+    scheduler,
+    /export CPU_CORES="\$builder_jobs"[\s\S]*export CARGO_BUILD_JOBS="\$builder_jobs"/,
+    'nested Make, CMake, and Cargo builds should receive the divided budget'
+  )
+  assert.match(
+    installer,
+    /_queue_target_dependency "libwhisper desktop[\s\S]*_queue_target_dependency "llama \(arm64 iPhoneOS\)"[\s\S]*_wait_for_target_dependencies "not ok - desktop or iOS dependency build failed"/,
+    'Apple-mobile dependencies should run through the bounded scheduler'
+  )
+  assert.match(
+    installer,
+    /_queue_target_dependency "llama android \(\$abi\)"[\s\S]*_wait_for_target_dependencies "not ok - Android dependency build failed \(\$abi\)"/,
+    'each Android ABI should complete its bounded dependency batch before the next ABI'
   )
 })
 
@@ -1034,6 +1271,28 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     /Restore native compiler cache[\s\S]*ccache-v1-/,
     'native Unix builds should restore compiler output caches'
   )
+  for (const nativeWorkflow of [workflow, releaseWorkflow, publishWorkflow]) {
+    assert.match(
+      nativeWorkflow,
+      /native-cache[\s\S]*github\.run_attempt[\s\S]*Save native compiler cache[\s\S]*!cancelled\(\)[\s\S]*native-cache\.outcome == 'success'/,
+      'native compiler caches should retain non-cancelled failed-attempt work under an immutable attempt key'
+    )
+  }
+  assert.match(
+    workflow,
+    /restore-keys:[\s\S]*ccache-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-\s/,
+    'debug lanes should reuse matching compiler objects across platform families'
+  )
+  assert.match(
+    releaseWorkflow,
+    /release-ccache-v1-[^\n]*needs\.validate-release\.outputs\.commit_sha[\s\S]*release-ccache-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-\s/,
+    'release caches should bind to the validated commit and share matching production objects'
+  )
+  assert.match(
+    publishWorkflow,
+    /release-ccache-v1-[^\n]*matrix\.runtime_artifact_id/,
+    'standalone npm packaging should fall back to the corresponding release compiler cache'
+  )
   assert.match(
     workflow,
     /linux-integration:[\s\S]*Restore Rust dependency cache[\s\S]*test-platform:/,
@@ -1076,6 +1335,18 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     /Restore Android emulator cache[\s\S]*system-images\/android-37\.0\/google_apis\/x86_64[\s\S]*~\/\.android\/avd/,
     'the Android test lane should cache its emulator image and AVD separately'
   )
+  for (const nativeWorkflow of [workflow, releaseWorkflow, publishWorkflow]) {
+    assert.match(
+      nativeWorkflow,
+      /ORO_PRUNE_IROH_BUILD_OUTPUTS: \$\{\{ matrix\.build_android \}\}/,
+      'Android builds should reclaim staged oro-iroh Cargo outputs before ABI compilation'
+    )
+    assert.match(
+      nativeWorkflow,
+      /ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS: \$\{\{ matrix\.build_android \}\}/,
+      'Android builds should remove isolated cross-build outputs after staging both ABIs'
+    )
+  }
   assert.match(
     workflow,
     /ACTIONLINT_VERSION: [\d.]+[\s\S]*ACTIONLINT_SHA256: [0-9a-f]{64}[\s\S]*sha256sum --check --status/,
@@ -1090,6 +1361,16 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     workflow,
     /linux-integration:[\s\S]*needs: \[changes, lint\][\s\S]*test-platform:[\s\S]*needs: \[changes, lint\]/,
     'expensive native jobs should not start before the static gate succeeds'
+  )
+  assert.match(
+    workflow,
+    /linux-integration:[\s\S]*timeout-minutes: 90[\s\S]*test-platform:[\s\S]*timeout-minutes: 120/,
+    'CI should stop wedged native builds before they consume the three-hour runner maximum'
+  )
+  assert.doesNotMatch(
+    `${workflow}\n${releaseWorkflow}\n${publishWorkflow}`,
+    /timeout-minutes: 180/,
+    'native CI and packaging jobs should not retain three-hour timeout budgets'
   )
   assert.match(
     workflow,
@@ -1113,6 +1394,11 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     workflow,
     /Documentation-only changes skip native builds and integration tests/,
     'documentation-only changes should avoid native runner allocation'
+  )
+  assert.match(
+    workflow,
+    /commits\/\$CURRENT_SHA\/pulls[\s\S]*run_ci=false[\s\S]*lint:[\s\S]*needs: changes[\s\S]*needs\.changes\.outputs\.run_ci == 'true'/,
+    'an open pull request should suppress its duplicate feature-branch push workflow'
   )
   assert.match(
     releaseWorkflow,

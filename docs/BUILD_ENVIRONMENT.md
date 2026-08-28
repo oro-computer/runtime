@@ -109,6 +109,37 @@ device build does not.
 - `ORO_HOME=<path>` chooses the staged runtime home.
 - `PREFIX=<path>` chooses the installation/link prefix.
 
+## Build storage and cleanup
+
+The source build separates disposable staging from caches that shorten later
+builds. Inspect a cleanup category before applying it:
+
+```sh
+./bin/clean.sh --staging --dry-run
+./bin/clean.sh --cache --dry-run
+./bin/clean.sh --full --dry-run
+```
+
+- With no arguments, `bin/clean.sh` removes only generated `.oro.env` files.
+  `--only-env` makes the same intent explicit and preserves compiled targets.
+- `--staging` removes runtime archive staging and outputs from disabled Llama
+  tool targets. These files are not incremental inputs, so this mode does not
+  make the next library build cold.
+- `--cache` removes the Iroh and cr-sqlite Cargo targets, downloaded Rust
+  toolchains stored under `build/`, and Go build/module caches. Use it when disk
+  recovery is more important than the next build's compile and download time.
+  Compiler caches such as `CCACHE_DIR` and package-manager caches are retained.
+- `--full` removes `build/`, the Iroh Cargo target, and repository Go caches.
+  Source and dependency intermediates start cold, while an external compiler
+  cache may still accelerate the rebuild.
+- `--dry-run` reports existing targets and their current sizes without deleting
+  them.
+
+Android CI sets `ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS=true` after deciding that the
+job will not perform another source build. This removes the pinned cr-sqlite
+Rust toolchain and Cargo target after both ABI extensions are staged. Normal
+developer builds leave this setting unset and retain those caches.
+
 Like the mobile exclusion controls, `DEBUG` and `VERBOSE` are interpreted by
 their presence rather than by parsing boolean words. Production release builds
 must leave both unset.

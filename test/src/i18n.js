@@ -1,5 +1,18 @@
 import test from 'oro:test'
-import i18n from 'oro:i18n'
+import i18n, { getMessagesForLocale } from 'oro:i18n'
+
+test('i18n ignores host locales that are not language identifiers', (t) => {
+  t.deepEqual(
+    getMessagesForLocale('C'),
+    [],
+    'POSIX C locale has no messages'
+  )
+  t.equal(
+    i18n.getMessage('key1', { locale: 'C' }),
+    null,
+    'POSIX C locale does not throw during message lookup'
+  )
+})
 
 test('i18n.getMessage(messageName[,substitutions = [][, options]])', (t) => {
   const en = {

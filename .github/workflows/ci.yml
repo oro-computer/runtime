@@ -37,6 +37,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
+      run_ci: ${{ steps.scope.outputs.run_ci }}
       runtime_changed: ${{ steps.scope.outputs.runtime_changed }}
     steps:
       - name: Classify changed files
@@ -47,8 +48,23 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BEFORE_SHA: ${{ github.event.before }}
           CURRENT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          run_ci=true
+          if [[ "$EVENT_NAME" == 'push' && "$REF_NAME" != 'master' && "$REF_NAME" != 'dev' ]]; then
+            if pull_count="$(gh api "/repos/$GITHUB_REPOSITORY/commits/$CURRENT_SHA/pulls" --jq '[.[] | select(.state == "open")] | length')" && (( pull_count > 0 )); then
+              run_ci=false
+            fi
+          fi
+          echo "run_ci=$run_ci" >> "$GITHUB_OUTPUT"
+
+          if [[ "$run_ci" != 'true' ]]; then
+            echo 'An open pull-request run already covers this branch commit; skipping the duplicate push run.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'runtime_changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           changed_files="$RUNNER_TEMP/changed-files.txt"
           case "$EVENT_NAME" in
             pull_request)
@@ -95,6 +111,8 @@ jobs:
 
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.run_ci == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -175,7 +193,7 @@ jobs:
     needs: [changes, lint]
     if: needs.changes.outputs.runtime_changed == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 90
     env:
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
@@ -214,9 +232,11 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-x64-${{ github.sha }}
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-x64-${{ github.sha }}-${{ github.run_attempt }}
           restore-keys: |
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-x64-${{ github.sha }}-
             ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-x64-
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore Rust dependency cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -289,7 +309,7 @@ jobs:
         run: ./bin/install.sh --yes-deps
 
       - name: Save native compiler cache
-        if: steps.native-cache.outputs.cache-hit != 'true'
+        if: ${{ !cancelled() && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}
@@ -339,7 +359,7 @@ jobs:
       needs.changes.outputs.runtime_changed == 'true' &&
       (github.event_name != 'workflow_call' || inputs.run_cross_platform)
     runs-on: ${{ matrix.runs_on }}
-    timeout-minutes: 180
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -421,6 +441,8 @@ jobs:
       GSK_RENDERER: cairo
       LIBGL_ALWAYS_SOFTWARE: '1'
       ORO_CI_ID: ${{ matrix.id }}
+      ORO_PRUNE_IROH_BUILD_OUTPUTS: ${{ matrix.build_android }}
+      ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS: ${{ matrix.build_android }}
       ORO_SKIP_PATH_PROMPT: '1'
       ORO_TEST_HEADLESS: '1'
       ORO_TEST_SKIP_DESKTOP_EXTENSION: '1'
@@ -506,9 +528,11 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ github.sha }}
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ github.sha }}-${{ github.run_attempt }}
           restore-keys: |
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ github.sha }}-
             ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore Rust dependency cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -635,7 +659,7 @@ jobs:
         run: ./bin/install.sh --yes-deps
 
       - name: Save native compiler cache
-        if: runner.os != 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
+        if: ${{ !cancelled() && runner.os != 'Windows' && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}

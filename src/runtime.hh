@@ -27,9 +27,9 @@
 #include "runtime/window.hh"
 
 namespace oro::runtime {
-  inline const auto VERSION_FULL_STRING = version::VERSION_FULL_STRING;
-  inline const auto VERSION_HASH_STRING = version::VERSION_HASH_STRING;
-  inline const auto VERSION_STRING = version::VERSION_STRING;
+  inline const auto& VERSION_FULL_STRING = version::VERSION_FULL_STRING;
+  inline const auto& VERSION_HASH_STRING = version::VERSION_HASH_STRING;
+  inline const auto& VERSION_STRING = version::VERSION_STRING;
 
   using App = app::App;
   using Bridge = bridge::Bridge;

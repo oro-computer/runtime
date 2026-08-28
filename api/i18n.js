@@ -50,6 +50,14 @@ export const DEFAULT_LOCALES_LOCATION =
  */
 export function getMessagesForLocale (locale) {
   const results = []
+
+  // WebKit can expose the POSIX `C` locale through navigator.languages.
+  // It is not a language code or RFC 5646 tag, so there are no messages to
+  // preload for it.
+  if (typeof locale !== 'string' || locale.trim().length < 2) {
+    return results
+  }
+
   const tags = language
     .lookup(locale)
     .map((l) => l.tags)

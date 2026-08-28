@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      reuse_release_artifacts:
+        description: Package the runtime distributions already built by the calling release workflow
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       ref:
@@ -109,33 +114,43 @@ jobs:
     name: Pack ${{ matrix.package }}
     needs: [validate-tag, top-level-packages]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 180
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         include:
           - package: linux-x64
             os: ubuntu-24.04
+            runtime_artifact_id: linux-x64-android-sdk
+            runtime_archive_ext: tar.gz
             build_android: true
             exclude_android: false
             exclude_ios: true
           - package: linux-arm64
             os: ubuntu-24.04-arm
+            runtime_artifact_id: linux-arm64-desktop
+            runtime_archive_ext: tar.gz
             build_android: false
             exclude_android: true
             exclude_ios: true
           - package: darwin-x64
             os: macos-15-intel
+            runtime_artifact_id: macos-x64-ios-sdk
+            runtime_archive_ext: tar.gz
             build_android: false
             exclude_android: true
             exclude_ios: false
           - package: darwin-arm64
             os: macos-14
+            runtime_artifact_id: macos-arm64-ios-sdk
+            runtime_archive_ext: tar.gz
             build_android: false
             exclude_android: true
             exclude_ios: false
           - package: win32-x64
             os: windows-2022
+            runtime_artifact_id: windows-x64-desktop
+            runtime_archive_ext: zip
             build_android: false
             exclude_android: true
             exclude_ios: true
@@ -147,7 +162,12 @@ jobs:
       EXCLUDE_ANDROID: ${{ matrix.exclude_android }}
       EXCLUDE_IOS: ${{ matrix.exclude_ios }}
       PACKAGE_ID: ${{ matrix.package }}
+      ORO_PRUNE_IROH_BUILD_OUTPUTS: ${{ matrix.build_android }}
+      ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS: ${{ matrix.build_android }}
       ORO_SKIP_PATH_PROMPT: '1'
+      REUSE_RELEASE_ARTIFACTS: ${{ inputs.reuse_release_artifacts }}
+      RUNTIME_ARCHIVE_EXT: ${{ matrix.runtime_archive_ext }}
+      RUNTIME_ARTIFACT_ID: ${{ matrix.runtime_artifact_id }}
     steps:
       - name: Checkout signed release tag
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -161,19 +181,20 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Setup Go for libipfs
+        if: ${{ !inputs.reuse_release_artifacts }}
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.23.2'
           cache: false
 
       - name: Setup Windows native compiler cache
-        if: runner.os == 'Windows'
+        if: ${{ !inputs.reuse_release_artifacts && runner.os == 'Windows' }}
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
           version: v0.17.0
 
       - name: Configure Windows native compiler cache
-        if: runner.os == 'Windows'
+        if: ${{ !inputs.reuse_release_artifacts && runner.os == 'Windows' }}
         shell: bash
         run: |
           {
@@ -184,7 +205,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Setup Java for Android package
-        if: matrix.build_android
+        if: ${{ !inputs.reuse_release_artifacts && matrix.build_android }}
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -195,13 +216,13 @@ jobs:
             bin/generate-gradle-files.sh
 
       - name: Resolve Android SDK cache root
-        if: matrix.build_android
+        if: ${{ !inputs.reuse_release_artifacts && matrix.build_android }}
         id: android-sdk
         shell: bash
         run: echo "root=$ANDROID_HOME" >> "$GITHUB_OUTPUT"
 
       - name: Restore Android build SDK cache
-        if: matrix.build_android
+        if: ${{ !inputs.reuse_release_artifacts && matrix.build_android }}
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
@@ -213,16 +234,20 @@ jobs:
           key: android-build-sdk-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bin/android-functions.sh') }}
 
       - name: Restore native compiler cache
-        if: runner.os != 'Windows'
+        if: ${{ !inputs.reuse_release_artifacts && runner.os != 'Windows' }}
         id: native-cache
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ needs.validate-tag.outputs.commit_sha }}
+          key: npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ needs.validate-tag.outputs.commit_sha }}-${{ github.run_attempt }}
           restore-keys: |
+            npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ needs.validate-tag.outputs.commit_sha }}-
             npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-
+            npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
+            release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.runtime_artifact_id }}-
 
       - name: Restore Rust dependency cache
+        if: ${{ !inputs.reuse_release_artifacts }}
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
@@ -233,6 +258,7 @@ jobs:
             cargo-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore Go build cache
+        if: ${{ !inputs.reuse_release_artifacts }}
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
@@ -243,7 +269,7 @@ jobs:
             go-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
+        if: ${{ !inputs.reuse_release_artifacts && runner.os == 'Linux' }}
         shell: bash
         run: |
           sudo apt-get update
@@ -264,14 +290,14 @@ jobs:
             pkg-config
 
       - name: Install macOS build dependencies
-        if: runner.os == 'macOS'
+        if: ${{ !inputs.reuse_release_artifacts && runner.os == 'macOS' }}
         shell: bash
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
         run: brew install automake ccache libtool pkg-config
 
       - name: Configure native compiler cache
-        if: runner.os != 'Windows'
+        if: ${{ !inputs.reuse_release_artifacts && runner.os != 'Windows' }}
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == 'Linux' ]]; then
@@ -309,7 +335,7 @@ jobs:
           fi
 
       - name: Build Windows runtime for npm package
-        if: runner.os == 'Windows'
+        if: ${{ !inputs.reuse_release_artifacts && runner.os == 'Windows' }}
         shell: pwsh
         env:
           ORO_HOME: ${{ github.workspace }}\build\npm\win32
@@ -317,12 +343,60 @@ jobs:
         run: .\bin\install.ps1 -yesdeps -verbose
 
       - name: Build and pack platform package (Unix)
-        if: runner.os != 'Windows'
+        if: ${{ !inputs.reuse_release_artifacts && runner.os != 'Windows' }}
         shell: bash
         run: |
           pack_dir="$RUNNER_TEMP/npm-packs"
           mkdir -p "$pack_dir"
           ./bin/publish-npm-modules.sh --only-platforms --yes-deps --dry-run --pack-destination "$pack_dir"
+
+      - name: Download verified release runtime distribution
+        if: inputs.reuse_release_artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: oro-runtime-${{ inputs.version }}-${{ matrix.runtime_artifact_id }}
+          path: ${{ runner.temp }}/npm-runtime-artifact
+
+      - name: Stage verified release runtime (Unix)
+        if: ${{ inputs.reuse_release_artifacts && runner.os != 'Windows' }}
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/npm-runtime-artifact/oro-runtime-$RELEASE_VERSION-$RUNTIME_ARTIFACT_ID.$RUNTIME_ARCHIVE_EXT"
+          staging="$GITHUB_WORKSPACE/build/npm/$PACKAGE_ID"
+          if [[ ! -f "$archive" ]]; then
+            echo >&2 "Missing verified runtime archive: $archive"
+            exit 1
+          fi
+          mkdir -p "$staging"
+          tar -xzf "$archive" --strip-components=1 -C "$staging"
+          echo "ORO_NPM_STAGING_HOME=$staging" >> "$GITHUB_ENV"
+
+      - name: Stage verified release runtime (Windows)
+        if: ${{ inputs.reuse_release_artifacts && runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "npm-runtime-artifact\oro-runtime-$env:RELEASE_VERSION-$env:RUNTIME_ARTIFACT_ID.$env:RUNTIME_ARCHIVE_EXT"
+          $extract = Join-Path $env:RUNNER_TEMP 'npm-runtime-extract'
+          $runtimeRoot = Join-Path $extract "oro-runtime-$env:RELEASE_VERSION-$env:RUNTIME_ARTIFACT_ID"
+          $staging = Join-Path $env:GITHUB_WORKSPACE "build\npm\$env:PACKAGE_ID"
+          if (-not (Test-Path $archive -PathType Leaf)) {
+            throw "Missing verified runtime archive: $archive"
+          }
+          New-Item -ItemType Directory -Force -Path $extract, $staging | Out-Null
+          Expand-Archive -Path $archive -DestinationPath $extract
+          if (-not (Test-Path $runtimeRoot -PathType Container)) {
+            throw "Runtime archive is missing expected root: $runtimeRoot"
+          }
+          Get-ChildItem -Force $runtimeRoot | Copy-Item -Destination $staging -Recurse -Force
+          "ORO_NPM_STAGING_HOME=$staging" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Pack verified release runtime (Unix)
+        if: ${{ inputs.reuse_release_artifacts && runner.os != 'Windows' }}
+        shell: bash
+        run: |
+          pack_dir="$RUNNER_TEMP/npm-packs"
+          mkdir -p "$pack_dir"
+          ./bin/publish-npm-modules.sh --only-platforms --no-rebuild --no-remove-oro-home --dry-run --pack-destination "$pack_dir"
 
       - name: Pack platform package (Windows)
         if: runner.os == 'Windows'
@@ -333,14 +407,14 @@ jobs:
           ./bin/publish-npm-modules.sh --only-platforms --no-rebuild --no-remove-oro-home --dry-run --pack-destination "$pack_dir"
 
       - name: Save native compiler cache
-        if: runner.os != 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
+        if: ${{ !cancelled() && !inputs.reuse_release_artifacts && runner.os != 'Windows' && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Report native compiler cache
-        if: always() && runner.os != 'Windows'
+        if: ${{ always() && !inputs.reuse_release_artifacts && runner.os != 'Windows' }}
         shell: bash
         run: ccache --show-stats || true
 
@@ -386,6 +460,8 @@ jobs:
           name: npm-pack-${{ inputs.version }}-${{ matrix.package }}
           path: ${{ runner.temp }}/npm-packs/*.tgz
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   top-level-packages:
     name: Pack Node adapter and meta-package
@@ -430,6 +506,8 @@ jobs:
           name: npm-pack-${{ inputs.version }}-top-level
           path: ${{ runner.temp }}/npm-packs/*.tgz
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   publish:
     name: Publish verified tarballs to npm
