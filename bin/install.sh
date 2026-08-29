@@ -3128,11 +3128,10 @@ function _compile_libusb {
         quiet command -v MSBuild.exe
         die $? "not ok - missing MSBuild.exe; install the Visual C++ build tools"
 
-        quiet MSBuild.exe "$libusb_project" \
+        quiet env "_CL_=${_CL_:+$_CL_ }/wd5287" MSBuild.exe "$libusb_project" \
           "-m:$CPU_CORES" \
           "-p:Configuration=$config" \
-          "-p:Platform=$msbuild_platform" \
-          "-p:DisableSpecificWarnings=5287"
+          "-p:Platform=$msbuild_platform"
         die $? "not ok - libusb MSBuild build (Win32)"
 
         mkdir -p "$BUILD_DIR/$target-$platform/lib$suffix"
@@ -4101,5 +4100,20 @@ if [[ -n "$BUILD_ANDROID" ]]; then
 fi
 
 _install_cli
+
+if [[ "${ORO_PRUNE_BUILD_OUTPUTS_AFTER_INSTALL:-false}" == "true" ]]; then
+  cd "$CWD" || exit 1
+  if [[ "$BUILD_DIR" != "$CWD/build" ]] || \
+     [[ "$ORO_HOME" == "$BUILD_DIR" ]] || \
+     [[ "$ORO_HOME" == "$BUILD_DIR/"* ]]; then
+    die 1 "not ok - refusing to prune a build directory that contains staged runtime artifacts"
+  fi
+
+  echo "# pruning transient build outputs after staged artifacts were installed..."
+  rm -rf -- "$BUILD_DIR"
+  die $? "not ok - unable to prune transient build outputs"
+  echo "# available disk after staged build cleanup"
+  df -h "$CWD" || true
+fi
 
 exit $?

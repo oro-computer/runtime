@@ -4,6 +4,9 @@
 #include <cstring>
 #include <fcntl.h>
 #include <poll.h>
+#if !defined(__ANDROID__)
+#include <spawn.h>
+#endif
 #include <set>
 #include <signal.h>
 #include <sstream>
@@ -295,8 +298,7 @@ namespace oro::runtime::process {
   Process::PID Process::open (const String &command, const String &path) noexcept {
     #if ORO_RUNTIME_PLATFORM_IOS
       return -1; // -EPERM
-    #else
-
+    #elif defined(__ANDROID__)
       return open([&command, &path, this] () -> int {
         if (this->config.useDirectArguments) {
           if (!path.empty() && chdir(path.c_str()) != 0) {
@@ -326,58 +328,291 @@ namespace oro::runtime::process {
             putenv(const_cast<char*>(kv.c_str()));
           }
 
-          #if !ORO_RUNTIME_PLATFORM_IOS
-            setpgid(0, 0);
-            #if defined(__linux__)
-              prctl(PR_SET_PDEATHSIG, SIGTERM);
-            #endif
-          #endif
-
+          setpgid(0, 0);
+          prctl(PR_SET_PDEATHSIG, SIGTERM);
           execvp(command.c_str(), argumentPointers.data());
           _exit(EXIT_FAILURE);
         }
 
-        // Build shell command line: cd '<path>' && <command><argv>
         String cmdline = command;
         if (!this->argv.empty()) {
-          // Forward argv verbatim (space-separated) for compatibility with existing callers
           cmdline += this->argv;
         }
 
-        String cd_and_cmd = cmdline;
+        String cdAndCommand = cmdline;
         if (!path.empty()) {
-          // single-quote escape: ' -> '\''
-          auto esc = path;
-          size_t pos = 0;
-          while ((pos = esc.find('\'', pos)) != String::npos) {
-            esc.replace(pos, 1, "'\\''");
-            pos += 4;
+          auto escapedPath = path;
+          size_t position = 0;
+          while ((position = escapedPath.find('\'', position)) != String::npos) {
+            escapedPath.replace(position, 1, "'\\''");
+            position += 4;
           }
-          cd_and_cmd = String("cd '") + esc + String("' && ") + cmdline;
+          cdAndCommand = String("cd '") + escapedPath + String("' && ") + cmdline;
         }
 
         if (this->config.replaceEnvironment) {
           clearProcessEnvironment();
         }
-        // Apply environment values in the child prior to exec.
         for (const auto& kv : this->env) {
           putenv(const_cast<char*>(kv.c_str()));
         }
 
-        #if !ORO_RUNTIME_PLATFORM_IOS
-          // Put the child in its own process group for robust group signals
-          setpgid(0, 0);
-          #if defined(__linux__)
-            prctl(PR_SET_PDEATHSIG, SIGTERM);
-          #endif
-        #endif
-
-        // Use /bin/sh -c so composite commands (e.g. "npm run build") work
-        execl("/bin/sh", "/bin/sh", "-c", cd_and_cmd.c_str(), (char*)nullptr);
-        // If execl returns, it failed
+        setpgid(0, 0);
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+        execl("/bin/sh", "/bin/sh", "-c", cdAndCommand.c_str(), (char*)nullptr);
         _exit(EXIT_FAILURE);
         return 0;
       });
+    #else
+      int stdinPipe[2] = {-1, -1};
+      int stdoutPipe[2] = {-1, -1};
+      int stderrPipe[2] = {-1, -1};
+
+      const auto closePipe = [](int descriptors[2]) {
+        for (size_t i = 0; i < 2; ++i) {
+          if (descriptors[i] >= 0) {
+            close(descriptors[i]);
+            descriptors[i] = -1;
+          }
+        }
+      };
+
+      const auto fail = [&](int error) -> PID {
+        closePipe(stdinPipe);
+        closePipe(stdoutPipe);
+        closePipe(stderrPipe);
+        stdinFD.reset();
+        stdoutFD.reset();
+        stderrFD.reset();
+        this->lastWriteStatus = error;
+        errno = error;
+        return -1;
+      };
+
+      if (openStdin) {
+        stdinFD = UniquePointer<FD>(new FD);
+        if (pipe(stdinPipe) != 0) {
+          return fail(errno);
+        }
+      }
+
+      if (readStdout) {
+        stdoutFD = UniquePointer<FD>(new FD);
+        if (pipe(stdoutPipe) != 0) {
+          return fail(errno);
+        }
+      }
+
+      if (readStderr) {
+        stderrFD = UniquePointer<FD>(new FD);
+        if (pipe(stderrPipe) != 0) {
+          return fail(errno);
+        }
+      }
+
+      posix_spawn_file_actions_t fileActions;
+      auto error = posix_spawn_file_actions_init(&fileActions);
+      if (error != 0) {
+        return fail(error);
+      }
+
+      const auto addPipeActions = [&] (
+        int descriptors[2],
+        size_t childIndex,
+        int standardDescriptor
+      ) {
+        const auto childDescriptor = descriptors[childIndex];
+        if (childDescriptor != standardDescriptor) {
+          auto status = posix_spawn_file_actions_adddup2(
+            &fileActions,
+            childDescriptor,
+            standardDescriptor
+          );
+          if (status != 0) {
+            return status;
+          }
+
+          status = posix_spawn_file_actions_addclose(&fileActions, childDescriptor);
+          if (status != 0) {
+            return status;
+          }
+        }
+
+        const auto parentDescriptor = descriptors[childIndex == 0 ? 1 : 0];
+        if (parentDescriptor != standardDescriptor) {
+          return posix_spawn_file_actions_addclose(&fileActions, parentDescriptor);
+        }
+        return 0;
+      };
+
+      if (stdinFD) {
+        error = addPipeActions(stdinPipe, 0, STDIN_FILENO);
+      }
+      if (error == 0 && stdoutFD) {
+        error = addPipeActions(stdoutPipe, 1, STDOUT_FILENO);
+      }
+      if (error == 0 && stderrFD) {
+        error = addPipeActions(stderrPipe, 1, STDERR_FILENO);
+      }
+      if (error == 0 && !path.empty()) {
+        error = posix_spawn_file_actions_addchdir_np(&fileActions, path.c_str());
+      }
+      if (error != 0) {
+        posix_spawn_file_actions_destroy(&fileActions);
+        return fail(error);
+      }
+
+      posix_spawnattr_t attributes;
+      error = posix_spawnattr_init(&attributes);
+      if (error != 0) {
+        posix_spawn_file_actions_destroy(&fileActions);
+        return fail(error);
+      }
+
+      error = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
+      if (error == 0) {
+        error = posix_spawnattr_setpgroup(&attributes, 0);
+      }
+      if (error != 0) {
+        posix_spawnattr_destroy(&attributes);
+        posix_spawn_file_actions_destroy(&fileActions);
+        return fail(error);
+      }
+
+      Vector<String> arguments;
+      String executable;
+      if (this->config.useDirectArguments) {
+        executable = command;
+        arguments.push_back(command);
+        if (this->config.argumentCount > 0) {
+          auto encoded = splitc(this->argv, static_cast<char>(0x01));
+          if (encoded.size() != this->config.argumentCount) {
+            posix_spawnattr_destroy(&attributes);
+            posix_spawn_file_actions_destroy(&fileActions);
+            return fail(EINVAL);
+          }
+          arguments.insert(arguments.end(), encoded.begin(), encoded.end());
+        }
+      } else {
+        executable = this->shell.empty() ? String("/bin/sh") : this->shell;
+        auto cmdline = command;
+        if (!this->argv.empty()) {
+          cmdline += this->argv;
+        }
+        arguments = {executable, "-c", cmdline};
+      }
+
+      Vector<char*> argumentPointers;
+      argumentPointers.reserve(arguments.size() + 1);
+      for (auto& argument : arguments) {
+        argumentPointers.push_back(argument.data());
+      }
+      argumentPointers.push_back(nullptr);
+
+      Vector<String> environment;
+      if (!this->config.replaceEnvironment) {
+        for (auto entry = environ; entry != nullptr && *entry != nullptr; ++entry) {
+          environment.push_back(*entry);
+        }
+      }
+
+      for (const auto& override : this->env) {
+        const auto separator = override.find('=');
+        bool replaced = false;
+        if (separator != String::npos) {
+          const auto prefix = override.substr(0, separator + 1);
+          for (auto& entry : environment) {
+            if (entry.starts_with(prefix)) {
+              entry = override;
+              replaced = true;
+              break;
+            }
+          }
+        }
+        if (!replaced) {
+          environment.push_back(override);
+        }
+      }
+
+      Vector<char*> environmentPointers;
+      environmentPointers.reserve(environment.size() + 1);
+      for (auto& entry : environment) {
+        environmentPointers.push_back(entry.data());
+      }
+      environmentPointers.push_back(nullptr);
+
+      PID pid = -1;
+      error = posix_spawnp(
+        &pid,
+        executable.c_str(),
+        &fileActions,
+        &attributes,
+        argumentPointers.data(),
+        environmentPointers.data()
+      );
+      posix_spawnattr_destroy(&attributes);
+      posix_spawn_file_actions_destroy(&fileActions);
+
+      if (error != 0) {
+        return fail(error);
+      }
+
+      if (stdinFD) {
+        close(stdinPipe[0]);
+        stdinPipe[0] = -1;
+        *stdinFD = stdinPipe[1];
+        stdinPipe[1] = -1;
+      }
+      if (stdoutFD) {
+        close(stdoutPipe[1]);
+        stdoutPipe[1] = -1;
+        *stdoutFD = stdoutPipe[0];
+        stdoutPipe[0] = -1;
+      }
+      if (stderrFD) {
+        close(stderrPipe[1]);
+        stderrPipe[1] = -1;
+        *stderrFD = stderrPipe[0];
+        stderrPipe[0] = -1;
+      }
+
+      closed = false;
+      id = pid;
+      data.id = pid;
+
+      // posix_spawnp avoids pthread_atfork handlers that can deadlock after
+      // GTK and WebKit have started worker threads.
+      auto thread = Thread([this] {
+        int code = 0;
+        PID waited = -1;
+        do {
+          waited = waitpid(this->id, &code, 0);
+        } while (waited < 0 && errno == EINTR);
+
+        if (waited < 0) {
+          this->status = -1;
+        } else if (WIFEXITED(code)) {
+          this->status = WEXITSTATUS(code);
+        } else if (WIFSIGNALED(code)) {
+          this->status = 128 + WTERMSIG(code);
+        } else {
+          this->status = -1;
+        }
+
+        this->closeFDs();
+        this->closed = true;
+
+        if (this->onExit != nullptr) {
+          try {
+            this->onExit(std::to_string(status));
+          } catch (const std::exception& exception) {
+            std::cerr << "Process exit callback exception: " << exception.what() << std::endl;
+          }
+        }
+      });
+
+      thread.detach();
+      return pid;
     #endif
   }
 

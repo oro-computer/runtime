@@ -167,8 +167,8 @@ namespace oro::runtime::bytes {
     return Buffer(0);
   }
 
-  template <Buffer::size_type size>
-  Buffer Buffer::from (const ByteArray<size>& input) {
+  template <Buffer::size_type length>
+  Buffer Buffer::from (const ByteArray<length>& input) {
     auto buffer = Buffer(input.size());
     buffer.set(input, 0);
     return buffer;
@@ -391,12 +391,12 @@ namespace oro::runtime::bytes {
     return this->byteLength.load(std::memory_order_relaxed);
   }
 
-  template <Buffer::size_type size>
-  bool Buffer::set (const ByteArray<size>& input, size_type byteOffset) {
+  template <Buffer::size_type length>
+  bool Buffer::set (const ByteArray<length>& input, size_type byteOffset) {
     if (byteOffset < 0) {
       byteOffset = this->byteLength + byteOffset;
     }
-    if (byteOffset + size > this->byteLength) {
+    if (byteOffset + length > this->byteLength) {
       throw Error("Buffer::at: RangeError: 'size' and 'byteOffset' exceeds 'byteLength'");
     }
     memcpy(this->buffer.data() + byteOffset, input.data(), input.size());
@@ -728,9 +728,9 @@ namespace oro::runtime::bytes {
     return *this;
   }
 
-  template <Buffer::size_type size>
-  bool BufferQueue::push (const ByteArray<size>& input) {
-    this->buffer.resize(this->buffer.byteLength + size);
+  template <Buffer::size_type length>
+  bool BufferQueue::push (const ByteArray<length>& input) {
+    this->buffer.resize(this->buffer.byteLength + length);
     this->byteLength = this->buffer.byteLength.load(std::memory_order_relaxed);
     return this->set(input, this->byteLength - input.size());
   }
@@ -789,10 +789,10 @@ namespace oro::runtime::bytes {
     return this->set(byte, this->byteLength - 1);
   }
 
-  template <BufferQueue::size_type size>
-  bool BufferQueue::reset (const ByteArray<size>& input) {
-    this->buffer.resize(size);
-    return this->set(input.get(), 0, size);
+  template <BufferQueue::size_type length>
+  bool BufferQueue::reset (const ByteArray<length>& input) {
+    this->buffer.resize(length);
+    return this->set(input.get(), 0, length);
   }
 
   bool BufferQueue::reset (const Vector<uint8_t>& input) {

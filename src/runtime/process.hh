@@ -239,10 +239,7 @@ namespace oro::runtime::process {
     void closeStdin () noexcept;
     PID open () noexcept {
       if (this->command.size() == 0) return 0;
-      const auto str = this->config.useDirectArguments
-        ? this->command
-        : string::trim(this->command + " " + this->argv);
-      auto pid = open(str, this->path);
+      auto pid = open(this->command, this->path);
       read();
       return pid;
     }

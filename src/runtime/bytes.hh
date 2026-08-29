@@ -18,8 +18,8 @@ namespace oro::runtime::bytes {
 
   using size_type = signed long int; // we're just explicit here
 
-  template <size_t size>
-  using ByteArray = Array<uint8_t, size>;
+  template <size_t length>
+  using ByteArray = Array<uint8_t, length>;
 
   /**
    * Encodes input as a string of hex characters.
@@ -124,8 +124,8 @@ namespace oro::runtime::bytes {
       using const_iterator = const_pointer;
 
       static Buffer empty ();
-      template <size_type size>
-      static Buffer from (const ByteArray<size>&);
+      template <size_type length>
+      static Buffer from (const ByteArray<length>&);
       static Buffer from (const Vector<uint8_t>&);;
       static Buffer from (const String&);
       static Buffer from (const Buffer&);
@@ -174,8 +174,8 @@ namespace oro::runtime::bytes {
 
       size_t size () const;
 
-      template <size_type size>
-      bool set (const ByteArray<size>&, size_type = 0);
+      template <size_type length>
+      bool set (const ByteArray<length>&, size_type = 0);
       bool set (const Vector<uint8_t>&, size_type = 0);
       bool set (const String&, size_type = 0);
       bool set (const Buffer&, size_type = 0);
@@ -218,8 +218,8 @@ namespace oro::runtime::bytes {
       BufferQueue& operator = (const Buffer&);
       BufferQueue& operator = (Buffer&&);
 
-      template <size_type size>
-      bool push (const ByteArray<size>&);
+      template <size_type length>
+      bool push (const ByteArray<length>&);
       bool push (const Vector<uint8_t>&);
       bool push (const String&);
       bool push (const Buffer&);
@@ -229,8 +229,8 @@ namespace oro::runtime::bytes {
       bool push (const char*, size_type);
       bool push (SharedPointer<unsigned char[]>, size_type);
       bool push (SharedPointer<char[]>, size_type);
-      template <size_type size>
-      bool reset (const ByteArray<size>&);
+      template <size_type length>
+      bool reset (const ByteArray<length>&);
       bool reset (const Vector<uint8_t>&);
       bool reset (const String&);
       bool reset (const Buffer&);

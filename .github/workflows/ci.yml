@@ -337,15 +337,19 @@ jobs:
           node -e "const { spawnSync } = require('node:child_process'); const path = require('node:path'); const cli = path.join(process.env.ORO_HOME, 'bin', 'oroc'); const result = spawnSync(cli, ['help'], { stdio: 'inherit' }); process.exit(result.status ?? 1)"
 
       - name: Run desktop tests
+        timeout-minutes: 20
         run: dbus-run-session -- npm test
 
       - name: Run child process integration tests
+        timeout-minutes: 15
         run: dbus-run-session -- npm run test:child-process
 
       - name: Run MCP integration tests
+        timeout-minutes: 15
         run: dbus-run-session -- npm run test:mcp
 
       - name: Run runtime-core tests
+        timeout-minutes: 15
         run: dbus-run-session -- npm run test:runtime-core
 
       - name: Report native compiler cache
@@ -444,6 +448,7 @@ jobs:
       LIBGL_ALWAYS_SOFTWARE: '1'
       ORO_CI_APPLE_MOBILE_TARGETS: ${{ matrix.apple_mobile_targets }}
       ORO_CI_ID: ${{ matrix.id }}
+      ORO_PRUNE_BUILD_OUTPUTS_AFTER_INSTALL: ${{ matrix.test_android }}
       ORO_PRUNE_IROH_BUILD_OUTPUTS: ${{ matrix.build_android }}
       ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS: ${{ matrix.build_android }}
       ORO_SKIP_PATH_PROMPT: '1'
@@ -756,14 +761,17 @@ jobs:
 
       - name: Run desktop tests
         if: matrix.test_desktop
+        timeout-minutes: 20
         run: npm test
 
       - name: Run child process integration tests
         if: matrix.test_child_process
+        timeout-minutes: 15
         run: npm run test:child-process
 
       - name: Boot iOS Simulator and run tests
         if: matrix.test_ios
+        timeout-minutes: 30
         shell: bash
         run: |
           simulator_udid="$(python3 - <<'PY'
@@ -788,6 +796,7 @@ jobs:
 
       - name: Run Android emulator tests
         if: matrix.test_android
+        timeout-minutes: 30
         shell: bash
         run: npm run test:android-emulator
 

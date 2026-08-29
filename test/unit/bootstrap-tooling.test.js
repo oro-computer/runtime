@@ -865,6 +865,11 @@ test('Rust build outputs honor caller target directories without contaminating c
     'Android CI should prune cr-sqlite intermediates after the final ABI is staged'
   )
   assert.match(
+    script,
+    /_install_cli[\s\S]*ORO_PRUNE_BUILD_OUTPUTS_AFTER_INSTALL:-false[\s\S]*"\$ORO_HOME" == "\$BUILD_DIR\/"\*[\s\S]*rm -rf -- "\$BUILD_DIR"/,
+    'Android CI should reclaim the source build tree only after staged artifacts are installed'
+  )
+  assert.match(
     crsqliteCompiler,
     /CARGO_TARGET_DIR="\$crsqlite_cargo_target_dir" quiet make/,
     'cr-sqlite should use its vendored target directory'
@@ -960,6 +965,21 @@ test('Apple runtime sources exclude APIs unavailable to iOS builds', () => {
   )
 })
 
+test('desktop Unix process launch avoids GUI atfork handlers', () => {
+  const process = readFile('src/runtime/process/unix.cc')
+
+  assert.match(
+    process,
+    /#elif defined\(__ANDROID__\)[\s\S]*return open\(\[&command, &path, this\][\s\S]*#else[\s\S]*posix_spawnp\(/,
+    'desktop Unix should use posix_spawnp while Android retains its supported fork path'
+  )
+  assert.match(
+    process,
+    /posix_spawn_file_actions_addchdir_np[\s\S]*POSIX_SPAWN_SETPGROUP/,
+    'spawned desktop processes should retain cwd and process-group behavior'
+  )
+})
+
 test('llama dependency builds omit standalone utilities and command-line tools', () => {
   const installer = readFile('bin/install.sh')
   const llamaCompiler = installer.match(
@@ -1024,8 +1044,13 @@ test('Windows libusb builds use the upstream Visual Studio project', () => {
   )
   assert.match(
     libusbCompiler,
-    /-p:DisableSpecificWarnings=5287/,
-    'the pinned libusb build should tolerate the new MSVC enum warning'
+    /env "_CL_=\$\{_CL_:\+\$_CL_ \}\/wd5287" MSBuild\.exe/,
+    'the pinned libusb build should pass the enum warning suppression to cl.exe'
+  )
+  assert.doesNotMatch(
+    libusbCompiler,
+    /DisableSpecificWarnings/,
+    'Windows builds should not rely on an MSBuild property that the upstream project ignores'
   )
   assert.doesNotMatch(
     libusbCompiler,
@@ -1407,6 +1432,11 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     workflow,
     /Restore Android emulator cache[\s\S]*system-images\/android-37\.0\/google_apis\/x86_64[\s\S]*~\/\.android\/avd/,
     'the Android test lane should cache its emulator image and AVD separately'
+  )
+  assert.match(
+    workflow,
+    /ORO_PRUNE_BUILD_OUTPUTS_AFTER_INSTALL: \$\{\{ matrix\.test_android \}\}/,
+    'only the Android emulator test lane should discard its installed source-build tree'
   )
   for (const nativeWorkflow of [workflow, releaseWorkflow, publishWorkflow]) {
     assert.match(
