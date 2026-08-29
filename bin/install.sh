@@ -3128,7 +3128,7 @@ function _compile_libusb {
         quiet command -v MSBuild.exe
         die $? "not ok - missing MSBuild.exe; install the Visual C++ build tools"
 
-        quiet env "_CL_=${_CL_:+$_CL_ }/wd5287" MSBuild.exe "$libusb_project" \
+        quiet env "_CL_=${_CL_:+$_CL_ }-wd5287" MSBuild.exe "$libusb_project" \
           "-m:$CPU_CORES" \
           "-p:Configuration=$config" \
           "-p:Platform=$msbuild_platform"

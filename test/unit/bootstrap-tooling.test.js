@@ -788,8 +788,8 @@ test('desktop tests expose their isolated fixtures to runtime code', () => {
   const script = readFile('test/scripts/test-desktop.js')
   assert.match(
     script,
-    /RUNTIME_ENV_KEYS[\s\S]*ORO_TEST_FIXTURES_DIR[\s\S]*ORO_TEST_GREP/,
-    'fixtures and test filters should be embedded in the runtime environment'
+    /RUNTIME_ENV_KEYS[\s\S]*ORO_TEST_FIXTURES_DIR[\s\S]*ORO_TEST_SKIP_TEST_EXTENSIONS[\s\S]*ORO_TEST_GREP/,
+    'fixtures, extension controls, and test filters should be embedded in the runtime environment'
   )
 
   const cli = readFile('src/cli/main.cc')
@@ -1044,8 +1044,8 @@ test('Windows libusb builds use the upstream Visual Studio project', () => {
   )
   assert.match(
     libusbCompiler,
-    /env "_CL_=\$\{_CL_:\+\$_CL_ \}\/wd5287" MSBuild\.exe/,
-    'the pinned libusb build should pass the enum warning suppression to cl.exe'
+    /env "_CL_=\$\{_CL_:\+\$_CL_ \}-wd5287" MSBuild\.exe/,
+    'the pinned libusb build should pass an MSYS-safe enum warning suppression to cl.exe'
   )
   assert.doesNotMatch(
     libusbCompiler,
@@ -1432,6 +1432,16 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     workflow,
     /Restore Android emulator cache[\s\S]*system-images\/android-37\.0\/google_apis\/x86_64[\s\S]*~\/\.android\/avd/,
     'the Android test lane should cache its emulator image and AVD separately'
+  )
+  assert.match(
+    workflow,
+    /Reclaim Android build disk[\s\S]*\/usr\/share\/dotnet[\s\S]*\$ANDROID_HOME\/system-images[\s\S]*Build Oro Runtime CLI \(Unix\)/,
+    'the Android lane should remove unused hosted toolchains and stale emulator images before compiling'
+  )
+  assert.match(
+    workflow,
+    /Build Oro Runtime CLI \(Unix\)[\s\S]*Restore Android emulator cache[\s\S]*Run Android emulator tests/,
+    'the Android emulator should be restored after native build outputs are staged and pruned'
   )
   assert.match(
     workflow,

@@ -149,18 +149,20 @@ if (globalThis.__args?.config && typeof globalThis.__args.config === 'object') {
  * ```
  */
 export function parse (input, options = null) {
+  const zone = parseIPv6Zone(input)
+  const parseInput = zone?.input || input
   let u = null
-  if (URL.canParse(input)) {
-    u = new URL(input)
+  if (URL.canParse(parseInput)) {
+    u = new URL(parseInput)
   }
 
-  if (options?.strict === true && !URL.canParse(input)) {
+  if (options?.strict === true && !URL.canParse(parseInput)) {
     return null
   }
 
   for (const scheme of RUNTIME_SCHEMES) {
-    if (URL.canParse(input, `${scheme}://`)) {
-      u = new URL(input, globalThis.location.origin)
+    if (URL.canParse(parseInput, `${scheme}://`)) {
+      u = new URL(parseInput, globalThis.location.origin)
       break
     }
   }
@@ -169,20 +171,39 @@ export function parse (input, options = null) {
     return null
   }
 
+  const encodedUsername = u.username
+  const encodedPassword = u.password
+  const username = decodeAuthComponent(encodedUsername)
+  const password = decodeAuthComponent(encodedPassword)
+  let hostname = stripIPv6Brackets(u.hostname) || null
+  let host = u.host || null
+  let origin = u.origin || null
+
+  if (zone && hostname) {
+    hostname += zone.identifier
+    host = `[${hostname}]${u.port ? `:${u.port}` : ''}`
+    if (origin && origin !== 'null' && u.host) {
+      origin = origin.replace(u.host, host)
+    }
+  }
+
   const out = {
     hash: u.hash || null,
-    host: u.host || null,
-    hostname: u.hostname || null,
-    origin: u.origin || null,
-    auth: [u.username, u.password].filter(Boolean).join(':') || null,
-    password: u.password || null,
+    host,
+    hostname,
+    origin,
+    auth:
+      encodedUsername || encodedPassword
+        ? `${username || ''}${encodedPassword ? `:${password}` : ''}`
+        : null,
+    password: password || null,
     pathname: u.pathname || null,
     path: u.pathname || null,
     port: u.port || null,
     protocol: u.protocol || null,
     search: u.search || null,
     searchParams: u.searchParams,
-    username: u.username || null,
+    username: username || null,
     [Symbol.toStringTag]: 'URL (Parsed)'
   }
 
@@ -202,8 +223,11 @@ export function parse (input, options = null) {
   } else {
     out.href = `${out.protocol}//`
 
-    if (out.username) {
-      out.href += [out.username, out.password].filter(Boolean).join(':')
+    if (encodedUsername || encodedPassword) {
+      out.href += encodedUsername
+      if (encodedPassword) {
+        out.href += `:${encodedPassword}`
+      }
 
       if (out.hostname) {
         out.href += '@'
@@ -214,6 +238,38 @@ export function parse (input, options = null) {
   }
 
   return out
+}
+
+function decodeAuthComponent (value) {
+  if (!value) return ''
+
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function stripIPv6Brackets (hostname) {
+  if (hostname?.startsWith('[') && hostname.endsWith(']')) {
+    return hostname.slice(1, -1)
+  }
+
+  return hostname
+}
+
+function parseIPv6Zone (input) {
+  if (typeof input !== 'string') return null
+
+  const match = input.match(
+    /^([a-z][a-z\d+.-]*:\/\/(?:[^/?#]*@)?\[)([\da-f:.]+)(%25(?:[a-z\d._~-]|%[\da-f]{2})+)(\](?::\d+)?)/i
+  )
+  if (!match) return null
+
+  return {
+    identifier: match[3],
+    input: match[1] + match[2] + match[4] + input.slice(match[0].length)
+  }
 }
 
 /**

@@ -508,6 +508,24 @@ jobs:
         shell: bash
         run: echo "root=$ANDROID_HOME" >> "$GITHUB_OUTPUT"
 
+      - name: Reclaim Android build disk
+        if: matrix.build_android && runner.os == 'Linux'
+        shell: bash
+        run: |
+          for directory in \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            "$ANDROID_HOME/system-images"
+          do
+            if [[ -e "$directory" ]]; then
+              sudo rm -rf -- "$directory"
+            fi
+          done
+          sudo apt-get clean
+          df -h .
+
       - name: Restore Android build SDK cache
         if: matrix.build_android
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -519,16 +537,6 @@ jobs:
             ${{ steps.android-sdk.outputs.root }}/platform-tools
             ${{ steps.android-sdk.outputs.root }}/platforms/android-37*
           key: android-build-sdk-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bin/android-functions.sh') }}
-
-      - name: Restore Android emulator cache
-        if: matrix.test_android
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
-        with:
-          path: |
-            ${{ steps.android-sdk.outputs.root }}/emulator
-            ${{ steps.android-sdk.outputs.root }}/system-images/android-37.0/google_apis/x86_64
-            ~/.android/avd
-          key: android-emulator-v37.1.11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('test/scripts/bootstrap-android-emulator.sh') }}
 
       - name: Restore native compiler cache
         if: runner.os != 'Windows'
@@ -793,6 +801,18 @@ jobs:
           xcrun simctl boot "$simulator_udid" || true
           xcrun simctl bootstatus "$simulator_udid" -b
           npm run test:ios-simulator
+
+      # Restore the multi-gigabyte emulator only after native outputs have been
+      # staged and pruned so both trees do not consume runner disk together.
+      - name: Restore Android emulator cache
+        if: matrix.test_android
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ${{ steps.android-sdk.outputs.root }}/emulator
+            ${{ steps.android-sdk.outputs.root }}/system-images/android-37.0/google_apis/x86_64
+            ~/.android/avd
+          key: android-emulator-v37.1.11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('test/scripts/bootstrap-android-emulator.sh') }}
 
       - name: Run Android emulator tests
         if: matrix.test_android
