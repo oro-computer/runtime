@@ -9,6 +9,7 @@ using oro::runtime::javascript::getResolveMenuSelectionJavaScript;
 using oro::runtime::config::getUserConfig;
 using oro::runtime::string::trim;
 using oro::runtime::string::split;
+using oro::runtime::string::convertWStringToString;
 
 namespace oro::runtime::app {
   static Atomic<bool> isConsoleVisible = false;
@@ -66,7 +67,7 @@ namespace oro::runtime::app {
     }
 
     auto userConfig = window != nullptr
-      ? dynamic_cast<Window*>(window)->bridge.userConfig
+      ? dynamic_cast<oro::runtime::window::Window*>(window)->bridge->userConfig
       : getUserConfig();
 
     if (message == WM_COPYDATA) {
@@ -79,12 +80,14 @@ namespace oro::runtime::app {
     switch (message) {
       case WM_ACTIVATEAPP: {
         // Propagate lifecycle and mirror DOM focus/blur
-        auto w = window ? dynamic_cast<Window*>(window) : nullptr;
+        auto w = window
+          ? dynamic_cast<oro::runtime::window::Window*>(window)
+          : nullptr;
         if (wParam) {
-          if (w) w->evalDomFocusThrottled();
+          if (w) w->dispatchDomFocus();
           app->resume();
         } else {
-          if (w) w->evalDomBlurThrottled();
+          if (w) w->dispatchDomBlur();
           app->pause();
         }
         break;

@@ -2788,6 +2788,49 @@ function _crsqlite_rust_toolchain {
   echo "$rust_toolchain"
 }
 
+function _run_rustup_with_retry {
+  local operation="$1"
+  shift
+
+  local max_attempts="${ORO_RUSTUP_MAX_ATTEMPTS:-4}"
+  local attempt=1
+  local rc=0
+  while (( attempt <= max_attempts )); do
+    rustup "$@"
+    rc=$?
+    if (( rc == 0 )); then
+      return 0
+    fi
+
+    if (( attempt == max_attempts )); then
+      echo "not ok - $operation failed after $max_attempts attempts" >&2
+      return "$rc"
+    fi
+
+    echo "warn - $operation failed (attempt $attempt/$max_attempts); retrying" >&2
+    sleep $((attempt * 2))
+    attempt=$((attempt + 1))
+  done
+
+  return "$rc"
+}
+
+function _ensure_crsqlite_rust_toolchain {
+  local rust_toolchain="$1"
+
+  if ! command -v rustup >/dev/null 2>&1; then
+    die 1 "not ok - rustup not found; required to install the pinned Rust toolchain for cr-sqlite"
+  fi
+
+  if ! rustup toolchain list | awk '{ print $1 }' | grep -q "^${rust_toolchain}"; then
+    echo "# installing pinned cr-sqlite Rust toolchain ($rust_toolchain)..."
+    _run_rustup_with_retry \
+      "rustup toolchain install $rust_toolchain" \
+      toolchain install "$rust_toolchain" --profile minimal
+    die $? "not ok - rustup toolchain install $rust_toolchain failed"
+  fi
+}
+
 function _compile_crsqlite_loadable {
   local platform="${1:-desktop}"
   local target="${2:-}"
@@ -2802,6 +2845,11 @@ function _compile_crsqlite_loadable {
   fi
 
   local crsqlite_cargo_target_dir="$BUILD_DIR/cr-sqlite/core/rs/bundle_static/target"
+  local rust_toolchain=""
+  rust_toolchain="$(_crsqlite_rust_toolchain)"
+  if [[ "$platform" != "android" ]]; then
+    _ensure_crsqlite_rust_toolchain "$rust_toolchain"
+  fi
 
   case "$platform" in
     desktop)
@@ -2854,6 +2902,16 @@ function _compile_crsqlite_loadable {
       # arm64-apple-ios-sim, which Apple Clang rejects. A target-specific
       # argument prevents bindgen from adding that invalid implicit target.
       local simulator_bindgen_args="--target=arm64-apple-ios-simulator ${BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim:-}"
+
+      local ios_rust_target=""
+      for ios_rust_target in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
+        if ! rustup target list --toolchain "$rust_toolchain" --installed | grep -qx "$ios_rust_target"; then
+          _run_rustup_with_retry \
+            "rustup target add $ios_rust_target ($rust_toolchain)" \
+            target add "$ios_rust_target" --toolchain "$rust_toolchain"
+          die $? "not ok - rustup target add $ios_rust_target ($rust_toolchain) failed"
+        fi
+      done
 
       echo "# building cr-sqlite iOS loadable variants..."
       (
@@ -2936,26 +2994,19 @@ function _compile_crsqlite_loadable {
       quiet cmake -E rm -f "$rustup_write_test" "$cargo_write_test"
       export PATH="$cargo_home/bin:$PATH"
 
-      if ! command -v rustup >/dev/null 2>&1; then
-        die 1 "not ok - rustup not found; required to install the pinned Rust toolchain for cr-sqlite"
-      fi
-
-      local rust_toolchain=""
-      rust_toolchain="$(_crsqlite_rust_toolchain)"
-
+      _ensure_crsqlite_rust_toolchain "$rust_toolchain"
       echo "# ensuring Rust toolchain for cr-sqlite android builds ($rust_toolchain / $android_triple)..."
-      if ! rustup toolchain list | awk '{ print $1 }' | grep -q "^${rust_toolchain}"; then
-        rustup toolchain install "$rust_toolchain"
-        die $? "not ok - rustup toolchain install $rust_toolchain failed"
-      fi
-
       if ! rustup component list --toolchain "$rust_toolchain" --installed | grep -q '^rust-src'; then
-        rustup component add rust-src --toolchain "$rust_toolchain"
+        _run_rustup_with_retry \
+          "rustup component add rust-src ($rust_toolchain)" \
+          component add rust-src --toolchain "$rust_toolchain"
         die $? "not ok - rustup component add rust-src ($rust_toolchain) failed"
       fi
 
       if ! rustup target list --toolchain "$rust_toolchain" --installed | grep -qx "$android_triple"; then
-        rustup target add "$android_triple" --toolchain "$rust_toolchain"
+        _run_rustup_with_retry \
+          "rustup target add $android_triple ($rust_toolchain)" \
+          target add "$android_triple" --toolchain "$rust_toolchain"
         die $? "not ok - rustup target add $android_triple ($rust_toolchain) failed"
       fi
 

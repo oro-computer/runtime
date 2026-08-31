@@ -350,9 +350,11 @@ jobs:
           path: |
             ~/.cargo/git
             ~/.cargo/registry
-          key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/**/Cargo.toml') }}
+            ~/.rustup/toolchains/nightly-2023-10-05-*
+            ~/.rustup/update-hashes/nightly-2023-10-05-*
+          key: cargo-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/**/Cargo.toml') }}
           restore-keys: |
-            cargo-v1-${{ runner.os }}-${{ runner.arch }}-
+            cargo-v2-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore Go build cache
         if: env.RUN_SELECTED_ARTIFACT == 'true'

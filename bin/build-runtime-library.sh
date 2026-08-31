@@ -203,9 +203,6 @@ declare sources=(
 declare has_asn1c_sources=0
 declare asn1_source_dirs=(
   "$root/build/asn1c/libasn1parser"
-  "$root/build/asn1c/libasn1fix"
-  "$root/build/asn1c/libasn1compiler"
-  "$root/build/asn1c/libasn1print"
 )
 
 if [[ -d "$root/build/asn1c" ]]; then
@@ -290,9 +287,6 @@ if (( has_asn1c_sources )); then
   cflags+=("-I$root/src/runtime/asn1c/include")
   cflags+=("-I$root/build/asn1c")
   cflags+=("-I$root/build/asn1c/libasn1parser")
-  cflags+=("-I$root/build/asn1c/libasn1fix")
-  cflags+=("-I$root/build/asn1c/libasn1compiler")
-  cflags+=("-I$root/build/asn1c/libasn1print")
   cflags+=("-DHAVE_CONFIG_H")
   cflags+=("-DORO_RUNTIME_HAVE_ASN1C=1")
 else
@@ -492,9 +486,11 @@ function main () {
         if [[ "$source" == "$root/build/asn1c/"* ]]; then
           compile_flags+=("-include" "$root/src/runtime/asn1c/include/compat.h")
           compile_flags+=("-D_GNU_SOURCE")
-          if [[ "$host" == "Darwin" ]]; then
+          if [[ "$host" == "Win32" ]]; then
+            compile_flags+=("-DYY_NO_UNISTD_H")
+          elif [[ "$host" == "Darwin" ]]; then
             compile_flags+=("-D_DARWIN_C_SOURCE")
-          elif [[ "$host" != "Win32" ]]; then
+          else
             compile_flags+=("-D_POSIX_C_SOURCE=200809L")
           fi
           compile_flags+=("-Dtypeof=__typeof__")

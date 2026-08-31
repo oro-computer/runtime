@@ -70,6 +70,9 @@ using oro::runtime::string::trim;
 using oro::runtime::string::split;
 using oro::runtime::string::splitc;
 using oro::runtime::string::toLowerCase;
+#if ORO_RUNTIME_PLATFORM_WINDOWS
+using oro::runtime::string::formatWindowsError;
+#endif
 using oro::runtime::crypto::rand64;
 using oro::runtime::Vector;
 

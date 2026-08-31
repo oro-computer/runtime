@@ -1,5 +1,6 @@
 #include "uniffi_manager.hh"
 
+#if ORO_RUNTIME_HAS_IROH_FFI
 namespace oro::runtime::iroh::uniffi {
 
   Manager::Manager () = default;
@@ -91,3 +92,4 @@ namespace oro::runtime::iroh::uniffi {
     return currentNet.get();
   }
 } // namespace oro::runtime::iroh::uniffi
+#endif

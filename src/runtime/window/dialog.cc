@@ -7,6 +7,9 @@
 using oro::runtime::string::split;
 using oro::runtime::string::join;
 using oro::runtime::string::trim;
+#if ORO_RUNTIME_PLATFORM_WINDOWS
+using oro::runtime::string::convertWStringToString;
+#endif
 using oro::runtime::app::App;
 
 #if ORO_RUNTIME_PLATFORM_IOS

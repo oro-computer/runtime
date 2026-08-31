@@ -1,6 +1,7 @@
 #include "../iroh.hh"
 
 namespace oro::runtime::iroh {
+#if ORO_RUNTIME_HAS_IROH_FFI
   namespace {
     inline Result makeResult (const uniffi::Error& error) {
       Result result;
@@ -13,6 +14,7 @@ namespace oro::runtime::iroh {
       return static_cast<uniffi::LogLevel>(static_cast<int>(level));
     }
   } // namespace
+#endif
 
   Library& Library::shared () {
     static Library instance;
@@ -26,6 +28,7 @@ namespace oro::runtime::iroh {
   }
 
   bool Library::init () {
+#if ORO_RUNTIME_HAS_IROH_FFI
     Lock lock(this->mutex);
     if (this->initialized) {
       return true;
@@ -38,10 +41,14 @@ namespace oro::runtime::iroh {
 
     this->initialized = true;
     return true;
+#else
+    return false;
+#endif
   }
 
   bool Library::shutdown () {
     Lock lock(this->mutex);
+#if ORO_RUNTIME_HAS_IROH_FFI
     if (!this->initialized) {
       return true;
     }
@@ -49,6 +56,10 @@ namespace oro::runtime::iroh {
     auto error = this->manager.shutdown();
     this->initialized = false;
     return error.ok();
+#else
+    this->initialized = false;
+    return true;
+#endif
   }
 
   bool Library::isInitialized () const {
@@ -57,13 +68,21 @@ namespace oro::runtime::iroh {
   }
 
   Result Library::setLogLevel (LogLevel level) {
+#if ORO_RUNTIME_HAS_IROH_FFI
     auto error = this->manager.setLogLevel(toUniffiLogLevel(level));
     return makeResult(error);
+#else
+    return Result {1, "Iroh FFI unavailable"};
+#endif
   }
 
   String Library::version () const {
+#if ORO_RUNTIME_HAS_IROH_FFI
     const auto status = this->manager.status();
     return status.version;
+#else
+    return {};
+#endif
   }
 
   Result Library::pathToKey (
@@ -72,6 +91,7 @@ namespace oro::runtime::iroh {
     const std::optional<String>& root,
     Vector<uint8_t>& out
   ) {
+#if ORO_RUNTIME_HAS_IROH_FFI
     auto result = this->manager.pathToKey(path, prefix, root);
     if (!result.ok()) {
       return makeResult(result.error);
@@ -79,6 +99,9 @@ namespace oro::runtime::iroh {
 
     out = result.value;
     return Result{};
+#else
+    return Result {1, "Iroh FFI unavailable"};
+#endif
   }
 
   Result Library::keyToPath (
@@ -87,6 +110,7 @@ namespace oro::runtime::iroh {
     const std::optional<String>& root,
     String& out
   ) {
+#if ORO_RUNTIME_HAS_IROH_FFI
     auto result = this->manager.keyToPath(key, prefix, root);
     if (!result.ok()) {
       return makeResult(result.error);
@@ -94,5 +118,8 @@ namespace oro::runtime::iroh {
 
     out = result.value;
     return Result{};
+#else
+    return Result {1, "Iroh FFI unavailable"};
+#endif
   }
 } // namespace oro::runtime::iroh

@@ -220,6 +220,7 @@ namespace oro::runtime::core::services {
 
   JSON::Object::Entries Iroh::describeConnectionStats (const ConnectionPtr& entry) const {
     JSON::Object::Entries stats;
+#if ORO_RUNTIME_HAS_IROH_FFI
     if (!entry) {
       return stats;
     }
@@ -228,6 +229,7 @@ namespace oro::runtime::core::services {
     stats.emplace("maxDatagramSize", static_cast<int64_t>(entry->connection.maxDatagramSize()));
     stats.emplace("rtt", static_cast<int64_t>(entry->connection.rtt()));
     stats.emplace("packetLoss", entry->connection.packetLoss());
+#endif
     return stats;
   }
 

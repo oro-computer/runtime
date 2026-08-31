@@ -90,10 +90,6 @@
 #include <WebView2EnvironmentOptions.h>
 #endif
 
-#ifdef interface
-#undef interface
-#endif
-
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "dbghelp.lib")
 #pragma comment(lib, "Dwmapi.lib")

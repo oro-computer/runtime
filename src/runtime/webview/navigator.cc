@@ -18,6 +18,9 @@ using oro::runtime::string::replace;
 using oro::runtime::string::split;
 using oro::runtime::string::trim;
 using oro::runtime::string::toLowerCase;
+#if ORO_RUNTIME_PLATFORM_WINDOWS
+using oro::runtime::string::convertWStringToString;
+#endif
 using oro::runtime::app::App;
 using oro::runtime::webview::TlsPinMap;
 using oro::runtime::webview::parseTlsPinConfig;

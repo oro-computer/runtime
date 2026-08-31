@@ -7,9 +7,13 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #if defined(_WIN32)
 #include <malloc.h>
+#ifndef strdup
+#define strdup _strdup
+#endif
 #else
 #include <unistd.h>
 #endif

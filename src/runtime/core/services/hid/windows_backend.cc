@@ -154,6 +154,9 @@ namespace oro::runtime::core::services::hid {
 
     class WindowsHIDBackend final : public HID::Backend {
       public:
+        using Callback = HID::Callback;
+        using DeviceSelection = HID::DeviceSelection;
+
         explicit WindowsHIDBackend(HID& svc)
           : service(svc) {
           this->startNotifications();

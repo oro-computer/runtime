@@ -27,6 +27,10 @@ using oro::runtime::string::toLowerCase;
 using oro::runtime::string::split;
 using oro::runtime::string::trim;
 using oro::runtime::string::tmpl;
+#if ORO_RUNTIME_PLATFORM_WINDOWS
+using oro::runtime::string::convertStringToWString;
+using oro::runtime::string::convertWStringToString;
+#endif
 using oro::runtime::app::App;
 
 #if ORO_RUNTIME_PLATFORM_LINUX

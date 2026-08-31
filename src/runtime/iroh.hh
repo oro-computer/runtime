@@ -1203,7 +1203,9 @@ namespace oro::runtime::iroh {
 
       mutable Mutex mutex;
       bool initialized = false;
+#if ORO_RUNTIME_HAS_IROH_FFI
       uniffi::Manager manager;
+#endif
   };
 } // namespace oro::runtime::iroh
 
