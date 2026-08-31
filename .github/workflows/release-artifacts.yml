@@ -449,7 +449,7 @@ jobs:
 
       - name: Save native compiler cache
         if: >-
-          !cancelled() &&
+          always() &&
           env.RUN_SELECTED_ARTIFACT == 'true' &&
           runner.os != 'Windows' &&
           steps.native-cache.outcome == 'success' &&

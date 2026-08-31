@@ -3345,12 +3345,17 @@ function _compile_zlib {
 
   quiet command -v cmake
   die $? "not ok - missing cmake, \"$(advice 'cmake')\""
+  local install_prefix="$BUILD_DIR/$target-$platform"
+  if [[ "$host" == "Win32" ]]; then
+    install_prefix="$(native_path "$install_prefix")"
+  fi
+
   local cmake_args=(
     -DBUILD_SHARED_LIBS=OFF
     -DZLIB_BUILD_EXAMPLES=OFF
     -DSKIP_INSTALL_LIBRARIES=OFF
     -DSKIP_INSTALL_HEADERS=OFF
-    -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"
+    -DCMAKE_INSTALL_PREFIX="$install_prefix"
     -DINSTALL_LIB_DIR="lib"
     -DINSTALL_INC_DIR="include"
   )

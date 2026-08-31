@@ -407,7 +407,7 @@ jobs:
           ./bin/publish-npm-modules.sh --only-platforms --no-rebuild --no-remove-oro-home --dry-run --pack-destination "$pack_dir"
 
       - name: Save native compiler cache
-        if: ${{ !cancelled() && !inputs.reuse_release_artifacts && runner.os != 'Windows' && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' }}
+        if: ${{ always() && !inputs.reuse_release_artifacts && runner.os != 'Windows' && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}

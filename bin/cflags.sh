@@ -234,9 +234,9 @@ else
 fi
 
 # Detect vendored zlib and advertise availability via ORO_RUNTIME_HAS_ZLIB so
-# runtime code can include <zlib.h> only when a corresponding library is
-# present. We intentionally look only at our build tree to avoid mismatches
-# between system headers and missing libraries.
+# runtime code can include <zlib.h> only when a corresponding library and its
+# generated headers are present. We intentionally look only at our build tree
+# to avoid mismatches between system headers and missing libraries.
 declare -a zlib_variants=("$platform")
 case "$platform" in
   Android)
@@ -251,17 +251,29 @@ case "$platform" in
 esac
 
 have_zlib=0
+zlib_include_dir=""
 for variant in "${zlib_variants[@]}"; do
   for libdir in "$root/build/$arch-$variant/lib" "$root/build/$arch-$variant/lib64"; do
     if [[ -f "$libdir/libz.a" ]] || [[ -f "$libdir/z.lib" ]] || [[ -f "$libdir/zlib.lib" ]]; then
-      have_zlib=1
-      break 2
+      for include_dir in \
+        "$root/build/$arch-$variant/include" \
+        "$root/build/$arch-$variant/zlib/build/include" \
+        "$root/build/$arch-$variant/zlib/include" \
+        "$root/build/include"
+      do
+        if [[ -f "$include_dir/zlib.h" ]] && [[ -f "$include_dir/zconf.h" ]]; then
+          have_zlib=1
+          zlib_include_dir="$include_dir"
+          break 3
+        fi
+      done
     fi
   done
 done
 
 if (( have_zlib )); then
   cflags+=("-DORO_RUNTIME_HAS_ZLIB=1")
+  cflags+=("-I$zlib_include_dir")
 else
   cflags+=("-DORO_RUNTIME_HAS_ZLIB=0")
 fi
@@ -314,6 +326,10 @@ if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then
       -D_DLL
       -DWIN32
       -DWIN32_LEAN_AND_MEAN
+      -DNOMINMAX
+      -DWINVER=0x0A00
+      -D_WIN32_WINNT=0x0A00
+      -DNTDDI_VERSION=0x0A000000
       "-Xlinker /NODEFAULTLIB:libcmt"
       "-Xlinker /NXCOMPAT"
       "-Xlinker /DYNAMICBASE"
@@ -337,8 +353,6 @@ if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then
         "-I/usr/lib/gcc/x86_64-w64-mingw32/10-win32/include/c++/x86_64-w64-mingw32"
         "-I/usr/lib/gcc/x86_64-w64-mingw32/10-win32/include/c++/backward"
         "-DWIN32"
-        "-DWINVER=0x0A00"
-        "-D_WIN32_WINNT=0x0A00"
         "-D_WIN32"
         "-D_WIN64"
         "-D_MSC_VER=1940"

@@ -299,8 +299,8 @@ namespace oro::runtime::core::services {
           timeoutId->store(0, std::memory_order_release);
 
           SharedPointer<runtime::Process> processToKill = nullptr;
-          String stdout;
-          String stderr;
+          String stdoutText;
+          String stderrText;
 
           {
             Lock lock(this->mutex);
@@ -312,8 +312,8 @@ namespace oro::runtime::core::services {
 
           {
             Lock outputLock(*outputMutex);
-            stdout = stdoutBuffer != nullptr ? stdoutBuffer->str() : "";
-            stderr = stderrBuffer != nullptr ? stderrBuffer->str() : "";
+            stdoutText = stdoutBuffer != nullptr ? stdoutBuffer->str() : "";
+            stderrText = stderrBuffer != nullptr ? stderrBuffer->str() : "";
           }
 
           const auto json = JSON::Object::Entries {
@@ -321,8 +321,8 @@ namespace oro::runtime::core::services {
             {"err", JSON::Object::Entries {
               {"id", std::to_string(id)},
               {"pid", std::to_string(pid)},
-              {"stdout", encodeURIComponent(stdout)},
-              {"stderr", encodeURIComponent(stderr)},
+              {"stdout", encodeURIComponent(stdoutText)},
+              {"stderr", encodeURIComponent(stderrText)},
               {"code", "ETIMEDOUT"}
             }}
           };

@@ -886,11 +886,23 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const cflags = readFile('bin/cflags.sh')
   const ldflags = readFile('bin/ldflags.sh')
   const installer = readFile('bin/install.sh')
+  const processService = readFile('src/runtime/core/services/process.cc')
+  const updateService = readFile('src/runtime/core/services/update.cc')
 
   assert.match(
     platform,
-    /#define NOMINMAX[\s\S]*#include <windows\.h>[\s\S]*#undef interface/,
+    /#define NOMINMAX[\s\S]*#include <windows\.h>[\s\S]*#include <roapi\.h>[\s\S]*#include <wrl\.h>[\s\S]*#undef interface/,
     'Windows SDK macros must not replace C++ identifiers such as min, max, and interface'
+  )
+  assert.match(
+    cflags,
+    /-DNOMINMAX[\s\S]*-DWINVER=0x0A00[\s\S]*-D_WIN32_WINNT=0x0A00[\s\S]*-DNTDDI_VERSION=0x0A000000/,
+    'Windows SDK compatibility macros should be defined before any source header is included'
+  )
+  assert.match(
+    cflags,
+    /zlib_include_dir=""[\s\S]*zlib\.h[\s\S]*zconf\.h[\s\S]*ORO_RUNTIME_HAS_ZLIB=1[\s\S]*-I\$zlib_include_dir/,
+    'zlib should be advertised only when its library and generated headers are usable'
   )
   assert.match(
     cflags,
@@ -906,6 +918,21 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     installer,
     /host" == "Win32"[\s\S]*MinGW C archive that is incompatible with the MSVC runtime build; skipping/,
     'the Windows bootstrap should skip the incompatible and expensive libipfs archive build'
+  )
+  assert.match(
+    installer,
+    /install_prefix="\$BUILD_DIR\/\$target-\$platform"[\s\S]*host" == "Win32"[\s\S]*native_path "\$install_prefix"[\s\S]*CMAKE_INSTALL_PREFIX="\$install_prefix"/,
+    'native Windows CMake should receive a native zlib install prefix'
+  )
+  assert.doesNotMatch(
+    processService,
+    /String (?:stdout|stderr);/,
+    'Windows stdio macros should not replace process output variable names'
+  )
+  assert.doesNotMatch(
+    updateService,
+    /JSON::Object::Entries json \{/,
+    'Windows conditional compilation should not leave update response names colliding in one scope'
   )
 })
 
@@ -1486,11 +1513,16 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     /Restore native compiler cache[\s\S]*ccache-v1-/,
     'native Unix builds should restore compiler output caches'
   )
+  assert.match(
+    workflow,
+    /Build Oro Runtime CLI\n\s+timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Unix\)[\s\S]*timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Windows\)[\s\S]*timeout-minutes: 20/,
+    'CI should stop native builds that exceed the twenty-minute cutoff'
+  )
   for (const nativeWorkflow of [workflow, releaseWorkflow, publishWorkflow]) {
     assert.match(
       nativeWorkflow,
-      /native-cache[\s\S]*github\.run_attempt[\s\S]*Save native compiler cache[\s\S]*!cancelled\(\)[\s\S]*native-cache\.outcome == 'success'/,
-      'native compiler caches should retain non-cancelled failed-attempt work under an immutable attempt key'
+      /native-cache[\s\S]*github\.run_attempt[\s\S]*Save native compiler cache[\s\S]*always\(\)[\s\S]*native-cache\.outcome == 'success'/,
+      'native compiler caches should retain partial failed or cancelled attempt work under an immutable attempt key'
     )
   }
   assert.match(

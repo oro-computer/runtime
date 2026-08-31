@@ -73,7 +73,7 @@
 #include <fileapi.h>
 #include <io.h>
 #include <objidl.h>
-#include <roerrorapi.h>
+#include <roapi.h>
 #include <signal.h>
 #include <shellapi.h>
 #include <shlobj.h>

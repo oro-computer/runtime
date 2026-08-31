@@ -946,13 +946,13 @@ namespace oro::runtime::core::services {
         data.emplace("target", targetAny);
       }
 
-      JSON::Object::Entries json {
+      JSON::Object::Entries responseJson {
         {"source", source},
         {"data", data}
       };
 
       this->loop.dispatch([=, this]() {
-        callback(seq, json, QueuedResponse{});
+        callback(seq, responseJson, QueuedResponse{});
       });
       return;
     });
@@ -1148,13 +1148,13 @@ namespace oro::runtime::core::services {
       queuedResponse.length = length;
       queuedResponse.headers = responseHeaders.str();
 
-      JSON::Object::Entries json {
+      JSON::Object::Entries responseJson {
         {"source", source},
         {"data", JSON::Object::Entries {}}
       };
 
       this->loop.dispatch([=, this]() {
-        callback(seq, json, queuedResponse);
+        callback(seq, responseJson, queuedResponse);
       });
       return;
     });
