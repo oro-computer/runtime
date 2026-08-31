@@ -3247,26 +3247,43 @@ function _compile_libipfs {
   mkdir -p "$gocache" "$gomodcache"
 
   echo "# building libipfs for $goos/$goarch..."
-  (
-    cd "$source" || exit 1
-    env \
-      "${cgo_env[@]}" \
-      CGO_ENABLED=1 \
-      GOOS="$goos" \
-      GOARCH="$goarch" \
-      GOCACHE="$gocache" \
-      GOMODCACHE="$gomodcache" \
-      go build \
-        -buildmode=c-archive \
-        -ldflags="-s -w" \
-        -trimpath \
-        -modcacherw \
-        "${goflags[@]}" \
-        -o "$archive_path" \
-        ./libipfs.go
-  )
+  local attempt=1
+  local max_attempts="${ORO_LIBIPFS_BUILD_ATTEMPTS:-3}"
+  local rc=1
+  if [[ ! "$max_attempts" =~ ^[1-9][0-9]*$ ]]; then
+    die 1 "not ok - ORO_LIBIPFS_BUILD_ATTEMPTS must be a positive integer"
+  fi
 
-  local rc=$?
+  while (( attempt <= max_attempts )); do
+    (
+      cd "$source" || exit 1
+      env \
+        "${cgo_env[@]}" \
+        CGO_ENABLED=1 \
+        GOOS="$goos" \
+        GOARCH="$goarch" \
+        GOCACHE="$gocache" \
+        GOMODCACHE="$gomodcache" \
+        go build \
+          -buildmode=c-archive \
+          -ldflags="-s -w" \
+          -trimpath \
+          -modcacherw \
+          "${goflags[@]}" \
+          -o "$archive_path" \
+          ./libipfs.go
+    )
+    rc=$?
+
+    if (( rc == 0 || attempt == max_attempts )); then
+      break
+    fi
+
+    echo "warn - libipfs go build failed (attempt $attempt/$max_attempts); retrying with the populated Go cache"
+    sleep $(( attempt * 2 ))
+    (( attempt += 1 ))
+  done
+
   if (( rc != 0 )); then
     die $rc "not ok - libipfs go build ($goos/$goarch). Ensure dependencies are vendored or set ORO_SKIP_LIBIPFS=1 to skip."
   fi

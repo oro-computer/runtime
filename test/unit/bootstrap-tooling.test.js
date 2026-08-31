@@ -823,6 +823,40 @@ test('desktop tests expose their isolated fixtures to runtime code', () => {
   )
 })
 
+test('VM context windows use an explicit startup handshake', () => {
+  const vm = readFile('api/vm.js')
+  const vmInit = readFile('api/vm/init.js')
+  const sharedWorker = readFile('api/shared-worker/index.js')
+  const sharedWorkerInit = readFile('api/shared-worker/init.js')
+
+  for (const source of [vm, sharedWorker]) {
+    assert.match(
+      source,
+      /channel\.postMessage\(\{ probe: index \}\)[\s\S]*build_headless !== true/,
+      'headless context windows should stay active after requesting their ready acknowledgement'
+    )
+    assert.doesNotMatch(
+      source,
+      /setTimeout\(resolve, 500\)/,
+      'context startup should not treat an elapsed timer as a ready signal'
+    )
+  }
+
+  for (const source of [vmInit, sharedWorkerInit]) {
+    assert.match(
+      source,
+      /probe === currentWindow\.index[\s\S]*announceReady\(\)/,
+      'context windows should answer readiness probes after initialization'
+    )
+  }
+
+  assert.match(
+    vm,
+    /Promise\.all\(\[getContextWorker\(\), window\.ready\]\)[\s\S]*throw error[\s\S]*VM Context SharedWorker did not acknowledge startup[\s\S]*10_000/,
+    'VM scripts should wait for both startup handshakes and reject initialization errors promptly'
+  )
+})
+
 test('quick desktop tests refresh sources in reused workdirs', () => {
   const script = readFile('test/scripts/test-desktop.js')
   assert.match(
@@ -1436,6 +1470,11 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     'Windows libipfs builds should give cgo a compiler name without spaces'
   )
   assert.match(
+    readFile('bin/install.sh'),
+    /ORO_LIBIPFS_BUILD_ATTEMPTS:-3[\s\S]*while \(\( attempt <= max_attempts \)\)[\s\S]*retrying with the populated Go cache/,
+    'libipfs builds should retry transient module downloads without discarding the Go cache'
+  )
+  assert.match(
     workflow,
     /cache: gradle[\s\S]*bin\/android-functions\.sh/,
     'Android builds should restore Gradle dependencies using the pinned toolchain inputs'
@@ -1457,8 +1496,8 @@ test('CI caches dependencies and runs focused platform coverage', () => {
   )
   assert.match(
     workflow,
-    /Build Oro Runtime CLI \(Unix\)[\s\S]*Restore Android emulator cache[\s\S]*Run Android emulator tests/,
-    'the Android emulator should be restored after native build outputs are staged and pruned'
+    /Build Oro Runtime CLI \(Unix\)[\s\S]*Restore Android emulator cache[\s\S]*Grant Android emulator KVM access[\s\S]*chmod a\+rw \/dev\/kvm[\s\S]*Run Android emulator tests/,
+    'the Android emulator should be restored after native outputs are pruned and receive KVM access before launch'
   )
   assert.match(
     workflow,

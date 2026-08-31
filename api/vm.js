@@ -955,9 +955,12 @@ export class Script extends EventTarget {
     gc.ref(this)
 
     this.#ready = getContextWindow()
-      .then(() => getContextWorker())
+      .then(async (window) => {
+        await Promise.all([getContextWorker(), window.ready])
+      })
       .catch((error) => {
         this.dispatchEvent(new ErrorEvent('error', { error }))
+        throw error
       })
   }
 
@@ -1241,7 +1244,6 @@ export async function getContextWindow () {
   for (const window of windows) {
     if (window.location.href === url.href) {
       contextWindow = window
-      contextWindow.ready = Promise.resolve()
       break
     }
   }
@@ -1272,19 +1274,27 @@ export async function getContextWindow () {
   }
 
   if (!contextWindow.ready) {
-    contextWindow.ready = new Promise((resolve) => {
-      const timeout = setTimeout(resolve, 500)
-      channel.addEventListener('message', function onMessage (event) {
-        if (event.data?.ready === contextWindow.index) {
+    const index = contextWindow.index
+    contextWindow.ready = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        channel.removeEventListener('message', onMessage)
+        reject(new Error(`VM context window ${index} did not become ready`))
+      }, 10_000)
+
+      function onMessage (event) {
+        if (event.data?.ready === index) {
           clearTimeout(timeout)
-          resolve(null)
           channel.removeEventListener('message', onMessage)
+          resolve(null)
         }
-      })
+      }
+
+      channel.addEventListener('message', onMessage)
+      channel.postMessage({ probe: index })
     })
   }
 
-  if (!vmDebug) {
+  if (!vmDebug && globalThis.__args.config.build_headless !== true) {
     await contextWindow.hide()
   }
 
@@ -1326,27 +1336,25 @@ export async function getContextWorker () {
     })
 
     contextWorker[kWorkerContextReady] = new Promise((resolve, reject) => {
-      contextWorker.addEventListener(
-        'error',
-        (event) => {
-          reject(
-            new Error('Failed to initialize VM Context SharedWorker', {
-              cause: event.error ?? event
-            })
-          )
-        },
-        { once: true }
-      )
+      const timeout = setTimeout(() => {
+        reject(new Error('VM Context SharedWorker did not acknowledge startup'))
+      }, 10_000)
 
-      contextWorker.port.addEventListener(
-        'message',
-        (event) => {
-          if (event.data === VM_WORKER_ACK) {
-            resolve(contextWorker)
-          }
-        },
-        { once: true }
-      )
+      contextWorker.addEventListener('error', (event) => {
+        clearTimeout(timeout)
+        reject(
+          new Error('Failed to initialize VM Context SharedWorker', {
+            cause: event.error ?? event
+          })
+        )
+      }, { once: true })
+
+      contextWorker.port.addEventListener('message', (event) => {
+        if (event.data === VM_WORKER_ACK) {
+          clearTimeout(timeout)
+          resolve(contextWorker)
+        }
+      }, { once: true })
     })
   }
 

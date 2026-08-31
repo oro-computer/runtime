@@ -160,7 +160,6 @@ export async function getContextWindow () {
   for (const window of windows) {
     if (window.location.href === url.href) {
       contextWindow = window
-      contextWindow.ready = Promise.resolve()
       break
     }
   }
@@ -193,19 +192,27 @@ export async function getContextWindow () {
   }
 
   if (!contextWindow.ready) {
-    contextWindow.ready = new Promise((resolve) => {
-      const timeout = setTimeout(resolve, 500)
-      channel.addEventListener('message', function onMessage (event) {
-        if (event.data?.ready === contextWindow.index) {
+    const index = contextWindow.index
+    contextWindow.ready = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        channel.removeEventListener('message', onMessage)
+        reject(new Error(`SharedWorker context window ${index} did not become ready`))
+      }, 10_000)
+
+      function onMessage (event) {
+        if (event.data?.ready === index) {
           clearTimeout(timeout)
-          resolve(null)
           channel.removeEventListener('message', onMessage)
+          resolve(null)
         }
-      })
+      }
+
+      channel.addEventListener('message', onMessage)
+      channel.postMessage({ probe: index })
     })
   }
 
-  if (!sharedWorkerDebug) {
+  if (!sharedWorkerDebug && globalThis.__args.config.build_headless !== true) {
     await contextWindow.hide()
   }
 

@@ -1,10 +1,27 @@
 /* global Worker */
 import { channel } from './index.js'
+import application from '../application.js'
 import globals from '../internal/globals.js'
 import crypto from '../crypto.js'
+import hooks from '../hooks.js'
 
 export const workers = new Map()
 export { channel }
+
+hooks.onReady(async () => {
+  const currentWindow = await application.getCurrentWindow()
+  const announceReady = () => {
+    channel.postMessage({ ready: currentWindow.index })
+  }
+
+  channel.addEventListener('message', (event) => {
+    if (event.data?.probe === currentWindow.index) {
+      announceReady()
+    }
+  })
+
+  announceReady()
+})
 
 globals.register('SharedWorkerContext.workers', workers)
 globals.register('SharedWorkerContext.info', new Map())

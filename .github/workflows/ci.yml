@@ -814,6 +814,16 @@ jobs:
             ~/.android/avd
           key: android-emulator-v37.1.11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('test/scripts/bootstrap-android-emulator.sh') }}
 
+      - name: Grant Android emulator KVM access
+        if: matrix.test_android && runner.os == 'Linux'
+        shell: bash
+        run: |
+          if [[ ! -e /dev/kvm ]]; then
+            echo >&2 'Android emulator acceleration is unavailable: /dev/kvm does not exist'
+            exit 1
+          fi
+          sudo chmod a+rw /dev/kvm
+
       - name: Run Android emulator tests
         if: matrix.test_android
         timeout-minutes: 30

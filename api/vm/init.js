@@ -69,7 +69,17 @@ class State {
       )
       this.worker.port.postMessage({ type: 'realm' })
 
-      vm.channel.postMessage({ ready: currentWindow.index })
+      const announceReady = () => {
+        vm.channel.postMessage({ ready: currentWindow.index })
+      }
+
+      vm.channel.addEventListener('message', (event) => {
+        if (event.data?.probe === currentWindow.index) {
+          announceReady()
+        }
+      })
+
+      announceReady()
     })
   }
 
