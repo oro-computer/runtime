@@ -3233,12 +3233,24 @@ function _compile_libipfs {
     goflags+=("-mod=vendor")
   fi
 
+  local cgo_env=()
+  if [[ "$host" == "Win32" ]]; then
+    if ! command -v clang >/dev/null 2>&1; then
+      die 1 "not ok - clang is required to build libipfs on Windows. Install clang or set ORO_SKIP_LIBIPFS=1 to disable libipfs."
+    fi
+
+    # Go parses CC as a command line. Using the absolute LLVM path from
+    # install.ps1 makes cgo split C:\Program Files at the first space.
+    cgo_env+=("CC=clang")
+  fi
+
   mkdir -p "$gocache" "$gomodcache"
 
   echo "# building libipfs for $goos/$goarch..."
   (
     cd "$source" || exit 1
     env \
+      "${cgo_env[@]}" \
       CGO_ENABLED=1 \
       GOOS="$goos" \
       GOARCH="$goarch" \

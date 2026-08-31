@@ -465,8 +465,12 @@ export class Test {
    */
   async requestAnimationFrame (msg = null) {
     if (globalThis.document && globalThis.document.hasFocus()) {
-      // RAF only works when the window is focused
-      await new Promise((resolve) => globalThis.requestAnimationFrame(resolve))
+      // Some headless WebKit hosts report a focused document without scheduling
+      // animation frames. Keep DOM helpers moving when that happens.
+      await Promise.race([
+        new Promise((resolve) => globalThis.requestAnimationFrame(resolve)),
+        new Promise((resolve) => setTimeout(resolve, 50))
+      ])
     } else {
       await new Promise((resolve) => setTimeout(resolve, 0))
     }

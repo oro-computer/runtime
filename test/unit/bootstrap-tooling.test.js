@@ -809,6 +809,18 @@ test('desktop tests expose their isolated fixtures to runtime code', () => {
     /'no-strict': \{ type: 'boolean' \}/,
     'documented negative desktop runner flags should be accepted'
   )
+
+  assert.match(
+    readFile('test/src/extension.js'),
+    /String\(process\.env\.ORO_TEST_SKIP_TEST_EXTENSIONS\) === '1'/,
+    'extension tests should accept the numeric environment value decoded by the runtime configuration'
+  )
+
+  assert.match(
+    readFile('api/test/index.js'),
+    /requestAnimationFrame \(msg = null\)[\s\S]*Promise\.race\([\s\S]*globalThis\.requestAnimationFrame[\s\S]*setTimeout\(resolve, 50\)/,
+    'DOM test helpers should not hang when a focused headless window suppresses animation frames'
+  )
 })
 
 test('quick desktop tests refresh sources in reused workdirs', () => {
@@ -1419,6 +1431,11 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     'libipfs should build against workflow-cacheable Go directories'
   )
   assert.match(
+    readFile('bin/install.sh'),
+    /host" == "Win32"[\s\S]*cgo_env\+=\("CC=clang"\)[\s\S]*"\$\{cgo_env\[@\]\}"[\s\S]*CGO_ENABLED=1/,
+    'Windows libipfs builds should give cgo a compiler name without spaces'
+  )
+  assert.match(
     workflow,
     /cache: gradle[\s\S]*bin\/android-functions\.sh/,
     'Android builds should restore Gradle dependencies using the pinned toolchain inputs'
@@ -1566,7 +1583,7 @@ test('Android bootstrap separates build packages from emulator packages', () => 
   )
   assert.match(
     emulatorBootstrap,
-    /android_system_image_arch[\s\S]*OROAVD_API_[\s\S]*emulator_packages[\s\S]*system_image_dir[\s\S]*sdkmanager" "\$\{emulator_packages\[@\]\}"/,
+    /ANDROID_USER_HOME[\s\S]*ANDROID_AVD_HOME[\s\S]*android_system_image_arch[\s\S]*OROAVD_API_[\s\S]*emulator_packages[\s\S]*system_image_dir[\s\S]*sdkmanager" "\$\{emulator_packages\[@\]\}"[\s\S]*ANDROID_AVD_HOME\/\$avd_name\.ini/,
     'emulator tests should install only missing host-compatible packages and use a versioned AVD'
   )
   assert.match(

@@ -64,6 +64,18 @@ if [ -z "$ANDROID_HOME" ]; then
   fi
 fi
 
+# Keep avdmanager and emulator on the same user-data directory. Hosted Android
+# toolchains may otherwise create the AVD under the SDK while emulator searches
+# the runner account's default ~/.android directory.
+if [[ -z "${ANDROID_USER_HOME:-}" ]]; then
+  ANDROID_USER_HOME="$HOME/.android"
+fi
+if [[ -z "${ANDROID_AVD_HOME:-}" ]]; then
+  ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+fi
+export ANDROID_USER_HOME ANDROID_AVD_HOME
+mkdir -p "$ANDROID_AVD_HOME"
+
 emulator="$(which emulator 2>/dev/null)"
 [[ -z "$avdmanager" ]] && avdmanager="$(which avdmanager 2>/dev/null)"
 [[ -z "$sdkmanager" ]] && sdkmanager="$(which sdkmanager 2>/dev/null)"
@@ -149,6 +161,11 @@ if [[ -z "$avd_exists" ]]; then
   "$avdmanager" --clear-cache create avd -n "$avd_name" -k "$pkg" -d 1 --force
   rc=$?
   (( rc != 0 )) && exit_and_write_code $rc
+fi
+
+if [[ ! -f "$ANDROID_AVD_HOME/$avd_name.ini" ]]; then
+  echo "not ok - Android AVD was not created at $ANDROID_AVD_HOME/$avd_name.ini"
+  exit_and_write_code 1
 fi
 
 [[ -z "$EMULATOR_FLAGS" ]] && EMULATOR_FLAGS=()
