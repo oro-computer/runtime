@@ -630,25 +630,32 @@ jobs:
       - name: Configure source-build target families
         shell: bash
         run: |
-          echo "ORO_HOME=$RUNNER_TEMP/oro-ci-$ORO_CI_ID" >> "$GITHUB_ENV"
-          echo "PREFIX=$RUNNER_TEMP/oro-ci-$ORO_CI_ID" >> "$GITHUB_ENV"
+          {
+            echo "ORO_HOME=$RUNNER_TEMP/oro-ci-$ORO_CI_ID"
+            echo "PREFIX=$RUNNER_TEMP/oro-ci-$ORO_CI_ID"
 
-          if [[ "$EXCLUDE_ANDROID" == "true" ]]; then
-            echo "NO_ANDROID=1" >> "$GITHUB_ENV"
-          else
-            echo "NO_ANDROID=" >> "$GITHUB_ENV"
-          fi
+            if [[ "$EXCLUDE_ANDROID" == "true" ]]; then
+              echo "NO_ANDROID=1"
+            else
+              echo "NO_ANDROID="
+            fi
 
-          if [[ "$EXCLUDE_IOS" == "true" ]]; then
-            echo "NO_IOS=1" >> "$GITHUB_ENV"
-          else
-            echo "NO_IOS=" >> "$GITHUB_ENV"
-          fi
+            if [[ "$EXCLUDE_IOS" == "true" ]]; then
+              echo "NO_IOS=1"
+            else
+              echo "NO_IOS="
+            fi
 
-          if [[ "$BUILD_ANDROID" == "true" ]]; then
-            echo "ORO_ANDROID_CI=1" >> "$GITHUB_ENV"
-            echo "ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes" >> "$GITHUB_ENV"
-          fi
+            if [[ "$BUILD_ANDROID" == "true" ]]; then
+              echo "ORO_ANDROID_CI=1"
+              echo "ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes"
+              # Android runtime archives do not expose these desktop-only FFI
+              # features. Their full desktop builds remain covered by the
+              # Linux and macOS shards.
+              echo "ORO_SKIP_IROH=1"
+              echo "ORO_SKIP_LIBIPFS=1"
+            fi
+          } >> "$GITHUB_ENV"
 
       - name: Report host toolchain and disk
         shell: bash

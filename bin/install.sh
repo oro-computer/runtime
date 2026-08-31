@@ -3187,6 +3187,11 @@ function _compile_libipfs {
     return 0
   fi
 
+  if [[ "$host" == "Win32" ]]; then
+    echo "warn - libipfs uses a MinGW C archive that is incompatible with the MSVC runtime build; skipping"
+    return 0
+  fi
+
   local goos=""
   case "$host" in
     Linux) goos="linux" ;;
@@ -3711,6 +3716,11 @@ function _compile_libsodium {
     platform="desktop"
   fi
 
+  if [[ "$platform" == "desktop" && "$host" == "Win32" ]]; then
+    echo "warn - libsodium build for Win32 not implemented; skipping"
+    return
+  fi
+
   echo "# building libsodium for $platform ($target) on $host..."
 
   local STAGING_DIR="$BUILD_DIR/$target-$platform/libsodium"
@@ -3728,11 +3738,6 @@ function _compile_libsodium {
   fi
 
   if [ "$platform" == "desktop" ]; then
-    if [[ "$host" == "Win32" ]]; then
-      echo "warn - libsodium build for Win32 not implemented; skipping"
-      return
-    fi
-
     export CFLAGS="-O2 -fPIC"
     export CXXFLAGS="$CFLAGS"
 

@@ -59,6 +59,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 
 #undef _WINSOCKAPI_
 #define _WINSOCKAPI_
@@ -70,6 +73,7 @@
 #include <fileapi.h>
 #include <io.h>
 #include <objidl.h>
+#include <roerrorapi.h>
 #include <signal.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -84,6 +88,10 @@
 #if !defined(ORO_RUNTIME_EXTENSION)
 #include <WebView2.h>
 #include <WebView2EnvironmentOptions.h>
+#endif
+
+#ifdef interface
+#undef interface
 #endif
 
 #pragma comment(lib, "advapi32.lib")

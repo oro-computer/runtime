@@ -61,9 +61,12 @@ fi
 
 if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then
   if [[ "$(basename "$CXX")" =~ clang ]]; then
-    if [[ "$host" = "Linux" ]] || [[ "$host" = "Win32" ]]; then
+    if [[ "$host" = "Linux" ]]; then
       cflags+=("-Wno-unused-command-line-argument")
       cflags+=("-stdlib=libstdc++")
+    fi
+    if [[ "$host" = "Win32" ]]; then
+      cflags+=("-Wno-unused-command-line-argument")
     fi
   fi
 else
@@ -96,18 +99,6 @@ do
     break
   fi
 done
-
-if [[ -z "$libsodium_include_dir" ]]; then
-  for candidate in \
-    "$root/build/$build_arch_dir-$build_platform_dir/include" \
-    "$root/build/libsodium/src/libsodium/include"
-  do
-    if [[ -f "$candidate/sodium.h" ]]; then
-      libsodium_include_dir="$candidate"
-      break
-    fi
-  done
-fi
 
 cflags+=(
   -std=c++2a
@@ -226,6 +217,10 @@ if [[ -f "$libipfs_header" ]]; then
 fi
 
 if [[ "${ORO_SKIP_LIBIPFS:-0}" == "1" ]]; then
+  have_libipfs=0
+fi
+
+if [[ "$host" == "Win32" ]]; then
   have_libipfs=0
 fi
 

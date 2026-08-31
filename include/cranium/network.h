@@ -76,15 +76,15 @@ Network* createNetwork(size_t numFeatures, size_t numHiddenLayers, size_t* hidde
     for (i = 0; i < network->numLayers; i++){
         // create input
         if (i == 0){
-            layers[i] = createLayer(INPUT, numFeatures, NULL);
+            layers[i] = createLayer(CRANIUM_INPUT, numFeatures, NULL);
         }
         //create output
         else if (i == network->numLayers - 1){
-            layers[i] = createLayer(OUTPUT, numOutputs, outputActivation);
+            layers[i] = createLayer(CRANIUM_OUTPUT, numOutputs, outputActivation);
         }
         // create hidden layer
         else{
-            layers[i] = createLayer(HIDDEN, hiddenSizes[i - 1], hiddenActivations[i - 1]);
+            layers[i] = createLayer(CRANIUM_HIDDEN, hiddenSizes[i - 1], hiddenActivations[i - 1]);
         }
     }
     network->layers = layers;

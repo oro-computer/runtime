@@ -142,7 +142,7 @@ done
 
 libipfs_header="$root/build/include/libipfs.h"
 have_libipfs=0
-if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]] && [[ -f "$libipfs_header" ]]; then
+if [[ "$host" != "Win32" ]] && [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]] && [[ -f "$libipfs_header" ]]; then
   declare -a libipfs_candidates=()
   libipfs_candidates+=("$root/build/$arch-$platform/lib/libipfs.a")
   if [[ "$host" == "Win32" ]]; then
@@ -221,7 +221,6 @@ elif [ "$host" == "Win32" ]; then
   if [ "$platform" == "desktop" ]; then
     if [[ "$(basename "$CXX")" =~ clang ]]; then
       cflags+=("-Wno-unused-command-line-argument")
-      cflags+=("-stdlib=libstdc++")
     fi
 
     # https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features?view=msvc-170

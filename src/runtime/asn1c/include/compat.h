@@ -8,7 +8,11 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#if defined(_WIN32)
+#include <malloc.h>
+#else
 #include <unistd.h>
+#endif
 
 #if defined(__APPLE__) || defined(__linux__)
 #include <alloca.h>

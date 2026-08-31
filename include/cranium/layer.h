@@ -7,9 +7,9 @@
 
 // possible types of layers in a network
 typedef enum LAYER_TYPE_ {
-    INPUT,
-    HIDDEN,
-    OUTPUT
+    CRANIUM_INPUT,
+    CRANIUM_HIDDEN,
+    CRANIUM_OUTPUT
 } LAYER_TYPE;
 
 // input matrix will continue to store values

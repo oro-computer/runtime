@@ -841,6 +841,11 @@ test('VM context windows use an explicit startup handshake', () => {
   for (const source of [vm, sharedWorker]) {
     assert.match(
       source,
+      /let contextWindowRequest = null[\s\S]*if \(contextWindowRequest\) \{[\s\S]*return await contextWindowRequest[\s\S]*contextWindowRequest = request[\s\S]*contextWindowRequest === request/,
+      'concurrent callers should share one context-window initialization request'
+    )
+    assert.match(
+      source,
       /channel\.postMessage\(\{ probe: index \}\)[\s\S]*build_headless !== true/,
       'headless context windows should stay active after requesting their ready acknowledgement'
     )
@@ -863,6 +868,44 @@ test('VM context windows use an explicit startup handshake', () => {
     vm,
     /Promise\.all\(\[getContextWorker\(\), window\.ready\]\)[\s\S]*throw error[\s\S]*VM Context SharedWorker did not acknowledge startup[\s\S]*10_000/,
     'VM scripts should wait for both startup handshakes and reject initialization errors promptly'
+  )
+})
+
+test('macOS window teardown preserves WebKit-owned views', () => {
+  const appleWindow = readFile('src/runtime/window/apple.mm')
+
+  assert.doesNotMatch(
+    appleWindow,
+    /for \(NSView\* view in contentView\.subviews\)[\s\S]*\[view release\]/,
+    'window teardown must not release WKWebView-owned subviews'
+  )
+})
+
+test('Windows runtime builds avoid incompatible headers and archives', () => {
+  const platform = readFile('src/runtime/platform/system.hh')
+  const cflags = readFile('bin/cflags.sh')
+  const ldflags = readFile('bin/ldflags.sh')
+  const installer = readFile('bin/install.sh')
+
+  assert.match(
+    platform,
+    /#define NOMINMAX[\s\S]*#include <windows\.h>[\s\S]*#undef interface/,
+    'Windows SDK macros must not replace C++ identifiers such as min, max, and interface'
+  )
+  assert.match(
+    cflags,
+    /sodium\.h" && -f "\$candidate\/sodium\/version\.h[\s\S]*if \[\[ "\$host" == "Win32" \]\]; then\s+have_libipfs=0/,
+    'optional Windows dependencies should be enabled only when their usable headers and ABI are present'
+  )
+  assert.match(
+    ldflags,
+    /have_sodium=0[\s\S]*libsodium\.lib[\s\S]*if \(\( have_sodium \)\)[\s\S]*host" != "Win32"[\s\S]*have_libipfs/,
+    'Windows linkage should follow the same optional-dependency availability checks'
+  )
+  assert.match(
+    installer,
+    /host" == "Win32"[\s\S]*MinGW C archive that is incompatible with the MSVC runtime build; skipping/,
+    'the Windows bootstrap should skip the incompatible and expensive libipfs archive build'
   )
 })
 
@@ -1163,6 +1206,11 @@ test('runtime target builds share the detected CPU budget', () => {
     /compile_status[\s\S]*failed to compile runtime objects/,
     'runtime compiler subprocess failures should propagate to the installer'
   )
+  assert.match(
+    runtimeBuilder,
+    /platform" = "android"[\s\S]*command -v ccache[\s\S]*runtime_compiler_launcher="ccache"[\s\S]*run_runtime_compiler/,
+    'direct Android NDK runtime compilation should use the restored native compiler cache'
+  )
 })
 
 test('CI shards Apple-mobile builds without changing installer defaults', () => {
@@ -1205,6 +1253,16 @@ test('CI shards Apple-mobile builds without changing installer defaults', () => 
     workflow.match(/ccache --max-size 1G/g)?.length,
     2,
     'native CI lanes should retain enough compiler output to avoid cache churn'
+  )
+})
+
+test('Android CI skips desktop-only networking archives', () => {
+  const workflow = readFile('.github/workflows/ci.yml')
+
+  assert.match(
+    workflow,
+    /BUILD_ANDROID" == "true"[\s\S]*ORO_SKIP_IROH=1[\s\S]*ORO_SKIP_LIBIPFS=1/,
+    'the Android shard should not spend time building host-only Iroh and libipfs archives'
   )
 })
 

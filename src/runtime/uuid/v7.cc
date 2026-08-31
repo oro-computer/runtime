@@ -1,11 +1,13 @@
 #include "../crypto.hh"
 #include "../uuid.hh"
 
+#include <chrono>
+
 namespace oro::runtime::uuid {
   void v7 (char* buffer) {
-    struct timeval tv;
-    gettimeofday(&tv, nullptr);
-    uint64_t delta = ((uint64_t) tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+    const auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch()
+    ).count();
     uint64_t timestamp = delta & ((1ull << 60) - 1);
     uint64_t value = 0;
 

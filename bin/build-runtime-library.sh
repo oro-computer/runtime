@@ -302,6 +302,25 @@ fi
 declare output_directory="$root/build/$arch-$platform"
 mkdir -p "$output_directory"
 
+declare runtime_compiler_launcher=""
+if [[ "$platform" = "android" ]] && command -v ccache >/dev/null 2>&1; then
+  # Android selects the NDK compiler by absolute path, bypassing the compiler
+  # wrapper directories used by hosted CI. Invoke ccache explicitly so the
+  # restored native cache also covers the runtime objects for each Android ABI.
+  runtime_compiler_launcher="ccache"
+fi
+
+function run_runtime_compiler () {
+  local compiler="$1"
+  shift
+
+  if [[ -n "$runtime_compiler_launcher" ]]; then
+    quiet "$runtime_compiler_launcher $compiler" "$@"
+  else
+    quiet "$compiler" "$@"
+  fi
+}
+
 declare newest_header_mtime=0
 if (( ! ignore_header_mtimes )); then
   while IFS= read -r header; do
@@ -382,7 +401,7 @@ function generate_llama_build_info () {
     char const *LLAMA_BUILD_TARGET = "$build_target";
 LLAMA_BUILD_INFO
 
-  quiet "$clang" "${cflags[@]}" -c $source -o ${source/cpp/o} || onsignal
+  run_runtime_compiler "$clang" "${cflags[@]}" -c $source -o ${source/cpp/o} || onsignal
 }
 
 function build_linux_desktop_extension_object () {
@@ -397,7 +416,7 @@ function build_linux_desktop_extension_object () {
     (( newest_header_mtime > $(stat_mtime "$destination") )) ||
     (( $(stat_mtime "$source") > $(stat_mtime "$destination") ));
   then
-    quiet $clang "${cflags[@]}" -DORO_RUNTIME_DESKTOP_EXTENSION=1 -c "$source"  -o "$destination" || onsignal
+    run_runtime_compiler "$clang" "${cflags[@]}" -DORO_RUNTIME_DESKTOP_EXTENSION=1 -c "$source" -o "$destination" || onsignal
     return $?
   fi
 
@@ -488,7 +507,7 @@ function main () {
         mkdir -p "$(dirname "$object")"
 
         echo "# compiling object ($arch-$platform) $(basename "$source")"
-        quiet "$compiler" "${compile_flags[@]}" -c "$source" -o "$object" || onsignal
+        run_runtime_compiler "$compiler" "${compile_flags[@]}" -c "$source" -o "$object" || onsignal
         echo "ok - built ${source/$src_directory\//} -> ${object/$output_directory\//} ($arch-$platform)"
       fi
     } & pids+=($!)

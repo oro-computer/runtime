@@ -195,8 +195,6 @@ elif [[ "$host" = "Win32" ]]; then
   fi
 fi
 
-ldflags+=("-lsodium")
-
 declare -a ld_platform_variants=("$platform")
 case "$platform" in
   Android)
@@ -214,6 +212,20 @@ for variant in "${ld_platform_variants[@]}"; do
   ldflags+=("-L$root/build/$arch-$variant/lib$d")
   ldflags+=("-L$root/build/$arch-$variant/lib64$d")
 done
+
+have_sodium=0
+for variant in "${ld_platform_variants[@]}"; do
+  for libdir in "$root/build/$arch-$variant/lib$d" "$root/build/$arch-$variant/lib" "$root/build/$arch-$variant/lib64$d" "$root/build/$arch-$variant/lib64"; do
+    if [[ -f "$libdir/libsodium.a" ]] || [[ -f "$libdir/libsodium.lib" ]]; then
+      have_sodium=1
+      break 2
+    fi
+  done
+done
+
+if (( have_sodium )); then
+  ldflags+=("-lsodium")
+fi
 
 # Prefer a vendored zlib build when available. Only add -lz when a candidate
 # archive is present in standard build output directories so we do not assume
@@ -234,7 +246,7 @@ fi
 
 libipfs_header="$root/build/include/libipfs.h"
 have_libipfs=0
-if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]] && [[ -f "$libipfs_header" ]]; then
+if [[ "$host" != "Win32" ]] && [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]] && [[ -f "$libipfs_header" ]]; then
   for variant in "${ld_platform_variants[@]}"; do
     if [[ "$host" = "Win32" ]]; then
       if [[ -f "$root/build/$arch-$variant/lib$d/libipfs${d}.a" ]]; then

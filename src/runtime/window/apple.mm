@@ -161,17 +161,6 @@ CGFloat MACOS_TRAFFIC_LIGHT_BUTTON_SIZE = 16;
       window->eval(getEmitToRenderProcessJavaScript("windowclosed", json.str()));
     }
   }
-  auto contentView = window->window.contentView;
-  auto subviews = NSMutableArray.array;
-
-  for (NSView* view in contentView.subviews) {
-    if (view == window->webview) {
-      continue;
-    }
-    [view removeFromSuperview];
-    [view release];
-  }
-
   window->window.delegate = nullptr;
   window->window.contentView = nullptr;
 
@@ -788,17 +777,6 @@ namespace oro::runtime::window {
 
     if (this->window) {
     #if ORO_RUNTIME_PLATFORM_MACOS
-      auto contentView = this->window.contentView;
-      auto subviews = NSMutableArray.array;
-
-      for (NSView* view in contentView.subviews) {
-        if (view == this->webview) {
-          continue;
-        }
-        [view removeFromSuperview];
-        [view release];
-      }
-
       this->window.delegate = nullptr;
       this->window.contentView = nullptr;
 

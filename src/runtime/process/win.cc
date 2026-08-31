@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <iostream>
 #include <stdexcept>
+#include <system_error>
 #include <limits.h>
 
 #include "../process.hh"
@@ -15,8 +16,10 @@ const static StringStream initial;
 
 namespace {
   int mapWinErrorToErrno (DWORD error) noexcept {
-    _dosmaperr(static_cast<unsigned long>(error));
-    return errno;
+    return std::error_code(
+      static_cast<int>(error),
+      std::system_category()
+    ).default_error_condition().value();
   }
 }
 
@@ -187,7 +190,7 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   process_command += "\"";
 #endif
 
-  auto comspec = Env::get("COMSPEC");
+  auto comspec = env::get("COMSPEC");
   auto shell = this->shell;
 
   if (shell == "cmd.exe" && comspec.size() > 0) {
@@ -328,7 +331,10 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
       WaitForSingleObject(_processHandle, INFINITE);
 
       if (GetExitCodeProcess(_processHandle, &exitCode) == 0) {
-        std::cerr << formatWindowsError(GetLastError(), "Process::open() GetExitCodeProcess()") << std::endl;
+        std::cerr << string::formatWindowsError(
+          GetLastError(),
+          "Process::open() GetExitCodeProcess()"
+        ) << std::endl;
         exitCode = -1;
       }
 
@@ -370,7 +376,7 @@ void Process::read() noexcept {
 
       for (;;) {
         memset(buffer.get(), 0, config.bufferSize);
-        BOOL bSuccess = ReadFile(*stdoutFD, static_cast<CHAR *>(buffer.get()), static_cast<DWORD>(config.bufferSize), &n, nullptr);
+        BOOL bSuccess = ReadFile(*stdoutFD, reinterpret_cast<CHAR *>(buffer.get()), static_cast<DWORD>(config.bufferSize), &n, nullptr);
 
         if (!bSuccess || n == 0) {
           break;
@@ -384,7 +390,7 @@ void Process::read() noexcept {
         if (config.rawOutput) {
           readStdout(output);
         } else {
-          auto parts = splitc(output, '\n');
+          auto parts = string::splitc(output, '\n');
 
           if (parts.size() > 1) {
             for (size_t part = 0; part + 1 < parts.size(); ++part) {
@@ -415,7 +421,7 @@ void Process::read() noexcept {
       auto buffer = std::make_unique<unsigned char[]>(config.bufferSize);
 
       for (;;) {
-        BOOL bSuccess = ReadFile(*stderrFD, static_cast<CHAR *>(buffer.get()), static_cast<DWORD>(config.bufferSize), &n, nullptr);
+        BOOL bSuccess = ReadFile(*stderrFD, reinterpret_cast<CHAR *>(buffer.get()), static_cast<DWORD>(config.bufferSize), &n, nullptr);
         if (!bSuccess || n == 0) break;
         Lock lock(stderrMutex);
         readStderr(String(

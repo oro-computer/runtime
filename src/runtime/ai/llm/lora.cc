@@ -53,7 +53,7 @@ namespace oro::runtime::ai::llm {
           const auto filename = Path(rootLoRADirectory) / this->name;
           if (filesystem::Resource::isFile(filename)) {
             if (this->model != nullptr && this->model->model != nullptr) {
-              this->lora = llama_adapter_lora_init(this->model->model, filename.c_str());
+              this->lora = llama_adapter_lora_init(this->model->model, filename.string().c_str());
             }
             this->filename = filename;
           }
@@ -66,7 +66,7 @@ namespace oro::runtime::ai::llm {
         const auto filename = Path(this->options.directory) / this->name;
         if (filesystem::Resource::isFile(filename)) {
           if (this->model != nullptr && this->model->model != nullptr) {
-            this->lora = llama_adapter_lora_init(this->model->model, filename.c_str());
+            this->lora = llama_adapter_lora_init(this->model->model, filename.string().c_str());
           }
           this->filename = filename;
         }
@@ -80,7 +80,7 @@ namespace oro::runtime::ai::llm {
         const auto filename = Path(directory) / this->name;
         if (filesystem::Resource::isFile(filename)) {
           if (this->model != nullptr && this->model->model != nullptr) {
-            this->lora = llama_adapter_lora_init(this->model->model, filename.c_str());
+            this->lora = llama_adapter_lora_init(this->model->model, filename.string().c_str());
           }
           this->filename = filename;
         }
@@ -91,7 +91,7 @@ namespace oro::runtime::ai::llm {
       const auto filename = Path(getcwd()) / this->name;
       if (filesystem::Resource::isFile(filename)) {
         if (this->model != nullptr && this->model->model != nullptr) {
-          this->lora = llama_adapter_lora_init(this->model->model, filename.c_str());
+          this->lora = llama_adapter_lora_init(this->model->model, filename.string().c_str());
         }
         this->filename = filename;
       }

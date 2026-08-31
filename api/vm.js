@@ -52,6 +52,7 @@ const VM_WORKER_ACK = 'VM_SHARED_WORKER_ACK'
 
 let contextWorker = null
 let contextWindow = null
+let contextWindowRequest = null
 
 // A weak mapping of context objects to `Script` instances where "context"
 // objects own the `Script` until the "context" is no longer stronglyheld
@@ -1239,6 +1240,23 @@ export async function getContextWindow () {
     return contextWindow
   }
 
+  if (contextWindowRequest) {
+    return await contextWindowRequest
+  }
+
+  const request = initializeContextWindow()
+  contextWindowRequest = request
+
+  try {
+    return await request
+  } finally {
+    if (contextWindowRequest === request) {
+      contextWindowRequest = null
+    }
+  }
+}
+
+async function initializeContextWindow () {
   const windows = await application.getWindows([], { max: false })
   const url = new URL(VM_WINDOW_PATH, globalThis.location.origin)
   for (const window of windows) {

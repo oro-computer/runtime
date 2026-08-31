@@ -73,7 +73,7 @@ namespace oro::runtime::ai::llm {
         if (filesystem::Resource::isDirectory(rootModelDirectory)) {
           const auto filename = Path(rootModelDirectory) / this->name;
           if (filesystem::Resource::isFile(filename) && !is_clip_or_mmproj_candidate(filename)) {
-            this->model = llama_model_load_from_file(filename.c_str(), this->params);
+            this->model = llama_model_load_from_file(filename.string().c_str(), this->params);
             this->filename = filename;
           }
         }
@@ -84,7 +84,7 @@ namespace oro::runtime::ai::llm {
       if (filesystem::Resource::isDirectory(this->options.directory)) {
         const auto filename = Path(this->options.directory) / this->name;
         if (filesystem::Resource::isFile(filename) && !is_clip_or_mmproj_candidate(filename)) {
-          this->model = llama_model_load_from_file(filename.c_str(), this->params);
+          this->model = llama_model_load_from_file(filename.string().c_str(), this->params);
           this->filename = filename;
         }
       }
@@ -96,7 +96,7 @@ namespace oro::runtime::ai::llm {
         const auto directory = userConfig["ai_llm_model_path"];
         const auto filename = Path(directory) / this->name;
         if (filesystem::Resource::isFile(filename) && !is_clip_or_mmproj_candidate(filename)) {
-          this->model = llama_model_load_from_file(filename.c_str(), this->params);
+          this->model = llama_model_load_from_file(filename.string().c_str(), this->params);
           this->filename = filename;
         }
       }
@@ -105,7 +105,7 @@ namespace oro::runtime::ai::llm {
     if (this->model == nullptr) {
       const auto filename = Path(getcwd()) / this->name;
       if (filesystem::Resource::isFile(filename) && !is_clip_or_mmproj_candidate(filename)) {
-        this->model = llama_model_load_from_file(filename.c_str(), this->params);
+        this->model = llama_model_load_from_file(filename.string().c_str(), this->params);
         this->filename = filename;
       }
     }

@@ -205,8 +205,8 @@ namespace oro::runtime::core::services {
           }
 
           SharedPointer<runtime::Process> process = nullptr;
-          String stdout;
-          String stderr;
+          String stdoutText;
+          String stderrText;
           int pid = 0;
           int code = 0;
 
@@ -223,8 +223,8 @@ namespace oro::runtime::core::services {
 
           {
             Lock outputLock(*outputMutex);
-            stdout = stdoutBuffer != nullptr ? stdoutBuffer->str() : "";
-            stderr = stderrBuffer != nullptr ? stderrBuffer->str() : "";
+            stdoutText = stdoutBuffer != nullptr ? stdoutBuffer->str() : "";
+            stderrText = stderrBuffer != nullptr ? stderrBuffer->str() : "";
           }
 
           this->handles.erase(id);
@@ -234,8 +234,8 @@ namespace oro::runtime::core::services {
             {"data", JSON::Object::Entries {
               {"id", std::to_string(id)},
               {"pid", std::to_string(pid)},
-              {"stdout", encodeURIComponent(stdout)},
-              {"stderr", encodeURIComponent(stderr)},
+              {"stdout", encodeURIComponent(stdoutText)},
+              {"stderr", encodeURIComponent(stderrText)},
               {"code", code}
             }}
           };

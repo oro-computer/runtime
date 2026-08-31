@@ -8,6 +8,7 @@ import client from '../application/client.js'
 import ipc from '../ipc.js'
 
 let contextWindow = null
+let contextWindowRequest = null
 
 export const SHARED_WORKER_WINDOW_TITLE = 'oro:shared-worker'
 export const SHARED_WORKER_WINDOW_PATH = '/oro/shared-worker/index.html'
@@ -155,6 +156,23 @@ export async function getContextWindow () {
     return contextWindow
   }
 
+  if (contextWindowRequest) {
+    return await contextWindowRequest
+  }
+
+  const request = initializeContextWindow()
+  contextWindowRequest = request
+
+  try {
+    return await request
+  } finally {
+    if (contextWindowRequest === request) {
+      contextWindowRequest = null
+    }
+  }
+}
+
+async function initializeContextWindow () {
   const windows = await application.getWindows([], { max: false })
   const url = new URL(SHARED_WORKER_WINDOW_PATH, globalThis.location.origin)
   for (const window of windows) {

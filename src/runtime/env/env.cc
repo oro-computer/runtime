@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-#if !ORO_RUNTIME_PLATFORM_WINDOWS
+#if !defined(_WIN32)
 #  include <unistd.h>
 #endif
 
