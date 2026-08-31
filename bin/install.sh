@@ -3374,7 +3374,7 @@ function _compile_zlib {
       _cmake_configure .. . "${cmake_args[@]}"
       die $? "not ok - zlib cmake configure (Win32)"
 
-      quiet cmake --build . --config "$config" -- -j"$CPU_CORES"
+      quiet cmake --build . --config "$config" --parallel "$CPU_CORES"
       die $? "not ok - zlib cmake build (Win32)"
 
       quiet cmake --install . --config "$config"

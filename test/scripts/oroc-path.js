@@ -30,6 +30,11 @@ export function resolveOrocExecutable (repoRoot, env = process.env) {
 
   if (existsSync(local)) return local
 
+  if (env.ORO_HOME) {
+    const staged = path.join(env.ORO_HOME, 'bin', executable)
+    if (existsSync(staged)) return staged
+  }
+
   const command = process.platform === 'win32' ? 'where' : 'which'
   const result = spawnSync(command, ['oroc'], { stdio: 'ignore' })
   return result.status === 0 ? 'oroc' : local

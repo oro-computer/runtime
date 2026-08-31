@@ -4861,7 +4861,9 @@ int runApp (const Path& path, const String& args, bool headless) {
   }
 
   #if defined(__APPLE__)
-    if (platform.mac) {
+    // Headless launches stay attached to the CLI so output, signals, and the
+    // application exit status are supervised by the child process path.
+    if (platform.mac && !headless) {
       auto sharedWorkspace = [NSWorkspace sharedWorkspace];
       auto configuration = [NSWorkspaceOpenConfiguration configuration];
       auto stringPath = path.string();

@@ -753,6 +753,15 @@ test('Linux headless launches use collision-safe Xvfb allocation', () => {
   )
 })
 
+test('headless macOS launches use the supervised child process path', () => {
+  const source = readFile('src/cli/main.cc')
+  assert.match(
+    source,
+    /if \(platform\.mac && !headless\) \{[\s\S]*openApplicationAtURL:[\s\S]*#endif[\s\S]*appProcess = std::make_shared<Process>/,
+    'headless macOS apps should bypass NSWorkspace so their output and exit status remain attached to the CLI'
+  )
+})
+
 test('desktop and runtime-core tests isolate writable runtime state', () => {
   for (const filename of [
     'test/scripts/test-desktop.js',
@@ -1278,8 +1287,12 @@ test('native dependency builds do not perform serial work before parallel builds
   const libuvCompiler = installer.match(
     /function _compile_libuv \{([\s\S]*?)\n\}/
   )?.[1]
+  const zlibCompiler = installer.match(
+    /function _compile_zlib \{([\s\S]*?)\n\}/
+  )?.[1]
   assert.ok(llamaCompiler, 'the llama compiler function should exist')
   assert.ok(libuvCompiler, 'the libuv compiler function should exist')
+  assert.ok(zlibCompiler, 'the zlib compiler function should exist')
   assert.doesNotMatch(
     llamaCompiler,
     /cmake --build build &&[\s\S]*cmake --build build -- -j"\$CPU_CORES"/,
@@ -1294,6 +1307,11 @@ test('native dependency builds do not perform serial work before parallel builds
     installer,
     /cmake --build \. --config \$config --parallel "\$CPU_CORES"/,
     'Windows CMake builds should use detected CPU parallelism'
+  )
+  assert.match(
+    zlibCompiler,
+    /cmake --build \. --config "\$config" --parallel "\$CPU_CORES"/,
+    'Windows zlib builds should use CMake parallelism instead of forwarding Unix flags to MSBuild'
   )
   assert.match(
     installer,
@@ -1643,6 +1661,11 @@ test('test runners resolve the host architecture instead of assuming x64', () =>
     resolver,
     /case 'x64':[\s\S]*return 'x86_64'[\s\S]*case 'arm64':[\s\S]*return 'arm64'/,
     'the shared test resolver should map Node host architectures to runtime build directories'
+  )
+  assert.match(
+    resolver,
+    /env\.ORO_HOME[\s\S]*path\.join\(env\.ORO_HOME, 'bin', executable\)[\s\S]*existsSync\(staged\)/,
+    'test runners should use the staged CLI after mobile CI prunes the source build tree'
   )
 
   for (const filename of [

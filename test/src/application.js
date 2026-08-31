@@ -756,13 +756,16 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     )
     t.equal(typeof win.isAlwaysOnTop, 'function', 'isAlwaysOnTop is a function')
 
-    await win.setAlwaysOnTop(true)
-    const onTop = await win.isAlwaysOnTop()
-    t.equal(onTop, true, 'window is set to always on top')
+    // Headless windows are not managed by the desktop compositor.
+    if (!isHeadless) {
+      await win.setAlwaysOnTop(true)
+      const onTop = await win.isAlwaysOnTop()
+      t.equal(onTop, true, 'window is set to always on top')
 
-    await win.setAlwaysOnTop(false)
-    const notOnTop = await win.isAlwaysOnTop()
-    t.equal(notOnTop, false, 'window is not set to always on top')
+      await win.setAlwaysOnTop(false)
+      const notOnTop = await win.isAlwaysOnTop()
+      t.equal(notOnTop, false, 'window is not set to always on top')
+    }
   })
 
   test('application.setSystemMenuItemEnabled', async (t) => {
