@@ -198,6 +198,7 @@ jobs:
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
       CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_TEMPDIR: ${{ github.workspace }}/.cache/ccache-tmp
       DEBUG: '1'
       GDK_BACKEND: x11
       GSK_RENDERER: cairo
@@ -226,6 +227,19 @@ jobs:
         with:
           go-version: '1.23.2'
           cache: false
+
+      - name: Setup Unix Rust compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Configure Unix Rust compiler cache
+        shell: bash
+        run: |
+          {
+            echo 'SCCACHE_GHA_ENABLED=true'
+            echo 'RUSTC_WRAPPER=sccache'
+          } >> "$GITHUB_ENV"
 
       - name: Restore native compiler cache
         id: native-cache
@@ -296,6 +310,7 @@ jobs:
             echo 'CMAKE_C_COMPILER_LAUNCHER=ccache'
             echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache'
           } >> "$GITHUB_ENV"
+          mkdir -p "$CCACHE_TEMPDIR"
           ccache --max-size 1G
           ccache --zero-stats
           mkdir -p "$XDG_RUNTIME_DIR"
@@ -413,7 +428,7 @@ jobs:
             id: macos-ios-arm64
             runs_on: macos-14
             release_support: ios
-            apple_mobile_targets: arm64-iPhoneOS arm64-iPhoneSimulator
+            apple_mobile_targets: arm64-iPhoneSimulator
             build_android: false
             exclude_android: true
             exclude_ios: false
@@ -441,6 +456,7 @@ jobs:
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
       CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_TEMPDIR: ${{ github.workspace }}/.cache/ccache-tmp
       DEBUG: '1'
       EXCLUDE_ANDROID: ${{ matrix.exclude_android }}
       EXCLUDE_IOS: ${{ matrix.exclude_ios }}
@@ -481,6 +497,12 @@ jobs:
         with:
           version: v0.17.0
 
+      - name: Setup Unix Rust compiler cache
+        if: runner.os != 'Windows'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
+
       - name: Configure Windows native compiler cache
         if: matrix.windows
         shell: bash
@@ -490,6 +512,15 @@ jobs:
             echo 'RUSTC_WRAPPER=sccache'
             echo 'CMAKE_C_COMPILER_LAUNCHER=sccache'
             echo 'CMAKE_CXX_COMPILER_LAUNCHER=sccache'
+          } >> "$GITHUB_ENV"
+
+      - name: Configure Unix Rust compiler cache
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          {
+            echo 'SCCACHE_GHA_ENABLED=true'
+            echo 'RUSTC_WRAPPER=sccache'
           } >> "$GITHUB_ENV"
 
       - name: Setup Java for Android
@@ -618,6 +649,7 @@ jobs:
           fi
           echo 'CMAKE_C_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
+          mkdir -p "$CCACHE_TEMPDIR"
           ccache --max-size 1G
           ccache --zero-stats
 
@@ -647,14 +679,14 @@ jobs:
               echo "NO_IOS="
             fi
 
+            # The Linux integration lane exercises the desktop networking FFI.
+            # Cross-platform lanes focus on their platform runtime and tests.
+            echo "ORO_SKIP_IROH=1"
+            echo "ORO_SKIP_LIBIPFS=1"
+
             if [[ "$BUILD_ANDROID" == "true" ]]; then
               echo "ORO_ANDROID_CI=1"
               echo "ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes"
-              # Android runtime archives do not expose these desktop-only FFI
-              # features. Their full desktop builds remain covered by the
-              # Linux and macOS shards.
-              echo "ORO_SKIP_IROH=1"
-              echo "ORO_SKIP_LIBIPFS=1"
             fi
           } >> "$GITHUB_ENV"
 

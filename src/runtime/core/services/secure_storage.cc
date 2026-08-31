@@ -70,6 +70,8 @@
 #  include <wincred.h>
 
   namespace {
+    using oro::runtime::String;
+
     std::wstring utf8ToWide (const String& value) {
       if (value.empty()) {
         return std::wstring();
@@ -135,11 +137,11 @@
     }
 
     std::wstring encodeComponent (const String& input) {
-      return utf8ToWide(bytes::base64::encode(input));
+      return utf8ToWide(oro::runtime::bytes::base64::encode(input));
     }
 
     String decodeComponent (const std::wstring& input) {
-      return bytes::base64::decode(wideToUtf8(input.c_str()));
+      return oro::runtime::bytes::base64::decode(wideToUtf8(input.c_str()));
     }
 
     std::wstring makeTargetName (const String& scope, const String& key) {

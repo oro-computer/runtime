@@ -2237,7 +2237,7 @@ export * from '{{url}}'
 
       for (const auto& entry : this->schemeHandlers.handlers) {
         const auto origin = entry.first + "://*";
-        origins.push_back(std::make_shared<WString>(convertStringToWString(origin)));
+        origins.push_back(std::make_shared<WString>(string::convertStringToWString(origin)));
         allowedOrigins[allowedOriginsCount++] = origins.back()->c_str();
       }
 
@@ -2245,7 +2245,7 @@ export * from '{{url}}'
       Set<Microsoft::WRL::ComPtr<CoreWebView2CustomSchemeRegistration>> registrationsSet;
 
       for (const auto& entry : this->schemeHandlers.handlers) {
-        schemes.push_back(std::make_shared<WString>(convertStringToWString(entry.first)));
+        schemes.push_back(std::make_shared<WString>(string::convertStringToWString(entry.first)));
         auto registration = Microsoft::WRL::Make<CoreWebView2CustomSchemeRegistration>(
           schemes.back()->c_str()
         );

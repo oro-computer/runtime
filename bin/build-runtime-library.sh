@@ -303,7 +303,11 @@ declare output_directory="$root/build/$arch-$platform"
 mkdir -p "$output_directory"
 
 declare runtime_compiler_launcher=""
-if [[ "$platform" = "android" ]] && command -v ccache >/dev/null 2>&1; then
+if [[ "$host" = "Win32" ]] && command -v sccache >/dev/null 2>&1; then
+  # The Windows installer selects clang++ by absolute path, bypassing CMake's
+  # compiler launcher. Invoke sccache directly for runtime object compilation.
+  runtime_compiler_launcher="sccache"
+elif [[ "$platform" = "android" ]] && command -v ccache >/dev/null 2>&1; then
   # Android selects the NDK compiler by absolute path, bypassing the compiler
   # wrapper directories used by hosted CI. Invoke ccache explicitly so the
   # restored native cache also covers the runtime objects for each Android ABI.
@@ -315,7 +319,12 @@ function run_runtime_compiler () {
   shift
 
   if [[ -n "$runtime_compiler_launcher" ]]; then
-    quiet "$runtime_compiler_launcher $compiler" "$@"
+    if [[ -n "$VERBOSE" ]]; then
+      echo "$runtime_compiler_launcher" "$compiler" "$@"
+      "$runtime_compiler_launcher" "$compiler" "$@"
+    else
+      "$runtime_compiler_launcher" "$compiler" "$@" > /dev/null 2>&1
+    fi
   else
     quiet "$compiler" "$@"
   fi

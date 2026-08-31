@@ -886,7 +886,9 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const cflags = readFile('bin/cflags.sh')
   const ldflags = readFile('bin/ldflags.sh')
   const installer = readFile('bin/install.sh')
+  const bridge = readFile('src/runtime/bridge/bridge.cc')
   const processService = readFile('src/runtime/core/services/process.cc')
+  const secureStorage = readFile('src/runtime/core/services/secure_storage.cc')
   const updateService = readFile('src/runtime/core/services/update.cc')
 
   assert.match(
@@ -933,6 +935,16 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     updateService,
     /JSON::Object::Entries json \{/,
     'Windows conditional compilation should not leave update response names colliding in one scope'
+  )
+  assert.equal(
+    bridge.match(/string::convertStringToWString/g)?.length,
+    2,
+    'Windows custom schemes should call the runtime string conversion namespace explicitly'
+  )
+  assert.match(
+    secureStorage,
+    /ORO_RUNTIME_PLATFORM_WINDOWS[\s\S]*namespace \{\s+using oro::runtime::String;[\s\S]*oro::runtime::bytes::base64::encode[\s\S]*oro::runtime::bytes::base64::decode/,
+    'Windows secure-storage helpers should qualify runtime string and byte helpers in their file-local namespace'
   )
 })
 
@@ -1238,6 +1250,11 @@ test('runtime target builds share the detected CPU budget', () => {
     /platform" = "android"[\s\S]*command -v ccache[\s\S]*runtime_compiler_launcher="ccache"[\s\S]*run_runtime_compiler/,
     'direct Android NDK runtime compilation should use the restored native compiler cache'
   )
+  assert.match(
+    runtimeBuilder,
+    /host" = "Win32"[\s\S]*command -v sccache[\s\S]*runtime_compiler_launcher="sccache"[\s\S]*run_runtime_compiler/,
+    'direct Windows runtime compilation should use the configured sccache service'
+  )
 })
 
 test('CI shards Apple-mobile builds without changing installer defaults', () => {
@@ -1268,8 +1285,8 @@ test('CI shards Apple-mobile builds without changing installer defaults', () => 
   )
   assert.match(
     workflow,
-    /macOS \+ iOS x64[\s\S]*apple_mobile_targets: x86_64-iPhoneSimulator[\s\S]*macOS \+ iOS arm64[\s\S]*apple_mobile_targets: arm64-iPhoneOS arm64-iPhoneSimulator/,
-    'Intel and Apple Silicon CI should not rebuild each other\'s mobile targets'
+    /macOS \+ iOS x64[\s\S]*apple_mobile_targets: x86_64-iPhoneSimulator[\s\S]*macOS \+ iOS arm64[\s\S]*apple_mobile_targets: arm64-iPhoneSimulator/,
+    'CI should compile each simulator architecture once while release builds retain iPhoneOS coverage'
   )
   assert.match(
     workflow,
@@ -1283,13 +1300,13 @@ test('CI shards Apple-mobile builds without changing installer defaults', () => 
   )
 })
 
-test('Android CI skips desktop-only networking archives', () => {
+test('cross-platform CI skips redundant desktop networking archives', () => {
   const workflow = readFile('.github/workflows/ci.yml')
 
   assert.match(
     workflow,
-    /BUILD_ANDROID" == "true"[\s\S]*ORO_SKIP_IROH=1[\s\S]*ORO_SKIP_LIBIPFS=1/,
-    'the Android shard should not spend time building host-only Iroh and libipfs archives'
+    /Linux integration lane exercises the desktop networking FFI[\s\S]*ORO_SKIP_IROH=1[\s\S]*ORO_SKIP_LIBIPFS=1[\s\S]*BUILD_ANDROID" == "true"/,
+    'platform shards should not repeat the networking FFI build covered by Linux integration'
   )
 })
 
@@ -1513,6 +1530,13 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     /Restore native compiler cache[\s\S]*ccache-v1-/,
     'native Unix builds should restore compiler output caches'
   )
+  for (const nativeWorkflow of [workflow, releaseWorkflow, publishWorkflow]) {
+    assert.match(
+      nativeWorkflow,
+      /CCACHE_TEMPDIR: \$\{\{ github\.workspace \}\}\/\.cache\/ccache-tmp[\s\S]*mkdir -p "\$CCACHE_TEMPDIR"/,
+      'volatile ccache temporary files should stay outside saved compiler caches'
+    )
+  }
   assert.match(
     workflow,
     /Build Oro Runtime CLI\n\s+timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Unix\)[\s\S]*timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Windows\)[\s\S]*timeout-minutes: 20/,
@@ -1544,6 +1568,16 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     workflow,
     /linux-integration:[\s\S]*Restore Rust dependency cache[\s\S]*test-platform:/,
     'Linux integration should cache Rust registry and Git dependencies'
+  )
+  assert.equal(
+    workflow.match(/Setup Unix Rust compiler cache/g)?.length,
+    2,
+    'Linux integration and Unix platform shards should configure Rust compiler caches'
+  )
+  assert.match(
+    workflow,
+    /Setup Unix Rust compiler cache[\s\S]*mozilla-actions\/sccache-action@[0-9a-f]{40} # v0\.0\.11[\s\S]*Configure Unix Rust compiler cache[\s\S]*SCCACHE_GHA_ENABLED=true[\s\S]*RUSTC_WRAPPER=sccache/,
+    'Unix native builds should reuse Rust compiler outputs through sccache'
   )
   assert.doesNotMatch(
     `${workflow}\n${releaseWorkflow}\n${publishWorkflow}`,

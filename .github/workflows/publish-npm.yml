@@ -159,6 +159,7 @@ jobs:
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
       CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_TEMPDIR: ${{ github.workspace }}/.cache/ccache-tmp
       EXCLUDE_ANDROID: ${{ matrix.exclude_android }}
       EXCLUDE_IOS: ${{ matrix.exclude_ios }}
       PACKAGE_ID: ${{ matrix.package }}
@@ -307,6 +308,7 @@ jobs:
           fi
           echo 'CMAKE_C_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
+          mkdir -p "$CCACHE_TEMPDIR"
           ccache --max-size 500M
           ccache --zero-stats
 
