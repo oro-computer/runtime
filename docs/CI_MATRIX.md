@@ -54,8 +54,8 @@ immediately afterward builds and smoke-tests those exact platform outputs.
 | Linux arm64 | `ubuntu-24.04-arm` | arm64 | none | 24; build and CLI smoke test |
 | Android x86_64 | `ubuntu-24.04` | x86_64 | Android x86_64 | 24; Emulator tests |
 | Android arm64-v8a | `ubuntu-24.04` | x86_64 | Android arm64-v8a | 24; build and CLI smoke test |
-| macOS + iOS x64 | `macos-15-intel` | x86_64 | x86_64 iOS Simulator library | 24; build and CLI smoke test |
-| macOS + iOS arm64 | `macos-14` | arm64 | arm64 iOS device and Simulator libraries | 24; macOS and Simulator tests |
+| macOS x64 | `macos-15-intel` | x86_64 | none | 24; build and CLI smoke test |
+| macOS + iOS arm64 | `macos-14` | arm64 | arm64 iOS Simulator library | 24; macOS and Simulator tests |
 | Windows x64 | `windows-2022` | x86_64 | none | 24; Windows desktop and child-process tests |
 
 The Linux x64 integration lane runs `npm test`, `npm run test:child-process`,
@@ -64,7 +64,9 @@ host. Windows repeats the desktop and child-process suites because process and p
 platform-specific. Apple Silicon repeats the desktop suite and boots an iPhone Simulator. The
 Android x86_64 runs `npm run test:android-emulator`; arm64-v8a builds in a parallel shard. Linux
 arm64 and Intel macOS are architecture build checks: they validate the staged target family and
-launch the resulting CLI without installing the test harness.
+launch the resulting CLI without installing the test harness. Per-commit iOS coverage stays on
+the tested Apple Silicon simulator shard; the release matrix separately builds the x86_64
+Simulator and arm64 device SDK artifacts.
 
 Android is intentionally cross-built on the Ubuntu x64 runner. The Android NDK distributes Linux
 host tools for x86_64, while Oro emits both supported Android target ABIs from that host. The

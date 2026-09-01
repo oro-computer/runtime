@@ -161,19 +161,12 @@ CGFloat MACOS_TRAFFIC_LIGHT_BUTTON_SIZE = 16;
       window->eval(getEmitToRenderProcessJavaScript("windowclosed", json.str()));
     }
   }
+
+  // Cocoa is still executing this delegate callback. Keep the native window
+  // and its WebKit-owned content alive until the dispatched manager cleanup
+  // runs after the callback returns.
   window->window.delegate = nullptr;
-  window->window.contentView = nullptr;
-
-  if (window->window.titleBarView) {
-    [window->window.titleBarView removeFromSuperview];
-  #if !__has_feature(objc_arc)
-    [window->window.titleBarView release];
-  #endif
-  }
-
-  window->window.titleBarView = nullptr;
-
-  window->window = nullptr;
+  objc_setAssociatedObject(self, "window", nil, OBJC_ASSOCIATION_ASSIGN);
   app->dispatch([app, index]() {
     app->runtime.windowManager.destroyWindow(index);
   });

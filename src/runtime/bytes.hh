@@ -110,9 +110,8 @@ namespace oro::runtime::bytes {
 
   class Buffer {
     public:
-      // just alias `String::npos` - same effect
-      static constexpr auto npos = String::npos;
       using size_type = ArrayBuffer::size_type;
+      static constexpr size_type npos = -1;
 
       // iterator protocol/interface
       using value_type = unsigned char;

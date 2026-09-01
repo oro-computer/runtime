@@ -6,7 +6,9 @@
 #include "../../config.hh"
 #include "../../url.hh"
 #if defined(_WIN32)
-#  define NOMINMAX
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
 #  include <windows.h>
 #  include <errno.h>
 #  include <string.h>
@@ -2547,11 +2549,23 @@ namespace oro::runtime::core::services {
       };
 
       // Convert UTF-8 path to UTF-16
-      int wlen = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
+      int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, nullptr, 0);
       std::wstring wpath;
-      wpath.resize(wlen > 0 ? (wlen - 1) : 0);
       if (wlen > 0) {
-        MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &wpath[0], wlen);
+        wpath.resize(static_cast<size_t>(wlen));
+        const auto written = MultiByteToWideChar(
+          CP_UTF8,
+          MB_ERR_INVALID_CHARS,
+          path.c_str(),
+          -1,
+          wpath.data(),
+          wlen
+        );
+        if (written > 0) {
+          wpath.resize(static_cast<size_t>(written - 1));
+        } else {
+          wpath.clear();
+        }
       }
 
       HANDLE h = CreateFileW(
@@ -2566,21 +2580,13 @@ namespace oro::runtime::core::services {
 
       if (h == INVALID_HANDLE_VALUE) {
         DWORD code = GetLastError();
-        char* msg = nullptr;
-        FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-          nullptr, code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&msg, 0, nullptr);
-        errMsg = msg ? String(msg) : String("CreateFileW failed");
-        if (msg) LocalFree(msg);
+        errMsg = oro::runtime::string::formatWindowsError(code, "CreateFileW");
       } else {
         FILETIME at = toFileTime(atime);
         FILETIME mt = toFileTime(mtime);
         if (!SetFileTime(h, nullptr, &at, &mt)) {
           DWORD code = GetLastError();
-          char* msg = nullptr;
-          FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-            nullptr, code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&msg, 0, nullptr);
-          errMsg = msg ? String(msg) : String("SetFileTime failed");
-          if (msg) LocalFree(msg);
+          errMsg = oro::runtime::string::formatWindowsError(code, "SetFileTime");
           r = -1;
         } else {
           r = 0;

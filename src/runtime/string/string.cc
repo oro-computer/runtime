@@ -1,5 +1,7 @@
 #include "../string.hh"
 
+#include <limits>
+
 #if defined(min)
 #undef min
 #endif
@@ -136,9 +138,46 @@ namespace oro::runtime::string {
   }
 
   WString convertStringToWString (const String& source) {
+  #if ORO_RUNTIME_PLATFORM_WINDOWS
+    if (source.empty()) {
+      return {};
+    }
+
+    if (source.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+      return {};
+    }
+
+    const auto sourceSize = static_cast<int>(source.size());
+    const auto required = MultiByteToWideChar(
+      CP_UTF8,
+      MB_ERR_INVALID_CHARS,
+      source.data(),
+      sourceSize,
+      nullptr,
+      0
+    );
+    if (required <= 0) {
+      return {};
+    }
+
+    WString result(static_cast<size_t>(required), L'\0');
+    const auto written = MultiByteToWideChar(
+      CP_UTF8,
+      MB_ERR_INVALID_CHARS,
+      source.data(),
+      sourceSize,
+      result.data(),
+      required
+    );
+    if (written != required) {
+      return {};
+    }
+    return result;
+  #else
     WString result(source.length(), L' ');
     std::copy(source.begin(), source.end(), result.begin());
     return result;
+  #endif
   }
 
   WString convertStringToWString (const WString& source) {
@@ -146,9 +185,50 @@ namespace oro::runtime::string {
   }
 
   String convertWStringToString (const WString& source) {
+  #if ORO_RUNTIME_PLATFORM_WINDOWS
+    if (source.empty()) {
+      return {};
+    }
+
+    if (source.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+      return {};
+    }
+
+    const auto sourceSize = static_cast<int>(source.size());
+    const auto required = WideCharToMultiByte(
+      CP_UTF8,
+      WC_ERR_INVALID_CHARS,
+      source.data(),
+      sourceSize,
+      nullptr,
+      0,
+      nullptr,
+      nullptr
+    );
+    if (required <= 0) {
+      return {};
+    }
+
+    String result(static_cast<size_t>(required), '\0');
+    const auto written = WideCharToMultiByte(
+      CP_UTF8,
+      WC_ERR_INVALID_CHARS,
+      source.data(),
+      sourceSize,
+      result.data(),
+      required,
+      nullptr,
+      nullptr
+    );
+    if (written != required) {
+      return {};
+    }
+    return result;
+  #else
     String result(source.length(), ' ');
     std::copy(source.begin(), source.end(), result.begin());
     return result;
+  #endif
   }
 
   String convertWStringToString (const String& source) {
@@ -205,15 +285,15 @@ namespace oro::runtime::string {
 #if ORO_RUNTIME_PLATFORM_WINDOWS
   String formatWindowsError (DWORD error, const String& source) {
     StringStream message;
-    LPVOID errorMessage;
+    LPWSTR errorMessage = nullptr;
 
     // format
-    FormatMessage(
+    const DWORD length = FormatMessageW(
       FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
       nullptr,
       error,
       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-      (LPTSTR) &errorMessage,
+      reinterpret_cast<LPWSTR>(&errorMessage),
       0,
       nullptr
     );
@@ -221,10 +301,19 @@ namespace oro::runtime::string {
     // create output string
     message
       << "Error " << error
-      << " in " << source
-      << ": " <<  (LPTSTR) errorMessage;
+      << " in " << source;
 
-    LocalFree(errorMessage);
+    if (length > 0 && errorMessage != nullptr) {
+      auto description = convertWStringToString(WString(errorMessage, length));
+      while (!description.empty() && (description.back() == '\r' || description.back() == '\n')) {
+        description.pop_back();
+      }
+      message << ": " << description;
+    }
+
+    if (errorMessage != nullptr) {
+      LocalFree(errorMessage);
+    }
 
     return message.str();
   }

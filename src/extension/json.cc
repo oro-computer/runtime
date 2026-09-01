@@ -182,11 +182,8 @@ const char * oapi_json_stringify_value (const oapi_json_any_t* json) {
   if (length > 0) {
     auto bytes = json->context->memory.alloc<char>(length + 1);
     if (bytes != nullptr) {
-    #if defined(_WIN32)
-      strncat_s(bytes, length + 1, string.c_str(), length);
-    #else
-      strncat(bytes, string.c_str(), length);
-    #endif
+      std::memcpy(bytes, string.data(), length);
+      bytes[length] = '\0';
     }
 
     return bytes;

@@ -9,29 +9,45 @@
 #include <chrono>
 
 namespace oro::runtime::ai::llm {
+  namespace {
+    using ClearKVFunction = void (*)(llama_context*);
+
+    ClearKVFunction getClearKVFunction () {
+      static const auto function = []() -> ClearKVFunction {
+      #if defined(_WIN32)
+        HMODULE module = GetModuleHandleW(nullptr);
+        auto resolved = module != nullptr
+          ? reinterpret_cast<ClearKVFunction>(GetProcAddress(module, "llama_kv_cache_clear"))
+          : nullptr;
+
+        if (resolved == nullptr) {
+          module = GetModuleHandleW(L"llama.dll");
+          if (module != nullptr) {
+            resolved = reinterpret_cast<ClearKVFunction>(
+              GetProcAddress(module, "llama_kv_cache_clear")
+            );
+          }
+        }
+
+        return resolved;
+      #else
+        return reinterpret_cast<ClearKVFunction>(
+          dlsym(RTLD_DEFAULT, "llama_kv_cache_clear")
+        );
+      #endif
+      }();
+
+      return function;
+    }
+  }
+
   // KV-cache telemetry counters (definitions)
   std::atomic<uint64_t> kvClearAttempted{0};
   std::atomic<uint64_t> kvClearSucceeded{0};
   std::atomic<long long> kvClearLastAttemptMs{0};
   std::atomic<long long> kvClearLastSuccessMs{0};
   bool isKVClearAvailable() {
-    using fn_t = void (*)(llama_context*);
-    static fn_t fn = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-#if defined(_WIN32)
-      HMODULE mod = GetModuleHandleW(nullptr);
-      if (mod) fn = reinterpret_cast<fn_t>(GetProcAddress(mod, "llama_kv_cache_clear"));
-      if (!fn) {
-        HMODULE h = GetModuleHandleW(L"llama.dll");
-        if (h) fn = reinterpret_cast<fn_t>(GetProcAddress(h, "llama_kv_cache_clear"));
-      }
-#else
-      fn = reinterpret_cast<fn_t>(dlsym(RTLD_DEFAULT, "llama_kv_cache_clear"));
-#endif
-      resolved = true;
-    }
-    return fn != nullptr;
+    return getClearKVFunction() != nullptr;
   }
   Context::Context (
     SharedPointer<Model> model,
@@ -234,24 +250,7 @@ namespace oro::runtime::ai::llm {
   bool Context::clearKV () {
     if (this->context == nullptr) return false;
 
-    using fn_t = void (*)(llama_context*);
-    static fn_t fn = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-#if defined(_WIN32)
-      // Try main module first (statically linked) then common DLL names
-      HMODULE mod = GetModuleHandleW(nullptr);
-      if (mod) fn = reinterpret_cast<fn_t>(GetProcAddress(mod, "llama_kv_cache_clear"));
-      if (!fn) {
-        HMODULE h = GetModuleHandleW(L"llama.dll");
-        if (h) fn = reinterpret_cast<fn_t>(GetProcAddress(h, "llama_kv_cache_clear"));
-      }
-#else
-      // Search the global namespace for dynamically linked symbols
-      fn = reinterpret_cast<fn_t>(dlsym(RTLD_DEFAULT, "llama_kv_cache_clear"));
-#endif
-      resolved = true;
-    }
+    const auto fn = getClearKVFunction();
     // Telemetry: record attempt timestamp
     kvClearAttempted.fetch_add(1);
     kvClearLastAttemptMs.store(

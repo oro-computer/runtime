@@ -75,15 +75,11 @@ namespace oro::runtime::serviceworker {
             if (registration.state == Registration::State::Activated) {
               if (!this->init(this->callback)) {
                 debug(
-                #if ORO_RUNTIME_PLATFORM_APPLE
                   "ServiceWorkerContainer: Failed to dispatch fetch request '%s %s%s' for client '%llu'",
-                #else
-                  "ServiceWorkerContainer: Failed to dispatch fetch request '%s %s%s' for client '%lu'",
-                #endif
                   request.method.c_str(),
                   request.url.pathname.c_str(),
                   request.url.search.c_str(),
-                  request.client.id
+                  static_cast<unsigned long long>(request.client.id)
                 );
               }
 

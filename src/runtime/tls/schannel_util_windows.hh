@@ -82,7 +82,7 @@ namespace oro::runtime::tls::schannel {
   }
 
   inline bool convertRsaToPkcs8(const std::vector<unsigned char>& pkcs1, std::vector<unsigned char>& pkcs8) {
-    if (pkcs1.empty()) return false;
+    if (pkcs1.empty() || pkcs1.size() > MAXDWORD) return false;
     CRYPT_PRIVATE_KEY_INFO info{};
     info.Version = 0;
     info.Algorithm.pszObjId = const_cast<char*>(szOID_RSA_RSA);
@@ -157,9 +157,12 @@ namespace oro::runtime::tls::schannel {
   }
 
   inline bool convertEcToPkcs8(const std::vector<unsigned char>& sec1, std::vector<unsigned char>& pkcs8) {
-    if (sec1.empty()) return false;
+    if (sec1.empty() || sec1.size() > MAXDWORD) return false;
     std::vector<unsigned char> oidEncoded;
     if (!extractEcCurveOid(sec1, oidEncoded)) {
+      return false;
+    }
+    if (oidEncoded.size() > MAXDWORD) {
       return false;
     }
 
@@ -256,6 +259,11 @@ namespace oro::runtime::tls::schannel {
       std::string body = pem.substr(start, end - start);
       std::vector<unsigned char> der;
       if (!decodePemSegment(pem.substr(pos, end + footer.size() - pos), header.c_str(), footer.c_str(), der)) {
+        for (auto ctx : certs) { if (ctx) CertFreeCertificateContext(ctx); }
+        certs.clear();
+        return false;
+      }
+      if (der.size() > MAXDWORD) {
         for (auto ctx : certs) { if (ctx) CertFreeCertificateContext(ctx); }
         certs.clear();
         return false;

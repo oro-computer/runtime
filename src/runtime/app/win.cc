@@ -10,6 +10,7 @@ using oro::runtime::javascript::getEmitToRenderProcessJavaScript;
 using oro::runtime::config::getUserConfig;
 using oro::runtime::string::trim;
 using oro::runtime::string::split;
+using oro::runtime::string::convertStringToWString;
 using oro::runtime::string::convertWStringToString;
 
 namespace oro::runtime::app {
@@ -17,29 +18,35 @@ namespace oro::runtime::app {
   static FILE* console = nullptr;
 
   static inline void alert (const WString &ws) {
-    MessageBoxA(nullptr, convertWStringToString(ws).c_str(), _TEXT("Alert"), MB_OK | MB_ICONSTOP);
+    MessageBoxW(nullptr, ws.c_str(), L"Alert", MB_OK | MB_ICONSTOP);
   }
 
   static inline void alert (const String &s) {
-    MessageBoxA(nullptr, s.c_str(), _TEXT("Alert"), MB_OK | MB_ICONSTOP);
+    alert(convertStringToWString(s));
   }
 
   static inline void alert (const char* s) {
-    MessageBoxA(nullptr, s, _TEXT("Alert"), MB_OK | MB_ICONSTOP);
+    alert(s != nullptr ? String(s) : String());
   }
 
   static void showWindowsConsole () {
     if (!isConsoleVisible) {
-      isConsoleVisible = true;
-      AllocConsole();
-      freopen_s(&console, "CONOUT$", "w", stdout);
+      if (AllocConsole() && freopen_s(&console, "CONOUT$", "w", stdout) == 0) {
+        isConsoleVisible = true;
+      } else {
+        console = nullptr;
+        FreeConsole();
+      }
     }
   }
 
   static void hideWindowsConsole () {
     if (isConsoleVisible) {
       isConsoleVisible = false;
-      fclose(console);
+      if (console != nullptr) {
+        fclose(console);
+        console = nullptr;
+      }
       FreeConsole();
     }
   }
@@ -62,9 +69,19 @@ namespace oro::runtime::app {
       GetWindowLongPtr(hWnd, GWLP_USERDATA)
     );
 
-    // invalidate `window` pointer that potentially is leaked
-    if (window != nullptr && app->runtime.windowManager.getWindow(window->index).get() != window) {
-      window = nullptr;
+    // Validate window userdata without dereferencing a potentially stale pointer.
+    if (window != nullptr) {
+      bool isManaged = false;
+      for (const auto& managed : app->runtime.windowManager.windows) {
+        if (managed.get() == window) {
+          isManaged = true;
+          break;
+        }
+      }
+
+      if (!isManaged) {
+        window = nullptr;
+      }
     }
 
     auto userConfig = window != nullptr
@@ -73,9 +90,19 @@ namespace oro::runtime::app {
 
     if (message == WM_COPYDATA) {
       auto copyData = reinterpret_cast<PCOPYDATASTRUCT>(lParam);
-      message = (UINT) copyData->dwData;
-      wParam = (WPARAM) copyData->cbData;
-      lParam = (LPARAM) copyData->lpData;
+      constexpr DWORD maxDeepLinkBytes = 1024 * 1024;
+      if (
+        copyData == nullptr ||
+        copyData->dwData != WM_HANDLE_DEEP_LINK ||
+        copyData->cbData > maxDeepLinkBytes ||
+        (copyData->cbData > 0 && copyData->lpData == nullptr)
+      ) {
+        return FALSE;
+      }
+
+      message = WM_HANDLE_DEEP_LINK;
+      wParam = static_cast<WPARAM>(copyData->cbData);
+      lParam = reinterpret_cast<LPARAM>(copyData->lpData);
     }
 
     switch (message) {
@@ -318,19 +345,25 @@ namespace oro::runtime::app {
 
     auto iconPath = fs::path { getcwd() / fs::path { userConfig["win_logo"] } };
 
-    HICON icon = (HICON) LoadImageA(
+    const auto wideIconPath = iconPath.wstring();
+    HICON icon = reinterpret_cast<HICON>(LoadImageW(
       NULL,
-      iconPath.string().c_str(),
+      wideIconPath.c_str(),
       IMAGE_ICON,
       GetSystemMetrics(SM_CXICON),
       GetSystemMetrics(SM_CXICON),
       LR_LOADFROMFILE
-    );
+    ));
 
     auto windowClassName = userConfig["meta_bundle_identifier"];
+    const auto wideWindowClassName = convertStringToWString(windowClassName);
+    if (wideWindowClassName.empty()) {
+      alert("Application bundle identifier is not valid UTF-8.");
+      return;
+    }
 
     app->wcex = {};
-    app->wcex.cbSize = sizeof(WNDCLASSEX);
+    app->wcex.cbSize = sizeof(WNDCLASSEXW);
     app->wcex.style = CS_HREDRAW | CS_VREDRAW;
     app->wcex.cbClsExtra = 0;
     app->wcex.cbWndExtra = 0;
@@ -339,12 +372,12 @@ namespace oro::runtime::app {
     app->wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
     app->wcex.hbrBackground = CreateSolidBrush(RGB(0, 0, 0));
     app->wcex.lpszMenuName = NULL;
-    app->wcex.lpszClassName = windowClassName.c_str();
+    app->wcex.lpszClassName = wideWindowClassName.c_str();
     app->wcex.hIconSm = icon; // ico doesn't auto scale, needs 16x16 icon lol fuck you bill
     app->wcex.hIcon = icon;
     app->wcex.lpfnWndProc = onWindowProcMessage;
 
-    if (!RegisterClassEx(&app->wcex)) {
+    if (!RegisterClassExW(&app->wcex)) {
       alert("Application could not launch, possible missing resources.");
     }
   }

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -23,6 +24,7 @@
 #include <schnlsp.h>
 
 #include "../tcp.hh"
+#include "../string.hh"
 #include "schannel_util_windows.hh"
 
 #pragma comment(lib, "secur32.lib")
@@ -45,10 +47,19 @@ namespace oro::runtime::tls {
     inline String formatSystemMessage(HRESULT hr) {
       String message;
       DWORD flags = FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
-      LPSTR buffer = nullptr;
+      LPWSTR buffer = nullptr;
       DWORD code = static_cast<DWORD>(hr);
-      if (FormatMessageA(flags, nullptr, code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPSTR>(&buffer), 0, nullptr) && buffer) {
-        message.assign(buffer);
+      const DWORD length = FormatMessageW(
+        flags,
+        nullptr,
+        code,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        reinterpret_cast<LPWSTR>(&buffer),
+        0,
+        nullptr
+      );
+      if (length > 0 && buffer != nullptr) {
+        message = string::convertWStringToString(WString(buffer, length));
         LocalFree(buffer);
         while (!message.empty() && (message.back() == '\r' || message.back() == '\n')) message.pop_back();
       }
@@ -72,19 +83,39 @@ namespace oro::runtime::tls {
 
     inline std::wstring widen(const String& value) {
       if (value.empty()) return std::wstring();
-      int needed = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), nullptr, 0);
+      if (value.size() > static_cast<size_t>(std::numeric_limits<int>::max())) return std::wstring();
+      int needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.c_str(), static_cast<int>(value.size()), nullptr, 0);
       if (needed <= 0) return std::wstring();
       std::wstring result(static_cast<size_t>(needed), L'\0');
-      MultiByteToWideChar(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), result.data(), needed);
+      const auto written = MultiByteToWideChar(
+        CP_UTF8,
+        MB_ERR_INVALID_CHARS,
+        value.c_str(),
+        static_cast<int>(value.size()),
+        result.data(),
+        needed
+      );
+      if (written != needed) return std::wstring();
       return result;
     }
 
     inline std::string narrow(const wchar_t* value) {
       if (!value) return std::string();
-      int needed = WideCharToMultiByte(CP_UTF8, 0, value, -1, nullptr, 0, nullptr, nullptr);
+      int needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1, nullptr, 0, nullptr, nullptr);
       if (needed <= 0) return std::string();
-      std::string result(static_cast<size_t>(needed) - 1, '\0');
-      if (needed > 1) WideCharToMultiByte(CP_UTF8, 0, value, -1, result.data(), needed - 1, nullptr, nullptr);
+      std::string result(static_cast<size_t>(needed), '\0');
+      const auto written = WideCharToMultiByte(
+        CP_UTF8,
+        WC_ERR_INVALID_CHARS,
+        value,
+        -1,
+        result.data(),
+        needed,
+        nullptr,
+        nullptr
+      );
+      if (written <= 0) return std::string();
+      result.resize(static_cast<size_t>(written - 1));
       return result;
     }
 
@@ -270,7 +301,7 @@ namespace oro::runtime::tls {
         if (proto.empty() || proto.size() > 255) continue;
         payload += 1 + proto.size();
       }
-      if (payload == 0) return;
+      if (payload == 0 || payload > std::numeric_limits<unsigned short>::max()) return;
       const size_t listSize = sizeof(SecApplicationProtocolList) + payload;
       const size_t totalSize = sizeof(SecPkgContext_ApplicationProtocols) + listSize;
       std::vector<unsigned char> storage(totalSize);
@@ -296,12 +327,12 @@ namespace oro::runtime::tls {
 
     inline String nameFromCert(const PCCERT_CONTEXT cert) {
       if (!cert) return String();
-      DWORD len = CertNameToStrA(cert->dwCertEncodingType, &cert->pCertInfo->Subject, CERT_X500_NAME_STR | CERT_NAME_STR_REVERSE_FLAG, nullptr, 0);
+      DWORD len = CertNameToStrW(cert->dwCertEncodingType, &cert->pCertInfo->Subject, CERT_X500_NAME_STR | CERT_NAME_STR_REVERSE_FLAG, nullptr, 0);
       if (!len) return String();
-      std::string out(static_cast<size_t>(len), '\0');
-      if (!CertNameToStrA(cert->dwCertEncodingType, &cert->pCertInfo->Subject, CERT_X500_NAME_STR | CERT_NAME_STR_REVERSE_FLAG, out.data(), len)) return String();
+      WString out(static_cast<size_t>(len), L'\0');
+      if (!CertNameToStrW(cert->dwCertEncodingType, &cert->pCertInfo->Subject, CERT_X500_NAME_STR | CERT_NAME_STR_REVERSE_FLAG, out.data(), len)) return String();
       if (!out.empty() && out.back() == '\0') out.pop_back();
-      return out;
+      return string::convertWStringToString(out);
     }
 
   }
@@ -420,16 +451,48 @@ namespace oro::runtime::tls {
       CERT_CHAIN_ENGINE_CONFIG config{};
       config.cbSize = sizeof(config);
       config.hExclusiveRoot = impl->rootStore;
-      if (impl->rootStore) {
-        CertCreateCertificateChainEngine(&config, &chainEngine);
-      }
       PCCERT_CHAIN_CONTEXT chainContext = nullptr;
-      if (!CertGetCertificateChain(chainEngine ? chainEngine : HCCE_CURRENT_USER, cert, nullptr, cert->hCertStore, &chainPara, 0, nullptr, &chainContext) || !chainContext) {
+      if (impl->rootStore && !CertCreateCertificateChainEngine(&config, &chainEngine)) {
+        flags = CERT_TRUST_IS_NOT_SIGNATURE_VALID;
+        message = "CertCreateCertificateChainEngine failed";
+      } else if (!CertGetCertificateChain(chainEngine ? chainEngine : HCCE_CURRENT_USER, cert, nullptr, cert->hCertStore, &chainPara, 0, nullptr, &chainContext) || !chainContext) {
         flags = CERT_TRUST_IS_NOT_SIGNATURE_VALID;
         message = "CertGetCertificateChain failed";
       } else {
         flags = chainContext->TrustStatus.dwErrorStatus;
         message = describeTrustError(flags);
+        if (flags == CERT_TRUST_NO_ERROR) {
+          SSL_EXTRA_CERT_CHAIN_POLICY_PARA sslPolicy{};
+          sslPolicy.cbSize = sizeof(sslPolicy);
+          sslPolicy.dwAuthType = AUTHTYPE_SERVER;
+          sslPolicy.pwszServerName = impl->target.empty()
+            ? nullptr
+            : const_cast<wchar_t*>(impl->target.c_str());
+
+          CERT_CHAIN_POLICY_PARA policyParameters{};
+          policyParameters.cbSize = sizeof(policyParameters);
+          policyParameters.pvExtraPolicyPara = &sslPolicy;
+
+          CERT_CHAIN_POLICY_STATUS policyStatus{};
+          policyStatus.cbSize = sizeof(policyStatus);
+          if (
+            !CertVerifyCertificateChainPolicy(
+              CERT_CHAIN_POLICY_SSL,
+              chainContext,
+              &policyParameters,
+              &policyStatus
+            ) ||
+            policyStatus.dwError != 0
+          ) {
+            flags = CERT_TRUST_IS_NOT_VALID_FOR_USAGE;
+            message = policyStatus.dwError != 0
+              ? formatSystemMessage(static_cast<HRESULT>(policyStatus.dwError))
+              : "CertVerifyCertificateChainPolicy failed";
+            if (message.empty()) {
+              message = "TLS server certificate policy validation failed";
+            }
+          }
+        }
         CertFreeCertificateChain(chainContext);
       }
       if (chainEngine) {
@@ -516,7 +579,8 @@ namespace oro::runtime::tls {
   int Client::connect(const ClientOptions& opts) {
     if (!this->impl) return -1;
     auto* c = this->impl;
-    c->target = widen(!opts.servername.empty() ? opts.servername : opts.host);
+    const auto target = !opts.servername.empty() ? opts.servername : opts.host;
+    c->target = widen(target);
     c->manualVerify = false;
     c->allowUnverified = !opts.rejectUnauthorized;
     c->handshakeComplete = false;
@@ -529,6 +593,11 @@ namespace oro::runtime::tls {
     c->decryptedPending.clear();
     c->lastErrorCode = S_OK;
     c->lastErrorMessage.clear();
+    if (!target.empty() && c->target.empty()) {
+      c->lastErrorCode = HRESULT_FROM_WIN32(ERROR_NO_UNICODE_TRANSLATION);
+      c->lastErrorMessage = "TLS server name is not valid UTF-8";
+      return -1;
+    }
 
     if (c->haveContext) {
       DeleteSecurityContext(&c->ctx);
@@ -574,9 +643,12 @@ namespace oro::runtime::tls {
 
     if (!opts.ca.empty()) {
       c->rootStore = createRootStore(opts.ca);
-      if (c->rootStore) {
-        cred.hRootStore = c->rootStore;
+      if (!c->rootStore) {
+        c->lastErrorCode = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        c->lastErrorMessage = "TLS CA bundle is invalid";
+        return -1;
       }
+      cred.hRootStore = c->rootStore;
     }
 
     if (hasCert && hasKey) {
@@ -632,6 +704,12 @@ namespace oro::runtime::tls {
 
   int Client::onEncryptedData(const unsigned char* data, size_t len) {
     if (!this->impl || !data || len == 0) return 0;
+    if (
+      len > MAXDWORD ||
+      this->impl->encryptedIn.size() > static_cast<size_t>(MAXDWORD) - len
+    ) {
+      return -1;
+    }
     this->impl->encryptedIn.insert(this->impl->encryptedIn.end(), data, data + len);
     return 0;
   }
@@ -670,8 +748,10 @@ namespace oro::runtime::tls {
       status = InitializeSecurityContextW(&c->cred, &c->ctx, c->target.empty() ? nullptr : const_cast<wchar_t*>(c->target.c_str()), c->requestedFlags, 0, SECURITY_NATIVE_DREP, &inDesc, 0, nullptr, &outDesc, &c->contextFlags, &c->expiry);
     }
 
-    if (outBuffers[0].pvBuffer && outBuffers[0].cbBuffer > 0) {
-      this->write(reinterpret_cast<const char*>(outBuffers[0].pvBuffer), outBuffers[0].cbBuffer);
+    if (outBuffers[0].pvBuffer) {
+      if (outBuffers[0].cbBuffer > 0) {
+        this->write(reinterpret_cast<const char*>(outBuffers[0].pvBuffer), outBuffers[0].cbBuffer);
+      }
       FreeContextBuffer(outBuffers[0].pvBuffer);
       outBuffers[0].pvBuffer = nullptr;
     }

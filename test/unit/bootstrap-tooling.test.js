@@ -834,6 +834,8 @@ test('desktop tests expose their isolated fixtures to runtime code', () => {
 
 test('VM context windows use an explicit startup handshake', () => {
   const vm = readFile('api/vm.js')
+  const ipc = readFile('api/ipc.js')
+  const workerThreads = readFile('api/worker_threads.js')
   const vmWorker = readFile('api/vm/worker.js')
   const vmInit = readFile('api/vm/init.js')
   const sharedWorker = readFile('api/shared-worker/index.js')
@@ -900,6 +902,32 @@ test('VM context windows use an explicit startup handshake', () => {
     vm,
     /contextWorker\.addEventListener\('message'/,
     'VM worker messages should not be observed on the SharedWorker wrapper'
+  )
+  assert.equal(
+    (vm.match(/worker\.port\.postMessage\([\s\S]*?\n\s*transfer\n\s*\)/g) || [])
+      .length,
+    2,
+    'VM context messages should use the transferable-list form supported by native MessagePorts'
+  )
+  assert.doesNotMatch(
+    [vm, ipc, workerThreads].join('\n'),
+    /\.postMessage\([\s\S]{0,300}\{ transfer \}\s*\)/,
+    'native Worker and MessagePort calls should not use unsupported structured-clone option dictionaries'
+  )
+  assert.match(
+    ipc,
+    /tx\.postMessage\([\s\S]*?options\.transfer\n\s*\)/,
+    'IPC MessagePorts should pass their resolved transferable list to the native port'
+  )
+  assert.match(
+    ipc,
+    /else if \(object instanceof MessagePort\)[\s\S]*else if \(Object\.getPrototypeOf\(object\) === Object\.prototype\) \{[\s\S]*findIPCMessageTransfers\(transfers, object\[key\]\)/,
+    'IPC transferable discovery should recurse into plain objects instead of treating them as transferables'
+  )
+  assert.doesNotMatch(
+    ipc,
+    /else \{\s+add\(object\)\s+return object\s+\}\s+\} else if \(Object\.getPrototypeOf/,
+    'IPC transferable discovery should not leave its plain-object branch unreachable'
   )
   assert.match(
     sharedWorkerInit,
@@ -971,6 +999,20 @@ test('macOS window teardown preserves WebKit-owned views', () => {
     /for \(NSView\* view in contentView\.subviews\)[\s\S]*\[view release\]/,
     'window teardown must not release WKWebView-owned subviews'
   )
+  const shouldClose = appleWindow.match(
+    /- \(BOOL\) windowShouldClose:[\s\S]*?\n}\n#elif ORO_RUNTIME_PLATFORM_IOS/
+  )?.[0]
+  assert.ok(shouldClose, 'the macOS window-close delegate should exist')
+  assert.doesNotMatch(
+    shouldClose,
+    /window->window\.(?:contentView|titleBarView) = nullptr|window->window = nullptr|\[window->window\.titleBarView release\]/,
+    'the close delegate should not destroy native window state while Cocoa is executing it'
+  )
+  assert.match(
+    shouldClose,
+    /window->window\.delegate = nullptr;[\s\S]*objc_setAssociatedObject\(self, "window", nil,[\s\S]*app->dispatch\([\s\S]*destroyWindow\(index\)/,
+    'the close delegate should detach callbacks and defer manager-owned teardown'
+  )
 })
 
 test('Linux window teardown completes synchronous GTK closes', () => {
@@ -998,8 +1040,15 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const processService = readFile('src/runtime/core/services/process.cc')
   const secureStorage = readFile('src/runtime/core/services/secure_storage.cc')
   const updateService = readFile('src/runtime/core/services/update.cc')
+  const appHeader = readFile('src/runtime/app.hh')
   const appWindow = readFile('src/runtime/app/win.cc')
   const platformWindow = readFile('src/runtime/window/win.cc')
+  const processWindow = readFile('src/runtime/process/win.cc')
+  const runtimeString = readFile('src/runtime/string/string.cc')
+  const tar = readFile('src/runtime/tar.cc')
+  const desktop = readFile('src/desktop/main.cc')
+  const cli = readFile('src/cli/main.cc')
+  const extensionJson = readFile('src/extension/json.cc')
   const bluetooth = readFile('src/runtime/core/services/bluetooth/win.cc')
   const dbusHeader = readFile('src/runtime/core/services/dbus.hh')
   const dbusService = readFile('src/runtime/core/services/dbus.cc')
@@ -1071,6 +1120,11 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     'Windows secure-storage helpers should qualify runtime string and byte helpers in their file-local namespace'
   )
   assert.match(
+    secureStorage,
+    /result\(static_cast<size_t>\(required\), L?'\\0'\)[\s\S]*result\.resize\(static_cast<size_t>\(written - 1\)\)/,
+    'Windows secure-storage conversion should reserve space for the Win32 terminator before trimming it'
+  )
+  assert.match(
     platformWindow,
     /namespace oro::runtime::window \{[\s\S]*class DragDrop : public IDropTarget[\s\S]*Window::Window/,
     'the Windows implementation and drag-drop type should compile in the declared window namespace'
@@ -1096,14 +1150,34 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     'the Windows app should preserve the declared userConfig identifier casing'
   )
   assert.match(
-    appWindow,
-    /app->wcex = \{\};[\s\S]*app->wcex\.cbSize[\s\S]*RegisterClassEx\(&app->wcex\)/,
-    'the Windows app should initialize and register its declared window class member'
+    [appHeader, appWindow].join('\n'),
+    /WNDCLASSEXW wcex;[\s\S]*app->wcex = \{\};[\s\S]*app->wcex\.cbSize[\s\S]*RegisterClassExW\(&app->wcex\)/,
+    'the Windows app should initialize and register a Unicode window class'
   )
   assert.match(
     bluetooth,
-    /#include <combaseapi\.h>[\s\S]*#include <windows\.foundation\.h>/,
-    'the Windows Bluetooth backend should load COM declarations before WinRT headers'
+    /#include <windows\.h>[\s\S]*#include <combaseapi\.h>[\s\S]*#include <windows\.foundation\.h>[\s\S]*#include "\.\.\/\.\.\/\.\.\/runtime\.hh"/,
+    'the Windows Bluetooth backend should parse WinRT ABI headers before project headers can alter SDK macros'
+  )
+  assert.match(
+    bluetooth,
+    /#include <bluetoothapis\.h>[\s\S]*#include <robuffer\.h>[\s\S]*#include <setupapi\.h>[\s\S]*using Windows::Storage::Streams::IBufferByteAccess;/,
+    'the Windows Bluetooth backend should use the SDK declarations for Bluetooth, WinRT buffers, and SetupAPI'
+  )
+  assert.match(
+    bluetooth,
+    /decltype\(&BluetoothGATTGetCharacteristicValue\)[\s\S]*BluetoothGATTGetCharacteristicValue[\s\S]*bthLeUuidToGuid[\s\S]*bthLeUuidEqualsGuid/,
+    'the Windows Bluetooth backend should derive dynamic API types from the SDK and normalize GATT UUIDs'
+  )
+  assert.doesNotMatch(
+    bluetooth,
+    /BluetoothGATT(?:Read|Write)CharacteristicValue|BluetoothGetDeviceInfoW|guidToString\([^\n]*\.ServiceUuid\)|memcmp\(&[^\n]*Uuid|typedef struct _BLUETOOTH_|typedef PVOID HDEVINFO|\.detach\(\)/,
+    'the Windows Bluetooth backend should not use nonexistent exports, incompatible UUID layouts, or handwritten SDK structures'
+  )
+  assert.match(
+    bluetooth,
+    /BluetoothGATTSetCharacteristicValue[\s\S]*PBLUETOOTH_GATT_VALUE_CHANGED_EVENT[\s\S]*BLUETOOTH_GATT_VALUE_CHANGED_EVENT_REGISTRATION/,
+    'the Windows Bluetooth backend should use the SDK GATT write and value-change event contracts'
   )
   assert.doesNotMatch(
     [dbusHeader, dbusService, routes].join('\n'),
@@ -1145,6 +1219,11 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     /void dispatchDeviceEvent\([^{};]*\)\s*;|DeviceDescriptor makeRemovedDescriptor\([^{};]*\)\s*;|LRESULT CALLBACK NotificationWindowProc\([^{};]*\)\s*;/,
     'inline Windows HID definitions should not have duplicate in-class declarations'
   )
+  assert.match(
+    hid,
+    /FILE_FLAG_OVERLAPPED[\s\S]*OVERLAPPED overlapped = \{\};[\s\S]*WriteFile\([\s\S]*&overlapped[\s\S]*CancelIoEx\(handle, &overlapped\)/,
+    'overlapped Windows HID handles should use bounded, cancellable overlapped writes'
+  )
   assert.doesNotMatch(
     platformWindow,
     /app->(?:isReady|hInstance|getcwd\(\))|navigateFunction|evaluateJavaScriptFunction/,
@@ -1161,9 +1240,89 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     'the Windows window backend should use current namespaced runtime helpers'
   )
   assert.match(
+    platformWindow,
+    /certificate->ToPemEncoding\(&pemW\)/,
+    'the Windows certificate handler should call the WebView2 Win32 certificate method'
+  )
+  assert.doesNotMatch(
+    platformWindow,
+    /get_PemEncodedCertificate|SchemeHandlers::Body/,
+    'the Windows window backend should not reference nonexistent WebView2 or scheme-handler members'
+  )
+  assert.match(
+    platformWindow,
+    /request\.setBody\(\s+size,\s+reinterpret_cast<const unsigned char\*>\(buffer\.get\(\)\)/,
+    'the Windows request handler should use the declared scheme-handler body overload'
+  )
+  assert.match(
+    platformWindow,
+    /version::VERSION_FULL_STRING[\s\S]*config::getUserConfig\(\)/,
+    'the Windows window backend should qualify version and configuration helpers'
+  )
+  assert.doesNotMatch(
+    platformWindow,
+    /MAKEINTRESOURCE\(IDI_APPLICATION\)/,
+    'the predefined Windows application icon should not be wrapped as a second resource identifier'
+  )
+  assert.match(
+    platformWindow,
+    /class DragDrop final : public IDropTarget[\s\S]*Window::drop owns this object[\s\S]*CreateDataObject\(&format, &medium, 1,[\s\S]*ReleaseStgMedium\(&medium\);[\s\S]*dragDropResult == DRAGDROP_S_CANCEL/,
+    'the Windows drag target and outbound data object should have single, explicit ownership'
+  )
+  assert.match(
+    platformWindow,
+    /CF_HDROP[\s\S]*TYMED_HGLOBAL[\s\S]*dropFiles->fWide = TRUE[\s\S]*DragQueryFileW[\s\S]*window\.dispatchEvent\(event\)/,
+    'Windows file drag and drop should use Unicode HDROP storage and dispatch the resulting event'
+  )
+  assert.doesNotMatch(
+    platformWindow,
+    /GlobalUnlock\(list\)|CreateDataObject\(&format, &medium, 2|const dtail|MapWindowPoints\(/,
+    'Windows drag and drop should not unlock a data pointer, overrun format arrays, corrupt point storage, or emit invalid JavaScript'
+  )
+  assert.match(
+    platformWindow,
+    /ScreenToClient\(child, &point\)/,
+    'Windows drag coordinates should be converted from screen to client space without aliasing adjacent stack values'
+  )
+  assert.match(
+    runtimeString,
+    /MultiByteToWideChar\(\s*CP_UTF8,\s*MB_ERR_INVALID_CHARS[\s\S]*WideCharToMultiByte\(\s*CP_UTF8,\s*WC_ERR_INVALID_CHARS/,
+    'shared Windows string conversion should validate UTF-8 in both directions'
+  )
+  assert.match(
+    processWindow,
+    /STARTUPINFOW[\s\S]*CREATE_UNICODE_ENVIRONMENT[\s\S]*CreateProcessW\([\s\S]*processThread = Thread/,
+    'Windows process creation should preserve Unicode arguments and own its waiter thread'
+  )
+  assert.match(
+    tar,
+    /CreateFileW\([\s\S]*while \(remaining > 0\)[\s\S]*remaining > static_cast<size_t>\(MAXDWORD\)/,
+    'Windows archive I/O should preserve Unicode paths and chunk DWORD-sized transfers'
+  )
+  assert.match(
+    desktop,
+    /Software\\\\Classes\\\\[\s\S]*RegCreateKeyExW[\s\S]*RegSetValueExW[\s\S]*L"\\"" \+ applicationPath \+ L"\\" \\"%1\\""/,
+    'Windows protocol registration should use the per-user Classes hive, Unicode values, and quoted arguments'
+  )
+  assert.match(
+    desktop,
+    /wideBundleIdentifier\.empty\(\)[\s\S]*invalid UTF-8 bundle identifier[\s\S]*CreateMutexW/,
+    'Windows single-instance startup should reject an invalid UTF-8 mutex name'
+  )
+  assert.doesNotMatch(
+    cli,
+    /CliLogLevel::ERROR/,
+    'Windows headers should not macro-expand a CLI log-level member'
+  )
+  assert.match(
+    extensionJson,
+    /std::memcpy\(bytes, string\.data\(\), length\);\s+bytes\[length\] = '\\0';/,
+    'extension JSON strings should initialize allocated output instead of appending to uninitialized memory'
+  )
+  assert.match(
     runtimeBuilder,
-    /--syntax-only[\s\S]*-fsyntax-only "\$source"/,
-    'the runtime builder should expose a compiler-backed source syntax check'
+    /--syntax-only[\s\S]*-ferror-limit=0 -fsyntax-only "\$source"/,
+    'the runtime builder should expose a compiler-backed source syntax check without hiding follow-on errors'
   )
   assert.match(
     installer,
@@ -1176,9 +1335,24 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     'the Windows source preflight should compile the platform-native TLS provider'
   )
   assert.match(
+    installer,
+    /entrypoint_sources=\([\s\S]*src\/init\.cc[\s\S]*src\/cli\/\*\.cc[\s\S]*src\/desktop\/\*\.cc[\s\S]*-ferror-limit=0 -fsyntax-only "\$source"/,
+    'the early Windows source preflight should include CLI and desktop entrypoints'
+  )
+  assert.match(
     [tlsClient, tlsServer].join('\n'),
     /#define SECURITY_WIN32 1[\s\S]*PCERT_ALT_NAME_INFO[\s\S]*CERT_KEY_CONTEXT[\s\S]*SecApplicationProtocolNegotiationStatus_Success[\s\S]*DWORD shutdownToken = SCHANNEL_SHUTDOWN/,
     'Schannel sources should use declarations provided by the Windows SDK'
+  )
+  assert.match(
+    tlsClient,
+    /CertCreateCertificateChainEngine[\s\S]*CertVerifyCertificateChainPolicy\(\s*CERT_CHAIN_POLICY_SSL[\s\S]*policyStatus\.dwError/,
+    'the Schannel client should apply hostname-aware SSL chain policy validation'
+  )
+  assert.match(
+    tlsServer,
+    /rootStore && !CertCreateCertificateChainEngine[\s\S]*CertCreateCertificateChainEngine failed[\s\S]*else if \(!CertGetCertificateChain/,
+    'the Schannel server should fail closed when its exclusive root chain engine cannot be created'
   )
   assert.match(
     tlsUtil,
@@ -1648,8 +1822,8 @@ test('CI shards Apple-mobile builds without changing installer defaults', () => 
   )
   assert.match(
     workflow,
-    /macOS \+ iOS x64[\s\S]*apple_mobile_targets: x86_64-iPhoneSimulator[\s\S]*macOS \+ iOS arm64[\s\S]*apple_mobile_targets: arm64-iPhoneSimulator/,
-    'CI should compile each simulator architecture once while release builds retain iPhoneOS coverage'
+    /macOS x64[\s\S]*release_support: desktop[\s\S]*exclude_ios: true[\s\S]*macOS \+ iOS arm64[\s\S]*apple_mobile_targets: arm64-iPhoneSimulator/,
+    'per-commit CI should keep iOS simulation on the tested Apple Silicon shard and avoid duplicating it on Intel'
   )
   assert.match(
     workflow,
@@ -1660,6 +1834,11 @@ test('CI shards Apple-mobile builds without changing installer defaults', () => 
     workflow.match(/ccache --max-size 1536M/g)?.length,
     2,
     'native CI lanes should retain enough compiler output to avoid cache churn'
+  )
+  assert.match(
+    workflow,
+    /RUNNER_OS" == 'macOS'[\s\S]*ccache --max-size 3G/,
+    'Apple host and simulator objects should fit in the native compiler cache without eviction churn'
   )
 })
 
@@ -1822,8 +2001,8 @@ test('CI covers every supported host and mobile target family', () => {
   )
   assert.match(
     workflow,
-    /macOS \+ iOS x64[\s\S]*macOS \+ iOS arm64/,
-    'CI should build and test Apple hosts and iOS from Intel and Apple Silicon runners'
+    /macOS x64[\s\S]*macOS \+ iOS arm64/,
+    'CI should build both Apple host architectures and test iOS on Apple Silicon'
   )
   assert.match(
     workflow,
@@ -2129,6 +2308,11 @@ test('Android bootstrap separates build packages from emulator packages', () => 
     cli,
     /if \(flagBuildForAndroidEmulator\) \{[\s\S]*system-images;[\s\S]*google_apis/,
     'application builds should request a system image only for the emulator target'
+  )
+  assert.match(
+    cli,
+    /"init "[\s\S]*"--use-defaults "[\s\S]*"--overwrite"/,
+    'Gradle initialization should be non-interactive and replace files in the prepared Android project directory'
   )
   assert.match(
     emulatorBootstrap,

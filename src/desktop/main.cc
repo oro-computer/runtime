@@ -4,6 +4,8 @@
 #include <span>
 #include <thread>
 #include <map>
+#include <limits>
+#include <cctype>
 
 #include "../app.hh"
 #include "../cli.hh"
@@ -204,30 +206,67 @@ static DBusHandlerResult onDBusMessage (
 #elif ORO_RUNTIME_PLATFORM_WINDOWS
 BOOL registerWindowsURISchemeInRegistry () {
   auto app = App::sharedApplication();
-  HKEY shellKey;
-  HKEY key;
-  LONG result;
+  HKEY shellKey = nullptr;
+  HKEY key = nullptr;
 
   auto protocol = app->runtime.userConfig["meta_application_protocol"];
 
-  if (protocol.size() == 0) {
+  if (
+    protocol.empty() ||
+    !std::isalpha(static_cast<unsigned char>(protocol.front())) ||
+    std::any_of(protocol.begin() + 1, protocol.end(), [](const char character) {
+      return !std::isalnum(static_cast<unsigned char>(character)) &&
+        character != '+' && character != '-' && character != '.';
+    })
+  ) {
     return FALSE;
   }
 
-  auto scheme = protocol.c_str();
-  wchar_t applicationPath[MAX_PATH];
-  GetModuleFileNameW(NULL, applicationPath, MAX_PATH);
+  const auto wideProtocol = convertStringToWString(protocol);
+  if (wideProtocol.empty()) {
+    return FALSE;
+  }
+
+  WString applicationPath(32768, L'\0');
+  const DWORD pathLength = GetModuleFileNameW(
+    nullptr,
+    applicationPath.data(),
+    static_cast<DWORD>(applicationPath.size())
+  );
+  if (pathLength == 0 || pathLength >= applicationPath.size()) {
+    return FALSE;
+  }
+  applicationPath.resize(pathLength);
+
+  const WString scheme = L"Software\\Classes\\" + wideProtocol;
 
   // Create the registry key for the scheme
-  result = RegCreateKeyEx(HKEY_CURRENT_USER, scheme, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL);
+  LONG result = RegCreateKeyExW(
+    HKEY_CURRENT_USER,
+    scheme.c_str(),
+    0,
+    nullptr,
+    0,
+    KEY_SET_VALUE,
+    nullptr,
+    &key,
+    nullptr
+  );
   if (result != ERROR_SUCCESS) {
     fprintf(stderr, "error: RegCreateKeyEx: Error creating registry key for scheme: %ld\n", result);
     return FALSE;
   }
 
-  auto value = String("URL:") + protocol;
+  const WString value = L"URL:" + wideProtocol;
   // Set the default value for the scheme
-  result = RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*) value.c_str(), value.size());
+  result = RegSetValueExW(
+    key,
+    nullptr,
+    0,
+    REG_SZ,
+    reinterpret_cast<const BYTE*>(value.c_str()),
+    static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t))
+  );
   if (result != ERROR_SUCCESS) {
     fprintf(stderr, "error: RegSetValueEx: Error setting default value for scheme: %ld\n", result);
     RegCloseKey(key);
@@ -235,7 +274,15 @@ BOOL registerWindowsURISchemeInRegistry () {
   }
 
   // Set the URL protocol value
-  result = RegSetValueEx(key, "URL Protocol", 0, REG_SZ, (BYTE*)"", sizeof(""));
+  const wchar_t empty[] = L"";
+  result = RegSetValueExW(
+    key,
+    L"URL Protocol",
+    0,
+    REG_SZ,
+    reinterpret_cast<const BYTE*>(empty),
+    sizeof(empty)
+  );
   if (result != ERROR_SUCCESS) {
     fprintf(stderr, "error: RegSetValueEx: Error setting URL protocol value: %ld\n", result);
     RegCloseKey(key);
@@ -243,15 +290,32 @@ BOOL registerWindowsURISchemeInRegistry () {
   }
 
   // create the registry key for the shell
-  result = RegCreateKeyEx(key, "shell\\open\\command", 0, NULL, 0, KEY_SET_VALUE, NULL, &shellKey, NULL);
+  result = RegCreateKeyExW(
+    key,
+    L"shell\\open\\command",
+    0,
+    nullptr,
+    0,
+    KEY_SET_VALUE,
+    nullptr,
+    &shellKey,
+    nullptr
+  );
   if (result != ERROR_SUCCESS) {
     fprintf(stderr, "error: RegCreateKeyEx: Error creating registry key for shell: %ld\n", result);
     RegCloseKey(key);
     return FALSE;
   }
 
-  auto command = convertWStringToString(applicationPath) + String(" %1");
-  result = RegSetValueEx(shellKey, NULL, 0, REG_SZ, (const BYTE*) command.c_str(), command.size());
+  const WString command = L"\"" + applicationPath + L"\" \"%1\"";
+  result = RegSetValueExW(
+    shellKey,
+    nullptr,
+    0,
+    REG_SZ,
+    reinterpret_cast<const BYTE*>(command.c_str()),
+    static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t))
+  );
 
   if (result != ERROR_SUCCESS) {
     fprintf(stderr, "error: kRegSetValueEx: Error setting command value: %ld\n", result);
@@ -305,14 +369,11 @@ MAIN {
 
   bool isCommandMode = false;
   bool isReadingStdin = false;
-  bool isHeadless = app.runtime.userConfig["build_headless"] == "true" ? true : false;
   bool isTest = false;
 
   int exitCode = 0;
   int c = 0;
 
-  bool wantsVersion = false;
-  bool wantsHelp = false;
   int remoteDebuggingPort = -1;
 
   auto bundleIdentifier = app.runtime.userConfig["meta_bundle_identifier"];
@@ -551,40 +612,70 @@ MAIN {
     g_signal_connect(gtkApp, "activate", G_CALLBACK(onGTKApplicationActivation), NULL);
   }
 #elif ORO_RUNTIME_PLATFORM_WINDOWS
-  HANDLE hMutex = CreateMutex(NULL, TRUE, bundleIdentifier.c_str());
-  auto lastWindowsError = GetLastError();
+  const auto wideBundleIdentifier = convertStringToWString(bundleIdentifier);
+  if (wideBundleIdentifier.empty()) {
+    fprintf(stderr, "error: invalid UTF-8 bundle identifier\n");
+    return 1;
+  }
+  HANDLE hMutex = CreateMutexW(NULL, TRUE, wideBundleIdentifier.c_str());
+  const auto lastWindowsError = hMutex != nullptr ? GetLastError() : ERROR_SUCCESS;
   auto appProtocol = app.runtime.userConfig["meta_application_protocol"];
+  const bool isExistingInstance = lastWindowsError == ERROR_ALREADY_EXISTS;
 
-  if (appProtocol.size() > 0 && argc > 1 && String(argv[1]).starts_with(appProtocol)) {
-    HWND hWnd = FindWindow(
-      app.runtime.userConfig["meta_bundle_identifier"].c_str(),
-      app.runtime.userConfig["meta_title"].c_str()
-    );
+  if (hMutex == nullptr) {
+    fprintf(stderr, "error: CreateMutexW failed: %lu\n", GetLastError());
+    return 1;
+  }
+
+  if (
+    appProtocol.size() > 0 &&
+    argc > 1 &&
+    String(argv[1]).starts_with(appProtocol + ":")
+  ) {
+    const String deepLink = argv[1];
+    HWND hWnd = nullptr;
+    if (isExistingInstance) {
+      for (int attempt = 0; attempt < 40 && hWnd == nullptr; attempt++) {
+        hWnd = FindWindowW(wideBundleIdentifier.c_str(), nullptr);
+        if (hWnd == nullptr) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+      }
+    }
 
     if (hWnd != NULL) {
-      COPYDATASTRUCT data;
+      if (deepLink.size() > std::numeric_limits<DWORD>::max()) {
+        CloseHandle(hMutex);
+        return 1;
+      }
+
+      COPYDATASTRUCT data = {};
       data.dwData = WM_HANDLE_DEEP_LINK;
-      data.cbData = strlen(lpCmdLine);
-      data.lpData = lpCmdLine;
-      SendMessage(
+      data.cbData = static_cast<DWORD>(deepLink.size());
+      data.lpData = const_cast<char*>(deepLink.data());
+      DWORD_PTR sendResult = 0;
+      SendMessageTimeoutW(
         hWnd,
         WM_COPYDATA,
-        (WPARAM) nullptr,
-        reinterpret_cast<LPARAM>(&data)
+        0,
+        reinterpret_cast<LPARAM>(&data),
+        SMTO_ABORTIFHUNG | SMTO_BLOCK,
+        5000,
+        &sendResult
       );
-    } else {
-      app.dispatch([hWnd, lpCmdLine]() {
-        oro::app::onWindowProcMessage(
-          hWnd,
+    } else if (!isExistingInstance) {
+      app.dispatch([deepLink]() {
+        oro::runtime::app::onWindowProcMessage(
+          nullptr,
           WM_HANDLE_DEEP_LINK,
-          (WPARAM) strlen(lpCmdLine),
-          (LPARAM) lpCmdLine
+          static_cast<WPARAM>(deepLink.size()),
+          reinterpret_cast<LPARAM>(deepLink.data())
         );
       });
     }
   }
 
-  if (lastWindowsError == ERROR_ALREADY_EXISTS) {
+  if (isExistingInstance) {
     // Application is already running, send the URI to the existing instance
     // Release the mutex and exit
     CloseHandle(hMutex);
@@ -599,13 +690,13 @@ MAIN {
 
     argvArray.push_back(s);
 
-    bool helpRequested = (
+    const bool helpRequested = (
       (s.find("--help") == 0) ||
       (s.find("-help") == 0) ||
       (s.find("-h") == 0)
     );
 
-    bool versionRequested = (
+    const bool versionRequested = (
       (s.find("--version") == 0) ||
       (s.find("-version") == 0) ||
       (s.find("-v") == 0) ||
@@ -616,16 +707,7 @@ MAIN {
       isReadingStdin = true;
     }
 
-    if (helpRequested) {
-      wantsHelp = true;
-    }
-
-    if (versionRequested) {
-      wantsVersion = true;
-    }
-
     if (s.find("--headless") == 0) {
-      isHeadless = true;
       app.runtime.userConfig["build_headless"] = "true";
     }
 

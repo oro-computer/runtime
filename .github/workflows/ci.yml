@@ -427,14 +427,13 @@ jobs:
             test_android: false
             test_ios: false
             windows: false
-          - name: macOS + iOS x64
-            id: macos-ios-x64
+          - name: macOS x64
+            id: macos-x64
             runs_on: macos-15-intel
-            release_support: ios
-            apple_mobile_targets: x86_64-iPhoneSimulator
+            release_support: desktop
             build_android: false
             exclude_android: true
-            exclude_ios: false
+            exclude_ios: true
             install_tests: false
             test_desktop: false
             test_child_process: false
@@ -670,7 +669,11 @@ jobs:
           echo 'CMAKE_C_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           mkdir -p "$CCACHE_TEMPDIR"
-          ccache --max-size 1536M
+          if [[ "$RUNNER_OS" == 'macOS' ]]; then
+            ccache --max-size 3G
+          else
+            ccache --max-size 1536M
+          fi
           ccache --zero-stats
 
       - name: Prepare Linux headless runtime directory

@@ -284,8 +284,8 @@ namespace oro::runtime::tar {
       }
     }
   #else
-    HANDLE handle = CreateFileA(
-      target.string().c_str(),
+    HANDLE handle = CreateFileW(
+      target.c_str(),
       GENERIC_READ,
       FILE_SHARE_READ,
       nullptr,
@@ -300,6 +300,11 @@ namespace oro::runtime::tar {
 
     LARGE_INTEGER size;
     if (!GetFileSizeEx(handle, &size)) {
+      CloseHandle(handle);
+      return;
+    }
+
+    if (size.QuadPart < 0) {
       CloseHandle(handle);
       return;
     }
@@ -397,8 +402,11 @@ namespace oro::runtime::tar {
       return false;
     }
 
+    const DWORD requested = size > static_cast<size_t>(MAXDWORD)
+      ? MAXDWORD
+      : static_cast<DWORD>(size);
     DWORD read = 0;
-    if (!ReadFile(handle, buffer, static_cast<DWORD>(size), &read, nullptr)) {
+    if (!ReadFile(handle, buffer, requested, &read, nullptr)) {
       return false;
     }
 
@@ -1524,8 +1532,8 @@ namespace oro::runtime::tar {
       std::filesystem::create_directories(parent, ec);
     }
 
-    HANDLE file = CreateFileA(
-      target.string().c_str(),
+    HANDLE file = CreateFileW(
+      target.c_str(),
       GENERIC_WRITE,
       0,
       nullptr,
@@ -1580,18 +1588,29 @@ namespace oro::runtime::tar {
       return false;
     }
   #else
-    DWORD written = 0;
-    if (!WriteFile(
-      static_cast<HANDLE>(this->handle),
-      data,
-      static_cast<DWORD>(size),
-      &written,
-      nullptr
-    )) {
-      return false;
-    }
-    if (written != size) {
-      return false;
+    auto cursor = static_cast<const unsigned char*>(data);
+    size_t remaining = size;
+    while (remaining > 0) {
+      const DWORD requested = remaining > static_cast<size_t>(MAXDWORD)
+        ? MAXDWORD
+        : static_cast<DWORD>(remaining);
+      DWORD written = 0;
+      if (!WriteFile(
+        static_cast<HANDLE>(this->handle),
+        cursor,
+        requested,
+        &written,
+        nullptr
+      )) {
+        return false;
+      }
+
+      if (written == 0) {
+        return false;
+      }
+
+      cursor += written;
+      remaining -= static_cast<size_t>(written);
     }
   #endif
 

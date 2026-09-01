@@ -15,7 +15,7 @@ namespace oro::runtime::core {
   using types::String;
   using types::Vector;
 
-  class Services;
+  struct Services;
 
   struct DispatchContext : public context::DispatchContext {
     struct StateFlags {

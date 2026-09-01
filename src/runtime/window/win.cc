@@ -13,6 +13,7 @@
 #include <winuser.h>
 #include <wincrypt.h>
 #include <limits>
+#include <new>
 
 using namespace Microsoft::WRL;
 using oro::runtime::javascript::getResolveMenuSelectionJavaScript;
@@ -42,7 +43,7 @@ extern BOOL ChangeWindowMessageFilterEx (
 );
 
 namespace oro::runtime::window {
-  class CDataObject : public IDataObject {
+  class CDataObject final : public IDataObject {
     public:
       HRESULT __stdcall QueryInterface (REFIID iid, void ** ppvObject);
       ULONG __stdcall AddRef (void);
@@ -103,6 +104,10 @@ namespace oro::runtime::window {
   }
 
   HRESULT __stdcall CDataObject::QueryInterface (REFIID iid, void **ppvObject) {
+    if (ppvObject == nullptr) {
+      return E_POINTER;
+    }
+
     if (iid == IID_IDataObject || iid == IID_IUnknown) {
       AddRef();
       *ppvObject = this;
@@ -114,13 +119,35 @@ namespace oro::runtime::window {
   }
 
   HGLOBAL DupMem (HGLOBAL hMem) {
-    DWORD len = GlobalSize(hMem);
-    PVOID source = GlobalLock(hMem);
-    PVOID dest = GlobalAlloc(GMEM_FIXED, len);
+    const SIZE_T len = GlobalSize(hMem);
+    if (len == 0) {
+      return nullptr;
+    }
 
-    memcpy(dest, source, len);
+    const HGLOBAL duplicate = GlobalAlloc(GMEM_MOVEABLE, len);
+    if (duplicate == nullptr) {
+      return nullptr;
+    }
+
+    const PVOID source = GlobalLock(hMem);
+    const PVOID destination = GlobalLock(duplicate);
+    if (source == nullptr || destination == nullptr) {
+      if (source != nullptr) {
+        GlobalUnlock(hMem);
+      }
+
+      if (destination != nullptr) {
+        GlobalUnlock(duplicate);
+      }
+
+      GlobalFree(duplicate);
+      return nullptr;
+    }
+
+    memcpy(destination, source, len);
+    GlobalUnlock(duplicate);
     GlobalUnlock(hMem);
-    return dest;
+    return duplicate;
   }
 
   int CDataObject::LookupFormatEtc (FORMATETC *pFormatEtc) {
@@ -135,6 +162,10 @@ namespace oro::runtime::window {
   }
 
   HRESULT __stdcall CDataObject::GetData (FORMATETC *pFormatEtc, STGMEDIUM *pMedium) {
+    if (pFormatEtc == nullptr || pMedium == nullptr) {
+      return E_POINTER;
+    }
+
     int idx;
 
     if ((idx = LookupFormatEtc(pFormatEtc)) == -1) {
@@ -147,6 +178,9 @@ namespace oro::runtime::window {
     switch(m_pFormatEtc[idx].tymed) {
       case TYMED_HGLOBAL:
         pMedium->hGlobal = DupMem(m_pStgMedium[idx].hGlobal);
+        if (pMedium->hGlobal == nullptr) {
+          return STG_E_MEDIUMFULL;
+        }
         break;
 
       default:
@@ -161,6 +195,10 @@ namespace oro::runtime::window {
   }
 
   HRESULT __stdcall CDataObject::QueryGetData (FORMATETC *pFormatEtc) {
+    if (pFormatEtc == nullptr) {
+      return E_POINTER;
+    }
+
     return (LookupFormatEtc(pFormatEtc) == -1) ? DV_E_FORMATETC : S_OK;
   }
 
@@ -198,12 +236,21 @@ namespace oro::runtime::window {
       return E_INVALIDARG;
     }
 
-    *ppDataObject = new CDataObject(fmtetc, stgmeds, count);
+    if (fmtetc == nullptr || stgmeds == nullptr || count == 0) {
+      return E_INVALIDARG;
+    }
+
+    try {
+      *ppDataObject = new CDataObject(fmtetc, stgmeds, count);
+    } catch (const std::bad_alloc&) {
+      *ppDataObject = nullptr;
+      return E_OUTOFMEMORY;
+    }
 
     return (*ppDataObject) ? S_OK : E_OUTOFMEMORY;
   }
 
-  class CDropSource : public IDropSource {
+  class CDropSource final : public IDropSource {
     public:
       HRESULT __stdcall QueryInterface(REFIID iid, void ** ppvObject);
       ULONG __stdcall AddRef(void);
@@ -241,6 +288,10 @@ namespace oro::runtime::window {
   }
 
   HRESULT __stdcall CDropSource::QueryInterface(REFIID iid, void **ppvObject) {
+    if (ppvObject == nullptr) {
+      return E_POINTER;
+    }
+
     if (iid == IID_IDropSource || iid == IID_IUnknown) {
       AddRef();
       *ppvObject = this;
@@ -272,22 +323,24 @@ namespace oro::runtime::window {
       return E_INVALIDARG;
     }
 
-    *ppDropSource = new CDropSource();
+    *ppDropSource = new (std::nothrow) CDropSource();
 
     return (*ppDropSource) ? S_OK : E_OUTOFMEMORY;
   }
 
-  class DragDrop : public IDropTarget {
+  class DragDrop final : public IDropTarget {
     Vector<String> draggablePayload;
-    unsigned int refCount;
+    LONG refCount;
 
     public:
     HWND childWindow;
     Window* window;
 
-    DragDrop(Window* win) : window(win) {
-      refCount = 0;
-    }
+    DragDrop(Window* win) :
+      refCount(0),
+      childWindow(nullptr),
+      window(win)
+    {}
 
     ~DragDrop () {
       draggablePayload.clear();
@@ -295,6 +348,10 @@ namespace oro::runtime::window {
 
     private:
 	    STDMETHODIMP QueryInterface(REFIID riid, void **ppv) {
+      if (ppv == nullptr) {
+        return E_POINTER;
+      }
+
       if (riid == IID_IUnknown || riid == IID_IDropTarget) {
         *ppv = static_cast<IUnknown*>(this);
         AddRef();
@@ -310,27 +367,24 @@ namespace oro::runtime::window {
       POINTL dragPoint,
       DWORD *dragEffect
     ) {
-      auto parent = this->window->window;
       auto child = this->childWindow;
 
-      auto position = POINT {0};
-      auto point = POINT {0};
-      auto rect = RECT {0};
+      auto point = POINT {
+        static_cast<LONG>(dragPoint.x),
+        static_cast<LONG>(dragPoint.y)
+      };
 
       auto format = FORMATETC {0};
       auto medium = STGMEDIUM {0};
-      auto result = (HRESULT) 0;
-
       char *list = 0;
 
-      GetClientRect(child, &rect);
-      position = { rect.left, rect.top };
+      if (dataObject == nullptr || dragEffect == nullptr) {
+        return E_POINTER;
+      }
 
-      MapWindowPoints(parent, GetParent(parent), (LPPOINT) &position, 2);
-      point.x = dragPoint.x - position.x;
-      point.y = dragPoint.y - position.y;
+      ScreenToClient(child, &point);
 
-      *dragEffect = DROPEFFECT_MOVE;
+      *dragEffect = DROPEFFECT_NONE;
 
       format.cfFormat = CF_TEXT;
       format.ptd      = nullptr;
@@ -338,14 +392,19 @@ namespace oro::runtime::window {
       format.lindex   = -1;
       format.tymed    = TYMED_HGLOBAL;
 
-      dataObject->QueryGetData(&format);
-      dataObject->GetData(&format, &medium);
+      if (
+        FAILED(dataObject->QueryGetData(&format)) ||
+        FAILED(dataObject->GetData(&format, &medium))
+      ) {
+        return S_OK;
+      }
 
       list = (char *) GlobalLock(medium.hGlobal);
 
       this->draggablePayload.clear();
 
       if (list != 0) {
+        *dragEffect = DROPEFFECT_MOVE;
         draggablePayload = split(String(list), ';');
 
 
@@ -360,28 +419,22 @@ namespace oro::runtime::window {
 
         auto payload = getEmitToRenderProcessJavaScript("drag", json);
         this->window->eval(payload);
+        GlobalUnlock(medium.hGlobal);
       }
 
-      GlobalUnlock(list);
       ReleaseStgMedium(&medium);
 
       return S_OK;
     }
 
     ULONG STDMETHODCALLTYPE AddRef(void) {
-      refCount++;
-
-      return refCount;
+      return InterlockedIncrement(&refCount);
     }
 
     ULONG STDMETHODCALLTYPE Release(void) {
-      refCount--;
-
-      if (refCount == 0) {
-        delete this;
-      }
-
-      return refCount;
+      // Window::drop owns this object. COM references only track registrations;
+      // deleting here would leave the owning shared pointer dangling.
+      return InterlockedDecrement(&refCount);
     }
 
     HRESULT STDMETHODCALLTYPE DragOver (
@@ -389,20 +442,19 @@ namespace oro::runtime::window {
       POINTL dragPoint,
       DWORD *dragEffect
     ) {
-      auto position = POINT {0};
-      auto parent = this->window->window;
+      if (dragEffect == nullptr) {
+        return E_POINTER;
+      }
+
       auto child = this->childWindow;
-      auto point = POINT {0};
-      auto rect = RECT {0};
+      auto point = POINT {
+        static_cast<LONG>(dragPoint.x),
+        static_cast<LONG>(dragPoint.y)
+      };
 
       *dragEffect = DROPEFFECT_COPY;
 
-      GetClientRect(child, &rect);
-      position = { rect.left, rect.top };
-
-      MapWindowPoints(parent, GetParent(parent), (LPPOINT) &position, 2);
-      point.x = dragPoint.x - position.x;
-      point.y = dragPoint.y - position.y;
+      ScreenToClient(child, &point);
 
       String json = (
         "{"
@@ -421,27 +473,46 @@ namespace oro::runtime::window {
 
     HRESULT STDMETHODCALLTYPE DragLeave(void) {
       // @TODO(jwerle)
-      IDropSource* dropSource;
-      IDataObject* dataObject;
+      ComPtr<IDropSource> dropSource;
+      ComPtr<IDataObject> dataObject;
 
-      DWORD dragDropResult;
-      DWORD dropEffect;
+      DWORD dropEffect = DROPEFFECT_NONE;
 
       DROPFILES *dropFiles = 0;
-      HGLOBAL globalMemory;
+      HGLOBAL globalMemory = nullptr;
 
-      FORMATETC format = { CF_TEXT, 0, DVASPECT_CONTENT, -1, TYMED_ISTREAM };
+      FORMATETC format = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
       STGMEDIUM medium = { TYMED_HGLOBAL, { 0 }, 0 };
-      UINT len = 0;
+      SIZE_T len = 1;
 
-      Vector<String> files = this->draggablePayload;
+      Vector<WString> files;
+      files.reserve(this->draggablePayload.size());
+      for (const auto& source : this->draggablePayload) {
+        const auto path = source.size() > 12 ? source.substr(12) : source;
+        auto file = convertStringToWString(path);
+        if (!path.empty() && file.empty()) {
+          return DV_E_FORMATETC;
+        }
 
-      for (auto &file : files) {
-        file = file.substr(12);
-        len += file.size();
+        if (file.size() > std::numeric_limits<SIZE_T>::max() - len - 1) {
+          return E_OUTOFMEMORY;
+        }
+
+        len += file.size() + 1;
+        files.push_back(std::move(file));
       }
 
-      globalMemory = GlobalAlloc(GHND, sizeof(DROPFILES) + len + 1);
+      if (
+        len >
+        (std::numeric_limits<SIZE_T>::max() - sizeof(DROPFILES)) / sizeof(wchar_t)
+      ) {
+        return E_OUTOFMEMORY;
+      }
+
+      globalMemory = GlobalAlloc(
+        GHND,
+        sizeof(DROPFILES) + len * sizeof(wchar_t)
+      );
 
       if (!globalMemory) {
         return E_POINTER;
@@ -455,40 +526,48 @@ namespace oro::runtime::window {
       }
 
       dropFiles->fNC = TRUE;
-      dropFiles->fWide = FALSE; // Should probably be true for unicode
+      dropFiles->fWide = TRUE;
       dropFiles->pFiles = sizeof(DROPFILES);
       GetCursorPos(&(dropFiles->pt));
 
-      char *dropFilePtr = (char *) &dropFiles[1];
-      for (Vector<String>::size_type i = 0; i < files.size(); ++i) {
-        String &file = files[i];
-
-        len = (file.length() + 1);
-
-        memcpy(dropFilePtr, file.c_str(), len);
-        dropFilePtr += len;
+      auto dropFilePtr = reinterpret_cast<wchar_t*>(&dropFiles[1]);
+      for (const auto& file : files) {
+        const auto bytes = (file.length() + 1) * sizeof(wchar_t);
+        memcpy(dropFilePtr, file.c_str(), bytes);
+        dropFilePtr += file.length() + 1;
       }
 
       GlobalUnlock(globalMemory);
       medium.hGlobal = globalMemory;
 
-      if (!medium.hGlobal) {
-        return S_OK;
+      HRESULT result = CreateDropSource(dropSource.GetAddressOf());
+      if (FAILED(result)) {
+        ReleaseStgMedium(&medium);
+        return result;
       }
 
-      CreateDropSource(&dropSource);
-      CreateDataObject(&format, &medium, 2, &dataObject);
+      result = CreateDataObject(&format, &medium, 1, dataObject.GetAddressOf());
+      if (FAILED(result)) {
+        ReleaseStgMedium(&medium);
+        return result;
+      }
 
       // ReleaseCapture();
-      dragDropResult = DoDragDrop(
-        dataObject,
-        dropSource,
+      const HRESULT dragDropResult = DoDragDrop(
+        dataObject.Get(),
+        dropSource.Get(),
         DROPEFFECT_COPY,
         &dropEffect
       );
 
+      ReleaseStgMedium(&medium);
+
       if (dragDropResult == DRAGDROP_S_CANCEL) {
         return S_OK;
+      }
+
+      if (FAILED(dragDropResult)) {
+        return dragDropResult;
       }
 
       if ((dropEffect & DROPEFFECT_COPY) == DROPEFFECT_COPY) {
@@ -500,9 +579,6 @@ namespace oro::runtime::window {
       }
 
       this->draggablePayload.clear();
-      dropSource->Release();
-      dataObject->Release();
-	      GlobalFree(globalMemory);
 
 	      return S_OK;
 	    }
@@ -513,31 +589,28 @@ namespace oro::runtime::window {
       POINTL dragPoint,
       DWORD *dragEffect
     ) {
+      if (dataObject == nullptr || dragEffect == nullptr) {
+        return E_POINTER;
+      }
+
       //
       // on windows pt.{x,y} are screen coordinates, to get the position of the mouse relative to the window
       // we need to subtract window.{left,top}.
       //
 
-      auto position = POINT {0};
-      auto parent = this->window->window;
       auto child = this->childWindow;
-      auto point = POINT {0};
-      auto rect = RECT {0};
+      auto point = POINT {
+        static_cast<LONG>(dragPoint.x),
+        static_cast<LONG>(dragPoint.y)
+      };
 
-      STGMEDIUM medium;
-      FORMATETC format;
-      HRESULT result;
-      HDROP drop;
-      int count;
+      STGMEDIUM medium = { 0 };
+      FORMATETC format = { 0 };
+      bool hasMedium = false;
 
       StringStream filesStringArray;
 
-      GetClientRect(child, &rect);
-      position = { rect.left, rect.top };
-
-      MapWindowPoints(parent, GetParent(parent), (LPPOINT) &position, 2);
-      point.x = dragPoint.x - position.x;
-      point.y = dragPoint.y - position.y;
+      ScreenToClient(child, &point);
 
       format.dwAspect = DVASPECT_CONTENT;
       format.cfFormat = CF_HDROP;
@@ -549,28 +622,36 @@ namespace oro::runtime::window {
         SUCCEEDED(dataObject->QueryGetData(&format)) &&
         SUCCEEDED(dataObject->GetData(&format, &medium))
       ) {
+        hasMedium = true;
         *dragEffect = DROPEFFECT_COPY;
 
-        drop = (HDROP) GlobalLock(medium.hGlobal);
-        count = DragQueryFile(drop, 0xFFFFFFFF, nullptr, 0);
+        const HDROP drop = reinterpret_cast<HDROP>(medium.hGlobal);
+        const UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
 
-        for (int i = 0; i < count; i++) {
-          int size = DragQueryFile(drop, i, nullptr, 0);
+        for (UINT i = 0; i < count; i++) {
+          const UINT size = DragQueryFileW(drop, i, nullptr, 0);
+          auto buffer = std::make_unique<wchar_t[]>(static_cast<SIZE_T>(size) + 1);
 
-          TCHAR* buf = new TCHAR[size + 1];
-          DragQueryFile(drop, i, buf, size + 1);
+          if (DragQueryFileW(drop, i, buffer.get(), size + 1) != size) {
+            continue;
+          }
+
+          auto path = convertWStringToString(WString(buffer.get(), size));
+          path = replace(path, "\\", "\\\\");
+          path = replace(path, "\"", "\\\"");
+          path = replace(path, "\r", "\\r");
+          path = replace(path, "\n", "\\n");
 
           // append escaped file path with wrapped quotes ('"')
           filesStringArray
             << '"'
-            << replace(String(buf), "\\\\", "\\\\")
+            << path
             << '"';
 
           if (i < count - 1) {
             filesStringArray << ",";
           }
 
-          delete[] buf;
         }
 
         this->window->eval(
@@ -581,8 +662,9 @@ namespace oro::runtime::window {
           "    y: " + std::to_string(point.y) + " / window.devicePixelRatio  \n"
           "  };                                                              \n"
           "                                                                  \n"
-          "  const dtail = JSON.stringify(value);                            \n"
+          "  const detail = JSON.stringify(value);                           \n"
           "  const event = new window.CustomEvent('data', { detail });       \n"
+          "  window.dispatchEvent(event);                                    \n"
           "})();"
         );
 
@@ -592,6 +674,7 @@ namespace oro::runtime::window {
           SUCCEEDED(dataObject->QueryGetData(&format)) &&
           SUCCEEDED(dataObject->GetData(&format, &medium))
         ) {
+          hasMedium = true;
           *dragEffect = DROPEFFECT_MOVE;
           for (auto &src : this->draggablePayload) {
             String json = (
@@ -618,8 +701,9 @@ namespace oro::runtime::window {
 
       this->draggablePayload.clear();
 
-      GlobalUnlock(medium.hGlobal);
-	      ReleaseStgMedium(&medium);
+      if (hasMedium) {
+	        ReleaseStgMedium(&medium);
+      }
 
 	      return S_OK;
 	    }
@@ -644,6 +728,18 @@ namespace oro::runtime::window {
     }
 
     auto userConfig = this->bridge->userConfig;
+    const auto wideWindowClassName = convertStringToWString(
+      userConfig["meta_bundle_identifier"]
+    );
+    const auto wideWindowTitle = convertStringToWString(userConfig["meta_title"]);
+    if (
+      wideWindowClassName.empty() ||
+      (!userConfig["meta_title"].empty() && wideWindowTitle.empty())
+    ) {
+      debug("Cannot create Windows window with invalid UTF-8 metadata");
+      return;
+    }
+
     // only the root window can handle "agent" tasks
     const bool isAgent = (
       userConfig["application_agent"] == "true" &&
@@ -651,10 +747,10 @@ namespace oro::runtime::window {
     );
 
     if (isAgent) {
-      this->window = CreateWindowEx(
+      this->window = CreateWindowExW(
         WS_EX_TOOLWINDOW,
-        userConfig["meta_bundle_identifier"].c_str(),
-        userConfig["meta_title"].c_str(),
+        wideWindowClassName.c_str(),
+        wideWindowTitle.c_str(),
         WS_OVERLAPPEDWINDOW,
         100000,
         100000,
@@ -694,12 +790,12 @@ namespace oro::runtime::window {
         style &= ~(WS_EX_DLGMODALFRAME | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE);
       }
 
-      this->window = CreateWindowEx(
+      this->window = CreateWindowExW(
         options.headless
           ? WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
           : WS_EX_APPWINDOW | WS_EX_ACCEPTFILES,
-        userConfig["meta_bundle_identifier"].c_str(),
-        userConfig["meta_title"].c_str(),
+        wideWindowClassName.c_str(),
+        wideWindowTitle.c_str(),
         style,
         100000,
         100000,
@@ -907,13 +1003,24 @@ namespace oro::runtime::window {
 
                 if (length > 0) {
                   auto buffer = std::make_shared<wchar_t[]>(length + 1);
-                  auto text = convertWStringToString(buffer.get());
-                  GetWindowTextW(handle, buffer.get(), length + 1);
+                  const auto copied = GetWindowTextW(handle, buffer.get(), length + 1);
+                  const auto text = copied > 0
+                    ? convertWStringToString(WString(buffer.get(), copied))
+                    : String();
 
                   if (text.find("Chrome") != String::npos) {
+                    if (
+                      window->drop->childWindow != nullptr &&
+                      window->drop->childWindow != handle
+                    ) {
+                      RevokeDragDrop(window->drop->childWindow);
+                    }
+
                     RevokeDragDrop(handle);
-                    RegisterDragDrop(handle, window->drop.get());
-                    window->drop->childWindow = handle;
+                    if (SUCCEEDED(RegisterDragDrop(handle, window->drop.get()))) {
+                      window->drop->childWindow = handle;
+                      return FALSE;
+                    }
                   }
                 }
 
@@ -1090,7 +1197,7 @@ namespace oro::runtime::window {
                   {
                     LPWSTR pemW = nullptr;
                     if (
-                      FAILED(certificate->get_PemEncodedCertificate(&pemW)) ||
+                      FAILED(certificate->ToPemEncoding(&pemW)) ||
                       pemW == nullptr
                     ) {
                       args->put_Action(COREWEBVIEW2_SERVER_CERTIFICATE_ERROR_ACTION_CANCEL);
@@ -1438,10 +1545,10 @@ namespace oro::runtime::window {
                       if (size > 0) {
                         auto buffer = std::make_shared<char[]>(size);
                         if (content->Read(buffer.get(), size, nullptr) == S_OK) {
-                          request.setBody(webview::SchemeHandlers::Body {
+                          request.setBody(
                             size,
-                            std::move(buffer)
-                          });
+                            reinterpret_cast<const unsigned char*>(buffer.get())
+                          );
                         }
                       }
                     }
@@ -1482,6 +1589,10 @@ namespace oro::runtime::window {
   }
 
   Window::~Window () {
+    if (this->drop != nullptr && this->drop->childWindow != nullptr) {
+      RevokeDragDrop(this->drop->childWindow);
+      this->drop->childWindow = nullptr;
+    }
   }
 
   ScreenSize Window::getScreenSize () {
@@ -1496,27 +1607,36 @@ namespace oro::runtime::window {
     auto text = String(
       this->bridge->userConfig["build_name"] + " " +
       "v" + this->bridge->userConfig["meta_version"] + "\n" +
-      "Built with oroc v" + VERSION_FULL_STRING + "\n" +
+      "Built with oroc v" + version::VERSION_FULL_STRING + "\n" +
       this->bridge->userConfig["meta_copyright"]
     );
+    const auto wideText = convertStringToWString(text);
+    const auto wideCaption = convertStringToWString(
+      this->bridge->userConfig["build_name"]
+    );
 
-    MSGBOXPARAMS mbp;
-    mbp.cbSize = sizeof(MSGBOXPARAMS);
+    MSGBOXPARAMSW mbp = {};
+    mbp.cbSize = sizeof(MSGBOXPARAMSW);
     mbp.hwndOwner = this->window;
     mbp.hInstance = app->instance;
-    mbp.lpszText = text.c_str();
-    mbp.lpszCaption = this->bridge->userConfig["build_name"].c_str();
+    mbp.lpszText = wideText.c_str();
+    mbp.lpszCaption = wideCaption.c_str();
     mbp.dwStyle = MB_USERICON;
     mbp.dwLanguageId = MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT);
     mbp.lpfnMsgBoxCallback = nullptr;
     mbp.dwContextHelpId = 0;
 
-    MessageBoxIndirect(&mbp);
+    MessageBoxIndirectW(&mbp);
   }
 
   void Window::kill () {
     if (this->controller != nullptr) this->controller->Close();
     if (this->window != nullptr) {
+      if (this->drop != nullptr && this->drop->childWindow != nullptr) {
+        RevokeDragDrop(this->drop->childWindow);
+        this->drop->childWindow = nullptr;
+      }
+
       if (menubar != nullptr) DestroyMenu(menubar);
       if (menutray != nullptr) DestroyMenu(menutray);
       DestroyWindow(this->window);
@@ -1572,7 +1692,7 @@ namespace oro::runtime::window {
   }
 
   void Window::show () {
-    static auto userConfig = getUserConfig();
+    static auto userConfig = config::getUserConfig();
     auto isAgent = userConfig.count("application_agent") != 0;
 
     if (isAgent && this->options.index == 0) return;
@@ -1858,7 +1978,7 @@ namespace oro::runtime::window {
       return;
     }
 
-    NOTIFYICONDATA nid;
+    NOTIFYICONDATAW nid = {};
 
 	    if (isTrayMenu) {
       const auto cwd = oro::runtime::getcwd();
@@ -1878,23 +1998,21 @@ namespace oro::runtime::window {
 
       HICON icon;
       if (trayIconPath.size() > 0) {
-        icon = (HICON) LoadImageA(
+        const auto wideTrayIconPath = convertStringToWString(trayIconPath);
+        icon = reinterpret_cast<HICON>(LoadImageW(
           nullptr,
-          trayIconPath.c_str(),
+          wideTrayIconPath.c_str(),
           IMAGE_ICON,
           GetSystemMetrics(SM_CXSMICON),
           GetSystemMetrics(SM_CXSMICON),
           LR_LOADFROMFILE
-        );
+        ));
       } else {
-        icon = LoadIcon(
-          GetModuleHandle(nullptr),
-          reinterpret_cast<LPCSTR>(MAKEINTRESOURCE(IDI_APPLICATION))
-        );
+        icon = LoadIcon(nullptr, IDI_APPLICATION);
       }
 
       menutray = CreatePopupMenu();
-      nid.cbSize = sizeof(NOTIFYICONDATA);
+      nid.cbSize = sizeof(NOTIFYICONDATAW);
       nid.hWnd = window;
       nid.uID = 1871369;
       nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
@@ -1914,13 +2032,14 @@ namespace oro::runtime::window {
       if (line.empty()) continue;
       auto menuTitle = split(line, ':')[0];
 
-      HMENU subMenu;
+      HMENU subMenu = nullptr;
       if (!isTrayMenu) subMenu = CreateMenu();
       if (isTrayMenu) {
         // Copy with bounds to avoid potential overflow of szTip
-        lstrcpyn(
+        const auto wideTitle = convertStringToWString(userConfig["meta_title"]);
+        lstrcpynW(
           nid.szTip,
-          userConfig["meta_title"].c_str(),
+          wideTitle.c_str(),
           static_cast<int>(sizeof(nid.szTip) / sizeof(nid.szTip[0]))
         );
       }
@@ -1929,7 +2048,8 @@ namespace oro::runtime::window {
         auto menuParts = split(line, ':');
         auto title = menuParts[0];
         menuTrayMap[itemId] =  line;
-        AppendMenuA(menutray, MF_STRING, itemId++, title.c_str());
+        const auto wideTitle = convertStringToWString(title);
+        AppendMenuW(menutray, MF_STRING, itemId++, wideTitle.c_str());
       }
 
       for (int i = 1; i < menuSource.size(); i++) {
@@ -1954,10 +2074,13 @@ namespace oro::runtime::window {
         int mask = 0;
         String key = "";
 
-        auto accelerators = split(parts[1], '+');
+        const auto acceleratorSource = parts.size() > 1 ? parts[1] : "";
+        auto accelerators = split(acceleratorSource, '+');
         auto accl = String("");
 
-        key = trim(parts[1]) == "_" ? "" : trim(accelerators[0]);
+        key = trim(acceleratorSource) == "_" || accelerators.empty()
+          ? ""
+          : trim(accelerators[0]);
 
         if (key.size() > 0) {
           bool isShift = String("ABCDEFGHIJKLMNOPQRSTUVWXYZ").find(key) != -1;
@@ -1977,12 +2100,13 @@ namespace oro::runtime::window {
         }
 
         auto display = String(title + "\t" + accl);
+        const auto wideDisplay = convertStringToWString(display);
 
         if (isTrayMenu) {
-          AppendMenuA(menutray, MF_STRING, itemId, display.c_str());
+          AppendMenuW(menutray, MF_STRING, itemId, wideDisplay.c_str());
           menuTrayMap[itemId] = String(title + ":" +(parts.size() > 1 ? parts[1] : ""));
         } else {
-          AppendMenuA(subMenu, MF_STRING, itemId, display.c_str());
+          AppendMenuW(subMenu, MF_STRING, itemId, wideDisplay.c_str());
           menuMap[itemId] = String(title + "\t" + menuTitle);
         }
 
@@ -1990,24 +2114,21 @@ namespace oro::runtime::window {
       }
 
       if (!isTrayMenu) {
-        AppendMenuA(menubar, MF_POPUP, (UINT_PTR) subMenu, menuTitle.c_str());
+        const auto wideMenuTitle = convertStringToWString(menuTitle);
+        AppendMenuW(menubar, MF_POPUP, (UINT_PTR) subMenu, wideMenuTitle.c_str());
       }
     }
 
     if (isTrayMenu) {
-      Shell_NotifyIcon(NIM_ADD, &nid);
+      Shell_NotifyIconW(NIM_ADD, &nid);
     } else {
-      MENUINFO Info;
+      MENUINFO Info = {};
       Info.cbSize = sizeof(Info);
-      Info.fMask = MIM_BACKGROUND | MFT_OWNERDRAW;
+      Info.fMask = MIM_BACKGROUND;
       Info.hbrBack = CreateSolidBrush(RGB(0, 0, 0));
       SetMenuInfo(menubar, &Info);
 
-      RECT rc;
-      rc.top = 0;
-      rc.left = 0;
-      rc.bottom = 0;
-      rc.right = 0;
+      RECT rc = {};
       InvalidateRect(this->window, &rc, true);
       DrawMenuBar(this->window);
       RedrawWindow(this->window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE);

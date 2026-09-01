@@ -145,7 +145,7 @@ bool flagQuietMode = false;     // Suppress standard logs (warn/error still surf
 bool flagJsonMode = false;      // Emit JSON logs
 
 enum class CliLogLevel {
-  ERROR = 0,
+  Error = 0,
   WARN = 1,
   INFO = 2,
   VERBOSE = 3,
@@ -1898,7 +1898,7 @@ static inline bool useColor () {
 
 static inline const char* levelLabel (CliLogLevel level) {
   switch (level) {
-    case CliLogLevel::ERROR: return "ERROR";
+    case CliLogLevel::Error: return "ERROR";
     case CliLogLevel::WARN: return "WARN";
     case CliLogLevel::INFO: return "INFO";
     case CliLogLevel::VERBOSE: return "VERBOSE";
@@ -1934,7 +1934,7 @@ static void logWithLevel (CliLogLevel level, const String& s) {
   const char* levelColor = "";
   if (color) {
     switch (level) {
-      case CliLogLevel::ERROR: levelColor = "\033[31m"; break;
+      case CliLogLevel::Error: levelColor = "\033[31m"; break;
       case CliLogLevel::WARN: levelColor = "\033[33m"; break;
       case CliLogLevel::INFO: levelColor = "\033[36m"; break;
       case CliLogLevel::VERBOSE: levelColor = "\033[2m"; break;
@@ -1943,7 +1943,7 @@ static void logWithLevel (CliLogLevel level, const String& s) {
     }
   }
 
-  std::ostream& os = (level == CliLogLevel::ERROR || level == CliLogLevel::WARN) ? std::cerr : std::cout;
+  std::ostream& os = (level == CliLogLevel::Error || level == CliLogLevel::WARN) ? std::cerr : std::cout;
 
   // JSON logging mode or log-file mirroring: build JSON entry
   const bool needJson = gLogJson || gLogFilePath.size() > 0;
@@ -2138,7 +2138,7 @@ void log (const String s) {
   if (s.size() == 0) return;
   // Infer level from conventional prefixes to avoid changing all call sites
   if (s.starts_with("ERROR:") || s.starts_with("Error:") || s.starts_with("error:")) {
-    return logWithLevel(CliLogLevel::ERROR, s);
+    return logWithLevel(CliLogLevel::Error, s);
   }
   if (s.starts_with("WARNING:") || s.starts_with("Warn:") || s.starts_with("warn:")) {
     return logWithLevel(CliLogLevel::WARN, s);
@@ -2148,7 +2148,7 @@ void log (const String s) {
 
 static inline void logInfo (const String& s) { logWithLevel(CliLogLevel::INFO, s); }
 static inline void logWarn (const String& s) { logWithLevel(CliLogLevel::WARN, s); }
-static inline void logError (const String& s) { logWithLevel(CliLogLevel::ERROR, s); }
+static inline void logError (const String& s) { logWithLevel(CliLogLevel::Error, s); }
 static inline void logVerbose (const String& s) { logWithLevel(CliLogLevel::VERBOSE, s); }
 static inline void logDebug (const String& s) { logWithLevel(CliLogLevel::DEBUG, s); }
 
@@ -2492,7 +2492,6 @@ inline String mergeEnvironmentAssignments (
 
   if (inEnvironmentTable && !wroteOverrides) {
     writeOverrides(output);
-    wroteOverrides = true;
   }
 
   if (!foundEnvironmentTable) {
@@ -4502,7 +4501,7 @@ Vector<Path> handleBuildPhaseForCopyMappedFiles (
 
     if (flagVerboseMode) {
       debug(
-        "copy %s ~> %s",
+        "copy %ls ~> %ls",
         fs::relative(src, targetPath).c_str(),
         fs::relative(dst, targetPath).c_str()
       );
@@ -5406,7 +5405,6 @@ bool startAndroidEmulator (AndroidCliState& state) {
   // start emulator in the background
   int emulatorStartWaited = 0;
   StringStream emulatorOutput;
-  bool emulatorStartFailed = false;
 
   logInfo("Starting emulator...");
   state.androidEmulatorProcess = new Process(
@@ -5443,7 +5441,6 @@ bool startAndroidEmulator (AndroidCliState& state) {
       break;
     } else {
       if (emulatorStartWaited >= state.androidTaskTimeout) {
-        emulatorStartFailed = true;
         logError("Emulator start timed out.");
         break;
       }
@@ -6153,6 +6150,11 @@ optionsAndEnv parseCommandLineOptions (
 
 int main (int argc, char* argv[]) {
   try {
+    if (argc > 0 && argv == nullptr) {
+      logError("invalid null argument vector");
+      return 1;
+    }
+
     const String cliInvocationPath = (argc > 0 && argv != nullptr && argv[0] != nullptr)
       ? String(argv[0])
       : String("oroc");
@@ -7290,7 +7292,7 @@ int main (int argc, char* argv[]) {
     const String spec = newVersionSpec;
 
     String nextVersion;
-    oro::runtime::semver::ReleaseType releaseType;
+    auto releaseType = oro::runtime::semver::ReleaseType::Patch;
     bool isReleaseType = false;
 
     if (equal(spec, "major")) {
@@ -8605,7 +8607,6 @@ int main (int argc, char* argv[]) {
 
       StringStream gradleInitCommand;
       gradleInitCommand
-        << "echo 1 |"
         << gradlePath
         << "gradle "
         << "--no-configuration-cache "
@@ -8613,7 +8614,9 @@ int main (int argc, char* argv[]) {
         << "--no-scan "
         << "--offline "
         << "--quiet "
-        << "init";
+        << "init "
+        << "--use-defaults "
+        << "--overwrite";
 
       if (debugEnv || verboseEnv) logVerbose(gradleInitCommand.str());
       if (std::system(gradleInitCommand.str().c_str()) != 0) {

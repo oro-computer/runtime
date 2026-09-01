@@ -87,7 +87,7 @@ export function setEnvironmentData (key, value) {
           env: { key, value }
         }
       },
-      { transfer }
+      transfer
     )
   }
 }
@@ -228,7 +228,7 @@ export class Worker extends EventEmitter {
           const transfer = getTransferables(data)
           this.#worker.postMessage(
             { worker_threads: { stdin: { data } } },
-            { transfer }
+            transfer
           )
 
           cb(null)
@@ -258,7 +258,7 @@ export class Worker extends EventEmitter {
         worker_threads: { workerData: options.workerData }
       }
 
-      this.#worker.postMessage(message, { transfer })
+      this.#worker.postMessage(message, transfer)
     }
 
     this.#worker.postMessage({

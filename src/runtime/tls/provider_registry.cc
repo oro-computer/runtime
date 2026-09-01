@@ -2,11 +2,14 @@
 
 #include "../env.hh"
 #include "../debug.hh"
+#include "../string.hh"
 
 #if ORO_RUNTIME_PLATFORM_POSIX
   #include <dlfcn.h>
 #elif ORO_RUNTIME_PLATFORM_WINDOWS
-  #define WIN32_LEAN_AND_MEAN
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
   #include <windows.h>
 #endif
 
@@ -105,7 +108,9 @@ namespace oro::runtime::tls {
       }
       return true;
     #elif ORO_RUNTIME_PLATFORM_WINDOWS
-      HMODULE mod = LoadLibraryA(path.c_str());
+      const auto widePath = string::convertStringToWString(path);
+      if (!path.empty() && widePath.empty()) continue;
+      HMODULE mod = LoadLibraryW(widePath.c_str());
       if (!mod) continue;
       auto fn = reinterpret_cast<RegisterFn>(GetProcAddress(mod, "oro_tls_register_provider"));
       if (!fn) {

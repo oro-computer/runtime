@@ -215,6 +215,15 @@ namespace oro::runtime::process {
     #endif
 
     ~Process () noexcept {
+    #if ORO_RUNTIME_PLATFORM_WINDOWS
+      if (processThread.joinable()) {
+        if (processThread.get_id() == std::this_thread::get_id()) {
+          processThread.detach();
+        } else {
+          processThread.join();
+        }
+      }
+    #endif
       closeFDs();
     };
 
@@ -265,7 +274,7 @@ namespace oro::runtime::process {
   #if !ORO_RUNTIME_PLATFORM_WINDOWS
     Thread stdoutAndStderrThread;
   #else
-    Thread stdoutThread, stderrThread;
+    Thread processThread, stdoutThread, stderrThread;
   #endif
 
     UniquePointer<FD> stdoutFD, stderrFD, stdinFD;

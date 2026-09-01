@@ -1181,9 +1181,7 @@ export class Script extends EventTarget {
           mode,
           id
         },
-        {
-          transfer
-        }
+        transfer
       )
 
       worker.port.addEventListener('message', onMessage)
@@ -1271,9 +1269,7 @@ export class Script extends EventTarget {
           mode,
           id
         },
-        {
-          transfer
-        }
+        transfer
       )
 
       worker.port.addEventListener('message', onMessage)

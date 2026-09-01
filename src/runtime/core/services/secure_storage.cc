@@ -90,15 +90,19 @@
         return std::wstring();
       }
 
-      std::wstring result(static_cast<size_t>(required - 1), L'\0');
-      MultiByteToWideChar(
+      std::wstring result(static_cast<size_t>(required), L'\0');
+      const auto written = MultiByteToWideChar(
         CP_UTF8,
-        0,
+        MB_ERR_INVALID_CHARS,
         value.c_str(),
         -1,
         result.data(),
         required
       );
+      if (written <= 0) {
+        return std::wstring();
+      }
+      result.resize(static_cast<size_t>(written - 1));
       return result;
     }
 
@@ -109,7 +113,7 @@
 
       int required = WideCharToMultiByte(
         CP_UTF8,
-        0,
+        WC_ERR_INVALID_CHARS,
         value,
         -1,
         nullptr,
@@ -122,10 +126,10 @@
         return "";
       }
 
-      String result(static_cast<size_t>(required - 1), '\0');
-      WideCharToMultiByte(
+      String result(static_cast<size_t>(required), '\0');
+      const auto written = WideCharToMultiByte(
         CP_UTF8,
-        0,
+        WC_ERR_INVALID_CHARS,
         value,
         -1,
         result.data(),
@@ -133,6 +137,10 @@
         nullptr,
         nullptr
       );
+      if (written <= 0) {
+        return "";
+      }
+      result.resize(static_cast<size_t>(written - 1));
       return result;
     }
 

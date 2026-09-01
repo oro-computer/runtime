@@ -113,7 +113,7 @@ namespace oro::runtime::app {
     #endif
     #elif ORO_RUNTIME_PLATFORM_WINDOWS
       _In_ HINSTANCE instance;
-      WNDCLASSEX wcex;
+      WNDCLASSEXW wcex;
     #endif
 
       App (const Options&);

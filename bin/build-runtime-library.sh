@@ -534,7 +534,7 @@ function main () {
 
       if (( syntax_only )); then
         echo "# checking syntax ($arch-$platform) $(basename "$source")"
-        run_runtime_compiler "$compiler" "${compile_flags[@]}" -fsyntax-only "$source" || onsignal
+        run_runtime_compiler "$compiler" "${compile_flags[@]}" -ferror-limit=0 -fsyntax-only "$source" || onsignal
         echo "ok - checked ${source/$src_directory\//} ($arch-$platform)"
       elif
         (( force )) ||

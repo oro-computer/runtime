@@ -1,15 +1,13 @@
 #if defined(_WIN32)
-#include "../../../debug.hh"
-#include "../../../runtime.hh"
-#include "../bluetooth.hh"
-#include "../../../string.hh"
-#include "../../../bytes.hh"
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
 #include <combaseapi.h>
+#include <bluetoothapis.h>
 #include <bluetoothleapis.h>
+#include <robuffer.h>
+#include <setupapi.h>
 #pragma comment(lib, "runtimeobject")
 #pragma comment(lib, "windowsapp")
 #include <wrl.h>
@@ -20,24 +18,39 @@
 #include <windows.foundation.collections.h>
 #include <windows.devices.bluetooth.advertisement.h>
 #include <windows.storage.streams.h>
+#include "../../../app.hh"
+#include "../../../http.hh"
+#include "../../../debug.hh"
+#include "../../../runtime.hh"
+#include "../bluetooth.hh"
+#include "../../../string.hh"
+#include "../../../bytes.hh"
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
 #include <thread>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
 
 // Dynamic Bluetooth GATT API loader (no static link deps)
 namespace {
+  static const GUID BLUETOOTH_LE_DEVICE_INTERFACE_GUID = {
+    0x781aee18,
+    0x7733,
+    0x4ce4,
+    {0xad, 0xd0, 0x91, 0xf4, 0x1c, 0x67, 0xb5, 0x92}
+  };
+
   struct GattFns {
     HMODULE mod = nullptr;
-    HRESULT (WINAPI *GetServices)(HANDLE, USHORT, PBTH_LE_GATT_SERVICE, USHORT*, ULONG) = nullptr;
-    HRESULT (WINAPI *GetCharacteristics)(HANDLE, PBTH_LE_GATT_SERVICE, USHORT, PBTH_LE_GATT_CHARACTERISTIC, USHORT*, ULONG) = nullptr;
-    HRESULT (WINAPI *ReadCharacteristicValue)(HANDLE, PBTH_LE_GATT_CHARACTERISTIC, USHORT, PBTH_LE_GATT_CHARACTERISTIC_VALUE, USHORT*, ULONG) = nullptr;
-    HRESULT (WINAPI *WriteCharacteristicValue)(HANDLE, PBTH_LE_GATT_CHARACTERISTIC, PBTH_LE_GATT_CHARACTERISTIC_VALUE, ULONG) = nullptr;
-    HRESULT (WINAPI *RegisterEvent)(HANDLE, BTH_LE_GATT_EVENT_TYPE, PVOID, PFNBLUETOOTH_GATT_EVENT_CALLBACK, PVOID, BLUETOOTH_GATT_EVENT_HANDLE*, ULONG) = nullptr;
-    HRESULT (WINAPI *UnregisterEvent)(BLUETOOTH_GATT_EVENT_HANDLE, ULONG) = nullptr;
+    decltype(&BluetoothGATTGetServices) GetServices = nullptr;
+    decltype(&BluetoothGATTGetCharacteristics) GetCharacteristics = nullptr;
+    decltype(&BluetoothGATTGetCharacteristicValue) ReadCharacteristicValue = nullptr;
+    decltype(&BluetoothGATTSetCharacteristicValue) WriteCharacteristicValue = nullptr;
+    decltype(&BluetoothGATTRegisterEvent) RegisterEvent = nullptr;
+    decltype(&BluetoothGATTUnregisterEvent) UnregisterEvent = nullptr;
   };
 
   static GattFns& gatt() {
@@ -47,8 +60,8 @@ namespace {
       if (fns.mod) {
         fns.GetServices = reinterpret_cast<decltype(fns.GetServices)>(GetProcAddress(fns.mod, "BluetoothGATTGetServices"));
         fns.GetCharacteristics = reinterpret_cast<decltype(fns.GetCharacteristics)>(GetProcAddress(fns.mod, "BluetoothGATTGetCharacteristics"));
-        fns.ReadCharacteristicValue = reinterpret_cast<decltype(fns.ReadCharacteristicValue)>(GetProcAddress(fns.mod, "BluetoothGATTReadCharacteristicValue"));
-        fns.WriteCharacteristicValue = reinterpret_cast<decltype(fns.WriteCharacteristicValue)>(GetProcAddress(fns.mod, "BluetoothGATTWriteCharacteristicValue"));
+        fns.ReadCharacteristicValue = reinterpret_cast<decltype(fns.ReadCharacteristicValue)>(GetProcAddress(fns.mod, "BluetoothGATTGetCharacteristicValue"));
+        fns.WriteCharacteristicValue = reinterpret_cast<decltype(fns.WriteCharacteristicValue)>(GetProcAddress(fns.mod, "BluetoothGATTSetCharacteristicValue"));
         fns.RegisterEvent = reinterpret_cast<decltype(fns.RegisterEvent)>(GetProcAddress(fns.mod, "BluetoothGATTRegisterEvent"));
         fns.UnregisterEvent = reinterpret_cast<decltype(fns.UnregisterEvent)>(GetProcAddress(fns.mod, "BluetoothGATTUnregisterEvent"));
       }
@@ -71,111 +84,107 @@ namespace {
     return std::string(buf);
   }
 
-  static inline bool parseHex16(const std::string& s, unsigned short& out) {
-    try {
-      out = (unsigned short) std::stoul(s, nullptr, 16);
-      return true;
-    } catch (...) {
+  static inline GUID bthLeUuidToGuid(const BTH_LE_UUID& uuid) {
+    if (!uuid.IsShortUuid) {
+      return uuid.Value.LongUuid;
+    }
+
+    return GUID {
+      static_cast<unsigned long>(uuid.Value.ShortUuid),
+      0x0000,
+      0x1000,
+      {0x80, 0x00, 0x00, 0x80, 0x5f, 0x9b, 0x34, 0xfb}
+    };
+  }
+
+  static inline std::string bthLeUuidToString(const BTH_LE_UUID& uuid) {
+    return guidToString(bthLeUuidToGuid(uuid));
+  }
+
+  static inline bool bthLeUuidEqualsGuid(const BTH_LE_UUID& uuid, const GUID& guid) {
+    const auto expanded = bthLeUuidToGuid(uuid);
+    return std::memcmp(&expanded, &guid, sizeof(GUID)) == 0;
+  }
+
+  static inline bool parseHex(
+    const std::string& input,
+    size_t offset,
+    size_t length,
+    uint32_t& output
+  ) {
+    output = 0;
+    if (offset + length > input.size()) {
       return false;
     }
+
+    for (size_t i = offset; i < offset + length; ++i) {
+      const auto c = input[i];
+      uint32_t value = 0;
+      if (c >= '0' && c <= '9') {
+        value = static_cast<uint32_t>(c - '0');
+      } else if (c >= 'a' && c <= 'f') {
+        value = static_cast<uint32_t>(10 + c - 'a');
+      } else if (c >= 'A' && c <= 'F') {
+        value = static_cast<uint32_t>(10 + c - 'A');
+      } else {
+        return false;
+      }
+      output = (output << 4) | value;
+    }
+    return true;
   }
 
   static inline bool parseGuid(const std::string& in, GUID& out) {
-    // Accept full 36-char GUID, or 16-bit short UUID (hex)
-    if (in.size() == 36 && in[8] == '-' && in[13] == '-' && in[18] == '-' && in[23] == '-') {
-      const auto hex = [](char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return 10 + c - 'a';
-        if (c >= 'A' && c <= 'F') return 10 + c - 'A';
-        return -1;
+    if (in.size() == 4) {
+      uint32_t shortId = 0;
+      if (!parseHex(in, 0, 4, shortId)) {
+        return false;
+      }
+      out = GUID {
+        static_cast<unsigned long>(shortId),
+        0x0000,
+        0x1000,
+        {0x80, 0x00, 0x00, 0x80, 0x5f, 0x9b, 0x34, 0xfb}
       };
-      auto parse32 = [&](int pos) -> unsigned {
-        unsigned v = 0;
-        for (int i = 0; i < 8; i++) {
-          int h = hex(in[pos + i]);
-          if (h < 0) return 0;
-          v = (v << 4) | h;
-        }
-        return v;
-      };
-      auto parse16 = [&](int pos) -> unsigned short {
-        unsigned short v = 0;
-        for (int i = 0; i < 4; i++) {
-          int h = hex(in[pos + i]);
-          if (h < 0) return 0;
-          v = (unsigned short) ((v << 4) | h);
-        }
-        return v;
-      };
-      auto parse8 = [&](int pos) -> unsigned char {
-        int hi = hex(in[pos]);
-        int lo = hex(in[pos + 1]);
-        if (hi < 0 || lo < 0) return 0;
-        return (unsigned char) ((hi << 4) | lo);
-      };
-      out.Data1 = parse32(0);
-      out.Data2 = parse16(9);
-      out.Data3 = parse16(14);
-      out.Data4[0] = parse8(19);
-      out.Data4[1] = parse8(21);
-      out.Data4[2] = parse8(24);
-      out.Data4[3] = parse8(26);
-      out.Data4[4] = parse8(28);
-      out.Data4[5] = parse8(30);
-      out.Data4[6] = parse8(32);
-      out.Data4[7] = parse8(34);
       return true;
     }
-    // Short UUID: format to 128-bit base UUID
-    unsigned short shortId = 0;
-    if (!parseHex16(in, shortId)) return false;
-    out.Data1 = 0x0000 | ((unsigned) shortId);
-    out.Data2 = 0x0000;
-    out.Data3 = 0x1000;
-    out.Data4[0] = 0x80;
-    out.Data4[1] = 0x00;
-    out.Data4[2] = 0x00;
-    out.Data4[3] = 0x80;
-    out.Data4[4] = 0x5f;
-    out.Data4[5] = 0x9b;
-    out.Data4[6] = 0x34;
-    out.Data4[7] = 0xfb;
+
+    if (
+      in.size() != 36 ||
+      in[8] != '-' ||
+      in[13] != '-' ||
+      in[18] != '-' ||
+      in[23] != '-'
+    ) {
+      return false;
+    }
+
+    uint32_t segments[11] = {};
+    if (
+      !parseHex(in, 0, 8, segments[0]) ||
+      !parseHex(in, 9, 4, segments[1]) ||
+      !parseHex(in, 14, 4, segments[2]) ||
+      !parseHex(in, 19, 2, segments[3]) ||
+      !parseHex(in, 21, 2, segments[4]) ||
+      !parseHex(in, 24, 2, segments[5]) ||
+      !parseHex(in, 26, 2, segments[6]) ||
+      !parseHex(in, 28, 2, segments[7]) ||
+      !parseHex(in, 30, 2, segments[8]) ||
+      !parseHex(in, 32, 2, segments[9]) ||
+      !parseHex(in, 34, 2, segments[10])
+    ) {
+      return false;
+    }
+
+    out.Data1 = static_cast<unsigned long>(segments[0]);
+    out.Data2 = static_cast<unsigned short>(segments[1]);
+    out.Data3 = static_cast<unsigned short>(segments[2]);
+    for (size_t i = 0; i < 8; ++i) {
+      out.Data4[i] = static_cast<unsigned char>(segments[i + 3]);
+    }
     return true;
   }
 }
-#include <string>
-#include <vector>
-#include <unordered_map>
-
-// Minimal SetupAPI declarations to avoid static headers/deps
-typedef PVOID HDEVINFO;
-typedef struct _SP_DEVICE_INTERFACE_DATA {
-  DWORD cbSize;
-  GUID InterfaceClassGuid;
-  DWORD Flags;
-  ULONG_PTR Reserved;
-} SP_DEVICE_INTERFACE_DATA, *PSP_DEVICE_INTERFACE_DATA;
-
-typedef struct _SP_DEVICE_INTERFACE_DETAIL_DATA_W {
-  DWORD cbSize;
-  WCHAR DevicePath[1];
-} SP_DEVICE_INTERFACE_DETAIL_DATA_W, *PSP_DEVICE_INTERFACE_DETAIL_DATA_W;
-
-#ifndef DIGCF_PRESENT
-#define DIGCF_PRESENT 0x00000002
-#endif
-#ifndef DIGCF_DEVICEINTERFACE
-#define DIGCF_DEVICEINTERFACE 0x00000010
-#endif
-
-// BLE Device Interface GUID {781AEE18-7733-4CE4-ADD0-91F41C67B592}
-static const GUID GUID_BLUETOOTHLE_DEVICE_INTERFACE = { 0x781aee18, 0x7733, 0x4ce4, { 0xad, 0xd0, 0x91, 0xf4, 0x1c, 0x67, 0xb5, 0x92 } };
-
-// SetupAPI function pointer types
-using PFN_SetupDiGetClassDevsW = HDEVINFO (WINAPI*)(const GUID*, PCWSTR, HWND, DWORD);
-using PFN_SetupDiEnumDeviceInterfaces = BOOL (WINAPI*)(HDEVINFO, PVOID, const GUID*, DWORD, PSP_DEVICE_INTERFACE_DATA);
-using PFN_SetupDiGetDeviceInterfaceDetailW = BOOL (WINAPI*)(HDEVINFO, PSP_DEVICE_INTERFACE_DATA, PSP_DEVICE_INTERFACE_DETAIL_DATA_W, DWORD, PDWORD, PVOID);
-using PFN_SetupDiDestroyDeviceInfoList = BOOL (WINAPI*)(HDEVINFO);
 
 using oro::runtime::core::services::Bluetooth;
 using oro::runtime::String;
@@ -185,7 +194,8 @@ using Microsoft::WRL::ComPtr;
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::Wrappers::HString;
 using Microsoft::WRL::Wrappers::HStringReference;
-using Microsoft::WRL::Wrappers::RoInitializeWrapper;
+using ABI::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs;
+using ABI::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher;
 using ABI::Windows::Devices::Bluetooth::Advertisement::IBluetoothLEAdvertisementWatcher;
 using ABI::Windows::Devices::Bluetooth::Advertisement::IBluetoothLEAdvertisementReceivedEventArgs;
 using ABI::Windows::Devices::Bluetooth::Advertisement::IBluetoothLEAdvertisement;
@@ -193,13 +203,20 @@ using ABI::Windows::Devices::Bluetooth::Advertisement::IBluetoothLEManufacturerD
 using ABI::Windows::Devices::Bluetooth::Advertisement::BluetoothLEScanningMode_Active;
 using ABI::Windows::Foundation::ITypedEventHandler;
 using ABI::Windows::Foundation::Collections::IVector;
-using ABI::Windows::Foundation::Collections::IVectorView;
 using ABI::Windows::Storage::Streams::IBuffer;
-using ABI::Windows::Storage::Streams::IBufferByteAccess;
+using Windows::Storage::Streams::IBufferByteAccess;
+namespace JSON = oro::runtime::JSON;
+namespace bytes = oro::runtime::bytes;
+namespace http = oro::runtime::http;
+
+using AdvertisementReceivedHandler = ABI::Windows::Foundation::ITypedEventHandler<
+  BluetoothLEAdvertisementWatcher*,
+  BluetoothLEAdvertisementReceivedEventArgs*
+>;
 
 namespace {
   class WindowsBackend final : public Bluetooth::Backend {
-    oro::runtime::core::Service& svc;
+    Bluetooth& svc;
     // Pending chooser state
     bool choosing = false;
     std::string pendingSeq;
@@ -209,9 +226,12 @@ namespace {
     Bluetooth::ParsedRequestDeviceOptions requestFilters;
     bool manufacturerFilterActive = false;
     bool watcherStarted = false;
+    bool watcherHandlerRegistered = false;
+    bool roInitializedByBackend = false;
+    std::jthread discoveryTimeoutThread;
     EventRegistrationToken watcherToken{};
     ComPtr<IBluetoothLEAdvertisementWatcher> watcher;
-    ComPtr<ITypedEventHandler<IBluetoothLEAdvertisementWatcher*, IBluetoothLEAdvertisementReceivedEventArgs*>> watcherHandler;
+    ComPtr<AdvertisementReceivedHandler> watcherHandler;
     std::unordered_set<std::string> watcherSeen;
     struct DeviceInfo {
       String name;
@@ -223,7 +243,33 @@ namespace {
 
   public:
     WindowsBackend(Bluetooth& service) : svc(service) {}
-    ~WindowsBackend() override { stopWatcher(); }
+    ~WindowsBackend() override {
+      stopDiscoveryTimeout();
+      stopWatcher();
+
+      if (!subscriptions.empty()) {
+        auto &f = gatt();
+        if (f.UnregisterEvent) {
+          for (const auto& entry : subscriptions) {
+            if (entry.second.first) {
+              f.UnregisterEvent(entry.second.first, BLUETOOTH_GATT_FLAG_NONE);
+            }
+          }
+        }
+        subscriptions.clear();
+      }
+
+      for (const auto& entry : connections) {
+        if (entry.second && entry.second != INVALID_HANDLE_VALUE) {
+          CloseHandle(entry.second);
+        }
+      }
+      connections.clear();
+
+      if (roInitializedByBackend) {
+        RoUninitialize();
+      }
+    }
 
     static std::string bluetoothAddressToString(UINT64 address) {
       char buf[18];
@@ -241,26 +287,22 @@ namespace {
       unsigned int len = 0;
       const wchar_t* buffer = hstr.GetRawBuffer(&len);
       if (!buffer || len == 0) return std::string();
-      int needed = WideCharToMultiByte(CP_UTF8, 0, buffer, len, nullptr, 0, nullptr, nullptr);
-      if (needed <= 0) return std::string();
-      std::string out;
-      out.resize((size_t) needed);
-      WideCharToMultiByte(CP_UTF8, 0, buffer, len, out.data(), needed, nullptr, nullptr);
-      return out;
+      return oro::runtime::string::convertWStringToString(
+        oro::runtime::WString(buffer, len)
+      );
     }
 
     HRESULT ensureWatcherStarted() {
       if (watcherStarted) return S_OK;
-      static bool roInitialized = false;
-      if (!roInitialized) {
+      if (!roInitializedByBackend) {
         HRESULT hr = RoInitialize(RO_INIT_MULTITHREADED);
         if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) return hr;
-        roInitialized = true;
+        roInitializedByBackend = SUCCEEDED(hr);
       }
 
       HStringReference className(RuntimeClass_Windows_Devices_Bluetooth_Advertisement_BluetoothLEAdvertisementWatcher);
       ComPtr<IActivationFactory> factory;
-      HRESULT hr = RoGetActivationFactory(className.GetHSTRING(), IID_PPV_ARGS(&factory));
+      HRESULT hr = RoGetActivationFactory(className.Get(), IID_PPV_ARGS(&factory));
       if (FAILED(hr)) return hr;
 
       ComPtr<IInspectable> inspectable;
@@ -270,34 +312,65 @@ namespace {
       hr = inspectable.As(&watcher);
       if (FAILED(hr)) return hr;
 
-      watcher->put_ScanningMode(BluetoothLEScanningMode_Active);
+      hr = watcher->put_ScanningMode(BluetoothLEScanningMode_Active);
+      if (FAILED(hr)) {
+        watcher.Reset();
+        return hr;
+      }
 
-      watcherHandler = Callback<ITypedEventHandler<IBluetoothLEAdvertisementWatcher*, IBluetoothLEAdvertisementReceivedEventArgs*>>(
+      watcherHandler = Callback<AdvertisementReceivedHandler>(
         [this](IBluetoothLEAdvertisementWatcher*, IBluetoothLEAdvertisementReceivedEventArgs* args) -> HRESULT {
           this->handleAdvertisement(args);
           return S_OK;
         }
       );
-      if (!watcherHandler) return E_FAIL;
+      if (!watcherHandler) {
+        watcher.Reset();
+        return E_FAIL;
+      }
 
       hr = watcher->add_Received(watcherHandler.Get(), &watcherToken);
-      if (FAILED(hr)) return hr;
+      if (FAILED(hr)) {
+        watcherHandler.Reset();
+        watcher.Reset();
+        return hr;
+      }
+      watcherHandlerRegistered = true;
 
       watcherSeen.clear();
-      watcher->Start();
+      hr = watcher->Start();
+      if (FAILED(hr)) {
+        watcher->remove_Received(watcherToken);
+        watcherHandlerRegistered = false;
+        watcherHandler.Reset();
+        watcher.Reset();
+        return hr;
+      }
       watcherStarted = true;
       return S_OK;
     }
 
     void stopWatcher() {
-      if (!watcherStarted || !watcher) return;
-      watcher->Stop();
-      watcher->remove_Received(watcherToken);
+      if (!watcher) return;
+      if (watcherStarted) {
+        watcher->Stop();
+      }
+      if (watcherHandlerRegistered) {
+        watcher->remove_Received(watcherToken);
+      }
       watcher.Reset();
       watcherHandler.Reset();
       watcherStarted = false;
+      watcherHandlerRegistered = false;
       watcherSeen.clear();
       manufacturerFilterActive = false;
+    }
+
+    void stopDiscoveryTimeout() {
+      if (discoveryTimeoutThread.joinable()) {
+        discoveryTimeoutThread.request_stop();
+        discoveryTimeoutThread.join();
+      }
     }
 
     void handleAdvertisement(IBluetoothLEAdvertisementReceivedEventArgs* args) {
@@ -443,15 +516,14 @@ namespace {
       const bool allowed = svc.context.getRuntime()->hasPermission("bluetooth");
       bool available = false;
 
-      // Dynamically probe classic Bluetooth radio presence using Bthprops.cpl exports.
-      // Lightweight probe that avoids additional link dependencies (may miss some cases).
-      HMODULE bth = LoadLibraryA("Bthprops.cpl");
+      // Dynamically probe classic Bluetooth radio presence without a static
+      // BluetoothApis import-library dependency.
+      HMODULE bth = LoadLibraryA("BluetoothApis.dll");
       if (bth) {
-        struct BLUETOOTH_FIND_RADIO_PARAMS { DWORD dwSize; } params{ sizeof(BLUETOOTH_FIND_RADIO_PARAMS) };
-        using HBLUETOOTH_RADIO_FIND = HANDLE; // treat as HANDLE for our purposes
-        using PFN_BluetoothFindFirstRadio = HBLUETOOTH_RADIO_FIND (WINAPI*)(const BLUETOOTH_FIND_RADIO_PARAMS*, HANDLE*);
-        using PFN_BluetoothFindNextRadio = BOOL (WINAPI*)(HBLUETOOTH_RADIO_FIND, HANDLE*);
-        using PFN_BluetoothFindRadioClose = BOOL (WINAPI*)(HBLUETOOTH_RADIO_FIND);
+        BLUETOOTH_FIND_RADIO_PARAMS params{ sizeof(BLUETOOTH_FIND_RADIO_PARAMS) };
+        using PFN_BluetoothFindFirstRadio = decltype(&BluetoothFindFirstRadio);
+        using PFN_BluetoothFindNextRadio = decltype(&BluetoothFindNextRadio);
+        using PFN_BluetoothFindRadioClose = decltype(&BluetoothFindRadioClose);
 
         auto pFirst = reinterpret_cast<PFN_BluetoothFindFirstRadio>(GetProcAddress(bth, "BluetoothFindFirstRadio"));
         auto pNext = reinterpret_cast<PFN_BluetoothFindNextRadio>(GetProcAddress(bth, "BluetoothFindNextRadio"));
@@ -536,10 +608,19 @@ namespace {
         }
       }
 
-      const int timeoutCopy = timeoutMs;
-      std::thread([this, timeoutCopy]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(timeoutCopy));
-        svc.loop.dispatch([this]() {
+      stopDiscoveryTimeout();
+      discoveryTimeoutThread = std::jthread([this, timeoutMs](std::stop_token token) {
+        const auto deadline = std::chrono::steady_clock::now() +
+          std::chrono::milliseconds(timeoutMs);
+        while (!token.stop_requested() && std::chrono::steady_clock::now() < deadline) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (token.stop_requested()) {
+          return;
+        }
+
+        svc.loop.dispatch([this, token]() {
+          if (token.stop_requested()) return;
           if (!choosing) return;
           choosing = false;
           if (!pendingSeq.empty() && pendingCb) {
@@ -554,17 +635,16 @@ namespace {
           stopWatcher();
           discovered.clear();
         });
-      }).detach();
+      });
 
       // Enumerate radios
-      HMODULE bth = LoadLibraryA("Bthprops.cpl");
+      HMODULE bth = LoadLibraryA("BluetoothApis.dll");
       if (!bth) return; // silent failure; no devices to emit
 
-      struct BLUETOOTH_FIND_RADIO_PARAMS { DWORD dwSize; } rparams{ sizeof(BLUETOOTH_FIND_RADIO_PARAMS) };
-      using HBLUETOOTH_RADIO_FIND = HANDLE;
-      using PFN_BluetoothFindFirstRadio = HBLUETOOTH_RADIO_FIND (WINAPI*)(const BLUETOOTH_FIND_RADIO_PARAMS*, HANDLE*);
-      using PFN_BluetoothFindNextRadio = BOOL (WINAPI*)(HBLUETOOTH_RADIO_FIND, HANDLE*);
-      using PFN_BluetoothFindRadioClose = BOOL (WINAPI*)(HBLUETOOTH_RADIO_FIND);
+      BLUETOOTH_FIND_RADIO_PARAMS rparams{ sizeof(BLUETOOTH_FIND_RADIO_PARAMS) };
+      using PFN_BluetoothFindFirstRadio = decltype(&BluetoothFindFirstRadio);
+      using PFN_BluetoothFindNextRadio = decltype(&BluetoothFindNextRadio);
+      using PFN_BluetoothFindRadioClose = decltype(&BluetoothFindRadioClose);
       auto pFirstRadio = reinterpret_cast<PFN_BluetoothFindFirstRadio>(GetProcAddress(bth, "BluetoothFindFirstRadio"));
       auto pNextRadio = reinterpret_cast<PFN_BluetoothFindNextRadio>(GetProcAddress(bth, "BluetoothFindNextRadio"));
       auto pCloseRadio = reinterpret_cast<PFN_BluetoothFindRadioClose>(GetProcAddress(bth, "BluetoothFindRadioClose"));
@@ -618,7 +698,7 @@ namespace {
         }
         deviceServices.clear();
         for (auto &svc : svcs) {
-          auto uuid = guidToString(svc.ServiceUuid);
+          auto uuid = bthLeUuidToString(svc.ServiceUuid);
           auto normalized = Bluetooth::normalizeUUID(String(uuid.c_str()));
           deviceServices.insert(std::string(normalized.c_str()));
         }
@@ -627,42 +707,15 @@ namespace {
         return true;
       };
 
-      // Device enumeration APIs
-      typedef struct _BLUETOOTH_ADDRESS { ULONGLONG ullLong; } BLUETOOTH_ADDRESS;
-      typedef struct _SYSTEMTIME_ { WORD wYear; WORD wMonth; WORD wDayOfWeek; WORD wDay; WORD wHour; WORD wMinute; WORD wSecond; WORD wMilliseconds; } SYSTEMTIME_;
-      const size_t BLUETOOTH_MAX_NAME_SIZE = 248;
-      typedef struct _BLUETOOTH_DEVICE_INFO_V1 {
-        DWORD dwSize;
-        BLUETOOTH_ADDRESS Address;
-        ULONG ulClassofDevice;
-        BOOL fConnected;
-        BOOL fRemembered;
-        BOOL fAuthenticated;
-        SYSTEMTIME_ stLastSeen;
-        SYSTEMTIME_ stLastUsed;
-        WCHAR szName[248];
-      } BLUETOOTH_DEVICE_INFO;
-      typedef BLUETOOTH_DEVICE_INFO* PBLUETOOTH_DEVICE_INFO;
-      typedef struct _BLUETOOTH_DEVICE_SEARCH_PARAMS {
-        DWORD dwSize;
-        BOOL fReturnAuthenticated;
-        BOOL fReturnRemembered;
-        BOOL fReturnUnknown;
-        BOOL fReturnConnected;
-        BOOL fIssueInquiry;
-        UCHAR cTimeoutMultiplier;
-        HANDLE hRadio;
-      } BLUETOOTH_DEVICE_SEARCH_PARAMS;
-      using HBLUETOOTH_DEVICE_FIND = HANDLE;
-      using PFN_BluetoothFindFirstDevice = HBLUETOOTH_DEVICE_FIND (WINAPI*)(const BLUETOOTH_DEVICE_SEARCH_PARAMS*, PBLUETOOTH_DEVICE_INFO);
-      using PFN_BluetoothFindNextDevice = BOOL (WINAPI*)(HBLUETOOTH_DEVICE_FIND, PBLUETOOTH_DEVICE_INFO);
-      using PFN_BluetoothFindDeviceClose = BOOL (WINAPI*)(HBLUETOOTH_DEVICE_FIND);
-      using PFN_BluetoothGetDeviceInfo = DWORD (WINAPI*)(HANDLE, PBLUETOOTH_DEVICE_INFO);
+      using PFN_BluetoothFindFirstDevice = decltype(&BluetoothFindFirstDevice);
+      using PFN_BluetoothFindNextDevice = decltype(&BluetoothFindNextDevice);
+      using PFN_BluetoothFindDeviceClose = decltype(&BluetoothFindDeviceClose);
+      using PFN_BluetoothGetDeviceInfo = decltype(&BluetoothGetDeviceInfo);
 
       auto pFirstDev = reinterpret_cast<PFN_BluetoothFindFirstDevice>(GetProcAddress(bth, "BluetoothFindFirstDevice"));
       auto pNextDev = reinterpret_cast<PFN_BluetoothFindNextDevice>(GetProcAddress(bth, "BluetoothFindNextDevice"));
       auto pCloseDev = reinterpret_cast<PFN_BluetoothFindDeviceClose>(GetProcAddress(bth, "BluetoothFindDeviceClose"));
-      auto pGetInfo = reinterpret_cast<PFN_BluetoothGetDeviceInfo>(GetProcAddress(bth, "BluetoothGetDeviceInfoW"));
+      auto pGetInfo = reinterpret_cast<PFN_BluetoothGetDeviceInfo>(GetProcAddress(bth, "BluetoothGetDeviceInfo"));
 
       HANDLE hRadio = nullptr; HBLUETOOTH_RADIO_FIND hFind = pFirstRadio(&rparams, &hRadio);
       while (hFind && hRadio) {
@@ -691,14 +744,18 @@ namespace {
           snprintf(idbuf, sizeof(idbuf), "%02llX:%02llX:%02llX:%02llX:%02llX:%02llX",
             (a >> 40) & 0xFF, (a >> 32) & 0xFF, (a >> 24) & 0xFF,
             (a >> 16) & 0xFF, (a >> 8) & 0xFF, a & 0xFF);
-          // Convert UTF-16 name to UTF-8
-          int len = WideCharToMultiByte(CP_UTF8, 0, info.szName, -1, nullptr, 0, nullptr, nullptr);
-          std::string name; name.resize(len > 0 ? (size_t)len : 0);
-          if (len > 0) {
-            WideCharToMultiByte(CP_UTF8, 0, info.szName, -1, name.data(), len, nullptr, nullptr);
-            if (!name.empty() && name.back() == '\0') name.pop_back();
+          // Convert the bounded UTF-16 device name to UTF-8.
+          size_t nameLength = 0;
+          while (
+            nameLength < ARRAYSIZE(info.szName) &&
+            info.szName[nameLength] != L'\0'
+          ) {
+            nameLength++;
           }
-          const std::string deviceId(idbuf);
+          const auto name = oro::runtime::string::convertWStringToString(
+            oro::runtime::WString(info.szName, nameLength)
+          );
+          const std::string deviceId = normalizeMac(idbuf);
           bool show = requestFilters.acceptAllDevices;
           if (!show && hasFilters) {
             for (const auto& filter : requestFilters.filters) {
@@ -754,12 +811,11 @@ namespace {
             continue;
           }
 
-          const std::string deviceId = normalizeMac(idbuf);
           std::vector<std::string> serviceList;
           serviceList.reserve(deviceServices.size());
           for (const auto& svcName : deviceServices) serviceList.push_back(svcName);
           std::vector<std::pair<uint16_t, std::vector<uint8_t>>> emptyManufacturer;
-          processDeviceCandidate(deviceId, name, rssi, serviceList, emptyManufacturer);
+          processDeviceCandidate(deviceId, name, 0, serviceList, emptyManufacturer);
 
           BLUETOOTH_DEVICE_INFO next{}; next.dwSize = sizeof(next);
           if (!pNextDev(hDev, &next)) { pCloseDev(hDev); hDev = nullptr; }
@@ -780,6 +836,7 @@ namespace {
         pendingCb(pendingSeq, JSON::Object::Entries {{"err", err}}, oro::runtime::QueuedResponse{});
         pendingSeq.clear(); pendingCb = nullptr;
         choosing = false;
+        stopDiscoveryTimeout();
       }
 
       FreeLibrary(bth);
@@ -788,6 +845,16 @@ namespace {
       std::string s; s.reserve(mac.size());
       for (auto c : mac) { if (c != ':' && c != '-') s.push_back((char) ::toupper((unsigned char)c)); }
       return s;
+    }
+
+    static inline std::string subscriptionKey(
+      const std::string& deviceId,
+      const std::string& serviceUuid,
+      const std::string& characteristicUuid
+    ) {
+      return normalizeMac(deviceId) + "|" +
+        Bluetooth::normalizeUUID(serviceUuid) + "|" +
+        Bluetooth::normalizeUUID(characteristicUuid);
     }
 
     static inline std::wstring toLower(const std::wstring& in) {
@@ -802,19 +869,23 @@ namespace {
       if (!setup) {
         return L"";
       }
+      using PFN_SetupDiGetClassDevsW = decltype(&SetupDiGetClassDevsW);
+      using PFN_SetupDiEnumDeviceInterfaces = decltype(&SetupDiEnumDeviceInterfaces);
+      using PFN_SetupDiGetDeviceInterfaceDetailW = decltype(&SetupDiGetDeviceInterfaceDetailW);
+      using PFN_SetupDiDestroyDeviceInfoList = decltype(&SetupDiDestroyDeviceInfoList);
       auto pGetClass = reinterpret_cast<PFN_SetupDiGetClassDevsW>(GetProcAddress(setup, "SetupDiGetClassDevsW"));
       auto pEnum = reinterpret_cast<PFN_SetupDiEnumDeviceInterfaces>(GetProcAddress(setup, "SetupDiEnumDeviceInterfaces"));
       auto pDetail = reinterpret_cast<PFN_SetupDiGetDeviceInterfaceDetailW>(GetProcAddress(setup, "SetupDiGetDeviceInterfaceDetailW"));
       auto pDestroy = reinterpret_cast<PFN_SetupDiDestroyDeviceInfoList>(GetProcAddress(setup, "SetupDiDestroyDeviceInfoList"));
       if (!pGetClass || !pEnum || !pDetail || !pDestroy) { FreeLibrary(setup); return L""; }
 
-      HDEVINFO devs = pGetClass(&GUID_BLUETOOTHLE_DEVICE_INTERFACE, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
-      if (!devs) { FreeLibrary(setup); return L""; }
+      HDEVINFO devs = pGetClass(&BLUETOOTH_LE_DEVICE_INTERFACE_GUID, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+      if (devs == INVALID_HANDLE_VALUE) { FreeLibrary(setup); return L""; }
 
       std::wstring found;
       for (DWORD i = 0; ; ++i) {
         SP_DEVICE_INTERFACE_DATA ifdata{}; ifdata.cbSize = sizeof(ifdata);
-        if (!pEnum(devs, nullptr, &GUID_BLUETOOTHLE_DEVICE_INTERFACE, i, &ifdata)) break;
+        if (!pEnum(devs, nullptr, &BLUETOOTH_LE_DEVICE_INTERFACE_GUID, i, &ifdata)) break;
         DWORD required = 0;
         pDetail(devs, &ifdata, nullptr, 0, &required, nullptr);
         if (required == 0) continue;
@@ -851,7 +922,15 @@ namespace {
         }};
         return cb(seq, JSON::Object::Entries {{"err", err}}, oro::runtime::QueuedResponse{});
       }
-      connections[normalizeMac(deviceId)] = h;
+      const auto key = normalizeMac(deviceId);
+      const auto existing = connections.find(key);
+      if (existing != connections.end()) {
+        if (existing->second && existing->second != INVALID_HANDLE_VALUE) {
+          CloseHandle(existing->second);
+        }
+        connections.erase(existing);
+      }
+      connections[key] = h;
       cb(seq, JSON::Object::Entries {{"data", JSON::Object {}}}, oro::runtime::QueuedResponse{});
     }
 
@@ -859,7 +938,7 @@ namespace {
       const auto key = normalizeMac(deviceId);
       // Unregister any subscriptions for this device
       for (auto it = subscriptions.begin(); it != subscriptions.end(); ) {
-        if (it->first.rfind(deviceId + "|", 0) == 0) {
+        if (it->first.rfind(key + "|", 0) == 0) {
           auto &f = gatt();
           if (f.UnregisterEvent && it->second.first) {
             f.UnregisterEvent(it->second.first, BLUETOOTH_GATT_FLAG_NONE);
@@ -888,12 +967,19 @@ namespace {
       cb(seq, j, oro::runtime::QueuedResponse{});
     }
     void gattGetPrimaryService(const std::string& seq, const Bluetooth::DeviceID& deviceId, const std::string& serviceFilter, const oro::runtime::core::Service::Callback cb) override {
-      this->gattGetPrimaryServices(seq, deviceId, serviceFilter, [cb, serviceFilter](auto s, auto json, auto qr) {
-        if (json.has("err")) return cb(s, json, qr);
-        auto services = json.get("data").get("services");
+      this->gattGetPrimaryServices(seq, deviceId, serviceFilter, [cb, serviceFilter](
+        std::string responseSeq,
+        JSON::Any json,
+        oro::runtime::QueuedResponse queuedResponse
+      ) {
+        auto& response = json.as<JSON::Object>();
+        if (response.has("err")) return cb(responseSeq, json, queuedResponse);
+        auto& data = response.get("data").as<JSON::Object>();
+        auto& services = data.get("services").as<JSON::Array>();
+        const auto normalizedFilter = Bluetooth::normalizeUUID(serviceFilter);
         bool found = false;
         for (size_t i = 0; i < services.size(); ++i) {
-          if (services[i].str() == serviceFilter) {
+          if (Bluetooth::normalizeUUID(services[i].str()) == normalizedFilter) {
             found = true;
             break;
           }
@@ -903,14 +989,14 @@ namespace {
             {"type", "NotFoundError"},
             {"message", "Service not found"}
           }};
-          cb(s, JSON::Object::Entries {{"err", err}}, qr);
+          cb(responseSeq, JSON::Object::Entries {{"err", err}}, queuedResponse);
         } else {
-          cb(s, JSON::Object::Entries {{
+          cb(responseSeq, JSON::Object::Entries {{
             "data",
             JSON::Object::Entries {{
-              {"service", serviceFilter}
+              {"service", normalizedFilter}
             }}
-          }}, qr);
+          }}, queuedResponse);
         }
       });
     }
@@ -957,7 +1043,7 @@ namespace {
       GUID filterGuid{};
       bool hasFilter = serviceFilter.size() > 0 && parseGuid(serviceFilter, filterGuid);
       for (auto &s : svcs) {
-        const auto u = guidToString(s.ServiceUuid);
+        const auto u = bthLeUuidToString(s.ServiceUuid);
         if (!hasFilter || _stricmp(u.c_str(), guidToString(filterGuid).c_str()) == 0) {
           arr.push(String(u.c_str()));
         }
@@ -978,12 +1064,19 @@ namespace {
     }
 
     void serviceGetCharacteristic(const std::string& seq, const Bluetooth::DeviceID& deviceId, const std::string& serviceUuid, const std::string& charUuid, const oro::runtime::core::Service::Callback cb) override {
-      this->serviceGetCharacteristics(seq, deviceId, serviceUuid, "", [cb, charUuid](auto s, auto json, auto qr) {
-        if (json.has("err")) return cb(s, json, qr);
-        auto chars = json.get("data").get("characteristics");
+      this->serviceGetCharacteristics(seq, deviceId, serviceUuid, "", [cb, charUuid](
+        std::string responseSeq,
+        JSON::Any json,
+        oro::runtime::QueuedResponse queuedResponse
+      ) {
+        auto& response = json.as<JSON::Object>();
+        if (response.has("err")) return cb(responseSeq, json, queuedResponse);
+        auto& data = response.get("data").as<JSON::Object>();
+        auto& characteristics = data.get("characteristics").as<JSON::Array>();
+        const auto normalizedUuid = Bluetooth::normalizeUUID(charUuid);
         bool found = false;
-        for (size_t i = 0; i < chars.size(); ++i) {
-          if (chars[i].str() == charUuid) {
+        for (size_t i = 0; i < characteristics.size(); ++i) {
+          if (Bluetooth::normalizeUUID(characteristics[i].str()) == normalizedUuid) {
             found = true;
             break;
           }
@@ -993,14 +1086,14 @@ namespace {
             {"type", "NotFoundError"},
             {"message", "Characteristic not found"}
           }};
-          cb(s, JSON::Object::Entries {{"err", err}}, qr);
+          cb(responseSeq, JSON::Object::Entries {{"err", err}}, queuedResponse);
         } else {
-          cb(s, JSON::Object::Entries {{
+          cb(responseSeq, JSON::Object::Entries {{
             "data",
             JSON::Object::Entries {{
-              {"characteristic", charUuid}
+              {"characteristic", normalizedUuid}
             }}
-          }}, qr);
+          }}, queuedResponse);
         }
       });
     }
@@ -1054,7 +1147,7 @@ namespace {
       }
       BTH_LE_GATT_SERVICE* target = nullptr;
       for (auto &s : svcs) {
-        if (memcmp(&s.ServiceUuid, &svcGuid, sizeof(GUID)) == 0) {
+        if (bthLeUuidEqualsGuid(s.ServiceUuid, svcGuid)) {
           target = &s;
           break;
         }
@@ -1091,7 +1184,7 @@ namespace {
       JSON::Array arr;
       JSON::Object propsMap;
       for (auto &c : clist) {
-        const auto u = guidToString(c.CharacteristicUuid.Value.LongUuid);
+        const auto u = bthLeUuidToString(c.CharacteristicUuid);
         arr.push(String(u.c_str()));
         JSON::Object props = JSON::Object::Entries {{
           {"broadcast", (bool) c.IsBroadcastable},
@@ -1144,7 +1237,7 @@ namespace {
       }
       BTH_LE_GATT_SERVICE* target = nullptr;
       for (auto &s : svcs) {
-        if (memcmp(&s.ServiceUuid, &svcGuid, sizeof(GUID)) == 0) {
+        if (bthLeUuidEqualsGuid(s.ServiceUuid, svcGuid)) {
           target = &s;
           break;
         }
@@ -1173,7 +1266,7 @@ namespace {
       }
       BTH_LE_GATT_CHARACTERISTIC* chr = nullptr;
       for (auto &c : clist) {
-        if (memcmp(&c.CharacteristicUuid.Value.LongUuid, &chrGuid, sizeof(GUID)) == 0) {
+        if (bthLeUuidEqualsGuid(c.CharacteristicUuid, chrGuid)) {
           chr = &c;
           break;
         }
@@ -1250,7 +1343,7 @@ namespace {
       }
       BTH_LE_GATT_SERVICE* target = nullptr;
       for (auto &s : svcs) {
-        if (memcmp(&s.ServiceUuid, &svcGuid, sizeof(GUID)) == 0) {
+        if (bthLeUuidEqualsGuid(s.ServiceUuid, svcGuid)) {
           target = &s;
           break;
         }
@@ -1279,7 +1372,7 @@ namespace {
       }
       BTH_LE_GATT_CHARACTERISTIC* chr = nullptr;
       for (auto &c : clist) {
-        if (memcmp(&c.CharacteristicUuid.Value.LongUuid, &chrGuid, sizeof(GUID)) == 0) {
+        if (bthLeUuidEqualsGuid(c.CharacteristicUuid, chrGuid)) {
           chr = &c;
           break;
         }
@@ -1300,10 +1393,22 @@ namespace {
       if (n) {
         memcpy(v->Data, value.data(), n);
       }
-      HRESULT hr = f.WriteCharacteristicValue(it->second, chr, v, BLUETOOTH_GATT_FLAG_WRITE_WITHOUT_RESPONSE);
+      HRESULT hr = f.WriteCharacteristicValue(
+        it->second,
+        chr,
+        v,
+        0,
+        BLUETOOTH_GATT_FLAG_WRITE_WITHOUT_RESPONSE
+      );
       if (FAILED(hr)) {
         // Try with response
-        hr = f.WriteCharacteristicValue(it->second, chr, v, BLUETOOTH_GATT_FLAG_NONE);
+        hr = f.WriteCharacteristicValue(
+          it->second,
+          chr,
+          v,
+          0,
+          BLUETOOTH_GATT_FLAG_NONE
+        );
       }
       if (FAILED(hr)) {
         JSON::Object err = JSON::Object::Entries {{
@@ -1320,9 +1425,9 @@ namespace {
       auto* ctx = reinterpret_cast<NotifyContext*>(Context);
       if (!ctx || !ctx->self) return;
       if (EventType != CharacteristicValueChangedEvent) return;
-      auto* param = reinterpret_cast<PBTH_LE_GATT_EVENT_PARAMETER>(EventOutParameter);
-      if (!param || param->EventType != CharacteristicValueChangedEvent) return;
-      auto* cv = param->Parameters.CharValueChangedEvent.ChangedCharacteristicValue;
+      auto* event = reinterpret_cast<PBLUETOOTH_GATT_VALUE_CHANGED_EVENT>(EventOutParameter);
+      if (!event) return;
+      auto* cv = event->CharacteristicValue;
       if (!cv) return;
       const ULONG n = cv->DataSize;
       oro::runtime::bytes::Buffer bd(n);
@@ -1365,7 +1470,7 @@ namespace {
       }
       BTH_LE_GATT_SERVICE* svcPtr = nullptr;
       for (auto &s : svcs) {
-        if (memcmp(&s.ServiceUuid, &svcGuid, sizeof(GUID)) == 0) {
+        if (bthLeUuidEqualsGuid(s.ServiceUuid, svcGuid)) {
           svcPtr = &s;
           break;
         }
@@ -1394,7 +1499,7 @@ namespace {
       }
       BTH_LE_GATT_CHARACTERISTIC* chr = nullptr;
       for (auto &c : clist) {
-        if (memcmp(&c.CharacteristicUuid.Value.LongUuid, &chrGuid, sizeof(GUID)) == 0) {
+        if (bthLeUuidEqualsGuid(c.CharacteristicUuid, chrGuid)) {
           chr = &c;
           break;
         }
@@ -1407,14 +1512,12 @@ namespace {
         return cb(seq, JSON::Object::Entries {{"err", err}}, oro::runtime::QueuedResponse{});
       }
 
-      BTH_LE_GATT_VALUE_CHANGED_EVENT_REGISTRATION reg{};
+      BLUETOOTH_GATT_VALUE_CHANGED_EVENT_REGISTRATION reg{};
       reg.NumCharacteristics = 1;
-      BTH_LE_GATT_CHARACTERISTIC chArr[1];
-      chArr[0] = *chr;
-      reg.Characteristics = chArr;
+      reg.Characteristics[0] = *chr;
       auto ctx = std::make_unique<NotifyContext>();
       ctx->self = this;
-      ctx->deviceId = deviceId;
+      ctx->deviceId = normalizeMac(deviceId);
       ctx->service = guidToString(svcGuid);
       ctx->characteristic = guidToString(chrGuid);
       BLUETOOTH_GATT_EVENT_HANDLE handle = nullptr;
@@ -1426,12 +1529,20 @@ namespace {
         }};
         return cb(seq, JSON::Object::Entries {{"err", err}}, oro::runtime::QueuedResponse{});
       }
-      subscriptions[deviceId + "|" + serviceUuid + "|" + charUuid] = { handle, std::move(ctx) };
+      const auto key = subscriptionKey(deviceId, serviceUuid, charUuid);
+      const auto existing = subscriptions.find(key);
+      if (existing != subscriptions.end()) {
+        if (f.UnregisterEvent && existing->second.first) {
+          f.UnregisterEvent(existing->second.first, BLUETOOTH_GATT_FLAG_NONE);
+        }
+        subscriptions.erase(existing);
+      }
+      subscriptions[key] = { handle, std::move(ctx) };
       cb(seq, JSON::Object::Entries {{"data", JSON::Object {}}}, oro::runtime::QueuedResponse{});
     }
 
     void characteristicStopNotifications(const std::string& seq, const Bluetooth::DeviceID& deviceId, const std::string& serviceUuid, const std::string& charUuid, const oro::runtime::core::Service::Callback cb) override {
-      const std::string key = deviceId + "|" + serviceUuid + "|" + charUuid;
+      const auto key = subscriptionKey(deviceId, serviceUuid, charUuid);
       auto it = subscriptions.find(key);
       if (it != subscriptions.end()) {
         auto &f = gatt();
@@ -1446,12 +1557,13 @@ namespace {
       // Resolve the IPC call immediately
       cb(seq, JSON::Object::Entries {{"data", JSON::Object {}}}, oro::runtime::QueuedResponse{});
       if (choosing && pendingCb) {
+        const auto normalizedDeviceId = normalizeMac(deviceId);
         // Finish the pending requestDevice with chosen id
         JSON::Object device = JSON::Object::Entries {{
-          {"id", String(deviceId.c_str())},
+          {"id", String(normalizedDeviceId.c_str())},
           {"name", String("")}
         }};
-        const auto it = discovered.find(deviceId);
+        const auto it = discovered.find(normalizedDeviceId);
         if (it != discovered.end()) {
           device.set("name", it->second.name);
           if (!it->second.services.empty()) {
@@ -1482,6 +1594,7 @@ namespace {
         choosing = false;
         pendingSeq.clear();
         pendingCb = nullptr;
+        stopDiscoveryTimeout();
         stopWatcher();
         discovered.clear();
       }
@@ -1493,6 +1606,7 @@ namespace {
         choosing = false;
         pendingSeq.clear();
         pendingCb = nullptr;
+        stopDiscoveryTimeout();
         stopWatcher();
         discovered.clear();
       }

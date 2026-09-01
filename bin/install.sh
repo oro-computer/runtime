@@ -835,6 +835,32 @@ function _check_windows_runtime_source_syntax() {
     --platform desktop \
     --syntax-only
   die $? "not ok - Windows runtime source syntax check failed"
+
+  local -a source_cflags=()
+  local source_cflags_output=""
+  source_cflags_output="$(ORO_TLS_BUILD_PROVIDER=schannel "$root/bin/cflags.sh")" || {
+    local source_cflags_status=$?
+    die "$source_cflags_status" "not ok - unable to resolve Windows entrypoint compiler flags"
+  }
+  read -r -a source_cflags <<< "$source_cflags_output"
+  local source_status=0
+  local source=""
+  local -a entrypoint_sources=(
+    "$root/src/init.cc"
+    "$root"/src/cli/*.cc
+    "$root"/src/desktop/*.cc
+  )
+
+  for source in "${entrypoint_sources[@]}"; do
+    if [[ ! -f "$source" ]]; then
+      continue
+    fi
+    echo "# checking Windows entrypoint syntax $(basename "$source")"
+    "$CXX" "${source_cflags[@]}" -ferror-limit=0 -fsyntax-only "$source" || source_status=1
+  done
+
+  die "$source_status" "not ok - Windows entrypoint source syntax check failed"
+  echo "ok - Windows entrypoint source syntax check passed"
 }
 
 function _get_web_view2() {

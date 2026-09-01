@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <system_error>
+#include <limits>
 #include <limits.h>
 
 #include "../process.hh"
@@ -79,6 +80,8 @@ int Process::wait () {
 class Handle {
   public:
     Handle() noexcept : handle(INVALID_HANDLE_VALUE) {}
+    Handle(const Handle&) = delete;
+    Handle& operator=(const Handle&) = delete;
 
     ~Handle() noexcept {
       close();
@@ -87,6 +90,7 @@ class Handle {
     void close() noexcept {
       if (handle != INVALID_HANDLE_VALUE) {
         CloseHandle(handle);
+        handle = INVALID_HANDLE_VALUE;
       }
     }
 
@@ -108,6 +112,13 @@ std::recursive_mutex create_processMutex;
 
 //Based on the example at https://msdn.microsoft.com/en-us/library/windows/desktop/ms682499(v=vs.85).aspx.
 Process::PID Process::open (const String &command, const String &path) noexcept {
+  if (processThread.joinable()) {
+    if (!closed) {
+      return 0;
+    }
+    processThread.join();
+  }
+
   if (openStdin) {
     stdinFD = UniquePointer<Process::FD>(new Process::FD(nullptr));
   }
@@ -156,15 +167,15 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   }
 
   PROCESS_INFORMATION process_info;
-  STARTUPINFO startup_info;
+  STARTUPINFOW startup_info;
 
   ZeroMemory(&process_info, sizeof(PROCESS_INFORMATION));
-  ZeroMemory(&startup_info, sizeof(STARTUPINFO));
+  ZeroMemory(&startup_info, sizeof(STARTUPINFOW));
 
-  startup_info.cb = sizeof(STARTUPINFO);
-  startup_info.hStdInput = stdin_rd_p;
-  startup_info.hStdOutput = stdout_wr_p;
-  startup_info.hStdError = stderr_wr_p;
+  startup_info.cb = sizeof(STARTUPINFOW);
+  startup_info.hStdInput = stdinFD ? static_cast<HANDLE>(stdin_rd_p) : GetStdHandle(STD_INPUT_HANDLE);
+  startup_info.hStdOutput = stdoutFD ? static_cast<HANDLE>(stdout_wr_p) : GetStdHandle(STD_OUTPUT_HANDLE);
+  startup_info.hStdError = stderrFD ? static_cast<HANDLE>(stderr_wr_p) : GetStdHandle(STD_ERROR_HANDLE);
 
   if (stdinFD || stdoutFD || stderrFD)
     startup_info.dwFlags |= STARTF_USESTDHANDLES;
@@ -263,13 +274,21 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   }
 
   // If not using shell, set application name to program path and pass only args
-  const char* applicationName = shell.size() > 0
-    ? shell.c_str()
-    : (process_command.empty() ? nullptr : process_command.c_str());
-  // CreateProcess may modify the command line buffer; ensure mutable
-  std::string mutableCmd = cmdline;
+  const String applicationName = shell.size() > 0
+    ? shell
+    : process_command;
+  const auto wideApplicationName = string::convertStringToWString(applicationName);
+  if (!applicationName.empty() && wideApplicationName.empty()) {
+    return 0;
+  }
 
-  Vector<char> environmentBlock;
+  // CreateProcess may modify the command line buffer; ensure mutable
+  auto mutableCmd = string::convertStringToWString(cmdline);
+  if (!cmdline.empty() && mutableCmd.empty()) {
+    return 0;
+  }
+
+  Vector<wchar_t> environmentBlock;
   if (config.replaceEnvironment) {
     auto environment = this->env;
     std::sort(environment.begin(), environment.end(), [](const String& left, const String& right) {
@@ -277,31 +296,51 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
         oro::runtime::string::toLowerCase(right);
     });
     for (const auto& entry : environment) {
-      environmentBlock.insert(environmentBlock.end(), entry.begin(), entry.end());
-      environmentBlock.push_back('\0');
+      const auto wideEntry = string::convertStringToWString(entry);
+      if (!entry.empty() && wideEntry.empty()) {
+        return 0;
+      }
+
+      environmentBlock.insert(environmentBlock.end(), wideEntry.begin(), wideEntry.end());
+      environmentBlock.push_back(L'\0');
     }
-    environmentBlock.push_back('\0');
+    environmentBlock.push_back(L'\0');
     if (environment.empty()) {
-      environmentBlock.push_back('\0');
+      environmentBlock.push_back(L'\0');
     }
   }
 
-  BOOL bSuccess = CreateProcess(
-    applicationName,
+  const auto widePath = string::convertStringToWString(path);
+  if (!path.empty() && widePath.empty()) {
+    return 0;
+  }
+
+  DWORD creationFlags = stdinFD || stdoutFD || stderrFD ? CREATE_NO_WINDOW : 0;
+  if (config.replaceEnvironment) {
+    creationFlags |= CREATE_UNICODE_ENVIRONMENT;
+  }
+
+  BOOL bSuccess = CreateProcessW(
+    wideApplicationName.empty() ? nullptr : wideApplicationName.c_str(),
     mutableCmd.size() > 0 ? mutableCmd.data() : nullptr,
     nullptr,
     nullptr,
     stdinFD || stdoutFD || stderrFD || config.inheritFDs, // Cannot be false when stdout, stderr or stdin is used
-    stdinFD || stdoutFD || stderrFD ? CREATE_NO_WINDOW : 0,             // CREATE_NO_WINDOW cannot be used when stdout or stderr is redirected to parent process
+    creationFlags,
     config.replaceEnvironment ? environmentBlock.data() : nullptr,
-    path.empty() ? nullptr : path.c_str(),
+    widePath.empty() ? nullptr : widePath.c_str(),
     &startup_info,
     &process_info
   );
 
   if (!bSuccess) {
     auto msg = String("Unable to execute: " + process_command);
-    MessageBoxA(nullptr, &msg[0], "Alert", MB_OK | MB_ICONSTOP);
+    MessageBoxW(
+      nullptr,
+      string::convertStringToWString(msg).c_str(),
+      L"Alert",
+      MB_OK | MB_ICONSTOP
+    );
     return 0;
   } else {
     CloseHandle(process_info.hThread);
@@ -325,7 +364,7 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   data.id = process_info.dwProcessId;
   data.handle = process_info.hProcess;
 
-  auto t = Thread([&](HANDLE _processHandle) {
+  processThread = Thread([this](HANDLE _processHandle) {
     DWORD exitCode = 0;
     try {
       WaitForSingleObject(_processHandle, INFINITE);
@@ -357,8 +396,6 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
     }
   }, processHandle);
 
-  t.detach();
-
   return process_info.dwProcessId;
 }
 
@@ -371,12 +408,22 @@ void Process::read() noexcept {
     stdoutThread = Thread([this]() {
       DWORD n;
 
-      UniquePointer<unsigned char[]> buffer(new unsigned char[config.bufferSize]);
+      const auto bufferSize = std::min(
+        config.bufferSize,
+        static_cast<size_t>(std::numeric_limits<DWORD>::max())
+      );
+      UniquePointer<unsigned char[]> buffer(new unsigned char[bufferSize]);
       StringStream ss;
 
       for (;;) {
-        memset(buffer.get(), 0, config.bufferSize);
-        BOOL bSuccess = ReadFile(*stdoutFD, reinterpret_cast<CHAR *>(buffer.get()), static_cast<DWORD>(config.bufferSize), &n, nullptr);
+        memset(buffer.get(), 0, bufferSize);
+        BOOL bSuccess = ReadFile(
+          *stdoutFD,
+          reinterpret_cast<CHAR *>(buffer.get()),
+          static_cast<DWORD>(bufferSize),
+          &n,
+          nullptr
+        );
 
         if (!bSuccess || n == 0) {
           break;
@@ -418,10 +465,20 @@ void Process::read() noexcept {
   if (stderrFD) {
     stderrThread = Thread([this]() {
       DWORD n;
-      auto buffer = std::make_unique<unsigned char[]>(config.bufferSize);
+      const auto bufferSize = std::min(
+        config.bufferSize,
+        static_cast<size_t>(std::numeric_limits<DWORD>::max())
+      );
+      auto buffer = std::make_unique<unsigned char[]>(bufferSize);
 
       for (;;) {
-        BOOL bSuccess = ReadFile(*stderrFD, reinterpret_cast<CHAR *>(buffer.get()), static_cast<DWORD>(config.bufferSize), &n, nullptr);
+        BOOL bSuccess = ReadFile(
+          *stderrFD,
+          reinterpret_cast<CHAR *>(buffer.get()),
+          static_cast<DWORD>(bufferSize),
+          &n,
+          nullptr
+        );
         if (!bSuccess || n == 0) break;
         Lock lock(stderrMutex);
         readStderr(String(
@@ -528,11 +585,11 @@ void Process::kill (PID id) noexcept {
   HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
   if (snapshot != INVALID_HANDLE_VALUE) {
-    PROCESSENTRY32 process;
+    PROCESSENTRY32W process;
     ZeroMemory(&process, sizeof(process));
     process.dwSize = sizeof(process);
 
-    if (Process32First(snapshot, &process)) {
+    if (Process32FirstW(snapshot, &process)) {
       do {
         if (process.th32ParentProcessID == id) {
           HANDLE process_handle = OpenProcess(PROCESS_TERMINATE, FALSE, process.th32ProcessID);
@@ -542,7 +599,7 @@ void Process::kill (PID id) noexcept {
             CloseHandle(process_handle);
           }
         }
-      } while (Process32Next(snapshot, &process));
+      } while (Process32NextW(snapshot, &process));
     }
 
     CloseHandle(snapshot);

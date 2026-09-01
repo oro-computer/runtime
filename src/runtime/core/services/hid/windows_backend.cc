@@ -22,6 +22,7 @@
 #include <dbt.h>
 
 #include <atomic>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -37,11 +38,7 @@ namespace oro::runtime::core::services::hid {
 
     String wideToString(const wchar_t* value) {
       if (!value) return String("");
-      int len = WideCharToMultiByte(CP_UTF8, 0, value, -1, nullptr, 0, nullptr, nullptr);
-      if (len <= 0) return String("");
-      Vector<char> buffer(static_cast<size_t>(len));
-      WideCharToMultiByte(CP_UTF8, 0, value, -1, buffer.data(), len, nullptr, nullptr);
-      return String(buffer.data());
+      return string::convertWStringToString(std::wstring(value));
     }
 
     String hidString(HANDLE handle, ULONG which) {
@@ -902,13 +899,6 @@ namespace oro::runtime::core::services::hid {
           auto state = std::make_shared<DeviceState>();
           state->running.store(true);
 
-          {
-            Lock lock(this->mutex);
-            auto& stored = this->devices[deviceId];
-            stored.opened = true;
-            stored.descriptor.opened = true;
-          }
-
           // refresh descriptor caps after successful open
           PHIDP_PREPARSED_DATA preparsed = nullptr;
           if (!HidD_GetPreparsedData(handle, &preparsed) || !preparsed) {
@@ -993,10 +983,14 @@ namespace oro::runtime::core::services::hid {
           bool usesReportId = state->usesInputReportId;
           HID& svc = this->service;
 
-          state->reader = std::thread([this, handle, reportSize, usesReportId, deviceId, &svc, state]() {
+          state->reader = std::thread([handle, reportSize, usesReportId, deviceId, &svc, state]() {
             Vector<uint8_t> buffer(reportSize ? reportSize : 64);
             OVERLAPPED overlapped = {};
             overlapped.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+            if (!overlapped.hEvent) {
+              state->running.store(false);
+              return;
+            }
             while (true) {
               if (!state->running.load()) break;
               DWORD bytesRead = 0;
@@ -1005,11 +999,7 @@ namespace oro::runtime::core::services::hid {
               if (!ok) {
                 DWORD err = GetLastError();
                 if (err == ERROR_IO_PENDING) {
-                  DWORD waitResult = WaitForSingleObject(overlapped.hEvent, 1000);
-                  if (waitResult == WAIT_TIMEOUT) {
-                    CancelIoEx(handle, &overlapped);
-                    continue;
-                  }
+                  DWORD waitResult = WaitForSingleObject(overlapped.hEvent, INFINITE);
                   if (waitResult != WAIT_OBJECT_0) {
                     break;
                   }
@@ -1019,7 +1009,7 @@ namespace oro::runtime::core::services::hid {
                 } else if (err == ERROR_OPERATION_ABORTED) {
                   break;
                 } else {
-                  continue;
+                  break;
                 }
               }
 
@@ -1054,6 +1044,7 @@ namespace oro::runtime::core::services::hid {
             }
 
             if (overlapped.hEvent) CloseHandle(overlapped.hEvent);
+            state->running.store(false);
           });
         }
 
@@ -1121,12 +1112,42 @@ namespace oro::runtime::core::services::hid {
             }
           }
 
+          if (payload.size() > static_cast<size_t>(std::numeric_limits<ULONG>::max())) {
+            error = makeError("OperationError", "HID report is too large");
+            return false;
+          }
+
           BOOL ok = FALSE;
           if (feature) {
             ok = HidD_SetFeature(handle, payload.data(), static_cast<ULONG>(payload.size()));
           } else {
+            OVERLAPPED overlapped = {};
+            overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            if (!overlapped.hEvent) {
+              error = makeError("OperationError", "Failed to create HID write event");
+              return false;
+            }
+
             DWORD bytesWritten = 0;
-            ok = WriteFile(handle, payload.data(), static_cast<DWORD>(payload.size()), &bytesWritten, nullptr);
+            ok = WriteFile(
+              handle,
+              payload.data(),
+              static_cast<DWORD>(payload.size()),
+              &bytesWritten,
+              &overlapped
+            );
+            if (!ok && GetLastError() == ERROR_IO_PENDING) {
+              const auto waitResult = WaitForSingleObject(overlapped.hEvent, 5000);
+              if (waitResult == WAIT_OBJECT_0) {
+                ok = GetOverlappedResult(handle, &overlapped, &bytesWritten, FALSE);
+              } else {
+                CancelIoEx(handle, &overlapped);
+                WaitForSingleObject(overlapped.hEvent, INFINITE);
+                ok = FALSE;
+              }
+            }
+            CloseHandle(overlapped.hEvent);
+            ok = ok && bytesWritten == payload.size();
           }
 
           if (!ok) {

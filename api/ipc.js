@@ -554,7 +554,7 @@ export function postMessage (message, ...args) {
             bytes: args[0] ?? null
           }
         },
-        { transfer }
+        transfer
       )
     } else {
       return globalThis.top.postMessage(message, ...args)
@@ -1923,13 +1923,10 @@ export function findIPCMessageTransfers (transfers, object) {
       const port = IPCMessagePort.create(object)
       add(port)
       return port
-    } else {
-      add(object)
-      return object
-    }
-  } else if (Object.getPrototypeOf(object) === Object.prototype) {
-    for (const key in object) {
-      object[key] = findIPCMessageTransfers(transfers, object[key])
+    } else if (Object.getPrototypeOf(object) === Object.prototype) {
+      for (const key in object) {
+        object[key] = findIPCMessageTransfers(transfers, object[key])
+      }
     }
   }
 
@@ -2173,7 +2170,7 @@ export class IPCMessagePort extends MessagePort {
         token: this[Symbol.for('oro.runtime.ipc.IPCMessagePort.token')],
         data: serializedMessage
       },
-      options
+      options.transfer
     )
   }
 
