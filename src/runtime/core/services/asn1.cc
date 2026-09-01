@@ -408,9 +408,9 @@ namespace oro::runtime::core::services {
     JSON::Object::Entries entry;
     entry["type"] = valueTypeToString(value->type);
 
-    const char* repr = asn1f_printable_value(value);
-    if (repr && *repr) {
-      entry["repr"] = String(repr);
+    const auto representation = this->buildValueRepresentation(value);
+    if (!representation.empty()) {
+      entry["repr"] = representation;
     }
 
     switch (value->type) {
@@ -468,6 +468,95 @@ namespace oro::runtime::core::services {
     }
 
     return Object(entry);
+  }
+
+  String ASN1::buildValueRepresentation (Value* value) const {
+    if (value == nullptr) {
+      return {};
+    }
+
+    switch (value->type) {
+      case asn1p_value_t::ATV_NOVALUE:
+        return "<NO VALUE>";
+      case asn1p_value_t::ATV_NULL:
+        return "NULL";
+      case asn1p_value_t::ATV_REAL:
+        return std::to_string(value->value.v_double);
+      case asn1p_value_t::ATV_INTEGER:
+        return std::to_string(value->value.v_integer);
+      case asn1p_value_t::ATV_MIN:
+        return "MIN";
+      case asn1p_value_t::ATV_MAX:
+        return "MAX";
+      case asn1p_value_t::ATV_FALSE:
+        return "FALSE";
+      case asn1p_value_t::ATV_TRUE:
+        return "TRUE";
+      case asn1p_value_t::ATV_TUPLE:
+        return "{" + std::to_string(value->value.v_integer >> 4) + ", " +
+          std::to_string(value->value.v_integer & 0xff) + "}";
+      case asn1p_value_t::ATV_QUADRUPLE:
+        return "{" + std::to_string((value->value.v_integer >> 24) & 0xff) + ", " +
+          std::to_string((value->value.v_integer >> 16) & 0xff) + ", " +
+          std::to_string((value->value.v_integer >> 8) & 0xff) + ", " +
+          std::to_string(value->value.v_integer & 0xff) + "}";
+      case asn1p_value_t::ATV_STRING:
+      case asn1p_value_t::ATV_UNPARSED:
+        if (value->value.string.buf == nullptr || value->value.string.size <= 0) {
+          return {};
+        }
+        return String(
+          reinterpret_cast<const char*>(value->value.string.buf),
+          static_cast<size_t>(value->value.string.size)
+        );
+      case asn1p_value_t::ATV_TYPE:
+        return "<Type>";
+      case asn1p_value_t::ATV_BITVECTOR: {
+        const auto& vector = value->value.binary_vector;
+        if (vector.bits == nullptr || vector.size_in_bits <= 0) {
+          return "''H";
+        }
+
+        String result("'");
+        if (vector.size_in_bits % 8 != 0) {
+          result.reserve(static_cast<size_t>(vector.size_in_bits) + 3);
+          for (int i = 0; i < vector.size_in_bits; ++i) {
+            const auto byte = vector.bits[i >> 3];
+            result.push_back(((byte >> (7 - (i % 8))) & 1) ? '1' : '0');
+          }
+          result.append("'B");
+        } else {
+          static constexpr char hex[] = "0123456789ABCDEF";
+          const auto byteCount = vector.size_in_bits / 8;
+          result.reserve(static_cast<size_t>(byteCount * 2) + 3);
+          for (int i = 0; i < byteCount; ++i) {
+            result.push_back(hex[vector.bits[i] >> 4]);
+            result.push_back(hex[vector.bits[i] & 0x0f]);
+          }
+          result.append("'H");
+        }
+        return result;
+      }
+      case asn1p_value_t::ATV_REFERENCED:
+        return this->buildReferenceStringRaw(value->value.reference);
+      case asn1p_value_t::ATV_VALUESET:
+        return "<ValueSet>";
+      case asn1p_value_t::ATV_CHOICE_IDENTIFIER: {
+        String result;
+        if (value->value.choice_identifier.identifier) {
+          result = value->value.choice_identifier.identifier;
+        }
+        if (value->value.choice_identifier.value) {
+          if (!result.empty()) {
+            result.append(": ");
+          }
+          result.append(this->buildValueRepresentation(value->value.choice_identifier.value));
+        }
+        return result;
+      }
+      default:
+        return "<some complex value>";
+    }
   }
 
   Object ASN1::buildModuleFlagsJson (Module* module) const {
@@ -727,6 +816,10 @@ namespace oro::runtime::core::services {
   }
 
   oro::runtime::JSON::Object::Entries ASN1::buildTagJson (Expression*) const {
+    return {};
+  }
+
+  String ASN1::buildValueRepresentation (Value*) const {
     return {};
   }
 

@@ -259,6 +259,7 @@ jobs:
           key: cargo-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust/**/Cargo.lock', 'rust/**/Cargo.toml') }}
           restore-keys: |
             cargo-v2-${{ runner.os }}-${{ runner.arch }}-
+            cargo-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore Go build cache
         if: ${{ !inputs.reuse_release_artifacts }}
@@ -311,7 +312,7 @@ jobs:
           echo 'CMAKE_C_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           mkdir -p "$CCACHE_TEMPDIR"
-          ccache --max-size 500M
+          ccache --max-size 1536M
           ccache --zero-stats
 
       - name: Verify synchronized release metadata

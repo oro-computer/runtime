@@ -56,6 +56,7 @@ namespace oro::runtime::core::services {
       JSON::Object buildXportsEntry (struct asn1p_xports_s*) const;
       JSON::Array::Entries buildMarkerJson (Expression*) const;
       JSON::Object::Entries buildTagJson (Expression*) const;
+      String buildValueRepresentation (Value*) const;
       String buildReferenceString (Value*) const;
       String buildReferenceStringRaw (struct asn1p_ref_s*) const;
       String buildModuleOidString (Module*) const;

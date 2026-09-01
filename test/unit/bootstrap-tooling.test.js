@@ -1145,6 +1145,27 @@ test('llama dependency builds omit standalone utilities and command-line tools',
   )
 })
 
+test('ASN.1 value rendering does not require compiler or fixer archives', () => {
+  const runtimeBuilder = readFile('bin/build-runtime-library.sh')
+  const asn1Service = readFile('src/runtime/core/services/asn1.cc')
+
+  assert.match(
+    runtimeBuilder,
+    /asn1_source_dirs=\(\s+"\$root\/build\/asn1c\/libasn1parser"\s+\)/,
+    'runtime builds should compile only the ASN.1 parser sources they execute'
+  )
+  assert.doesNotMatch(
+    asn1Service,
+    /asn1f_printable_value/,
+    'ASN.1 JSON rendering should not link against the omitted fixer subsystem'
+  )
+  assert.match(
+    asn1Service,
+    /String ASN1::buildValueRepresentation[\s\S]*ATV_BITVECTOR[\s\S]*ATV_REFERENCED[\s\S]*ATV_CHOICE_IDENTIFIER/,
+    'the runtime should retain representations for scalar and structured ASN.1 values'
+  )
+})
+
 test('CMake cache invalidation tracks build inputs without forcing legacy caches cold', () => {
   const installer = readFile('bin/install.sh')
   assert.match(
@@ -1299,7 +1320,7 @@ test('CI shards Apple-mobile builds without changing installer defaults', () => 
     'CI should validate both missing and unexpectedly duplicated Apple targets'
   )
   assert.equal(
-    workflow.match(/ccache --max-size 1G/g)?.length,
+    workflow.match(/ccache --max-size 1536M/g)?.length,
     2,
     'native CI lanes should retain enough compiler output to avoid cache churn'
   )
