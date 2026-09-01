@@ -1,4 +1,6 @@
 #include "../app.hh"
+#include "../filesystem.hh"
+#include "../javascript.hh"
 #include "../version.hh"
 #include "../string.hh"
 #include "../bytes.hh"
@@ -10,6 +12,8 @@
 #include <limits>
 
 using namespace Microsoft::WRL;
+using oro::runtime::javascript::getResolveMenuSelectionJavaScript;
+using oro::runtime::javascript::getEmitToRenderProcessJavaScript;
 using oro::runtime::string::replace;
 using oro::runtime::string::trim;
 using oro::runtime::string::toLowerCase;
@@ -21,6 +25,7 @@ using oro::runtime::url::URL;
 using oro::runtime::webview::parseTlsPinConfig;
 using oro::runtime::webview::isCertificateAllowedForHost;
 using oro::runtime::webview::hasPinsForHost;
+using oro::runtime::app::App;
 
 #pragma comment(lib, "crypt32.lib")
 
@@ -31,7 +36,7 @@ extern BOOL ChangeWindowMessageFilterEx (
   void* unused
 );
 
-namespace {
+namespace oro::runtime::window {
   class CDataObject : public IDataObject {
     public:
       HRESULT __stdcall QueryInterface (REFIID iid, void ** ppvObject);
@@ -621,7 +626,7 @@ namespace {
       hotkey(this),
       dialog(this) {
     // this may be an "empty" path if not available
-    static const auto edgeRuntimePath = FileResource::getMicrosoftEdgeRuntimePath();
+    static const auto edgeRuntimePath = filesystem::Resource::getMicrosoftEdgeRuntimePath();
     static auto app = App::sharedApplication();
     app->isReady = false;
 
@@ -933,7 +938,7 @@ namespace {
 
               webview3->SetVirtualHostNameToFolderMapping(
                 convertStringToWString(bundleIdentifier).c_str(),
-                FileResource::getResourcesPath().c_str(),
+                filesystem::Resource::getResourcesPath().c_str(),
                 COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW
               );
             } while (0);

@@ -112,22 +112,30 @@ function native_path() {
 }
 
 function quiet () {
-  # Support spaces in command by quioting initial argument
+  # Support spaces in command by quoting initial argument
   # Just quoting first argument on calling side doesn't work
   declare command="$1"; shift
+  declare quiet_output=""
+  declare quiet_rc=0
   if [ -n "$VERBOSE" ]; then
     echo "$command" "$@"
     if [[ "$(host_os)" != "Win32" ]]; then
       eval "$command $@"
     else
-    "$command" "$@"
+      "$command" "$@"
     fi
   else
     if [[ "$(host_os)" != "Win32" ]]; then
-      eval "$command $@" > /dev/null 2>&1
+      quiet_output="$(eval "$command $@" 2>&1)" || quiet_rc=$?
     else
-      "$command" "$@" > /dev/null 2>&1
+      quiet_output="$("$command" "$@" 2>&1)" || quiet_rc=$?
     fi
+
+    if (( quiet_rc != 0 )) && [[ -n "$quiet_output" ]]; then
+      printf '%s\n' "$quiet_output" >&2
+    fi
+
+    return "$quiet_rc"
   fi
 
   return $?

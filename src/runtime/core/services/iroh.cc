@@ -110,6 +110,7 @@ namespace oro::runtime::core::services {
     }
   }
 
+#if ORO_RUNTIME_HAS_IROH_FFI
   struct Iroh::ConnectionTypeWatcher {
     String nodeId;
     iroh::PublicKey key;
@@ -1468,4 +1469,259 @@ namespace oro::runtime::core::services {
       });
     });
   }
+#else
+  Iroh::Iroh (const Options& options)
+    : core::Service(options),
+      allowService(options.enabled),
+      cachedLogLevel(static_cast<int>(iroh::LogLevel::Info)) {
+    this->enabled = false;
+  }
+
+  Iroh::~Iroh () {
+    this->stop();
+  }
+
+  bool Iroh::hasLibrary () const {
+    return false;
+  }
+
+  bool Iroh::start () {
+    this->enabled = false;
+    return false;
+  }
+
+  bool Iroh::stop () {
+    this->enabled = false;
+    return false;
+  }
+
+  void Iroh::respondError (
+    const Callback& cb,
+    const String& seq,
+    const String& source,
+    const String& message,
+    const String& code
+  ) {
+    cb(seq, makeErrorPayload(source, message, code), QueuedResponse{});
+  }
+
+  JSON::Object::Entries Iroh::makeStatusData () const {
+    JSON::Object::Entries data;
+    data.emplace("initialized", false);
+    data.emplace("version", String());
+
+    const auto levelValue = this->cachedLogLevel.load();
+    const auto level = static_cast<iroh::LogLevel>(levelValue);
+    JSON::Object::Entries logLevel;
+    logLevel.emplace("value", levelValue);
+    logLevel.emplace("name", String(iroh::toString(level)));
+    data.emplace("logLevel", logLevel);
+    return data;
+  }
+
+  void Iroh::init (const String& seq, const Callback cb) {
+    this->respondError(cb, seq, kSourceInit, "Iroh FFI unavailable");
+  }
+
+  void Iroh::shutdown (const String& seq, const Callback cb) {
+    this->respondError(cb, seq, kSourceShutdown, "Iroh FFI unavailable");
+  }
+
+  void Iroh::status (const String& seq, const Callback cb) {
+    cb(seq, makeDataPayload(kSourceStatus, this->makeStatusData()), QueuedResponse{});
+  }
+
+  void Iroh::setLogLevel (const String& seq, iroh::LogLevel, const Callback cb) {
+    this->respondError(cb, seq, kSourceSetLogLevel, "Iroh FFI unavailable");
+  }
+
+  void Iroh::pathToKey (
+    const String& seq,
+    const String&,
+    const std::optional<String>&,
+    const std::optional<String>&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourcePathToKey, "Iroh FFI unavailable");
+  }
+
+  void Iroh::keyToPath (
+    const String& seq,
+    const Vector<uint8_t>&,
+    const std::optional<String>&,
+    const std::optional<String>&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceKeyToPath, "Iroh FFI unavailable");
+  }
+
+  void Iroh::createEndpoint (
+    const String& seq,
+    ID,
+    const EndpointOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceEndpointCreate, "Iroh FFI unavailable");
+  }
+
+  void Iroh::destroyEndpoint (const String& seq, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceEndpointDestroy, "Iroh FFI unavailable");
+  }
+
+  void Iroh::bindEndpoint (
+    const String& seq,
+    ID,
+    const BindOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceEndpointBind, "Iroh FFI unavailable");
+  }
+
+  void Iroh::getHomeRelay (const String& seq, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceEndpointHomeRelay, "Iroh FFI unavailable");
+  }
+
+  void Iroh::getNodeAddr (const String& seq, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceEndpointNodeAddr, "Iroh FFI unavailable");
+  }
+
+  void Iroh::connect (
+    const String& seq,
+    ID,
+    ID,
+    const ConnectOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionConnect, "Iroh FFI unavailable");
+  }
+
+  void Iroh::accept (
+    const String& seq,
+    ID,
+    ID,
+    const AcceptOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionAccept, "Iroh FFI unavailable");
+  }
+
+  void Iroh::acceptAny (const String& seq, ID, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceConnectionAcceptAny, "Iroh FFI unavailable");
+  }
+
+  void Iroh::closeEndpoint (const String& seq, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceEndpointClose, "Iroh FFI unavailable");
+  }
+
+  void Iroh::closeConnection (const String& seq, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceConnectionClose, "Iroh FFI unavailable");
+  }
+
+  void Iroh::waitConnectionClosed (const String& seq, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceConnectionWaitClosed, "Iroh FFI unavailable");
+  }
+
+  void Iroh::connectionStats (const String& seq, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceConnectionStats, "Iroh FFI unavailable");
+  }
+
+  void Iroh::writeDatagram (
+    const String& seq,
+    ID,
+    const Vector<uint8_t>&,
+    const DatagramOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionDatagramWrite, "Iroh FFI unavailable");
+  }
+
+  void Iroh::readDatagram (
+    const String& seq,
+    ID,
+    const DatagramOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionDatagramRead, "Iroh FFI unavailable");
+  }
+
+  void Iroh::watchConnectionType (
+    const String& seq,
+    ID,
+    const String&,
+    bool,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionTypeWatch, "Iroh FFI unavailable");
+  }
+
+  void Iroh::openBidirectionalStream (
+    const String& seq,
+    ID,
+    ID,
+    ID,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionOpenBi, "Iroh FFI unavailable");
+  }
+
+  void Iroh::openUnidirectionalStream (
+    const String& seq,
+    ID,
+    ID,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionOpenUni, "Iroh FFI unavailable");
+  }
+
+  void Iroh::acceptBidirectionalStream (
+    const String& seq,
+    ID,
+    ID,
+    ID,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionAcceptBi, "Iroh FFI unavailable");
+  }
+
+  void Iroh::acceptUnidirectionalStream (
+    const String& seq,
+    ID,
+    ID,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceConnectionAcceptUni, "Iroh FFI unavailable");
+  }
+
+  void Iroh::sendStreamWrite (
+    const String& seq,
+    ID,
+    const Vector<uint8_t>&,
+    const StreamWriteOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceStreamWrite, "Iroh FFI unavailable");
+  }
+
+  void Iroh::sendStreamFinish (const String& seq, ID, const Callback cb) {
+    this->respondError(cb, seq, kSourceStreamFinish, "Iroh FFI unavailable");
+  }
+
+  void Iroh::recvStreamRead (
+    const String& seq,
+    ID,
+    const StreamReadOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceStreamRead, "Iroh FFI unavailable");
+  }
+
+  void Iroh::recvStreamReadToEnd (
+    const String& seq,
+    ID,
+    const StreamReadToEndOptions&,
+    const Callback cb
+  ) {
+    this->respondError(cb, seq, kSourceStreamReadToEnd, "Iroh FFI unavailable");
+  }
+#endif
 } // namespace oro::runtime::core::services

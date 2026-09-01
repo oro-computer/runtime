@@ -866,8 +866,18 @@ test('VM context windows use an explicit startup handshake', () => {
 
   assert.match(
     vm,
-    /Promise\.all\(\[getContextWorker\(\), window\.ready\]\)[\s\S]*throw error[\s\S]*VM Context SharedWorker did not acknowledge startup[\s\S]*10_000/,
-    'VM scripts should wait for both startup handshakes and reject initialization errors promptly'
+    /Promise\.all\(\[getContextWorker\(\), window\.ready\]\)[\s\S]*throw error/,
+    'VM scripts should wait for both startup handshakes and propagate initialization errors'
+  )
+  assert.match(
+    vm,
+    /function waitForContextWorkerReady[\s\S]*if \(event\.data === VM_WORKER_ACK\)[\s\S]*worker\.ready\.then\(\(\) => \{[\s\S]*VM Context SharedWorker did not acknowledge startup[\s\S]*10_000/,
+    'the worker ACK timeout should start after initialization and ignore unrelated messages'
+  )
+  assert.doesNotMatch(
+    vm,
+    /port\.addEventListener\('message',[\s\S]{0,180}\{ once: true \}/,
+    'unrelated worker messages should not consume the startup acknowledgement listener'
   )
 })
 
@@ -890,6 +900,8 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const processService = readFile('src/runtime/core/services/process.cc')
   const secureStorage = readFile('src/runtime/core/services/secure_storage.cc')
   const updateService = readFile('src/runtime/core/services/update.cc')
+  const appWindow = readFile('src/runtime/app/win.cc')
+  const platformWindow = readFile('src/runtime/window/win.cc')
 
   assert.match(
     platform,
@@ -950,6 +962,21 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     secureStorage,
     /ORO_RUNTIME_PLATFORM_WINDOWS[\s\S]*namespace \{\s+using oro::runtime::String;[\s\S]*oro::runtime::bytes::base64::encode[\s\S]*oro::runtime::bytes::base64::decode/,
     'Windows secure-storage helpers should qualify runtime string and byte helpers in their file-local namespace'
+  )
+  assert.match(
+    platformWindow,
+    /namespace oro::runtime::window \{[\s\S]*class DragDrop : public IDropTarget[\s\S]*Window::Window/,
+    'the Windows implementation and drag-drop type should compile in the declared window namespace'
+  )
+  assert.doesNotMatch(
+    appWindow,
+    /dynamic_cast<Window\*>|->bridge\.emit|->evalDom(?:Focus|Blur)Throttled/,
+    'the Windows app should qualify window types and use public shared-pointer APIs'
+  )
+  assert.match(
+    appWindow,
+    /using oro::runtime::javascript::getEmitToRenderProcessJavaScript;[\s\S]*oro::runtime::window::HotKeyBinding::ID/,
+    'the Windows app should qualify JavaScript and hotkey symbols from sibling namespaces'
   )
 })
 
@@ -1166,6 +1193,16 @@ test('ASN.1 value rendering does not require compiler or fixer archives', () => 
   )
 })
 
+test('disabled Iroh builds compile service stubs without FFI symbols', () => {
+  const irohService = readFile('src/runtime/core/services/iroh.cc')
+
+  assert.match(
+    irohService,
+    /#if ORO_RUNTIME_HAS_IROH_FFI\s+struct Iroh::ConnectionTypeWatcher[\s\S]*#else\s+Iroh::Iroh[\s\S]*Iroh FFI unavailable[\s\S]*#endif/,
+    'the complete Iroh service implementation should be excluded when its native library is unavailable'
+  )
+})
+
 test('CMake cache invalidation tracks build inputs without forcing legacy caches cold', () => {
   const installer = readFile('bin/install.sh')
   assert.match(
@@ -1237,6 +1274,32 @@ test('verbose non-interactive builds retain detected CPU parallelism', () => {
     cpuSelector,
     /CPU_CORES < 1[\s\S]*CPU_CORES=1/,
     'invalid CPU detection should still fall back to one core'
+  )
+})
+
+test('quiet native builds preserve command failure diagnostics', () => {
+  const functions = readFile('bin/functions.sh')
+  const workflow = readFile('.github/workflows/ci.yml')
+  const runtimeBuilder = readFile('bin/build-runtime-library.sh')
+  const quietRunner = functions.match(
+    /function quiet \(\) \{([\s\S]*?)\n\}/
+  )?.[1]
+
+  assert.ok(quietRunner, 'the quiet command runner should exist')
+  assert.match(
+    quietRunner,
+    /quiet_output="\$\([\s\S]*2>&1\)" \|\| quiet_rc=\$\?[\s\S]*printf '%s\\n' "\$quiet_output" >&2[\s\S]*return "\$quiet_rc"/,
+    'quiet commands should replay captured diagnostics and preserve failures'
+  )
+  assert.doesNotMatch(
+    workflow,
+    /VERBOSE: '1'/,
+    'CI native builds should not stream successful compiler command output'
+  )
+  assert.match(
+    runtimeBuilder,
+    /runtime_compiler_launcher[\s\S]*compiler_output="\$\([\s\S]*2>&1[\s\S]*\)" \|\| compiler_rc=\$\?[\s\S]*printf '%s\\n' "\$compiler_output" >&2[\s\S]*return "\$compiler_rc"/,
+    'cached Android and Windows compilers should also replay failures in quiet builds'
   )
 })
 
@@ -1475,13 +1538,13 @@ test('CI covers every supported host and mobile target family', () => {
   }
   assert.match(
     workflow,
-    /Android x86_64 \+ arm64-v8a[\s\S]*build_android: true[\s\S]*test_android: true/,
-    'CI should cross-build and exercise both supported Android ABIs on Linux x64'
+    /Android x86_64[\s\S]*android_supported_abis: x86_64[\s\S]*test_android: true[\s\S]*Android arm64-v8a[\s\S]*android_supported_abis: arm64-v8a[\s\S]*test_android: false/,
+    'CI should build Android ABIs in parallel while exercising the emulator-compatible shard'
   )
   assert.match(
     workflow,
-    /android\)[\s\S]*arm64-v8a-android x86_64-android[\s\S]*ios\)[\s\S]*required_ios_targets[\s\S]*Apple CI is missing required iOS target/,
-    'CI should fail if an assigned Android ABI or iOS target is missing'
+    /android\)[\s\S]*required_android_abis[\s\S]*Android CI built an unassigned ABI target[\s\S]*ios\)[\s\S]*required_ios_targets[\s\S]*Apple CI is missing required iOS target/,
+    'CI should fail if an assigned Android ABI or iOS target is missing or duplicated'
   )
   assert.match(
     workflow,
@@ -1575,6 +1638,11 @@ test('CI caches dependencies and runs focused platform coverage', () => {
       'native compiler caches should retain partial failed or cancelled attempt work under an immutable attempt key'
     )
   }
+  assert.match(
+    workflow,
+    /Quiesce native compiler cache[\s\S]*native_compiler_pids[\s\S]*native_signal in TERM KILL[\s\S]*ccache --cleanup[\s\S]*Save native compiler cache/,
+    'cancelled platform builds should stop cache writers before preserving partial compiler output'
+  )
   assert.match(
     workflow,
     /restore-keys:[\s\S]*ccache-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-\s/,

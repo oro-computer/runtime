@@ -210,7 +210,6 @@ jobs:
       ORO_TEST_HEADLESS: '1'
       ORO_TEST_SKIP_DESKTOP_EXTENSION: '1'
       ORO_TEST_SKIP_TEST_EXTENSIONS: '1'
-      VERBOSE: '1'
       WEBKIT_DISABLE_COMPOSITING_MODE: '1'
       XDG_RUNTIME_DIR: /tmp/oro-xdg-runtime
     steps:
@@ -400,10 +399,11 @@ jobs:
             test_android: false
             test_ios: false
             windows: false
-          - name: Android x86_64 + arm64-v8a
-            id: android-ubuntu-x64
+          - name: Android x86_64
+            id: android-x86_64
             runs_on: ubuntu-24.04
             release_support: android
+            android_supported_abis: x86_64
             build_android: true
             exclude_android: false
             exclude_ios: true
@@ -411,6 +411,20 @@ jobs:
             test_desktop: false
             test_child_process: false
             test_android: true
+            test_ios: false
+            windows: false
+          - name: Android arm64-v8a
+            id: android-arm64-v8a
+            runs_on: ubuntu-24.04
+            release_support: android
+            android_supported_abis: arm64-v8a
+            build_android: true
+            exclude_android: false
+            exclude_ios: true
+            install_tests: false
+            test_desktop: false
+            test_child_process: false
+            test_android: false
             test_ios: false
             windows: false
           - name: macOS + iOS x64
@@ -455,6 +469,7 @@ jobs:
             test_ios: false
             windows: true
     env:
+      ANDROID_SUPPORTED_ABIS: ${{ matrix.android_supported_abis }}
       BUILD_ANDROID: ${{ matrix.build_android }}
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
@@ -476,7 +491,6 @@ jobs:
       ORO_TEST_SKIP_DESKTOP_EXTENSION: '1'
       ORO_TEST_SKIP_TEST_EXTENSIONS: '1'
       RELEASE_SUPPORT: ${{ matrix.release_support }}
-      VERBOSE: '1'
       WEBKIT_DISABLE_COMPOSITING_MODE: '1'
       XDG_RUNTIME_DIR: /tmp/oro-xdg-runtime
     steps:
@@ -721,6 +735,36 @@ jobs:
         shell: bash
         run: ./bin/install.sh --yes-deps
 
+      - name: Quiesce native compiler cache
+        if: ${{ always() && runner.os != 'Windows' && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          native_compiler_pids() {
+            ps -Ao pid=,command= | awk -v workspace="$GITHUB_WORKSPACE" '
+              index($0, workspace) &&
+              $0 ~ /(^|[\/ ])(ccache|clang|clang\+\+)( |$)/ { print $1 }
+            '
+          }
+
+          for native_signal in TERM KILL; do
+            native_pids="$(native_compiler_pids)"
+            if [[ -z "$native_pids" ]]; then
+              break
+            fi
+
+            while IFS= read -r native_pid; do
+              if [[ -n "$native_pid" ]]; then
+                kill -"$native_signal" "$native_pid" 2>/dev/null || true
+              fi
+            done <<< "$native_pids"
+
+            if [[ "$native_signal" == "TERM" ]]; then
+              sleep 2
+            fi
+          done
+
+          ccache --cleanup
+
       - name: Save native compiler cache
         if: ${{ always() && runner.os != 'Windows' && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -750,9 +794,29 @@ jobs:
                 echo >&2 'Android CI unexpectedly contains an Apple-mobile target directory'
                 exit 1
               fi
-              for target in arm64-v8a-android x86_64-android; do
+              read -r -a required_android_abis <<< "$ANDROID_SUPPORTED_ABIS"
+              if (( ${#required_android_abis[@]} == 0 )); then
+                echo >&2 'Android CI has no assigned ABI target'
+                exit 1
+              fi
+              for abi in "${required_android_abis[@]}"; do
+                target="$abi-android"
                 if [[ ! -d "$ORO_HOME/lib/$target" ]]; then
                   echo >&2 "Android CI is missing required ABI target: $target"
+                  exit 1
+                fi
+              done
+              for path in "${android_targets[@]}"; do
+                target="$(basename "$path")"
+                expected=false
+                for abi in "${required_android_abis[@]}"; do
+                  if [[ "$target" == "$abi-android" ]]; then
+                    expected=true
+                    break
+                  fi
+                done
+                if [[ "$expected" != "true" ]]; then
+                  echo >&2 "Android CI built an unassigned ABI target: $target"
                   exit 1
                 fi
               done

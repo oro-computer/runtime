@@ -54,6 +54,58 @@ let contextWorker = null
 let contextWindow = null
 let contextWindowRequest = null
 
+function waitForContextWorkerReady (worker) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let timeout = null
+
+    const cleanup = () => {
+      clearTimeout(timeout)
+      worker.removeEventListener('error', onError)
+      worker.port.removeEventListener('message', onMessage)
+    }
+
+    const finish = (error = null) => {
+      if (settled) return
+      settled = true
+      cleanup()
+
+      if (error) {
+        reject(error)
+      } else {
+        resolve(worker)
+      }
+    }
+
+    const onError = (event) => {
+      finish(
+        new Error('Failed to initialize VM Context SharedWorker', {
+          cause: event?.error ?? event
+        })
+      )
+    }
+
+    const onMessage = (event) => {
+      if (event.data === VM_WORKER_ACK) {
+        finish()
+      }
+    }
+
+    worker.addEventListener('error', onError)
+    worker.port.addEventListener('message', onMessage)
+
+    worker.ready.then(() => {
+      if (!settled) {
+        timeout = setTimeout(() => {
+          finish(
+            new Error('VM Context SharedWorker did not acknowledge startup')
+          )
+        }, 10_000)
+      }
+    }, onError)
+  })
+}
+
 // A weak mapping of context objects to `Script` instances where "context"
 // objects own the `Script` until the "context" is no longer stronglyheld
 // in which the `Script` eventually becomes garbage collected triggering
@@ -1353,27 +1405,7 @@ export async function getContextWorker () {
       type: 'module'
     })
 
-    contextWorker[kWorkerContextReady] = new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('VM Context SharedWorker did not acknowledge startup'))
-      }, 10_000)
-
-      contextWorker.addEventListener('error', (event) => {
-        clearTimeout(timeout)
-        reject(
-          new Error('Failed to initialize VM Context SharedWorker', {
-            cause: event.error ?? event
-          })
-        )
-      }, { once: true })
-
-      contextWorker.port.addEventListener('message', (event) => {
-        if (event.data === VM_WORKER_ACK) {
-          clearTimeout(timeout)
-          resolve(contextWorker)
-        }
-      }, { once: true })
-    })
+    contextWorker[kWorkerContextReady] = waitForContextWorkerReady(contextWorker)
   }
 
   contextWorker.port.start()

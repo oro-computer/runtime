@@ -52,7 +52,8 @@ immediately afterward builds and smoke-tests those exact platform outputs.
 | Linux x64 integration | `ubuntu-24.04` | x86_64 | none | 24; all shared integration suites |
 | Node compatibility | `ubuntu-24.04` | no native build | none | 22; tooling unit tests |
 | Linux arm64 | `ubuntu-24.04-arm` | arm64 | none | 24; build and CLI smoke test |
-| Android | `ubuntu-24.04` | x86_64 | Android x86_64 and arm64-v8a | 24; Emulator tests |
+| Android x86_64 | `ubuntu-24.04` | x86_64 | Android x86_64 | 24; Emulator tests |
+| Android arm64-v8a | `ubuntu-24.04` | x86_64 | Android arm64-v8a | 24; build and CLI smoke test |
 | macOS + iOS x64 | `macos-15-intel` | x86_64 | x86_64 iOS Simulator library | 24; build and CLI smoke test |
 | macOS + iOS arm64 | `macos-14` | arm64 | arm64 iOS device and Simulator libraries | 24; macOS and Simulator tests |
 | Windows x64 | `windows-2022` | x86_64 | none | 24; Windows desktop and child-process tests |
@@ -61,9 +62,9 @@ The Linux x64 integration lane runs `npm test`, `npm run test:child-process`,
 `npm run test:mcp`, and `npm run test:runtime-core`. These shared suites are not repeated on every
 host. Windows repeats the desktop and child-process suites because process and path behavior is
 platform-specific. Apple Silicon repeats the desktop suite and boots an iPhone Simulator. The
-Android lane runs `npm run test:android-emulator`. Linux arm64 and Intel macOS are architecture build
-checks: they validate the staged target family and launch the resulting CLI without installing the
-test harness.
+Android x86_64 runs `npm run test:android-emulator`; arm64-v8a builds in a parallel shard. Linux
+arm64 and Intel macOS are architecture build checks: they validate the staged target family and
+launch the resulting CLI without installing the test harness.
 
 Android is intentionally cross-built on the Ubuntu x64 runner. The Android NDK distributes Linux
 host tools for x86_64, while Oro emits both supported Android target ABIs from that host. The

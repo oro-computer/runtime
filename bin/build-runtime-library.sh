@@ -310,6 +310,8 @@ fi
 
 function run_runtime_compiler () {
   local compiler="$1"
+  local compiler_output=""
+  local compiler_rc=0
   shift
 
   if [[ -n "$runtime_compiler_launcher" ]]; then
@@ -317,7 +319,15 @@ function run_runtime_compiler () {
       echo "$runtime_compiler_launcher" "$compiler" "$@"
       "$runtime_compiler_launcher" "$compiler" "$@"
     else
-      "$runtime_compiler_launcher" "$compiler" "$@" > /dev/null 2>&1
+      compiler_output="$(
+        "$runtime_compiler_launcher" "$compiler" "$@" 2>&1
+      )" || compiler_rc=$?
+
+      if (( compiler_rc != 0 )) && [[ -n "$compiler_output" ]]; then
+        printf '%s\n' "$compiler_output" >&2
+      fi
+
+      return "$compiler_rc"
     fi
   else
     quiet "$compiler" "$@"

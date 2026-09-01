@@ -6,6 +6,7 @@
 #include "../app.hh"
 
 using oro::runtime::javascript::getResolveMenuSelectionJavaScript;
+using oro::runtime::javascript::getEmitToRenderProcessJavaScript;
 using oro::runtime::config::getUserConfig;
 using oro::runtime::string::trim;
 using oro::runtime::string::split;
@@ -57,7 +58,7 @@ namespace oro::runtime::app {
       return 0;
     }
 
-    auto window = reinterpret_cast<window::Manager::ManagedWindow*>(
+    auto window = reinterpret_cast<oro::runtime::window::Manager::ManagedWindow*>(
       GetWindowLongPtr(hWnd, GWLP_USERDATA)
     );
 
@@ -125,12 +126,14 @@ namespace oro::runtime::app {
 
       case WM_SIZE: {
         // Propagate lifecycle and mirror DOM focus/blur
-        auto w = window ? dynamic_cast<Window*>(window) : nullptr;
+        auto w = window
+          ? dynamic_cast<oro::runtime::window::Window*>(window)
+          : nullptr;
         if (wParam == SIZE_MINIMIZED) {
-          if (w) w->evalDomBlurThrottled();
+          if (w) w->dispatchDomBlur();
           app->pause();
         } else if (wParam == SIZE_RESTORED || wParam == SIZE_MAXIMIZED) {
-          if (w) w->evalDomFocusThrottled();
+          if (w) w->dispatchDomFocus();
           app->resume();
         }
         if (window == nullptr || window->controller == nullptr) {
@@ -170,7 +173,7 @@ namespace oro::runtime::app {
           // broadcast an event to all the windows that the tray icon was clicked
           for (auto window : app->runtime.windowManager.windows) {
             if (window != nullptr) {
-              window->bridge.emit("tray", JSON::Object {});
+              window->bridge->emit("tray", JSON::Object {});
             }
           }
         }
@@ -192,7 +195,7 @@ namespace oro::runtime::app {
             auto parent = parts[1];
 
             if (title.find("About") == 0) {
-              dynamic_cast<Window*>(window)->about();
+              dynamic_cast<oro::runtime::window::Window*>(window)->about();
               break;
             }
 
@@ -251,7 +254,9 @@ namespace oro::runtime::app {
 
       case WM_HOTKEY: {
         if (window != nullptr) {
-          window->hotkey.onHotKeyBindingCallback((HotKeyBinding::ID) wParam);
+          window->hotkey.onHotKeyBindingCallback(
+            (oro::runtime::window::HotKeyBinding::ID) wParam
+          );
         }
         break;
       }
@@ -268,25 +273,25 @@ namespace oro::runtime::app {
       }
 
       case WM_GETMINMAXINFO: {
-        const auto screen = window::Window::getScreenSize();
+        const auto screen = oro::runtime::window::Window::getScreenSize();
         auto info = reinterpret_cast<LPMINMAXINFO>(lParam);
 
-        info->ptMinTrackSize.x = window::Window::getSizeInPixels(
+        info->ptMinTrackSize.x = oro::runtime::window::Window::getSizeInPixels(
           app->runtime.windowManager.options.defaultMinWidth,
           screen.width
         );
 
-        info->ptMinTrackSize.y = window::Window::getSizeInPixels(
+        info->ptMinTrackSize.y = oro::runtime::window::Window::getSizeInPixels(
           app->runtime.windowManager.options.defaultMinHeight,
           screen.height
         );
 
-        info->ptMaxTrackSize.x = window::Window::getSizeInPixels(
+        info->ptMaxTrackSize.x = oro::runtime::window::Window::getSizeInPixels(
           app->runtime.windowManager.options.defaultMaxWidth,
           screen.width
         );
 
-        info->ptMaxTrackSize.y = window::Window::getSizeInPixels(
+        info->ptMaxTrackSize.y = oro::runtime::window::Window::getSizeInPixels(
           app->runtime.windowManager.options.defaultMaxHeight,
           screen.height
         );
