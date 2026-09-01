@@ -4,8 +4,11 @@
 #include "../bluetooth.hh"
 #include "../../../string.hh"
 #include "../../../bytes.hh"
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
+#include <combaseapi.h>
 #include <bluetoothleapis.h>
 #pragma comment(lib, "runtimeobject")
 #pragma comment(lib, "windowsapp")

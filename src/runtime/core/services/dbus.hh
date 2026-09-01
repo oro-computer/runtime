@@ -31,7 +31,7 @@ namespace oro::runtime::core::services {
         ConnectionID connectionId = 0;
         String destination;
         String path;
-        String interface;
+        String interfaceName;
         String member;
         String signature;
         JSON::Any body;
@@ -42,7 +42,7 @@ namespace oro::runtime::core::services {
       struct SignalOptions {
         ConnectionID connectionId = 0;
         String path;
-        String interface;
+        String interfaceName;
         String name;
         String signature;
         JSON::Any body;
@@ -56,7 +56,7 @@ namespace oro::runtime::core::services {
       struct ExportOptions {
         ConnectionID connectionId = 0;
         String path;
-        String interface;
+        String interfaceName;
       };
 
       explicit DBus(const Options& options);

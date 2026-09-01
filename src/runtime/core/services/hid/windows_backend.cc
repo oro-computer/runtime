@@ -1,6 +1,8 @@
 #if defined(_WIN32)
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601
 #endif
@@ -501,6 +503,11 @@ namespace oro::runtime::core::services::hid {
         }
 
       private:
+        struct RequestState {
+          HID::RequestDeviceOptions options;
+          Vector<HID::Backend::DeviceDescriptor> pending;
+        };
+
         struct DeviceRecord {
           HID::Backend::DeviceDescriptor descriptor;
           String path;
@@ -594,9 +601,6 @@ namespace oro::runtime::core::services::hid {
           }};
         }
 
-        void dispatchDeviceEvent(const char* eventName, const HID::Backend::DeviceDescriptor& descriptor);
-        HID::Backend::DeviceDescriptor makeRemovedDescriptor(const String& deviceId) const;
-
         void startNotifications() {
           bool expected = false;
           if (!this->notificationRunning.compare_exchange_strong(expected, true)) {
@@ -624,8 +628,6 @@ namespace oro::runtime::core::services::hid {
           }
           this->notificationThreadId.store(0);
         }
-
-        static LRESULT CALLBACK NotificationWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
         void notificationLoop() {
           this->notificationThreadId.store(GetCurrentThreadId());

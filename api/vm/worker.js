@@ -1,6 +1,8 @@
 const Uint8ArrayPrototype = Uint8Array.prototype
 const TypedArrayPrototype = Object.getPrototypeOf(Uint8ArrayPrototype)
 const TypedArray = TypedArrayPrototype.constructor
+const VM_WORKER_ACK = 'VM_SHARED_WORKER_ACK'
+const VM_WORKER_PROBE = 'VM_SHARED_WORKER_PROBE'
 
 function isTypedArray (object) {
   return object instanceof TypedArray
@@ -146,12 +148,17 @@ class State {
       this.ports.push(port)
       port.start()
       port.addEventListener('message', this.onPortMessage.bind(this, port))
-      port.postMessage('VM_SHARED_WORKER_ACK')
+      port.postMessage(VM_WORKER_ACK)
     }
   }
 
   onPortMessage (port, event) {
     // port.postMessage(event.data) // debug echo
+
+    if (event.data === VM_WORKER_PROBE) {
+      port.postMessage(VM_WORKER_ACK)
+      return
+    }
 
     if (event.data?.type === 'terminate-worker') {
       for (const port of this.ports) {

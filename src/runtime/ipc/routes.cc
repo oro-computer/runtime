@@ -3953,7 +3953,7 @@ static void mapIPCRoutes (Router *router) {
     options.connectionId = id;
     options.destination = message.get("destination");
     options.path = message.get("path");
-    options.interface = message.get("interface");
+    options.interfaceName = message.get("interface");
     options.member = message.get("member");
     options.signature = message.get("signature");
     if (message.has("timeout")) {
@@ -3983,7 +3983,7 @@ static void mapIPCRoutes (Router *router) {
     core::services::DBus::SignalOptions options;
     options.connectionId = id;
     options.path = message.get("path");
-    options.interface = message.get("interface");
+    options.interfaceName = message.get("interface");
     options.name = message.get("name");
     options.signature = message.get("signature");
     if (message.has("body")) {
@@ -4045,7 +4045,7 @@ static void mapIPCRoutes (Router *router) {
     core::services::DBus::ExportOptions options;
     options.connectionId = id;
     options.path = message.get("path");
-    options.interface = message.get("interface");
+    options.interfaceName = message.get("interface");
 
     JSON::Any definition = nullptr;
     if (message.has("definition")) {
@@ -8018,9 +8018,9 @@ static void mapIPCRoutes (Router *router) {
     }
 
     uint64_t id;
-    int offset = 0;
+    int64_t offset = 0;
     REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
-    REQUIRE_AND_GET_MESSAGE_VALUE(offset, "offset", std::stoi);
+    REQUIRE_AND_GET_MESSAGE_VALUE(offset, "offset", std::stoll);
 
     if (message.buffer.data() == nullptr || message.buffer.size() == 0) {
       const auto json = JSON::Object::Entries {

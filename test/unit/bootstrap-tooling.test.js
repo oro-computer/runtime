@@ -834,6 +834,7 @@ test('desktop tests expose their isolated fixtures to runtime code', () => {
 
 test('VM context windows use an explicit startup handshake', () => {
   const vm = readFile('api/vm.js')
+  const vmWorker = readFile('api/vm/worker.js')
   const vmInit = readFile('api/vm/init.js')
   const sharedWorker = readFile('api/shared-worker/index.js')
   const sharedWorkerInit = readFile('api/shared-worker/init.js')
@@ -871,8 +872,13 @@ test('VM context windows use an explicit startup handshake', () => {
   )
   assert.match(
     vm,
-    /function waitForContextWorkerReady[\s\S]*if \(event\.data === VM_WORKER_ACK\)[\s\S]*worker\.ready\.then\(\(\) => \{[\s\S]*VM Context SharedWorker did not acknowledge startup[\s\S]*10_000/,
-    'the worker ACK timeout should start after initialization and ignore unrelated messages'
+    /function waitForContextWorkerReady[\s\S]*if \(event\.data === VM_WORKER_ACK\)[\s\S]*worker\.port\.postMessage\(VM_WORKER_PROBE\)[\s\S]*worker\.port\.start\(\)[\s\S]*worker\.ready\.then\(\(\) => \{[\s\S]*setInterval\(probe, 250\)[\s\S]*VM Context SharedWorker did not acknowledge startup[\s\S]*10_000/,
+    'the worker ACK timeout should start after initialization, actively probe the port, and ignore unrelated messages'
+  )
+  assert.match(
+    vmWorker,
+    /if \(event\.data === VM_WORKER_PROBE\) \{\s+port\.postMessage\(VM_WORKER_ACK\)/,
+    'the VM worker should acknowledge active startup probes'
   )
   assert.doesNotMatch(
     vm,
@@ -891,6 +897,21 @@ test('macOS window teardown preserves WebKit-owned views', () => {
   )
 })
 
+test('Linux window teardown completes synchronous GTK closes', () => {
+  const manager = readFile('src/runtime/window/manager.cc')
+
+  assert.match(
+    manager,
+    /if \(window->window != nullptr\) \{\s+window->close\(\);\s+if \(window->window != nullptr\) \{\s+return;/,
+    'synchronously destroyed GTK windows should be removed before close replies allow more windows to be created'
+  )
+  assert.doesNotMatch(
+    manager,
+    /if \(window->window != nullptr\) \{\s+window->close\(\);\s+return;/,
+    'GTK close should defer cleanup only while the native window remains alive'
+  )
+})
+
 test('Windows runtime builds avoid incompatible headers and archives', () => {
   const platform = readFile('src/runtime/platform/system.hh')
   const cflags = readFile('bin/cflags.sh')
@@ -902,6 +923,11 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const updateService = readFile('src/runtime/core/services/update.cc')
   const appWindow = readFile('src/runtime/app/win.cc')
   const platformWindow = readFile('src/runtime/window/win.cc')
+  const bluetooth = readFile('src/runtime/core/services/bluetooth/win.cc')
+  const dbusHeader = readFile('src/runtime/core/services/dbus.hh')
+  const dbusService = readFile('src/runtime/core/services/dbus.cc')
+  const hid = readFile('src/runtime/core/services/hid/windows_backend.cc')
+  const routes = readFile('src/runtime/ipc/routes.cc')
 
   assert.match(
     platform,
@@ -977,6 +1003,77 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     appWindow,
     /using oro::runtime::javascript::getEmitToRenderProcessJavaScript;[\s\S]*oro::runtime::window::HotKeyBinding::ID/,
     'the Windows app should qualify JavaScript and hotkey symbols from sibling namespaces'
+  )
+  assert.doesNotMatch(
+    appWindow,
+    /auto userconfig/,
+    'the Windows app should preserve the declared userConfig identifier casing'
+  )
+  assert.match(
+    bluetooth,
+    /#include <combaseapi\.h>[\s\S]*#include <windows\.foundation\.h>/,
+    'the Windows Bluetooth backend should load COM declarations before WinRT headers'
+  )
+  assert.doesNotMatch(
+    [dbusHeader, dbusService, routes].join('\n'),
+    /(?:String|options|signal|pending|object)\.interface\b|String interface;/,
+    'D-Bus implementation names should not collide with the Windows interface macro'
+  )
+  assert.match(
+    dbusHeader,
+    /String interfaceName;/,
+    'D-Bus options should retain a Windows-safe interface field'
+  )
+  assert.match(
+    hid,
+    /struct RequestState \{[\s\S]*HID::RequestDeviceOptions options;[\s\S]*Vector<HID::Backend::DeviceDescriptor> pending;/,
+    'the Windows HID backend should declare its pending request state'
+  )
+  assert.doesNotMatch(
+    hid,
+    /void dispatchDeviceEvent\([^{};]*\)\s*;|DeviceDescriptor makeRemovedDescriptor\([^{};]*\)\s*;|LRESULT CALLBACK NotificationWindowProc\([^{};]*\)\s*;/,
+    'inline Windows HID definitions should not have duplicate in-class declarations'
+  )
+  assert.doesNotMatch(
+    platformWindow,
+    /app->(?:isReady|hInstance|getcwd\(\))|navigateFunction|evaluateJavaScriptFunction/,
+    'the Windows window backend should use the current application and navigation APIs'
+  )
+  assert.match(
+    platformWindow,
+    /app->instance[\s\S]*navigateHandler[\s\S]*evaluateJavaScriptHandler/,
+    'the Windows window backend should use current application and navigation members'
+  )
+})
+
+test('append writes preserve kernel-managed file positions', () => {
+  const fs = readFile('api/fs/index.js')
+  const fsStream = readFile('api/fs/stream.js')
+  const fsServiceHeader = readFile('src/runtime/core/services/fs.hh')
+  const fsService = readFile('src/runtime/core/services/fs.cc')
+  const routes = readFile('src/runtime/ipc/routes.cc')
+
+  assert.match(
+    fs,
+    /\(flags & constants\.O_APPEND\) === constants\.O_APPEND \? -1 : 0[\s\S]*ipc\.sendSync\('fs\.write', \{ id, offset \}/,
+    'synchronous append writes should pass the kernel-position sentinel'
+  )
+  assert.match(
+    fsStream,
+    /\(handle\.flags & O_APPEND\) === O_APPEND\s+\? null\s+: this\.start \+ this\.bytesWritten/,
+    'append streams should not pass an explicit positional offset'
+  )
+  for (const source of [fsServiceHeader, fsService]) {
+    assert.match(
+      source,
+      /int64_t(?: offset)?/,
+      'the native file service should preserve negative offset sentinels'
+    )
+  }
+  assert.match(
+    routes,
+    /int64_t offset = 0;[\s\S]*REQUIRE_AND_GET_MESSAGE_VALUE\(offset, "offset", std::stoll\)/,
+    'the file-write IPC route should preserve signed 64-bit positions'
   )
 })
 

@@ -3,6 +3,7 @@
  */
 import { Readable, Writable } from '../stream.js'
 import { AbortError } from '../errors.js'
+import { O_APPEND } from './constants.js'
 
 import * as exports from './stream.js'
 
@@ -304,7 +305,9 @@ export class WriteStream extends Writable {
       return callback(new Error('File handle not opened'))
     }
 
-    const position = this.start + this.bytesWritten
+    const position = (handle.flags & O_APPEND) === O_APPEND
+      ? null
+      : this.start + this.bytesWritten
     let result = null
 
     if (!buffer.length) {

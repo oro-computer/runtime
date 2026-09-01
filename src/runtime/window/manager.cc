@@ -175,7 +175,9 @@ namespace oro::runtime::window {
         // so we don't leave GTK signal handlers with a dangling Window*.
         if (window->window != nullptr) {
           window->close();
-          return;
+          if (window->window != nullptr) {
+            return;
+          }
         }
       #endif
         window->close();

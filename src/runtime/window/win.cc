@@ -1,4 +1,5 @@
 #include "../app.hh"
+#include "../cwd.hh"
 #include "../filesystem.hh"
 #include "../javascript.hh"
 #include "../version.hh"
@@ -15,6 +16,7 @@ using namespace Microsoft::WRL;
 using oro::runtime::javascript::getResolveMenuSelectionJavaScript;
 using oro::runtime::javascript::getEmitToRenderProcessJavaScript;
 using oro::runtime::string::replace;
+using oro::runtime::string::split;
 using oro::runtime::string::trim;
 using oro::runtime::string::toLowerCase;
 using oro::runtime::string::convertWStringToString;
@@ -628,7 +630,6 @@ namespace oro::runtime::window {
     // this may be an "empty" path if not available
     static const auto edgeRuntimePath = filesystem::Resource::getMicrosoftEdgeRuntimePath();
     static auto app = App::sharedApplication();
-    app->isReady = false;
 
     if (!edgeRuntimePath.empty()) {
       const auto string = convertWStringToString(edgeRuntimePath.string());
@@ -658,7 +659,7 @@ namespace oro::runtime::window {
         options.height,
         nullptr,
         nullptr,
-        app->hInstance,
+        app->instance,
         nullptr
       );
     } else {
@@ -703,7 +704,7 @@ namespace oro::runtime::window {
         options.height,
         nullptr,
         nullptr,
-        app->hInstance,
+        app->instance,
         nullptr
       );
     }
@@ -712,11 +713,11 @@ namespace oro::runtime::window {
     webviewEnvironmentOptions->put_AdditionalBrowserArguments(L"--enable-features=msWebView2EnableDraggableRegions");
 
     this->drop = std::make_shared<DragDrop>(this);
-    this->bridge->navigateFunction = [this] (const auto url) {
+    this->bridge->navigateHandler = [this] (const auto url) {
       this->navigate(url);
     };
 
-    this->bridge->evaluateJavaScriptFunction = [this] (const auto source) {
+    this->bridge->evaluateJavaScriptHandler = [this] (const auto source) {
       this->eval(source);
     };
 
@@ -1470,8 +1471,6 @@ namespace oro::runtime::window {
               this->webview->Navigate(convertStringToWString(url).c_str());
             }
 
-            // notify app is ready
-            app->isReady = true;
             return S_OK;
           }).Get()
         );
@@ -1501,7 +1500,7 @@ namespace oro::runtime::window {
     MSGBOXPARAMS mbp;
     mbp.cbSize = sizeof(MSGBOXPARAMS);
     mbp.hwndOwner = this->window;
-    mbp.hInstance = app->hInstance;
+    mbp.hInstance = app->instance;
     mbp.lpszText = text.c_str();
     mbp.lpszCaption = this->bridge->userConfig["build_name"].c_str();
     mbp.dwStyle = MB_USERICON;
@@ -1859,7 +1858,7 @@ namespace oro::runtime::window {
     NOTIFYICONDATA nid;
 
 	    if (isTrayMenu) {
-      auto cwd = app->getcwd();
+      const auto cwd = oro::runtime::getcwd();
       auto trayIconPath = String("application_tray_icon");
 
       if (fs::exists(fs::path(cwd) / (trayIconPath + ".png"))) {

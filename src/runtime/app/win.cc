@@ -308,7 +308,7 @@ namespace oro::runtime::app {
   }
 
   void registerWindowClass (App* app) {
-    auto userconfig = app->runtime.userConfig;
+    auto userConfig = app->runtime.userConfig;
     // this fixes bad default quality DPI.
     SetProcessDPIAware();
 

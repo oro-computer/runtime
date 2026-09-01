@@ -2073,7 +2073,8 @@ export function writeFileSync (path, data, options) {
     throw result.err
   }
 
-  result = ipc.sendSync('fs.write', { id, offset: 0 }, null, data)
+  const offset = (flags & constants.O_APPEND) === constants.O_APPEND ? -1 : 0
+  result = ipc.sendSync('fs.write', { id, offset }, null, data)
 
   if (result.err) {
     throw result.err

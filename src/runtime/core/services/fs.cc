@@ -1626,7 +1626,7 @@ namespace oro::runtime::core::services {
     ID id,
     SharedPointer<unsigned char[]> bytes,
     size_t size,
-    size_t offset,
+    int64_t offset,
     const Callback callback
   ) const {
     this->loop.dispatch([=, this]() {

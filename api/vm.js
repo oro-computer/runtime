@@ -49,6 +49,7 @@ const VM_WINDOW_INDEX = 47
 const VM_WINDOW_TITLE = 'oro:vm'
 const VM_WINDOW_PATH = '/oro/vm/index.html'
 const VM_WORKER_ACK = 'VM_SHARED_WORKER_ACK'
+const VM_WORKER_PROBE = 'VM_SHARED_WORKER_PROBE'
 
 let contextWorker = null
 let contextWindow = null
@@ -57,9 +58,11 @@ let contextWindowRequest = null
 function waitForContextWorkerReady (worker) {
   return new Promise((resolve, reject) => {
     let settled = false
+    let probeInterval = null
     let timeout = null
 
     const cleanup = () => {
+      clearInterval(probeInterval)
       clearTimeout(timeout)
       worker.removeEventListener('error', onError)
       worker.port.removeEventListener('message', onMessage)
@@ -91,11 +94,27 @@ function waitForContextWorkerReady (worker) {
       }
     }
 
+    const probe = () => {
+      try {
+        worker.port.postMessage(VM_WORKER_PROBE)
+      } catch (error) {
+        finish(
+          new Error('Failed to probe VM Context SharedWorker', {
+            cause: error
+          })
+        )
+      }
+    }
+
     worker.addEventListener('error', onError)
     worker.port.addEventListener('message', onMessage)
+    worker.port.start()
 
     worker.ready.then(() => {
       if (!settled) {
+        probe()
+        if (settled) return
+        probeInterval = setInterval(probe, 250)
         timeout = setTimeout(() => {
           finish(
             new Error('VM Context SharedWorker did not acknowledge startup')

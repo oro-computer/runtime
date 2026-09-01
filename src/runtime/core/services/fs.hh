@@ -145,7 +145,7 @@ namespace oro::runtime::core::services {
       void stopWatch (const ipc::Message::Seq&, ID, const Callback);
       void unlink (const ipc::Message::Seq&, const String&, const Callback) const;
       void watch (const ipc::Message::Seq&, ID, const String&, const Callback);
-      void write (const ipc::Message::Seq&, ID, SharedPointer<unsigned char[]>, size_t, size_t, const Callback) const;
+      void write (const ipc::Message::Seq&, ID, SharedPointer<unsigned char[]>, size_t, int64_t, const Callback) const;
   };
 }
 #endif

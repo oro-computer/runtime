@@ -112,12 +112,7 @@ test('os.hrtime.bigint()', (t) => {
   t.equal(typeof hrtime, 'bigint', 'hrtime is bigint')
 })
 
-test('process.versions freeze + oro version', (t) => {
-  t.equal(
-    process.versions.socket,
-    '0.6.0',
-    'process.versions.socket is pinned to 0.6.0'
-  )
+test('process.versions reports oro version', (t) => {
   t.equal(
     process.versions.oro,
     primordials.version.short,

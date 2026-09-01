@@ -92,7 +92,7 @@ namespace oro::runtime::core::services {
       struct ExportedObject {
         ExportID id = 0;
         String path;
-        String interface;
+        String interfaceName;
         DBusObjectPathVTable vtable {};
         Connection* connection = nullptr;
         std::unordered_set<String> methods;
@@ -121,7 +121,7 @@ namespace oro::runtime::core::services {
       ConnectionID connectionId = 0;
       CallID id = 0;
       String path;
-      String interface;
+      String interfaceName;
       String member;
       DBusMessage* message = nullptr;
     };
@@ -678,7 +678,7 @@ namespace oro::runtime::core::services {
       auto message = dbus_message_new_method_call(
         options.destination.empty() ? nullptr : options.destination.c_str(),
         options.path.empty() ? nullptr : options.path.c_str(),
-        options.interface.empty() ? nullptr : options.interface.c_str(),
+        options.interfaceName.empty() ? nullptr : options.interfaceName.c_str(),
         options.member.empty() ? nullptr : options.member.c_str()
       );
 
@@ -791,7 +791,7 @@ namespace oro::runtime::core::services {
 
       auto message = dbus_message_new_signal(
         options.path.empty() ? nullptr : options.path.c_str(),
-        options.interface.empty() ? nullptr : options.interface.c_str(),
+        options.interfaceName.empty() ? nullptr : options.interfaceName.c_str(),
         options.name.empty() ? nullptr : options.name.c_str()
       );
 
@@ -996,7 +996,7 @@ namespace oro::runtime::core::services {
       auto exported = std::make_shared<Implementation::Connection::ExportedObject>();
       exported->id = rand64();
       exported->path = options.path;
-      exported->interface = options.interface;
+      exported->interfaceName = options.interfaceName;
       exported->connection = connection.get();
       exported->vtable.message_function = Implementation::objectPathFilter;
 
@@ -1354,7 +1354,7 @@ namespace oro::runtime::core::services {
     }
 
     const char* iface = dbus_message_get_interface(message);
-    if (!exported.interface.empty() && (!iface || exported.interface != iface)) {
+    if (!exported.interfaceName.empty() && (!iface || exported.interfaceName != iface)) {
       return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
     }
 
@@ -1382,7 +1382,9 @@ namespace oro::runtime::core::services {
     pending->connectionId = connection.id;
     pending->id = rand64();
     pending->path = exported.path;
-    pending->interface = exported.interface.empty() && iface ? String(iface) : exported.interface;
+    pending->interfaceName = exported.interfaceName.empty() && iface
+      ? String(iface)
+      : exported.interfaceName;
     pending->member = member;
     pending->message = message;
     dbus_message_ref(message);
@@ -1399,7 +1401,7 @@ namespace oro::runtime::core::services {
       {"connectionId", std::to_string(connection.id)},
       {"callId", std::to_string(pending->id)},
       {"path", exported.path},
-      {"interface", pending->interface},
+      {"interface", pending->interfaceName},
       {"member", pending->member},
       {"sender", String(sender ? sender : "")},
       {"body", body}
@@ -1423,7 +1425,7 @@ namespace oro::runtime::core::services {
 
     if (type == DBUS_MESSAGE_TYPE_SIGNAL) {
       const char* path = dbus_message_get_path(message);
-      const char* interface = dbus_message_get_interface(message);
+      const char* interfaceName = dbus_message_get_interface(message);
       const char* member = dbus_message_get_member(message);
       const char* sender = dbus_message_get_sender(message);
 
@@ -1432,7 +1434,7 @@ namespace oro::runtime::core::services {
       JSON::Object::Entries entries {
         {"connectionId", std::to_string(connection.id)},
         {"path", String(path ? path : "")},
-        {"interface", String(interface ? interface : "")},
+        {"interface", String(interfaceName ? interfaceName : "")},
         {"member", String(member ? member : "")},
         {"sender", String(sender ? sender : "")},
         {"body", payload}
