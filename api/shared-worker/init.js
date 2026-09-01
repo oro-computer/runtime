@@ -2,11 +2,14 @@
 import { channel } from './index.js'
 import application from '../application.js'
 import globals from '../internal/globals.js'
-import crypto from '../crypto.js'
 import hooks from '../hooks.js'
+
+const WORKER_INSTALL_TIMEOUT = 10_000
 
 export const workers = new Map()
 export { channel }
+
+const installations = new Map()
 
 hooks.onReady(async () => {
   const currentWindow = await application.getCurrentWindow()
@@ -28,7 +31,9 @@ globals.register('SharedWorkerContext.info', new Map())
 
 globalThis.addEventListener('connect', (event) => {
   if (event.detail?.connect) {
-    onConnect(new MessageEvent('connect', { data: event.detail }))
+    onConnect(new MessageEvent('connect', { data: event.detail })).catch(
+      (err) => console.error(err)
+    )
   }
 })
 
@@ -44,6 +49,16 @@ export class SharedWorkerInstance extends Worker {
 
     this.#info = options?.info ?? null
     this.addEventListener('message', this.onMessage.bind(this))
+    this.addEventListener('error', (event) => {
+      event.preventDefault?.()
+      const message =
+        event.error?.message ?? event.message ?? 'SharedWorker bootstrap failed'
+      try {
+        channel.postMessage({
+          error: { id: this.#info?.id, message }
+        })
+      } catch {}
+    })
   }
 
   get info () {
@@ -51,7 +66,7 @@ export class SharedWorkerInstance extends Worker {
   }
 
   async onMessage (event) {
-    if (Array.isArray(event.data.__shared_worker_debug)) {
+    if (Array.isArray(event.data?.__shared_worker_debug)) {
       const log = document.querySelector('#log')
       if (log) {
         for (const entry of event.data.__shared_worker_debug) {
@@ -110,7 +125,7 @@ export class SharedWorkerInfo {
 
     const url = new URL(this.scriptURL)
     this.url = url.toString()
-    this.hash = crypto.murmur3(url.toString())
+    this.hash = this.id
   }
 
   get pathname () {
@@ -118,24 +133,117 @@ export class SharedWorkerInfo {
   }
 }
 
+function waitForWorkerInstallation (info, start) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const timeout = setTimeout(() => {
+      const error = new Error(
+        `SharedWorker (${info.pathname}) did not finish installing`
+      )
+      settle(reject, error)
+      try {
+        channel.postMessage({
+          error: { id: info.id, message: error.message }
+        })
+      } catch {}
+    }, WORKER_INSTALL_TIMEOUT)
+
+    function settle (callback, value) {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      clearTimeout(timeout)
+      channel.removeEventListener('message', onMessage)
+      callback(value)
+    }
+
+    function onMessage (event) {
+      if (event.data?.error?.id === info.id) {
+        settle(reject, new Error(event.data.error.message))
+      } else if (event.data?.installed?.id === info.id) {
+        settle(resolve, null)
+      }
+    }
+
+    channel.addEventListener('message', onMessage)
+
+    try {
+      start()
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      settle(reject, error)
+      try {
+        channel.postMessage({
+          error: { id: info.id, message: error.message }
+        })
+      } catch {}
+    }
+  })
+}
+
+function ensureWorkerInstalled (info) {
+  if (installations.has(info.hash)) {
+    return installations.get(info.hash)
+  }
+
+  if (workers.has(info.hash)) {
+    return Promise.resolve(workers.get(info.hash))
+  }
+
+  let worker = null
+  const installation = waitForWorkerInstallation(info, () => {
+    worker = new SharedWorkerInstance('./worker.js', {
+      info
+    })
+
+    workers.set(info.hash, worker)
+    globals.get('SharedWorkerContext.info').set(info.hash, info)
+    worker.postMessage({ install: info })
+  })
+    .then(() => worker)
+    .catch((err) => {
+      if (workers.get(info.hash) === worker) {
+        workers.delete(info.hash)
+      }
+
+      globals.get('SharedWorkerContext.info').delete(info.hash)
+      try {
+        worker?.terminate()
+      } catch {}
+      throw err
+    })
+    .finally(() => {
+      if (installations.get(info.hash) === installation) {
+        installations.delete(info.hash)
+      }
+    })
+
+  installations.set(info.hash, installation)
+  return installation
+}
+
 export async function onInstall (event) {
   const info = new SharedWorkerInfo(event.data.install)
 
-  if (!info.id || workers.has(info.hash)) {
+  if (info.id === null || info.id === undefined) {
     return
   }
 
-  const worker = new SharedWorkerInstance('./worker.js', {
-    info
-  })
-
-  workers.set(info.hash, worker)
-  globals.get('SharedWorkerContext.info').set(info.hash, info)
-  worker.postMessage({ install: info })
+  await ensureWorkerInstalled(info)
 }
 
 export async function onUninstall (event) {
   const info = new SharedWorkerInfo(event.data.uninstall)
+
+  if (installations.has(info.hash)) {
+    try {
+      await installations.get(info.hash)
+    } catch {
+      return
+    }
+  }
 
   if (!workers.has(info.hash)) {
     return
@@ -143,6 +251,7 @@ export async function onUninstall (event) {
 
   const worker = workers.get(info.hash)
   workers.delete(info.hash)
+  globals.get('SharedWorkerContext.info').delete(info.hash)
 
   worker.postMessage({ uninstall: info })
 }
@@ -150,35 +259,11 @@ export async function onUninstall (event) {
 export async function onConnect (event) {
   const info = new SharedWorkerInfo(event.data.connect)
 
-  if (!info.id) {
+  if (info.id === null || info.id === undefined) {
     return
   }
 
-  if (!workers.has(info.hash)) {
-    onInstall(
-      new MessageEvent('message', {
-        data: {
-          install: event.data.connect
-        }
-      })
-    )
-
-    try {
-      await new Promise((resolve, reject) => {
-        channel.addEventListener('message', (event) => {
-          if (event.data?.error?.id === info.id) {
-            reject(new Error(event.data.error.message))
-          } else if (event.data?.installed?.id === info.id) {
-            resolve()
-          }
-        })
-      })
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  const worker = workers.get(info.hash)
+  const worker = await ensureWorkerInstalled(info)
   worker.postMessage({ connect: info })
 }
 

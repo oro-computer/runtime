@@ -1,5 +1,7 @@
 #include "../app.hh"
+#include "../config.hh"
 #include "../cwd.hh"
+#include "../env.hh"
 #include "../filesystem.hh"
 #include "../javascript.hh"
 #include "../version.hh"
@@ -19,6 +21,7 @@ using oro::runtime::string::replace;
 using oro::runtime::string::split;
 using oro::runtime::string::trim;
 using oro::runtime::string::toLowerCase;
+using oro::runtime::string::convertStringToWString;
 using oro::runtime::string::convertWStringToString;
 
 using oro::runtime::bytes::base64::decode;
@@ -771,7 +774,7 @@ namespace oro::runtime::window {
     this->hotkey.init();
     this->bridge->init();
 
-    static const auto APPDATA = Path(convertStringToWString(Env::get("APPDATA")));
+    static const auto APPDATA = Path(convertStringToWString(env::get("APPDATA")));
 
     if (APPDATA.empty() || !fs::exists(APPDATA)) {
       throw std::runtime_error(
@@ -837,7 +840,7 @@ namespace oro::runtime::window {
               ICoreWebView2Settings6* settings6 = nullptr;
               ICoreWebView2Settings9* settings9 = nullptr;
 
-              const auto wantsDebugMode = this->options.debug || isDebugEnabled();
+              const auto wantsDebugMode = this->options.debug || config::isDebugEnabled();
 
               this->webview->get_Settings(&settings);
 

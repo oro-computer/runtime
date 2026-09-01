@@ -8,10 +8,10 @@
 #import <Foundation/Foundation.h>
 #import <IOKit/hid/IOHIDManager.h>
 
-#include "../../debug.hh"
-#include "../../app.hh"
-#include "../../bytes.hh"
-#include "../../platform/types.hh"
+#include "../../../debug.hh"
+#include "../../../app.hh"
+#include "../../../bytes.hh"
+#include "../../../platform/types.hh"
 
 #include <pthread.h>
 #include <utility>

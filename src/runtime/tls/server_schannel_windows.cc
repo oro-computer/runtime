@@ -15,6 +15,9 @@
 #include <windows.h>
 #include <wincrypt.h>
 #include <ncrypt.h>
+#ifndef SECURITY_WIN32
+#define SECURITY_WIN32 1
+#endif
 #include <security.h>
 #include <schannel.h>
 #include <schnlsp.h>
@@ -23,6 +26,7 @@
 #pragma comment(lib, "crypt32.lib")
 #pragma comment(lib, "ncrypt.lib")
 
+#include "../tcp.hh"
 #include "schannel_util_windows.hh"
 
 #ifndef SSL_ERROR_WANT_READ
@@ -71,7 +75,7 @@ namespace oro::runtime::tls {
 
     inline String describeIdentityError(HRESULT hr, bool isClient) {
       const char* role = isClient ? "client" : "server";
-      if (hr == HRESULT_FROM_WIN32(ERROR_BAD_PASSWORD)) {
+      if (hr == HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD)) {
         return String("TLS ") + role + " private key passphrase is incorrect";
       }
       if (hr == HRESULT_FROM_WIN32(ERROR_INVALID_DATA)) {
@@ -121,7 +125,7 @@ namespace oro::runtime::tls {
       PCERT_EXTENSION ext = CertFindExtension(szOID_SUBJECT_ALT_NAME2, cert->pCertInfo->cExtension, cert->pCertInfo->rgExtension);
       if (!ext) return sans;
       DWORD decodedSize = 0;
-      PCCERT_ALT_NAME_INFO altInfo = nullptr;
+      PCERT_ALT_NAME_INFO altInfo = nullptr;
       if (!CryptDecodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, szOID_SUBJECT_ALT_NAME2, ext->Value.pbData, ext->Value.cbData, CRYPT_DECODE_ALLOC_FLAG, nullptr, &altInfo, &decodedSize)) {
         return sans;
       }
@@ -321,7 +325,8 @@ namespace oro::runtime::tls {
     this->impl = nullptr;
   }
 
-  static HRESULT importServerCertificate(Server::Impl* impl, const String& certPem, const String& keyPem, const String& passphrase) {
+  template <typename ServerImpl>
+  static HRESULT importServerCertificate(ServerImpl* impl, const String& certPem, const String& keyPem, const String& passphrase) {
     if (!impl) return E_INVALIDARG;
     std::vector<PCCERT_CONTEXT> certs;
     if (!schannel::parseCertificateChain(certPem, certs)) {
@@ -348,7 +353,7 @@ namespace oro::runtime::tls {
     }
 
     NCRYPT_KEY_HANDLE key = 0;
-    SECURITY_STATUS status = NCryptImportKey(provider, 0, NCRYPT_PKCS8_PRIVATE_KEY_BLOB, nullptr, &key, keyDer.data(), static_cast<DWORD>(keyDer.size()), 0);
+    SECURITY_STATUS status = schannel::importPkcs8(provider, keyDer, keyFormat, keyPass, &key);
     if (status == ERROR_SUCCESS) {
       status = NCryptFinalizeKey(key, 0);
     }
@@ -359,12 +364,11 @@ namespace oro::runtime::tls {
       return HRESULT_FROM_WIN32(status);
     }
 
-    CRYPT_KEY_CONTEXT keyContext{};
+    CERT_KEY_CONTEXT keyContext{};
     keyContext.cbSize = sizeof(keyContext);
     keyContext.dwKeySpec = CERT_NCRYPT_KEY_SPEC;
     keyContext.hCryptProv = 0;
     keyContext.hNCryptKey = key;
-    keyContext.fCallerFreeProvOrNCryptKey = TRUE;
     if (!CertSetCertificateContextProperty(certs.front(), CERT_KEY_CONTEXT_PROP_ID, CERT_STORE_NO_CRYPT_RELEASE_FLAG, &keyContext)) {
       HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
       NCryptFreeObject(key);
@@ -505,7 +509,8 @@ namespace oro::runtime::tls {
     return 0;
   }
 
-  static void evaluateClientCert(Server::Impl* impl) {
+  template <typename ServerImpl>
+  static void evaluateClientCert(ServerImpl* impl) {
     if (!impl || impl->verifyDone || !impl->handshakeComplete) return;
     PCCERT_CONTEXT cert = nullptr;
     if (QueryContextAttributes(&impl->ctx, SECPKG_ATTR_REMOTE_CERT_CONTEXT, &cert) != SEC_E_OK) {
@@ -809,7 +814,7 @@ namespace oro::runtime::tls {
     if (!this->impl || !this->impl->handshakeComplete) return -1;
     SecPkgContext_ApplicationProtocol proto{};
     if (QueryContextAttributes(&this->impl->ctx, SECPKG_ATTR_APPLICATION_PROTOCOL, &proto) == SEC_E_OK) {
-      if (proto.ProtoStatus == ApplicationProtocolNegotiationStatus_Success && proto.ProtocolIdSize > 0) {
+      if (proto.ProtoNegoStatus == SecApplicationProtocolNegotiationStatus_Success && proto.ProtocolIdSize > 0) {
         alpn.assign(reinterpret_cast<const char*>(proto.ProtocolId), proto.ProtocolIdSize);
       }
     }
@@ -820,12 +825,11 @@ namespace oro::runtime::tls {
   int Server::shutdown() {
     if (!this->impl || !this->impl->handshakeComplete) return 0;
     if (!this->transport) return -1;
-    SCHANNEL_SHUTDOWN token{};
-    token.dwType = SCHANNEL_SHUTDOWN;
+    DWORD shutdownToken = SCHANNEL_SHUTDOWN;
     SecBuffer buffer;
     buffer.BufferType = SECBUFFER_TOKEN;
-    buffer.pvBuffer = &token;
-    buffer.cbBuffer = sizeof(token);
+    buffer.pvBuffer = &shutdownToken;
+    buffer.cbBuffer = sizeof(shutdownToken);
     SecBufferDesc desc;
     desc.cBuffers = 1;
     desc.pBuffers = &buffer;

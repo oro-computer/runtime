@@ -68,7 +68,7 @@ namespace oro::runtime::app {
     }
 
     auto userConfig = window != nullptr
-      ? dynamic_cast<oro::runtime::window::Window*>(window)->bridge->userConfig
+      ? static_cast<oro::runtime::window::Window*>(window)->bridge->userConfig
       : getUserConfig();
 
     if (message == WM_COPYDATA) {
@@ -82,7 +82,7 @@ namespace oro::runtime::app {
       case WM_ACTIVATEAPP: {
         // Propagate lifecycle and mirror DOM focus/blur
         auto w = window
-          ? dynamic_cast<oro::runtime::window::Window*>(window)
+          ? static_cast<oro::runtime::window::Window*>(window)
           : nullptr;
         if (wParam) {
           if (w) w->dispatchDomFocus();
@@ -127,7 +127,7 @@ namespace oro::runtime::app {
       case WM_SIZE: {
         // Propagate lifecycle and mirror DOM focus/blur
         auto w = window
-          ? dynamic_cast<oro::runtime::window::Window*>(window)
+          ? static_cast<oro::runtime::window::Window*>(window)
           : nullptr;
         if (wParam == SIZE_MINIMIZED) {
           if (w) w->dispatchDomBlur();
@@ -195,7 +195,7 @@ namespace oro::runtime::app {
             auto parent = parts[1];
 
             if (title.find("About") == 0) {
-              dynamic_cast<oro::runtime::window::Window*>(window)->about();
+              static_cast<oro::runtime::window::Window*>(window)->about();
               break;
             }
 
@@ -329,21 +329,22 @@ namespace oro::runtime::app {
 
     auto windowClassName = userConfig["meta_bundle_identifier"];
 
-    wcex.cbSize = sizeof(WNDCLASSEX);
-    wcex.style = CS_HREDRAW | CS_VREDRAW;
-    wcex.cbClsExtra = 0;
-    wcex.cbWndExtra = 0;
-    wcex.hInstance = app->instance;
-    wcex.hIcon = LoadIcon(app->instance, IDI_APPLICATION);
-    wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wcex.hbrBackground = CreateSolidBrush(RGB(0, 0, 0));
-    wcex.lpszMenuName = NULL;
-    wcex.lpszClassName = windowClassName.c_str();
-    wcex.hIconSm = icon; // ico doesn't auto scale, needs 16x16 icon lol fuck you bill
-    wcex.hIcon = icon;
-    wcex.lpfnWndProc = onWindowProcMessage;
+    app->wcex = {};
+    app->wcex.cbSize = sizeof(WNDCLASSEX);
+    app->wcex.style = CS_HREDRAW | CS_VREDRAW;
+    app->wcex.cbClsExtra = 0;
+    app->wcex.cbWndExtra = 0;
+    app->wcex.hInstance = app->instance;
+    app->wcex.hIcon = LoadIcon(app->instance, IDI_APPLICATION);
+    app->wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
+    app->wcex.hbrBackground = CreateSolidBrush(RGB(0, 0, 0));
+    app->wcex.lpszMenuName = NULL;
+    app->wcex.lpszClassName = windowClassName.c_str();
+    app->wcex.hIconSm = icon; // ico doesn't auto scale, needs 16x16 icon lol fuck you bill
+    app->wcex.hIcon = icon;
+    app->wcex.lpfnWndProc = onWindowProcMessage;
 
-    if (!RegisterClassEx(&wcex)) {
+    if (!RegisterClassEx(&app->wcex)) {
       alert("Application could not launch, possible missing resources.");
     }
   }

@@ -8,11 +8,11 @@
 #endif
 #include "windows_backend.hh"
 
-#include "../../app.hh"
-#include "../../bytes.hh"
-#include "../../debug.hh"
-#include "../../string.hh"
-#include "../../platform/types.hh"
+#include "../../../app.hh"
+#include "../../../bytes.hh"
+#include "../../../debug.hh"
+#include "../../../string.hh"
+#include "../../../platform/types.hh"
 
 #include <windows.h>
 #include <setupapi.h>
@@ -170,7 +170,7 @@ namespace oro::runtime::core::services::hid {
         }
 
         void getDevices(const String& seq, const Callback cb) override {
-          this->enumerateDevices([=](const EnumerateResult& result) {
+          this->enumerateDevices([=, this](const EnumerateResult& result) {
             if (!result.ok) {
               cb(seq, result.error, QueuedResponse{});
               return;
@@ -190,7 +190,7 @@ namespace oro::runtime::core::services::hid {
         }
 
         void requestDevice(const String& seq, const HID::RequestDeviceOptions& options, const Callback cb) override {
-          this->enumerateDevices([=](const EnumerateResult& result) {
+          this->enumerateDevices([=, this](const EnumerateResult& result) {
             if (!result.ok) {
               cb(seq, result.error, QueuedResponse{});
               return;
@@ -387,7 +387,7 @@ namespace oro::runtime::core::services::hid {
           SP_DEVICE_INTERFACE_DATA interfaceData;
           interfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 
-          for (DWORD index = 0; SetupDiEnumDeviceInterface(infoSet, nullptr, &GUID_DEVINTERFACE_HID, index, &interfaceData); ++index) {
+          for (DWORD index = 0; SetupDiEnumDeviceInterfaces(infoSet, nullptr, &GUID_DEVINTERFACE_HID, index, &interfaceData); ++index) {
             DevicePath devicePath = getDevicePath(infoSet, interfaceData);
             if (devicePath.wide.empty()) continue;
 
@@ -633,7 +633,7 @@ namespace oro::runtime::core::services::hid {
           this->notificationThreadId.store(GetCurrentThreadId());
           static const wchar_t* className = L"SocketHIDNotificationWindow";
           static std::once_flag registerFlag;
-          std::call_once(registerFlag, [className]() {
+          std::call_once(registerFlag, []() {
             WNDCLASSW wc = {};
             wc.lpfnWndProc = WindowsHIDBackend::NotificationWindowProc;
             wc.hInstance = GetModuleHandleW(nullptr);
@@ -1039,7 +1039,7 @@ namespace oro::runtime::core::services::hid {
                 {"deviceId", deviceId},
                 {"reportId", static_cast<uint32_t>(reportId)},
                 {"encoding", String("base64")},
-                {"data", bytes::base64::encode(payload)}
+                {"data", payload.str(bytes::Buffer::Encoding::BASE64)}
               }};
 
               const String serialized = event.str();
@@ -1061,7 +1061,7 @@ namespace oro::runtime::core::services::hid {
           Lock lock(this->mutex);
           auto it = this->openDevices.find(deviceId);
           if (it == this->openDevices.end()) return false;
-          return it->second.running.load();
+          return it->second->running.load();
         }
 
         void stopReader(const std::shared_ptr<DeviceState>& state) {
@@ -1179,7 +1179,7 @@ namespace oro::runtime::core::services::hid {
             {"data", JSON::Object::Entries {{
               {"reportId", static_cast<uint32_t>(resolvedId)},
               {"encoding", String("base64")},
-              {"data", bytes::base64::encode(payload)}
+              {"data", payload.str(bytes::Buffer::Encoding::BASE64)}
             }}}
           }};
         }

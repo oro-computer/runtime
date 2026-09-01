@@ -108,7 +108,16 @@ function waitForContextWorkerReady (worker) {
 
     worker.addEventListener('error', onError)
     worker.port.addEventListener('message', onMessage)
-    worker.port.start()
+    try {
+      worker.port.start()
+    } catch (error) {
+      finish(
+        new Error('Failed to start VM Context SharedWorker port', {
+          cause: error
+        })
+      )
+      return
+    }
 
     worker.ready.then(() => {
       if (!settled) {
@@ -123,6 +132,38 @@ function waitForContextWorkerReady (worker) {
       }
     }, onError)
   })
+}
+
+function closeContextWorker (worker) {
+  if (typeof worker?.destroy === 'function') {
+    try {
+      worker.destroy()
+    } catch {}
+    return
+  }
+
+  try {
+    worker?.port?.close()
+  } catch {}
+
+  try {
+    worker?.channel?.port2?.close()
+  } catch {}
+}
+
+async function awaitContextWorkerReady (worker) {
+  try {
+    await worker.ready
+    await worker[kWorkerContextReady]
+    return worker
+  } catch (error) {
+    if (contextWorker === worker) {
+      contextWorker = null
+    }
+
+    closeContextWorker(worker)
+    throw error
+  }
 }
 
 // A weak mapping of context objects to `Script` instances where "context"
@@ -1396,9 +1437,7 @@ async function initializeContextWindow () {
  */
 export async function getContextWorker () {
   if (contextWorker) {
-    await contextWorker.ready
-    await contextWorker[kWorkerContextReady]
-    return contextWorker
+    return await awaitContextWorkerReady(contextWorker)
   }
 
   if (os.platform() === 'win32' && !process.env.COREWEBVIEW2_22_AVAILABLE) {
@@ -1427,15 +1466,15 @@ export async function getContextWorker () {
     contextWorker[kWorkerContextReady] = waitForContextWorkerReady(contextWorker)
   }
 
-  contextWorker.port.start()
-  contextWorker.addEventListener('message', (event) => {
+  const worker = contextWorker
+  worker.port.addEventListener('message', (event) => {
     if (event.data?.type === 'terminate-worker') {
-      if (typeof contextWorker?.destroy === 'function') {
-        contextWorker.destroy()
-      }
+      closeContextWorker(worker)
 
       // unref
-      contextWorker = null
+      if (contextWorker === worker) {
+        contextWorker = null
+      }
 
       if (
         globalThis.window &&
@@ -1448,9 +1487,20 @@ export async function getContextWorker () {
     }
   })
 
-  await contextWorker.ready
-  await contextWorker[kWorkerContextReady]
-  return contextWorker
+  try {
+    worker.port.start()
+  } catch (error) {
+    if (contextWorker === worker) {
+      contextWorker = null
+    }
+
+    closeContextWorker(worker)
+    throw new Error('Failed to start VM Context SharedWorker port', {
+      cause: error
+    })
+  }
+
+  return await awaitContextWorkerReady(worker)
 }
 
 /**

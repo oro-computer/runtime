@@ -233,7 +233,10 @@ class State {
   }
 }
 
-if (globalThis.self && !globalThis.window) {
+if (
+  globalThis.isSharedWorkerScope === true ||
+  (globalThis.self && !globalThis.window)
+) {
   State.init()
 }
 

@@ -15,46 +15,119 @@ export const SHARED_WORKER_WINDOW_PATH = '/oro/shared-worker/index.html'
 
 export const channel = new BroadcastChannel('oro.runtime.sharedWorker')
 export const workers = new Map()
+const workerReferences = new Map()
 
 channel.addEventListener('message', (event) => {
-  if (event.data?.error?.id) {
-    const ref = workers.get(event.data.error.id)
-    if (ref) {
-      const worker = ref.deref()
-      if (!worker) {
+  if (event.data?.error?.id !== null && event.data?.error?.id !== undefined) {
+    const refs = workerReferences.get(event.data.error.id)
+    if (refs) {
+      const error = new Error(event.data.error.message)
+
+      for (const ref of refs) {
+        const worker = ref.deref()
+        if (!worker) {
+          refs.delete(ref)
+        } else {
+          worker.dispatchEvent(
+            new ErrorEvent('error', {
+              error,
+              message: error.message
+            })
+          )
+        }
+      }
+
+      if (refs.size === 0) {
+        workerReferences.delete(event.data.error.id)
         workers.delete(event.data.error.id)
       } else {
-        worker.dispatchEvent(
-          new ErrorEvent('error', {
-            error: new Error(event.data.error.message)
-          })
-        )
+        updateWorkerReference(event.data.error.id, refs)
       }
     }
   }
 })
 
-export async function init (sharedWorker, options) {
-  const currentWindow = await application.getCurrentWindow()
-  const window = await getContextWindow()
-  await currentWindow.send({
-    event: 'connect',
-    window: window.index,
-    value: {
-      connect: {
-        scriptURL: options.scriptURL,
-        client: client.toJSON(),
-        name: options.name,
-        port: serialize(
-          ipc.findIPCMessageTransfers(new Set(), sharedWorker.channel.port2)
-        ),
-        id: sharedWorker.id
-      }
-    }
-  })
+// Register before the first await so early module failures reach every
+// SharedWorker object using the same URL and name.
+function registerWorker (sharedWorker) {
+  let refs = workerReferences.get(sharedWorker.id)
+  if (!refs) {
+    refs = new Set()
+    workerReferences.set(sharedWorker.id, refs)
+  }
 
-  ipc.IPCMessagePort.transfer(sharedWorker.channel.port2)
-  workers.set(sharedWorker.id, new WeakRef(sharedWorker))
+  const ref = new WeakRef(sharedWorker)
+  refs.add(ref)
+  workers.set(sharedWorker.id, ref)
+  return { ref, refs }
+}
+
+function unregisterWorker (sharedWorker, registration) {
+  const refs = workerReferences.get(sharedWorker.id)
+  if (refs === registration.refs) {
+    refs.delete(registration.ref)
+
+    if (refs.size === 0) {
+      workerReferences.delete(sharedWorker.id)
+      workers.delete(sharedWorker.id)
+    } else {
+      updateWorkerReference(sharedWorker.id, refs)
+    }
+  }
+}
+
+function updateWorkerReference (id, refs) {
+  const current = workers.get(id)
+  if (current && refs.has(current) && current.deref()) {
+    return
+  }
+
+  for (const ref of refs) {
+    if (ref.deref()) {
+      workers.set(id, ref)
+      return
+    }
+  }
+
+  workerReferences.delete(id)
+  workers.delete(id)
+}
+
+export async function init (sharedWorker, options) {
+  const registration = registerWorker(sharedWorker)
+
+  try {
+    const currentWindow = await application.getCurrentWindow()
+    const window = await getContextWindow()
+    const port = serialize(
+      ipc.findIPCMessageTransfers(new Set(), sharedWorker.channel.port2)
+    )
+
+    // Serialize before marking the sending endpoint as transferred, then
+    // activate the local relay before the receiving worker can reply.
+    ipc.IPCMessagePort.transfer(sharedWorker.channel.port2)
+
+    await currentWindow.send({
+      event: 'connect',
+      window: window.index,
+      value: {
+        connect: {
+          scriptURL: options.scriptURL,
+          client: client.toJSON(),
+          name: options.name,
+          port,
+          id: sharedWorker.id
+        }
+      }
+    })
+  } catch (err) {
+    unregisterWorker(sharedWorker, registration)
+    try {
+      sharedWorker.channel.port1.close()
+      sharedWorker.channel.port2.close()
+    } catch {}
+    throw err
+  }
 }
 
 export class SharedWorkerMessagePort extends ipc.IPCMessagePort {
@@ -94,7 +167,13 @@ export class SharedWorker extends EventTarget {
     }
 
     const url = new URL(aURL, location.origin)
-    const id = crypto.murmur3(url.origin + url.pathname)
+    const name =
+      typeof nameOrOptions === 'string'
+        ? nameOrOptions
+        : typeof nameOrOptions?.name === 'string'
+          ? nameOrOptions.name
+          : null
+    const id = crypto.murmur3(`${url.toString()}\0${name ?? ''}`)
 
     // @ts-ignore
     super(url.toString(), nameOrOptions)
@@ -102,12 +181,7 @@ export class SharedWorker extends EventTarget {
     this.#id = id
     this.#ready = init(this, {
       scriptURL: url.toString(),
-      name:
-        typeof nameOrOptions === 'string'
-          ? nameOrOptions
-          : typeof nameOrOptions?.name === 'string'
-            ? nameOrOptions.name
-            : null
+      name
     })
   }
 

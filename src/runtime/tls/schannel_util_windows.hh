@@ -3,6 +3,7 @@
 
 #include <windows.h>
 #include <wincrypt.h>
+#include <ncrypt.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -180,57 +181,6 @@ namespace oro::runtime::tls::schannel {
     return true;
   }
 
-  inline bool decryptPkcs8(const std::vector<unsigned char>& encrypted, const std::wstring& passphrase, std::vector<unsigned char>& pkcs8) {
-    if (encrypted.empty() || passphrase.empty()) return false;
-    CRYPT_ENCRYPTED_PRIVATE_KEY_INFO* encInfo = nullptr;
-    DWORD encInfoSize = 0;
-    if (!CryptDecodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-        PKCS_ENCRYPTED_PRIVATE_KEY_INFO,
-        encrypted.data(), static_cast<DWORD>(encrypted.size()),
-        CRYPT_DECODE_ALLOC_FLAG, nullptr,
-        &encInfo, &encInfoSize)) {
-      return false;
-    }
-
-    CRYPT_PRIVATE_KEY_INFO keyInfo{};
-    if (CryptDecryptPrivateKeyInfo(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-        encInfo, passphrase.c_str(), 0, &keyInfo) == FALSE) {
-      auto err = GetLastError();
-      if (err != ERROR_MORE_DATA) {
-        LocalFree(encInfo);
-        return false;
-      }
-    }
-
-    std::vector<unsigned char> privateData;
-    privateData.resize(keyInfo.PrivateKey.cbData);
-    keyInfo.PrivateKey.pbData = privateData.data();
-    if (!CryptDecryptPrivateKeyInfo(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-        encInfo, passphrase.c_str(), 0, &keyInfo)) {
-      LocalFree(encInfo);
-      return false;
-    }
-
-    std::vector<unsigned char> algoParams;
-    if (keyInfo.Algorithm.Parameters.cbData && keyInfo.Algorithm.Parameters.pbData) {
-      algoParams.assign(keyInfo.Algorithm.Parameters.pbData,
-        keyInfo.Algorithm.Parameters.pbData + keyInfo.Algorithm.Parameters.cbData);
-      keyInfo.Algorithm.Parameters.pbData = algoParams.data();
-    }
-
-    BYTE* encoded = nullptr;
-    DWORD encodedSize = 0;
-    bool ok = CryptEncodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-      PKCS_PRIVATE_KEY_INFO, &keyInfo,
-      CRYPT_ENCODE_ALLOC_FLAG, nullptr,
-      &encoded, &encodedSize);
-    LocalFree(encInfo);
-    if (!ok) return false;
-    pkcs8.assign(encoded, encoded + encodedSize);
-    LocalFree(encoded);
-    return true;
-  }
-
   inline HRESULT ensurePkcs8(std::vector<unsigned char>& der, PrivateKeyFormat format, const std::wstring& passphrase = L"") {
     if (format == PrivateKeyFormat::PKCS8) {
       return der.empty() ? HRESULT_FROM_WIN32(ERROR_INVALID_DATA) : S_OK;
@@ -242,12 +192,55 @@ namespace oro::runtime::tls::schannel {
     } else if (format == PrivateKeyFormat::EC_SEC1) {
       ok = convertEcToPkcs8(der, converted);
     } else if (format == PrivateKeyFormat::PKCS8_ENCRYPTED) {
-      if (passphrase.empty()) return HRESULT_FROM_WIN32(ERROR_BAD_PASSWORD);
-      ok = decryptPkcs8(der, passphrase, converted);
+      return passphrase.empty() ? HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD) : S_OK;
     }
     if (!ok) return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
     der.swap(converted);
     return S_OK;
+  }
+
+  inline SECURITY_STATUS importPkcs8(
+    NCRYPT_PROV_HANDLE provider,
+    const std::vector<unsigned char>& der,
+    PrivateKeyFormat format,
+    const std::wstring& passphrase,
+    NCRYPT_KEY_HANDLE* key
+  ) {
+    if (provider == 0 || key == nullptr || der.empty() || der.size() > MAXDWORD) {
+      return NTE_INVALID_PARAMETER;
+    }
+
+    NCryptBuffer secret{};
+    NCryptBufferDesc parameters{};
+    NCryptBufferDesc* parameterList = nullptr;
+
+    if (format == PrivateKeyFormat::PKCS8_ENCRYPTED) {
+      if (passphrase.empty()) {
+        return HRESULT_FROM_WIN32(ERROR_INVALID_PASSWORD);
+      }
+      if (passphrase.size() >= MAXDWORD / sizeof(wchar_t)) {
+        return NTE_INVALID_PARAMETER;
+      }
+
+      secret.BufferType = NCRYPTBUFFER_PKCS_SECRET;
+      secret.cbBuffer = static_cast<ULONG>((passphrase.size() + 1) * sizeof(wchar_t));
+      secret.pvBuffer = const_cast<wchar_t*>(passphrase.c_str());
+      parameters.ulVersion = NCRYPTBUFFER_VERSION;
+      parameters.cBuffers = 1;
+      parameters.pBuffers = &secret;
+      parameterList = &parameters;
+    }
+
+    return NCryptImportKey(
+      provider,
+      0,
+      NCRYPT_PKCS8_PRIVATE_KEY_BLOB,
+      parameterList,
+      key,
+      const_cast<unsigned char*>(der.data()),
+      static_cast<DWORD>(der.size()),
+      NCRYPT_DO_NOT_FINALIZE_FLAG
+    );
   }
 
   inline bool parseCertificateChain(const std::string& pem, std::vector<PCCERT_CONTEXT>& certs) {

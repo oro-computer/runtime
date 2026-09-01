@@ -838,6 +838,7 @@ test('VM context windows use an explicit startup handshake', () => {
   const vmInit = readFile('api/vm/init.js')
   const sharedWorker = readFile('api/shared-worker/index.js')
   const sharedWorkerInit = readFile('api/shared-worker/init.js')
+  const sharedWorkerRuntime = readFile('api/shared-worker/worker.js')
 
   for (const source of [vm, sharedWorker]) {
     assert.match(
@@ -885,6 +886,81 @@ test('VM context windows use an explicit startup handshake', () => {
     /port\.addEventListener\('message',[\s\S]{0,180}\{ once: true \}/,
     'unrelated worker messages should not consume the startup acknowledgement listener'
   )
+  assert.match(
+    vm,
+    /async function awaitContextWorkerReady[\s\S]*catch \(error\)[\s\S]*contextWorker = null[\s\S]*closeContextWorker\(worker\)/,
+    'failed VM worker startup should clear the cached worker and release its ports'
+  )
+  assert.match(
+    vm,
+    /worker\.port\.addEventListener\('message',[\s\S]*type === 'terminate-worker'[\s\S]*closeContextWorker\(worker\)/,
+    'VM worker termination should be observed on the worker message port'
+  )
+  assert.doesNotMatch(
+    vm,
+    /contextWorker\.addEventListener\('message'/,
+    'VM worker messages should not be observed on the SharedWorker wrapper'
+  )
+  assert.match(
+    sharedWorkerInit,
+    /const installations = new Map\(\)[\s\S]*function ensureWorkerInstalled[\s\S]*if \(installations\.has\(info\.hash\)\)[\s\S]*return installations\.get\(info\.hash\)[\s\S]*waitForWorkerInstallation/,
+    'concurrent clients should share the same SharedWorker installation promise'
+  )
+  assert.match(
+    sharedWorkerInit,
+    /export async function onConnect[\s\S]*const worker = await ensureWorkerInstalled\(info\)[\s\S]*worker\.postMessage\(\{ connect: info \}\)/,
+    'connections should not reach a SharedWorker before installation completes'
+  )
+  assert.match(
+    sharedWorkerRuntime,
+    /let installation = null[\s\S]*installation = install\(data\.install\)[\s\S]*await installation[\s\S]*dispatchConnection\(data\.connect\)/,
+    'the SharedWorker runtime should serialize install and connect messages'
+  )
+  assert.match(
+    sharedWorkerRuntime,
+    /async function install \(info\)[\s\S]*try \{[\s\S]*await installWorker\(info\)[\s\S]*catch \(err\)[\s\S]*reportWorkerError\(info\?\.id, err\)/,
+    'all SharedWorker installation phases should report failures'
+  )
+  assert.match(
+    sharedWorkerRuntime,
+    /try \{\s+dispatchConnection\(data\.connect\)\s+\} catch \(err\) \{\s+reportWorkerError\(data\.connect\.id, err\)/,
+    'connection deserialization and dispatch failures should reach the client'
+  )
+  assert.match(
+    sharedWorkerRuntime,
+    /Environment\.open\(\{[\s\S]*type: 'sharedWorker',[\s\S]*scope: String\(id\)[\s\S]*\}\)/,
+    'each SharedWorker should open an environment scoped to its identity'
+  )
+  assert.match(
+    sharedWorkerRuntime,
+    /new MessageEvent\('connect', \{ data: connection \}\)/,
+    'module connect handlers should receive the connection metadata'
+  )
+  assert.doesNotMatch(
+    sharedWorkerRuntime,
+    /module\.reportError\.bind/,
+    'CommonJS worker error handlers should be bound from module.exports'
+  )
+  assert.match(
+    sharedWorker,
+    /function registerWorker[\s\S]*new Set\(\)[\s\S]*export async function init[\s\S]*const registration = registerWorker\(sharedWorker\)[\s\S]*await application\.getCurrentWindow\(\)/,
+    'SharedWorker errors should reach every registered client, including during startup'
+  )
+  assert.match(
+    sharedWorkerInit,
+    /this\.addEventListener\('error',[\s\S]*SharedWorker bootstrap failed[\s\S]*channel\.postMessage/,
+    'native worker bootstrap errors should be forwarded to SharedWorker clients'
+  )
+  assert.match(
+    sharedWorker,
+    /const port = serialize\([\s\S]*IPCMessagePort\.transfer\(sharedWorker\.channel\.port2\)[\s\S]*await currentWindow\.send\([\s\S]*port,/,
+    'the transferred port relay should be active before the worker can acknowledge'
+  )
+  assert.match(
+    sharedWorker,
+    /const id = crypto\.murmur3\(`\$\{url\.toString\(\)\}\\0\$\{name \?\? ''\}`\)/,
+    'SharedWorker identity should include the complete URL and worker name'
+  )
 })
 
 test('macOS window teardown preserves WebKit-owned views', () => {
@@ -917,6 +993,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const cflags = readFile('bin/cflags.sh')
   const ldflags = readFile('bin/ldflags.sh')
   const installer = readFile('bin/install.sh')
+  const runtimeBuilder = readFile('bin/build-runtime-library.sh')
   const bridge = readFile('src/runtime/bridge/bridge.cc')
   const processService = readFile('src/runtime/core/services/process.cc')
   const secureStorage = readFile('src/runtime/core/services/secure_storage.cc')
@@ -928,6 +1005,10 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const dbusService = readFile('src/runtime/core/services/dbus.cc')
   const hid = readFile('src/runtime/core/services/hid/windows_backend.cc')
   const routes = readFile('src/runtime/ipc/routes.cc')
+  const tlsClient = readFile('src/runtime/tls/client_schannel_windows.cc')
+  const tlsServer = readFile('src/runtime/tls/server_schannel_windows.cc')
+  const tlsServerHeader = readFile('src/runtime/tls/server.hh')
+  const tlsUtil = readFile('src/runtime/tls/schannel_util_windows.hh')
 
   assert.match(
     platform,
@@ -996,8 +1077,13 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.doesNotMatch(
     appWindow,
-    /dynamic_cast<Window\*>|->bridge\.emit|->evalDom(?:Focus|Blur)Throttled/,
+    /dynamic_cast<[^>]*Window\*>|->bridge\.emit|->evalDom(?:Focus|Blur)Throttled/,
     'the Windows app should qualify window types and use public shared-pointer APIs'
+  )
+  assert.match(
+    appWindow,
+    /static_cast<oro::runtime::window::Window\*>\(window\)/,
+    'known managed windows should use a valid derived-to-base cast'
   )
   assert.match(
     appWindow,
@@ -1008,6 +1094,11 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     appWindow,
     /auto userconfig/,
     'the Windows app should preserve the declared userConfig identifier casing'
+  )
+  assert.match(
+    appWindow,
+    /app->wcex = \{\};[\s\S]*app->wcex\.cbSize[\s\S]*RegisterClassEx\(&app->wcex\)/,
+    'the Windows app should initialize and register its declared window class member'
   )
   assert.match(
     bluetooth,
@@ -1029,6 +1120,26 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     /struct RequestState \{[\s\S]*HID::RequestDeviceOptions options;[\s\S]*Vector<HID::Backend::DeviceDescriptor> pending;/,
     'the Windows HID backend should declare its pending request state'
   )
+  assert.match(
+    hid,
+    /#include "\.\.\/\.\.\/\.\.\/app\.hh"[\s\S]*#include "\.\.\/\.\.\/\.\.\/platform\/types\.hh"/,
+    'the Windows HID backend should resolve runtime headers from its nested service directory'
+  )
+  assert.match(
+    hid,
+    /SetupDiEnumDeviceInterfaces\(/,
+    'the Windows HID backend should call the declared SetupAPI interface enumerator'
+  )
+  assert.doesNotMatch(
+    hid,
+    /SetupDiEnumDeviceInterface\(/,
+    'the Windows HID backend should not call the nonexistent singular SetupAPI enumerator'
+  )
+  assert.doesNotMatch(
+    hid,
+    /\[className\]\(\)|base64::encode\(payload\)|it->second\.running/,
+    'the Windows HID backend should use valid static storage, buffer encoding, and shared-pointer access'
+  )
   assert.doesNotMatch(
     hid,
     /void dispatchDeviceEvent\([^{};]*\)\s*;|DeviceDescriptor makeRemovedDescriptor\([^{};]*\)\s*;|LRESULT CALLBACK NotificationWindowProc\([^{};]*\)\s*;/,
@@ -1043,6 +1154,62 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     platformWindow,
     /app->instance[\s\S]*navigateHandler[\s\S]*evaluateJavaScriptHandler/,
     'the Windows window backend should use current application and navigation members'
+  )
+  assert.match(
+    platformWindow,
+    /#include "\.\.\/env\.hh"[\s\S]*using oro::runtime::string::convertStringToWString;[\s\S]*env::get\("APPDATA"\)[\s\S]*config::isDebugEnabled\(\)/,
+    'the Windows window backend should use current namespaced runtime helpers'
+  )
+  assert.match(
+    runtimeBuilder,
+    /--syntax-only[\s\S]*-fsyntax-only "\$source"/,
+    'the runtime builder should expose a compiler-backed source syntax check'
+  )
+  assert.match(
+    installer,
+    /_prepare\s+cd "\$BUILD_DIR" \|\| exit 1[\s\S]{0,160}_get_web_view2\s+_check_windows_runtime_source_syntax[\s\S]*_compile_llama/,
+    'Windows CI should check runtime source syntax before compiling dependencies'
+  )
+  assert.match(
+    installer,
+    /ORO_TLS_BUILD_PROVIDER=schannel "\$root\/bin\/build-runtime-library\.sh"[\s\S]*--syntax-only/,
+    'the Windows source preflight should compile the platform-native TLS provider'
+  )
+  assert.match(
+    [tlsClient, tlsServer].join('\n'),
+    /#define SECURITY_WIN32 1[\s\S]*PCERT_ALT_NAME_INFO[\s\S]*CERT_KEY_CONTEXT[\s\S]*SecApplicationProtocolNegotiationStatus_Success[\s\S]*DWORD shutdownToken = SCHANNEL_SHUTDOWN/,
+    'Schannel sources should use declarations provided by the Windows SDK'
+  )
+  assert.match(
+    tlsUtil,
+    /NCRYPTBUFFER_PKCS_SECRET[\s\S]*NCryptImportKey[\s\S]*NCRYPT_DO_NOT_FINALIZE_FLAG/,
+    'encrypted PKCS#8 keys should be imported through the supported CNG password interface'
+  )
+  assert.match(
+    tlsServerHeader,
+    /private:\s+void close\(\);/,
+    'the Schannel server cleanup implementation should have a class declaration'
+  )
+  assert.doesNotMatch(
+    [tlsClient, tlsServer, tlsUtil].join('\n'),
+    /ERROR_BAD_PASSWORD|PCCERT_ALT_NAME_INFO|CRYPT_KEY_CONTEXT|fCallerFreeProvOrNCryptKey|CryptDecryptPrivateKeyInfo|\.ProtoStatus|\bApplicationProtocolNegotiationStatus_Success|SCHANNEL_SHUTDOWN token/,
+    'Schannel sources should not reference nonexistent Windows SDK declarations'
+  )
+})
+
+test('local native includes are validated by the fast lint entrypoint', () => {
+  const packageMetadata = JSON.parse(readFile('package.json'))
+  const checker = readFile('bin/check-local-includes.js')
+
+  assert.match(
+    packageMetadata.scripts.lint,
+    /^npm run lint:includes/,
+    'native include validation should run before the more expensive lint stages'
+  )
+  assert.match(
+    checker,
+    /specifier\.startsWith\('\.'\)[\s\S]*fs\.existsSync\(target\)/,
+    'the native include checker should reject unresolved relative includes'
   )
 })
 
@@ -1074,6 +1241,16 @@ test('append writes preserve kernel-managed file positions', () => {
     routes,
     /int64_t offset = 0;[\s\S]*REQUIRE_AND_GET_MESSAGE_VALUE\(offset, "offset", std::stoll\)/,
     'the file-write IPC route should preserve signed 64-bit positions'
+  )
+})
+
+test('VM workers initialize from the explicit shared-worker scope', () => {
+  const worker = readFile('api/vm/worker.js')
+
+  assert.match(
+    worker,
+    /globalThis\.isSharedWorkerScope === true \|\|\s+\(globalThis\.self && !globalThis\.window\)/,
+    'VM workers should initialize when the runtime identifies their shared-worker scope'
   )
 })
 

@@ -40,11 +40,12 @@ namespace oro::runtime::tls {
       int getNegotiatedALPN(types::String& alpn);
       void enqueueWrite(const unsigned char* data, size_t len);
       void flushPendingWrites();
-	      int shutdown();
-	      const types::String& lastErrorMessage() const;
-	      long lastErrorCode() const;
+      int shutdown();
+      const types::String& lastErrorMessage() const;
+      long lastErrorCode() const;
 
-	    private:
+    private:
+      void close();
       loop::Loop& loop;
       Options options;
       struct Impl; Impl* impl = nullptr;

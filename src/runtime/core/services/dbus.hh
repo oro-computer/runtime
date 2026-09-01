@@ -3,7 +3,7 @@
 
 #include "../../core.hh"
 #include "../../ipc.hh"
-#include "../../../include/oro/dbus.h"
+#include <oro/dbus.h>
 
 namespace oro::runtime::core::services {
   class DBus : public core::Service {

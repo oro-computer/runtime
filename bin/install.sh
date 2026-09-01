@@ -819,6 +819,24 @@ function _build_runtime_library() {
   die "$runtime_status" "not ok - unable to build runtime library"
 }
 
+function _check_windows_runtime_source_syntax() {
+  if [[ "$host" != "Win32" ]]; then
+    return
+  fi
+
+  local enabled="${ORO_RUNTIME_SOURCE_PREFLIGHT:-${CI:-}}"
+  if [[ "$enabled" != "1" ]] && [[ "$enabled" != "true" ]]; then
+    return
+  fi
+
+  echo "# checking Windows runtime source syntax before dependency compilation"
+  ORO_TLS_BUILD_PROVIDER=schannel "$root/bin/build-runtime-library.sh" \
+    --arch "$(host_arch)" \
+    --platform desktop \
+    --syntax-only
+  die $? "not ok - Windows runtime source syntax check failed"
+}
+
 function _get_web_view2() {
   if [[ "$(uname -s)" != *"_NT"* ]] && [ -z "$FORCE_WEBVIEW2_DOWNLOAD" ]; then
     return
@@ -4016,6 +4034,9 @@ cd "$BUILD_DIR" || exit 1
 
 trap onsignal INT TERM
 
+_get_web_view2
+_check_windows_runtime_source_syntax
+
 if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
   quiet xcode-select -p
   die $? "not ok - xcode needs to be installed from the mac app store: https://apps.apple.com/us/app/xcode/id497799835"
@@ -4145,8 +4166,6 @@ echo "ok - copied headers"
 cd "$CWD" || exit 1
 
 cd "$BUILD_DIR" || exit 1
-
-_get_web_view2
 
 _check_compiler_features
 _build_runtime_library

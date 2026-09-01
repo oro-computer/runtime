@@ -48,6 +48,7 @@ declare args=()
 declare pids=()
 declare force=0
 declare ignore_header_mtimes=0
+declare syntax_only=0
 declare d=""
 
 declare arch="$(host_arch)"
@@ -111,6 +112,10 @@ while (( $# > 0 )); do
     ignore_header_mtimes=1; continue
   fi
 
+  if [[ "$arg" = "--syntax-only" ]]; then
+    syntax_only=1; continue
+  fi
+
   if [[ "$arg" = "--platform" ]]; then
     if [[ "$1" = "ios" ]] || [[ "$1" = "iPhoneOS" ]] || [[ "$1" = "iphoneos" ]]; then
       arch="arm64"
@@ -137,7 +142,7 @@ done
 declare objects=()
 
 declare sqlite_amalgamation="$root/build/sqlite/sqlite3.c"
-if [[ ! -f "$sqlite_amalgamation" ]]; then
+if (( ! syntax_only )) && [[ ! -f "$sqlite_amalgamation" ]]; then
   echo >&2 "not ok - missing sqlite amalgamation. run bin/fetch-sqlite.sh first."
   exit 1
 fi
@@ -190,15 +195,19 @@ declare sources=(
   $(find "$root"/src/runtime/window/dialog.cc)
   $(find "$root"/src/runtime/window/hotkey.cc)
   $(find "$root"/src/runtime/window/manager.cc)
-
-  ## deps
-  "$root/build/sqlite/sqlite3.c"
-  "$root/build/llama/common/log.cpp"
-  "$root/build/llama/common/common.cpp"
-  "$root/build/llama/common/sampling.cpp"
-  "$root/build/llama/common/json-schema-to-grammar.cpp"
-  "$root/build/llama/src/llama.cpp"
 )
+
+if (( ! syntax_only )); then
+  sources+=(
+    ## deps
+    "$root/build/sqlite/sqlite3.c"
+    "$root/build/llama/common/log.cpp"
+    "$root/build/llama/common/common.cpp"
+    "$root/build/llama/common/sampling.cpp"
+    "$root/build/llama/common/json-schema-to-grammar.cpp"
+    "$root/build/llama/src/llama.cpp"
+  )
+fi
 
 declare has_asn1c_sources=0
 declare asn1_source_dirs=(
@@ -207,13 +216,15 @@ declare asn1_source_dirs=(
 
 if [[ -d "$root/build/asn1c" ]]; then
   has_asn1c_sources=1
-  for dir in "${asn1_source_dirs[@]}"; do
-    if [[ -d "$dir" ]]; then
-      while IFS= read -r file; do
-        sources+=("$file")
-      done < <(find "$dir" -maxdepth 1 -type f -name '*.c' 2>/dev/null)
-    fi
-  done
+  if (( ! syntax_only )); then
+    for dir in "${asn1_source_dirs[@]}"; do
+      if [[ -d "$dir" ]]; then
+        while IFS= read -r file; do
+          sources+=("$file")
+        done < <(find "$dir" -maxdepth 1 -type f -name '*.c' 2>/dev/null)
+      fi
+    done
+  fi
 else
   echo "# warn - build/asn1c not found; skipping ASN.1 integration" >&2
 fi
@@ -294,10 +305,12 @@ else
 fi
 
 declare output_directory="$root/build/$arch-$platform"
-mkdir -p "$output_directory"
+if (( ! syntax_only )); then
+  mkdir -p "$output_directory"
+fi
 
 declare runtime_compiler_launcher=""
-if [[ "$host" = "Win32" ]] && command -v sccache >/dev/null 2>&1; then
+if (( ! syntax_only )) && [[ "$host" = "Win32" ]] && command -v sccache >/dev/null 2>&1; then
   # The Windows installer selects clang++ by absolute path, bypassing CMake's
   # compiler launcher. Invoke sccache directly for runtime object compilation.
   runtime_compiler_launcher="sccache"
@@ -350,26 +363,30 @@ fi
 
 cd "$(dirname "$output_directory")"
 
-echo "# building runtime static libary ($arch-$platform)"
-for source in "${sources[@]}"; do
-  declare src_directory="$root/src"
+if (( syntax_only )); then
+  echo "# checking runtime source syntax ($arch-$platform)"
+else
+  echo "# building runtime static library ($arch-$platform)"
+  for source in "${sources[@]}"; do
+    declare src_directory="$root/src"
 
-  declare object="${source/.cc/$d.o}"
-  object="${object/.cpp/$d.o}"
-  object="${object/.c/$d.o}"
+    declare object="${source/.cc/$d.o}"
+    object="${object/.cpp/$d.o}"
+    object="${object/.c/$d.o}"
 
-  declare build_dir="$root/build"
+    declare build_dir="$root/build"
 
-  if [[ "$object" =~ ^"$src_directory" ]]; then
-    object="${object/$src_directory/$output_directory}"
-  else
-    object="${object/$build_dir/$output_directory}"
-  fi
+    if [[ "$object" =~ ^"$src_directory" ]]; then
+      object="${object/$src_directory/$output_directory}"
+    else
+      object="${object/$build_dir/$output_directory}"
+    fi
 
-  objects+=("$object")
-done
+    objects+=("$object")
+  done
 
-objects+=("$output_directory/llama/build-info.o")
+  objects+=("$output_directory/llama/build-info.o")
+fi
 
 function generate_llama_build_info () {
   build_number="0"
@@ -443,14 +460,16 @@ function main () {
   local compile_status=0
   local compile_rc=0
 
-  mkdir -p "$output_directory/include"
-  cp -rf "$root/include"/* "$output_directory/include"
-  rm -f "$output_directory/include/oro/_user-config-bytes.hh"
+  if (( ! syntax_only )); then
+    mkdir -p "$output_directory/include"
+    cp -rf "$root/include"/* "$output_directory/include"
+    rm -f "$output_directory/include/oro/_user-config-bytes.hh"
 
-  generate_llama_build_info || return $?
+    generate_llama_build_info || return $?
 
-  if [[ "$host" = "Linux" ]] && [[ "$platform" = "desktop" ]]; then
-    build_linux_desktop_extension_object || return $?
+    if [[ "$host" = "Linux" ]] && [[ "$platform" = "desktop" ]]; then
+      build_linux_desktop_extension_object || return $?
+    fi
   fi
 
   for source in "${sources[@]}"; do
@@ -513,7 +532,11 @@ function main () {
         object="${object/$build_dir/$output_directory}"
       fi
 
-      if
+      if (( syntax_only )); then
+        echo "# checking syntax ($arch-$platform) $(basename "$source")"
+        run_runtime_compiler "$compiler" "${compile_flags[@]}" -fsyntax-only "$source" || onsignal
+        echo "ok - checked ${source/$src_directory\//} ($arch-$platform)"
+      elif
         (( force )) ||
         ! test -f "$object" ||
         (( $(stat_mtime "$source") > $(stat_mtime "$object") )) ||
@@ -538,8 +561,17 @@ function main () {
   pids=()
 
   if (( compile_status != 0 )); then
-    echo >&2 "not ok - failed to compile runtime objects ($arch-$platform)"
+    if (( syntax_only )); then
+      echo >&2 "not ok - runtime source syntax check failed ($arch-$platform)"
+    else
+      echo >&2 "not ok - failed to compile runtime objects ($arch-$platform)"
+    fi
     return 1
+  fi
+
+  if (( syntax_only )); then
+    echo "ok - runtime source syntax check passed ($arch-$platform)"
+    return 0
   fi
 
   declare base_lib="$canonical_runtime_lib_prefix"
