@@ -893,8 +893,13 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
 
   assert.match(
     platform,
-    /#define NOMINMAX[\s\S]*#include <windows\.h>[\s\S]*#include <roapi\.h>[\s\S]*#include <wrl\.h>[\s\S]*#undef interface/,
-    'Windows SDK macros must not replace C++ identifiers such as min, max, and interface'
+    /#define NOMINMAX[\s\S]*#include <windows\.h>[\s\S]*#include <roapi\.h>[\s\S]*#include <wrl\.h>/,
+    'Windows SDK compatibility macros and headers should be ordered correctly'
+  )
+  assert.doesNotMatch(
+    platform,
+    /#undef interface/,
+    'the Windows interface macro must remain available to WinRT headers included by platform sources'
   )
   assert.match(
     cflags,
