@@ -1126,7 +1126,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     platformWindow,
-    /namespace oro::runtime::window \{[\s\S]*class DragDrop : public IDropTarget[\s\S]*Window::Window/,
+    /namespace oro::runtime::window \{[\s\S]*class DragDrop final : public IDropTarget[\s\S]*Window::Window/,
     'the Windows implementation and drag-drop type should compile in the declared window namespace'
   )
   assert.doesNotMatch(
@@ -2232,7 +2232,7 @@ test('CI caches dependencies and runs focused platform coverage', () => {
   )
   assert.match(
     workflow,
-    /Linux arm64[\s\S]*install_tests: false[\s\S]*macOS \+ iOS x64[\s\S]*install_tests: false/,
+    /Linux arm64[\s\S]*install_tests: false[\s\S]*macOS x64[\s\S]*install_tests: false/,
     'architecture-only lanes should build and smoke test without installing the integration harness'
   )
   assert.equal(
