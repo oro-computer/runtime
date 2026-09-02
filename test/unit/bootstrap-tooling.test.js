@@ -1054,7 +1054,7 @@ test('Windows AI archives are installed and linked with shared ggml', () => {
   )
   assert.match(
     install,
-    /local ggml_dir="\$BUILD_DIR\/\$target-\$platform\/lib\$d\/cmake\/ggml"[\s\S]*?WHISPER_USE_SYSTEM_GGML=ON[\s\S]*?_cmake_configure \.\. \. \\\s+-DCMAKE_INSTALL_PREFIX=.*?cmake --install \. --config "\$config"[\s\S]*?missing installed whisper\.lib/,
+    /local ggml_dir="\$BUILD_DIR\/\$target-\$platform\/lib\$d\/cmake\/ggml"[\s\S]*?WHISPER_USE_SYSTEM_GGML=ON[\s\S]*?_cmake_configure \.\. \. \\\s+-DCMAKE_INSTALL_PREFIX=[\s\S]*?cmake --install \. --config "\$config"[\s\S]*?missing installed whisper\.lib/,
     'Whisper should reuse the installed llama ggml package and install its archive before linking'
   )
 })
@@ -2070,7 +2070,7 @@ test('native dependency builds do not perform serial work before parallel builds
   )
   assert.match(
     installer,
-    /cmake --build \. --config \$config --parallel "\$CPU_CORES"/,
+    /cmake --build \. --config "\$config" --parallel "\$CPU_CORES"/,
     'Windows CMake builds should use detected CPU parallelism'
   )
   assert.match(
