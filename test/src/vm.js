@@ -1,6 +1,15 @@
 import test from 'oro:test'
 import vm from 'oro:vm'
 
+function withTimeout (promise, milliseconds, message) {
+  let timer = null
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), milliseconds)
+  })
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
 test('vm.runInContext(source) - simple', async (t) => {
   t.equal(await vm.runInContext('1 + 2 + 3'), 6, 'vm.runInContext("1 + 2 + 3")')
   t.deepEqual(
@@ -73,33 +82,50 @@ test('vm.runInContext(source, context) - transferables', async (t) => {
     scope: {}
   }
 
-  await vm.runInContext(
-    `
-    let port = null
+  try {
+    await withTimeout(
+      vm.runInContext(
+        `
+        let port = null
 
-    scope.setMessagePort = (value) => {
-      port = value
-      port.onmessage = (event) => port.postMessage(event.data)
-    }
+        scope.setMessagePort = (value) => {
+          port = value
+          port.onmessage = (event) => port.postMessage(event.data)
+        }
 
-    scope.decoded = new TextDecoder().decode(buffer)
-  `,
-    { context }
-  )
+        scope.decoded = new TextDecoder().decode(buffer)
+      `,
+        { context }
+      ),
+      10_000,
+      'VM transferable context setup timed out'
+    )
 
-  await context.scope.setMessagePort(channel.port2)
-  t.equal(
-    'hello world',
-    context.scope.decoded,
-    'context.scope.decoded === "hello world"'
-  )
-  channel.port1.postMessage(context.scope.decoded)
-  await new Promise((resolve) => {
-    channel.port1.onmessage = (event) => {
-      t.equal('hello world', event.data, 'port1 message is "hello world"')
-      resolve()
-    }
-  })
+    await withTimeout(
+      context.scope.setMessagePort(channel.port2),
+      10_000,
+      'VM MessagePort transfer timed out'
+    )
+    t.equal(
+      'hello world',
+      context.scope.decoded,
+      'context.scope.decoded === "hello world"'
+    )
+    channel.port1.postMessage(context.scope.decoded)
+    await withTimeout(
+      new Promise((resolve) => {
+        channel.port1.onmessage = (event) => {
+          t.equal('hello world', event.data, 'port1 message is "hello world"')
+          resolve()
+        }
+      }),
+      10_000,
+      'VM MessagePort echo timed out'
+    )
+  } finally {
+    channel.port1.close()
+    channel.port2.close()
+  }
 })
 
 test('vm.runInContext(source, context) - ESM', async (t) => {

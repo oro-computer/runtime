@@ -1,6 +1,30 @@
 import application from '../application.js'
+import serialize from '../internal/serialize.js'
+import ipc from '../ipc.js'
 import * as vm from '../vm.js'
 import hooks from '../hooks.js'
+
+function serializeWindowMessage (message) {
+  const transfers = new Set()
+  const serialized = serialize(ipc.findIPCMessageTransfers(transfers, message))
+
+  for (const transfer of transfers) {
+    if (transfer instanceof ipc.IPCMessagePort) {
+      ipc.IPCMessagePort.transfer(transfer)
+    }
+  }
+
+  return serialized
+}
+
+function createTransferredError (error) {
+  return {
+    name: error?.name ?? 'Error',
+    type: error?.constructor?.name ?? 'Error',
+    message: error?.message ?? String(error ?? ''),
+    stack: error?.stack
+  }
+}
 
 class World extends EventTarget {
   ready = null
@@ -13,9 +37,42 @@ class World extends EventTarget {
     this.state = state
     this.id = id
     this.frame = createWorld({ id })
-    this.ready = new Promise((resolve) => {
-      this.frame.contentWindow.addEventListener('load', resolve, { once: true })
+    this.ready = new Promise((resolve, reject) => {
+      let timeout = null
+
+      const cleanup = () => {
+        clearTimeout(timeout)
+        this.frame.removeEventListener('load', onLoad)
+        this.frame.removeEventListener('error', onError)
+      }
+
+      const finish = (error = null) => {
+        cleanup()
+        if (error) {
+          reject(error)
+        } else {
+          resolve()
+        }
+      }
+
+      const onLoad = () => finish()
+      const onError = (event) => {
+        finish(new Error(`Failed to load VM world ${id}`, { cause: event }))
+      }
+
+      this.frame.addEventListener('load', onLoad, { once: true })
+      this.frame.addEventListener('error', onError, { once: true })
+      timeout = setTimeout(() => {
+        finish(new Error(`VM world ${id} did not load`))
+      }, 10_000)
     })
+
+    const target =
+      globalThis.document.head ??
+      globalThis.document.body ??
+      globalThis.document
+
+    target.appendChild(this.frame)
   }
 
   async postMessage (...args) {
@@ -84,17 +141,14 @@ class State {
   }
 
   onMessage (event) {
-    if (event.data?.type === 'world.result') {
-      const transfer = []
-      vm.findMessageTransfers(transfer, event.data)
-      this.worker.port.postMessage(
-        { ...event.data, type: 'result' },
-        { transfer }
-      )
+    const data = event.data
+
+    if (data?.type === 'world.result') {
+      this.worker.port.postMessage({ ...data, type: 'result' })
     }
 
-    if (event.data?.type === 'world.destroy') {
-      const { id } = event.data
+    if (data?.type === 'world.destroy') {
+      const { id } = data
       const world = this.worlds.get(id)
       if (world) {
         world.dispatchEvent(new Event('destroyed'))
@@ -120,17 +174,28 @@ class State {
     }
 
     if (event.data?.type === 'script') {
-      const { id } = event.data
-      const transfer = []
+      const { id, nonce } = event.data
       const world = this.worlds.get(id) ?? new World(this, id)
 
       if (!this.worlds.has(id)) {
         this.worlds.set(id, world)
       }
 
-      vm.findMessageTransfers(transfer, event.data)
+      try {
+        await world.postMessage(serializeWindowMessage(event.data))
+      } catch (error) {
+        this.worlds.delete(id)
+        if (world.frame?.parentElement) {
+          world.frame.parentElement.removeChild(world.frame)
+        }
 
-      world.postMessage(event.data, { transfer })
+        this.worker.port.postMessage({
+          type: 'result',
+          err: createTransferredError(error),
+          nonce,
+          id
+        })
+      }
     }
 
     if (event.data?.type === 'destroy') {
@@ -162,11 +227,6 @@ function createWorld (options) {
     height: 0,
     display: 'none'
   })
-
-  const target =
-    globalThis.document.head ?? globalThis.document.body ?? globalThis.document
-
-  target.appendChild(frame)
 
   return frame
 }

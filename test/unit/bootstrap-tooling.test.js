@@ -703,6 +703,11 @@ test('runtime library rebuilds first-party objects after header changes', () => 
     /\$ar crs[\s\S]*archive_rc=\$\?[\s\S]*rm -rf "\$stage_dir"/,
     'archive staging should be removed after both successful and failed archive attempts'
   )
+  assert.match(
+    script,
+    /archive_inputs="\$\(printf '%s\\n' "\$\{objects\[@\]\}"\)"[\s\S]*cat "\$archive_inputs_file"[\s\S]*build_static=1[\s\S]*printf '%s\\n' "\$archive_inputs" > "\$archive_inputs_file"/,
+    'the static archive should be rebuilt when its selected object surface changes'
+  )
 })
 
 test('build cleanup separates disposable staging from expensive caches', () => {
@@ -838,6 +843,7 @@ test('VM context windows use an explicit startup handshake', () => {
   const workerThreads = readFile('api/worker_threads.js')
   const vmWorker = readFile('api/vm/worker.js')
   const vmInit = readFile('api/vm/init.js')
+  const vmWorld = readFile('api/vm/world.js')
   const sharedWorker = readFile('api/shared-worker/index.js')
   const sharedWorkerInit = readFile('api/shared-worker/init.js')
   const sharedWorkerRuntime = readFile('api/shared-worker/worker.js')
@@ -936,8 +942,40 @@ test('VM context windows use an explicit startup handshake', () => {
   )
   assert.match(
     ipc,
-    /\[Symbol\.for\('oro\.runtime\.serialize'\)\][\s\S]*transferred: true,[\s\S]*\/\/ swap rx\/tx/,
+    /static transfer \(port\)[\s\S]*IPCMessagePort\.ports\.delete\(port\.id\)[\s\S]*\[Symbol\.for\('oro\.runtime\.serialize'\)\][\s\S]*transferred: true,[\s\S]*\/\/ swap rx\/tx/,
     'a received IPC port should preserve its channel orientation when transferred through another worker hop'
+  )
+  for (const source of [vmInit, vmWorld]) {
+    assert.match(
+      source,
+      /function serializeWindowMessage[\s\S]*serialize\(ipc\.findIPCMessageTransfers\(transfers, message\)\)[\s\S]*ipc\.IPCMessagePort\.transfer\(transfer\)/,
+      'VM window boundaries should serialize logical IPC ports before native structured cloning'
+    )
+  }
+  assert.match(
+    vmInit,
+    /this\.worker\.port\.postMessage\(\{ \.\.\.data, type: 'result' \}\)[\s\S]*await world\.postMessage\(serializeWindowMessage\(event\.data\)\)/,
+    'the VM coordinator should preserve serialized results and serialize worker messages sent to a world'
+  )
+  assert.match(
+    vmInit,
+    /frame\.addEventListener\('load'[\s\S]*setTimeout\(\(\) => \{[\s\S]*VM world \$\{id\} did not load[\s\S]*10_000[\s\S]*target\.appendChild\(this\.frame\)/,
+    'VM worlds should install load listeners before attachment and reject stalled loads promptly'
+  )
+  assert.match(
+    vmInit,
+    /catch \(error\) \{[\s\S]*this\.worlds\.delete\(id\)[\s\S]*type: 'result',[\s\S]*err: createTransferredError\(error\)/,
+    'VM coordinator forwarding errors should be returned to the waiting script call'
+  )
+  assert.match(
+    vmWorld,
+    /function postWorldResult[\s\S]*realm\.postMessage\(serializeWindowMessage\(message\)\)[\s\S]*const eventData = ipc\.inflateIPCMessageTransfers\(event\.data\)/,
+    'VM worlds should inflate coordinator messages and serialize their results'
+  )
+  assert.match(
+    vm,
+    /event\.data\?\.type === 'result'[\s\S]*inflateIPCMessageTransfers\(event\.data\)/,
+    'VM clients should inflate serialized world results after the final native message boundary'
   )
   assert.match(
     sharedWorkerInit,
@@ -1102,6 +1140,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const cflags = readFile('bin/cflags.sh')
   const ldflags = readFile('bin/ldflags.sh')
   const installer = readFile('bin/install.sh')
+  const pkgConfig = readFile('bin/generate-oro-runtime-pkg-config.sh')
   const runtimeBuilder = readFile('bin/build-runtime-library.sh')
   const bridge = readFile('src/runtime/bridge/bridge.cc')
   const processService = readFile('src/runtime/core/services/process.cc')
@@ -1140,6 +1179,26 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     cflags,
     /-DNOMINMAX[\s\S]*-DWINVER=0x0A00[\s\S]*-D_WIN32_WINNT=0x0A00[\s\S]*-DNTDDI_VERSION=0x0A000000/,
     'Windows SDK compatibility macros should be defined before any source header is included'
+  )
+  assert.match(
+    cflags,
+    /-Wl,\/NODEFAULTLIB:libcmt[\s\S]*-Wl,\/NXCOMPAT[\s\S]*-Wl,\/DYNAMICBASE[\s\S]*-Wl,\/HIGHENTROPYVA[\s\S]*-Wl,\/guard:cf/,
+    'Windows linker options should remain opaque to Git Bash path conversion'
+  )
+  assert.doesNotMatch(
+    [cflags, cli].join('\n'),
+    /-Xlinker \/(?:NODEFAULTLIB|NXCOMPAT|DYNAMICBASE|HIGHENTROPYVA|guard:cf)/,
+    'Windows build commands should not emit path-like slash linker arguments'
+  )
+  assert.equal(
+    (cli.match(/-Wl,\/NODEFAULTLIB:libcmt/g) || []).length,
+    2,
+    'CLI-generated Windows build commands should keep linker options opaque to Git Bash'
+  )
+  assert.match(
+    pkgConfig,
+    /ldflags\+=\("-Wl,\/NODEFAULTLIB:libcmt"\)/,
+    'Windows pkg-config metadata should expose linker options through Libs without path conversion'
   )
   assert.match(
     cflags,
@@ -1872,7 +1931,7 @@ test('Android CI compiles only the host runtime surface used by its CLI', () => 
   )
   assert.match(
     runtimeBuilder,
-    /host" = "Linux"[\s\S]*platform" = "desktop"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*sources=\([\s\S]*runtime\/config\/config\.cc[\s\S]*runtime\/mcp\/tool\.cc[\s\S]*runtime\/process\/unix\.cc[\s\S]*build\/sqlite\/sqlite3\.c[\s\S]*build\/llama\/src\/llama\.cpp/,
+    /host" = "Linux"[\s\S]*platform" = "desktop"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*sources=\([\s\S]*runtime\/config\/config\.cc[\s\S]*runtime\/mcp\/tool\.cc[\s\S]*runtime\/process\/unix\.cc[\s\S]*runtime\/version\.cc[\s\S]*build\/sqlite\/sqlite3\.c[\s\S]*build\/llama\/src\/llama\.cpp/,
     'the reduced host archive should retain every translation unit consumed by the Android build CLI'
   )
   assert.match(

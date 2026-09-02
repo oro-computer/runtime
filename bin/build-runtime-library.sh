@@ -324,6 +324,7 @@ if [[ "$host" = "Linux" ]] &&
     "$root/src/runtime/url/path.cc"
     "$root/src/runtime/url/search.cc"
     "$root/src/runtime/url/url.cc"
+    "$root/src/runtime/version.cc"
     "$root/src/runtime/webview/tls_pins.cc"
   )
 
@@ -663,6 +664,9 @@ function main () {
   #
   local build_static=0
   local static_library_mtime=$(stat_mtime "$static_library")
+  local archive_inputs_file="${static_library}.inputs"
+  local archive_inputs=""
+  archive_inputs="$(printf '%s\n' "${objects[@]}")"
 
   for source in "${objects[@]}"; do
     if ! test -f "$source"; then
@@ -674,6 +678,11 @@ function main () {
       # do not break early; we still want to validate all objects exist
     fi
   done
+
+  if [[ ! -f "$archive_inputs_file" ]] ||
+     [[ "$(cat "$archive_inputs_file")" != "$archive_inputs" ]]; then
+    build_static=1
+  fi
 
   if (( build_static )); then
     # Stage unique-named object entries for archiving
@@ -717,6 +726,7 @@ function main () {
     fi
 
     if [ -f "$static_library" ]; then
+      printf '%s\n' "$archive_inputs" > "$archive_inputs_file"
       echo "ok - built static library ($arch-$platform): $(basename "$static_library")"
       stage_runtime_compat_archives "$static_library"
     else

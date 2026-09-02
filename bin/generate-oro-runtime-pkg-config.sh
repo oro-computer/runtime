@@ -230,9 +230,9 @@ elif [ "$host" == "Win32" ]; then
       "-D_DLL"
       "-DWIN32"
       "-DWIN32_LEAN_AND_MEAN"
-      "-Xlinker" "/NODEFAULTLIB:libcmt"
       "-Wno-nonportable-include-path"
     )
+    ldflags+=("-Wl,/NODEFAULTLIB:libcmt")
   fi
 elif [ "$host" == "Darwin" ]; then
   if [ "$platform" == "desktop" ]; then

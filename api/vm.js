@@ -26,7 +26,7 @@
 
 /* eslint-disable no-new-func */
 /* global ErrorEvent, EventTarget, MessagePort */
-import { maybeMakeError } from './ipc.js'
+import { inflateIPCMessageTransfers, maybeMakeError } from './ipc.js'
 import { SharedWorker } from './shared-worker/index.js'
 import { isESMSource } from './util.js'
 import application from './application.js'
@@ -1192,19 +1192,19 @@ export class Script extends EventTarget {
           event.data?.nonce === nonce &&
           event.data?.type === 'result'
         ) {
+          const data = inflateIPCMessageTransfers(event.data)
           worker.port.removeEventListener('message', onMessage)
-          if (event.data.context) {
+          if (data.context) {
             applyContextDifferences(
               contextReference,
-              event.data.context,
+              data.context,
               contextReference
             )
           }
 
-          if (event.data.err) {
-            reject(maybeMakeError(event.data.err))
+          if (data.err) {
+            reject(maybeMakeError(data.err))
           } else {
-            const { data } = event
             const result = { data: data.data }
             // check if result data is an external reference
             const isReference = Reference.isReference(result.data)
@@ -1280,19 +1280,19 @@ export class Script extends EventTarget {
           event.data?.nonce === nonce &&
           event.data?.type === 'result'
         ) {
+          const data = inflateIPCMessageTransfers(event.data)
           worker.port.removeEventListener('message', onMessage)
-          if (event.data.context) {
+          if (data.context) {
             applyContextDifferences(
               contextReference,
-              event.data.context,
+              data.context,
               contextReference
             )
           }
 
-          if (event.data.err) {
-            reject(maybeMakeError(event.data.err))
+          if (data.err) {
+            reject(maybeMakeError(data.err))
           } else {
-            const { data } = event
             const result = { data: data.data }
             // check if result data is an external reference
             const isReference = Reference.isReference(result.data)

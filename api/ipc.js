@@ -1980,6 +1980,9 @@ export class IPCMessagePort extends MessagePort {
    */
   static transfer (port) {
     port[Symbol.for('oro.runtime.ipc.IPCMessagePort.transferred')] = true
+    if (port.id && IPCMessagePort.ports.get(port.id) === port) {
+      IPCMessagePort.ports.delete(port.id)
+    }
     return port
   }
 
@@ -2161,10 +2164,7 @@ export class IPCMessagePort extends MessagePort {
     options.transfer = Array.from(transfers)
     for (const entry of transfers) {
       if (entry instanceof IPCMessagePort) {
-        entry[Symbol.for('oro.runtime.ipc.IPCMessagePort.transferred')] = true
-        if (entry.id) {
-          IPCMessagePort.ports.delete(entry.id)
-        }
+        IPCMessagePort.transfer(entry)
       }
     }
 

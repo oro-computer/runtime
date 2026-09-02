@@ -1,7 +1,22 @@
 import * as vm from '../vm.js'
 import gc from '../gc.js'
+import serialize from '../internal/serialize.js'
+import ipc from '../ipc.js'
 
 let realm = null
+
+function serializeWindowMessage (message) {
+  const transfers = new Set()
+  const serialized = serialize(ipc.findIPCMessageTransfers(transfers, message))
+
+  for (const transfer of transfers) {
+    if (transfer instanceof ipc.IPCMessagePort) {
+      ipc.IPCMessagePort.transfer(transfer)
+    }
+  }
+
+  return serialized
+}
 
 function createTransferredError (error) {
   if (error instanceof Error) {
@@ -67,6 +82,21 @@ function createTransferredError (error) {
   }
 }
 
+function postWorldResult (message) {
+  try {
+    return realm.postMessage(serializeWindowMessage(message))
+  } catch (error) {
+    return realm.postMessage(
+      serializeWindowMessage({
+        type: 'world.result',
+        err: createTransferredError(error),
+        nonce: message.nonce,
+        id: message.id
+      })
+    )
+  }
+}
+
 const context = {}
 Object.defineProperty(globalThis, 'globalObject', {
   configurable: false,
@@ -79,19 +109,20 @@ globalThis.addEventListener('message', async (event) => {
     realm = event.source
   }
 
-  if (event.data?.type === 'script') {
-    const { id, mode, nonce, source } = event.data
+  const eventData = ipc.inflateIPCMessageTransfers(event.data)
+
+  if (eventData?.type === 'script') {
+    const { id, mode, nonce, source } = eventData
     const inputTransfers = []
-    const transfer = []
     let result
 
-    vm.findMessageTransfers(inputTransfers, event.data.context, {
+    vm.findMessageTransfers(inputTransfers, eventData.context, {
       ignoreScriptReferenceArgs: true
     })
 
     for (const value of inputTransfers) {
       if (value instanceof MessagePort) {
-        return realm.postMessage({
+        return postWorldResult({
           type: 'world.result',
           err: createTransferredError(
             new TypeError('MessagePort cannot be in context')
@@ -104,7 +135,7 @@ globalThis.addEventListener('message', async (event) => {
 
     const delta = vm.applyContextDifferences(
       context,
-      event.data.context,
+      eventData.context,
       context,
       true
     )
@@ -131,17 +162,13 @@ globalThis.addEventListener('message', async (event) => {
       })()
     } catch (err) {
       vm.applyOutputContextReferences(context)
-      vm.findMessageTransfers(transfer, context)
-      return realm.postMessage(
-        {
-          type: 'world.result',
-          err: createTransferredError(err),
-          context,
-          nonce,
-          id
-        },
-        { transfer }
-      )
+      return postWorldResult({
+        type: 'world.result',
+        err: createTransferredError(err),
+        context,
+        nonce,
+        id
+      })
     }
 
     if (typeof result === 'function') {
@@ -159,23 +186,18 @@ globalThis.addEventListener('message', async (event) => {
     }
 
     vm.applyOutputContextReferences(context)
-    vm.findMessageTransfers(transfer, context)
-    vm.findMessageTransfers(transfer, result)
 
-    return realm.postMessage(
-      {
-        type: 'world.result',
-        data: result,
-        context,
-        nonce,
-        id
-      },
-      { transfer }
-    )
+    return postWorldResult({
+      type: 'world.result',
+      data: result,
+      context,
+      nonce,
+      id
+    })
   }
 
-  if (event.data?.type === 'destroy') {
-    const { id } = event.data
+  if (eventData?.type === 'destroy') {
+    const { id } = eventData
     await gc.release()
     return realm.postMessage({ type: 'world.destroy', id })
   }
