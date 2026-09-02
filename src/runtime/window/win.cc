@@ -651,7 +651,6 @@ namespace oro::runtime::window {
           if (i < count - 1) {
             filesStringArray << ",";
           }
-
         }
 
         this->window->eval(
