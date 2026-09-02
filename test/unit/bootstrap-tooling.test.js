@@ -1030,6 +1030,29 @@ test('Linux window teardown completes synchronous GTK closes', () => {
   )
 })
 
+test('Linux headless focus changes bypass native compositor operations', () => {
+  const linuxWindow = readFile('src/runtime/window/linux.cc')
+  const focus = linuxWindow.match(
+    /void Window::focus \(\) \{([\s\S]*?)\n {2}\}\n\n {2}void Window::blur/
+  )?.[1]
+  const blur = linuxWindow.match(
+    /void Window::blur \(\) \{([\s\S]*?)\n {2}\}\n\n {2}void Window::setAlwaysOnTop/
+  )?.[1]
+
+  assert.ok(focus, 'the Linux focus implementation should exist')
+  assert.ok(blur, 'the Linux blur implementation should exist')
+  assert.match(
+    focus,
+    /options\.headless == false[\s\S]*gtk_window_present[\s\S]*evalDomFocusThrottled/,
+    'headless focus should mirror DOM state without presenting a hidden GTK window'
+  )
+  assert.match(
+    blur,
+    /options\.headless == false[\s\S]*gdk_window_lower[\s\S]*evalDomBlurThrottled/,
+    'headless blur should mirror DOM state without entering the native compositor'
+  )
+})
+
 test('Windows runtime builds avoid incompatible headers and archives', () => {
   const platform = readFile('src/runtime/platform/system.hh')
   const cflags = readFile('bin/cflags.sh')
@@ -1327,7 +1350,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   assert.match(
     installer,
     /_prepare\s+cd "\$BUILD_DIR" \|\| exit 1[\s\S]{0,160}_get_web_view2\s+_check_windows_runtime_source_syntax[\s\S]*_compile_llama/,
-    'Windows CI should check runtime source syntax before compiling dependencies'
+    'opt-in Windows source audits should run before dependency compilation'
   )
   assert.match(
     installer,
@@ -1741,7 +1764,7 @@ test('quiet native builds preserve command failure diagnostics', () => {
   )
   assert.doesNotMatch(
     workflow,
-    /VERBOSE: '1'/,
+    /VERBOSE: '1'|install\.ps1[^\n]*-verbose/i,
     'CI native builds should not stream successful compiler command output'
   )
   assert.match(
@@ -1791,6 +1814,32 @@ test('runtime target builds share the detected CPU budget', () => {
     runtimeBuilder,
     /host" = "Win32"[\s\S]*command -v sccache[\s\S]*runtime_compiler_launcher="sccache"[\s\S]*run_runtime_compiler/,
     'direct Windows runtime compilation should use the configured sccache service'
+  )
+})
+
+test('CI correctness builds avoid redundant native compile work', () => {
+  const cflags = readFile('bin/cflags.sh')
+  const workflow = readFile('.github/workflows/ci.yml')
+
+  assert.equal(
+    workflow.match(/ORO_CI_FAST_COMPILE: '1'/g)?.length,
+    2,
+    'Linux integration and cross-platform builds should both use fast correctness flags'
+  )
+  assert.match(
+    cflags,
+    /DEBUG[\s\S]*ORO_CI_FAST_COMPILE[\s\S]*-O0[\s\S]*ORO_RUNTIME_BUILD_DEBUG[\s\S]*ORO_CI_FAST_COMPILE[\s\S]*-O0[\s\S]*-Os/,
+    'CI should omit debug symbols and optimization work without changing release flags'
+  )
+  assert.match(
+    workflow,
+    /archive build compiles the complete Windows source surface[\s\S]*ORO_RUNTIME_SOURCE_PREFLIGHT=0/,
+    'Windows CI should not syntax-compile the full runtime immediately before compiling it again'
+  )
+  assert.match(
+    workflow,
+    /Reclaim Android build disk[\s\S]*cache_directories=\([\s\S]*sudo chown -R "\$USER":"\$android_group" "\$directory"[\s\S]*Restore Android build SDK cache/,
+    'Android SDK cache targets should be writable before archive restoration'
   )
 })
 

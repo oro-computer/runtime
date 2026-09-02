@@ -205,6 +205,7 @@ jobs:
       LIBGL_ALWAYS_SOFTWARE: '1'
       NO_ANDROID: '1'
       NO_IOS: '1'
+      ORO_CI_FAST_COMPILE: '1'
       ORO_CI_ID: linux-x64-node24
       ORO_SKIP_PATH_PROMPT: '1'
       ORO_TEST_HEADLESS: '1'
@@ -481,6 +482,7 @@ jobs:
       GSK_RENDERER: cairo
       LIBGL_ALWAYS_SOFTWARE: '1'
       ORO_CI_APPLE_MOBILE_TARGETS: ${{ matrix.apple_mobile_targets }}
+      ORO_CI_FAST_COMPILE: '1'
       ORO_CI_ID: ${{ matrix.id }}
       ORO_PRUNE_BUILD_OUTPUTS_AFTER_INSTALL: ${{ matrix.test_android }}
       ORO_PRUNE_IROH_BUILD_OUTPUTS: ${{ matrix.build_android }}
@@ -569,6 +571,33 @@ jobs:
           do
             if [[ -e "$directory" ]]; then
               sudo rm -rf -- "$directory"
+            fi
+          done
+          android_group="$(id -gn)"
+          for directory in \
+            "$ANDROID_HOME" \
+            "$ANDROID_HOME/build-tools" \
+            "$ANDROID_HOME/cmdline-tools" \
+            "$ANDROID_HOME/ndk" \
+            "$ANDROID_HOME/platforms"
+          do
+            if [[ -e "$directory" ]]; then
+              sudo chown "$USER":"$android_group" "$directory"
+            else
+              sudo install -d -o "$USER" -g "$android_group" "$directory"
+            fi
+          done
+          shopt -s nullglob
+          cache_directories=(
+            "$ANDROID_HOME/build-tools/36.0.0"
+            "$ANDROID_HOME/cmdline-tools/23.0"
+            "$ANDROID_HOME/ndk/29.0.14206865"
+            "$ANDROID_HOME/platform-tools"
+            "$ANDROID_HOME"/platforms/android-37*
+          )
+          for directory in "${cache_directories[@]}"; do
+            if [[ -e "$directory" ]]; then
+              sudo chown -R "$USER":"$android_group" "$directory"
             fi
           done
           sudo apt-get clean
@@ -690,6 +719,10 @@ jobs:
             echo "ORO_HOME=$RUNNER_TEMP/oro-ci-$ORO_CI_ID"
             echo "PREFIX=$RUNNER_TEMP/oro-ci-$ORO_CI_ID"
 
+            # The archive build compiles the complete Windows source surface.
+            # Do not syntax-compile every translation unit a second time first.
+            echo "ORO_RUNTIME_SOURCE_PREFLIGHT=0"
+
             if [[ "$EXCLUDE_ANDROID" == "true" ]]; then
               echo "NO_ANDROID=1"
             else
@@ -779,7 +812,7 @@ jobs:
         if: matrix.windows
         timeout-minutes: 20
         shell: pwsh
-        run: .\bin\install.ps1 -yesdeps -verbose
+        run: .\bin\install.ps1 -yesdeps
 
       - name: Validate staged target families
         if: runner.os != 'Windows'

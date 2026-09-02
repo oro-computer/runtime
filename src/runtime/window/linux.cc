@@ -2773,16 +2773,20 @@ namespace oro::runtime::window {
 
   void Window::focus () {
     if (this->window) {
-      gtk_window_present(GTK_WINDOW(this->window));
+      if (this->options.headless == false) {
+        gtk_window_present(GTK_WINDOW(this->window));
+      }
       this->evalDomFocusThrottled();
     }
   }
 
   void Window::blur () {
     if (this->window) {
-      auto gdk = gtk_widget_get_window(this->window);
-      if (gdk) {
-        gdk_window_lower(gdk);
+      if (this->options.headless == false) {
+        auto gdk = gtk_widget_get_window(this->window);
+        if (gdk) {
+          gdk_window_lower(gdk);
+        }
       }
       this->evalDomBlurThrottled();
     }

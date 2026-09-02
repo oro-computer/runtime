@@ -107,6 +107,14 @@ while an `android` device build does not.
   selects the separate debug library layout.
 - `VERBOSE=<non-empty>` prints additional source-build diagnostics.
 - `CPU_CORES=<count>` overrides detected build parallelism.
+- `ORO_CI_FAST_COMPILE=<non-empty>` keeps CI correctness builds unoptimized
+  while omitting debug-symbol generation. Debug builds still define
+  `ORO_RUNTIME_BUILD_DEBUG`; release and distribution builds must leave this
+  variable unset.
+- `ORO_RUNTIME_SOURCE_PREFLIGHT=0` disables the Windows syntax-only preflight
+  when a following archive and executable build will compile the same source
+  surface. Set it to `1` to run the standalone source audit before dependency
+  compilation.
 - `ORO_HOME=<path>` chooses the staged runtime home.
 - `PREFIX=<path>` chooses the installation/link prefix.
 

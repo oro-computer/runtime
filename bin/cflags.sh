@@ -584,9 +584,13 @@ while (( $# > 0 )); do
 done
 
 if [[ -n "$DEBUG" ]]; then
-  cflags+=("-g")
+  if [[ -z "${ORO_CI_FAST_COMPILE:-}" ]]; then
+    cflags+=("-g")
+  fi
   cflags+=("-O0")
   cflags+=("-DORO_RUNTIME_BUILD_DEBUG=1")
+elif [[ -n "${ORO_CI_FAST_COMPILE:-}" ]]; then
+  cflags+=("-O0")
 else
   cflags+=("-Os")
 fi
