@@ -543,6 +543,7 @@ namespace oro::runtime::window {
                     backing: NSBackingStoreBuffered
                       defer: NO
     ];
+    this->window.releasedWhenClosed = NO;
     // this->window.appearance = [NSAppearance appearanceNamed: NSAppearanceNameVibrantDark];
     this->window.contentMinSize = NSMakeSize(options.minWidth, options.minHeight);
     this->window.titleVisibility = NSWindowTitleVisible;

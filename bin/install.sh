@@ -684,6 +684,9 @@ function _build_cli {
     win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/${canonical_runtime_lib}${d}.a")
     win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/llama.lib")
     win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/whisper.lib")
+    win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/ggml.lib")
+    win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/ggml-cpu.lib")
+    win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/ggml-base.lib")
     if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]]; then
       local libipfs_win_archive="$BUILD_DIR/$arch-$platform/lib$d/libipfs${d}.lib"
       local libipfs_win_archive_a="$BUILD_DIR/$arch-$platform/lib$d/libipfs${d}.a"
@@ -782,6 +785,31 @@ function _build_runtime_library() {
   fi
 
   local runtime_target_count=${#runtime_arches[@]}
+
+  if [[ "${ORO_RUNTIME_DESKTOP_CLI_ONLY:-0}" = "1" ]] &&
+     [[ -n "$BUILD_ANDROID" ]]; then
+    local runtime_index=0
+    echo "# building Android runtimes before the reduced host CLI with $CPU_CORES compile jobs"
+
+    for (( runtime_index = 1; runtime_index < runtime_target_count; runtime_index++ )); do
+      ORO_RUNTIME_BUILD_JOBS="$CPU_CORES" \
+        "$root/bin/build-runtime-library.sh" \
+          --arch "${runtime_arches[$runtime_index]}" \
+          --platform "${runtime_platforms[$runtime_index]}" \
+          $pass_force $pass_ignore_header_mtimes
+      die $? "not ok - unable to build ${runtime_arches[$runtime_index]}-${runtime_platforms[$runtime_index]} runtime library"
+    done
+
+    ORO_RUNTIME_BUILD_JOBS="$CPU_CORES" \
+      "$root/bin/build-runtime-library.sh" \
+        --arch "${runtime_arches[0]}" \
+        --platform "${runtime_platforms[0]}" \
+        $pass_force $pass_ignore_header_mtimes
+
+    die $? "not ok - unable to build the reduced desktop CLI runtime library"
+    return
+  fi
+
   local runtime_jobs=$(( CPU_CORES / runtime_target_count ))
   local runtime_job_remainder=$(( CPU_CORES % runtime_target_count ))
   if (( runtime_jobs < 1 )); then
@@ -2287,7 +2315,13 @@ function _compile_llama {
       _stage_llama_desktop_outputs "$STAGING_DIR" "$BUILD_DIR/$target-$platform"
       die $? "not ok - libllama.a (desktop)"
     else
-      if ! test -f "$BUILD_DIR/$target-$platform/lib$d/llama.lib"; then
+      local windows_llama_libdir="$BUILD_DIR/$target-$platform/lib$d"
+      local windows_ggml_dir="$windows_llama_libdir/cmake/ggml"
+      if ! test -f "$windows_llama_libdir/llama.lib" ||
+         ! test -f "$windows_llama_libdir/ggml.lib" ||
+         ! test -f "$windows_llama_libdir/ggml-cpu.lib" ||
+         ! test -f "$windows_llama_libdir/ggml-base.lib" ||
+         ! test -f "$windows_ggml_dir/ggml-config.cmake"; then
         local config="Release"
         if [[ -n "$DEBUG" ]]; then
           config="Debug"
@@ -2295,14 +2329,27 @@ function _compile_llama {
         cd "$STAGING_DIR/build/" || exit 1
         quiet command -v cmake
         die $? "not ok - missing cmake, \"$(advice 'cmake')\""
-        _cmake_configure .. . "${cmake_args[@]}"
-        quiet cmake --build . --config $config --parallel "$CPU_CORES"
-        mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
-        quiet echo "copy_if_newer $STAGING_DIR/build/$config/llama.lib "$BUILD_DIR/$target-$platform/lib$d/llama.lib""
-        copy_if_newer "$STAGING_DIR/build/$config/llama.lib" "$BUILD_DIR/$target-$platform/lib$d/llama.lib"
-        if [[ -n "$DEBUG" ]]; then
-          copy_if_newer "$STAGING_DIR"/build/$config/llama_a.pdb "$BUILD_DIR/$target-$platform/lib$d/llama_a.pdb"
-        fi;
+        _cmake_configure .. . \
+          -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" \
+          -DCMAKE_INSTALL_LIBDIR="lib$d" \
+          -DCMAKE_INSTALL_BINDIR="$STAGING_DIR/install-bin" \
+          "${cmake_args[@]}"
+        die $? "not ok - llama.lib (desktop) configure"
+
+        quiet cmake --build . --config "$config" --parallel "$CPU_CORES"
+        die $? "not ok - llama.lib (desktop) build"
+
+        quiet cmake --install . --config "$config"
+        die $? "not ok - llama.lib (desktop) install"
+
+        local windows_llama_archive=""
+        for windows_llama_archive in llama.lib ggml.lib ggml-cpu.lib ggml-base.lib; do
+          test -f "$windows_llama_libdir/$windows_llama_archive"
+          die $? "not ok - missing installed $windows_llama_archive (desktop)"
+        done
+
+        test -f "$windows_ggml_dir/ggml-config.cmake"
+        die $? "not ok - missing installed ggml CMake package (desktop)"
       fi
     fi
 
@@ -2563,8 +2610,8 @@ function _compile_whisper {
     -DCMAKE_LIBRARY_PATH="$BUILD_DIR/$target-$platform/lib:$BUILD_DIR/$target-$platform/lib64"
   )
 
-  local ggml_dir="$BUILD_DIR/$target-$platform/lib/cmake/ggml"
-  if _toolchain_supports_openmp && ([[ -f "$ggml_dir/ggml-config.cmake" ]] || [[ -f "$ggml_dir/ggmlConfig.cmake" ]]); then
+  local ggml_dir="$BUILD_DIR/$target-$platform/lib$d/cmake/ggml"
+  if [[ -f "$ggml_dir/ggml-config.cmake" ]] || [[ -f "$ggml_dir/ggmlConfig.cmake" ]]; then
     cmake_args+=(-DWHISPER_USE_SYSTEM_GGML=ON -Dggml_DIR="$ggml_dir")
   else
     cmake_args+=(-DWHISPER_USE_SYSTEM_GGML=OFF)
@@ -2618,19 +2665,20 @@ function _compile_whisper {
 
         mkdir -p "$STAGING_DIR/build"
         cd "$STAGING_DIR/build" || exit 1
-        _cmake_configure .. . "${cmake_args[@]}"
+        _cmake_configure .. . \
+          -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform" \
+          -DCMAKE_INSTALL_LIBDIR="lib$d" \
+          "${cmake_args[@]}"
         die $? "not ok - libwhisper.lib (desktop) configure"
 
-        quiet cmake --build . --config $config --parallel "$CPU_CORES"
+        quiet cmake --build . --config "$config" --parallel "$CPU_CORES"
         die $? "not ok - libwhisper.lib (desktop) build"
 
-        mkdir -p "$BUILD_DIR/$target-$platform/lib$d"
-        copy_if_newer "$STAGING_DIR/build/$config/whisper.lib" "$BUILD_DIR/$target-$platform/lib$d/whisper.lib"
-        if [[ -n "$DEBUG" ]]; then
-          if [ -f "$STAGING_DIR/build/$config/whisper.pdb" ]; then
-            copy_if_newer "$STAGING_DIR/build/$config/whisper.pdb" "$BUILD_DIR/$target-$platform/lib$d/whisper.pdb"
-          fi
-        fi
+        quiet cmake --install . --config "$config"
+        die $? "not ok - libwhisper.lib (desktop) install"
+
+        test -f "$BUILD_DIR/$target-$platform/lib$d/whisper.lib"
+        die $? "not ok - missing installed whisper.lib (desktop)"
       fi
       cd "$STAGING_DIR" || exit 1
     fi

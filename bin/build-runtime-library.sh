@@ -267,6 +267,76 @@ elif [[ "$host" = "Win32" ]]; then
   sources+=("$root/src/runtime/process/win.cc")
 fi
 
+if [[ "$host" = "Linux" ]] &&
+   [[ "$platform" = "desktop" ]] &&
+   [[ "${ORO_RUNTIME_DESKTOP_CLI_ONLY:-0}" = "1" ]]; then
+  # Android CI needs the host executable only to package and launch the Android
+  # app. Keep the translation units that the CLI link consumes instead of
+  # compiling the complete desktop application runtime alongside the NDK build.
+  sources=(
+    "$root/src/runtime/ini.cc"
+    "$root/src/runtime/semver.cc"
+    "$root/src/runtime/tar.cc"
+    "$root/src/runtime/toml.cc"
+    "$root/src/runtime/ai/server.cc"
+    "$root/src/runtime/ai/chat/session.cc"
+    "$root/src/runtime/ai/llm/context.cc"
+    "$root/src/runtime/ai/llm/lora.cc"
+    "$root/src/runtime/ai/llm/manager.cc"
+    "$root/src/runtime/ai/llm/model.cc"
+    "$root/src/runtime/bytes/base64.cc"
+    "$root/src/runtime/bytes/buffer.cc"
+    "$root/src/runtime/bytes/hex.cc"
+    "$root/src/runtime/config/config.cc"
+    "$root/src/runtime/config/global.cc"
+    "$root/src/runtime/concurrent/abort.cc"
+    "$root/src/runtime/crypto/rand.cc"
+    "$root/src/runtime/crypto/sha1.cc"
+    "$root/src/runtime/cwd/cwd.cc"
+    "$root/src/runtime/debug/trace.cc"
+    "$root/src/runtime/env/env.cc"
+    "$root/src/runtime/filesystem/resource.cc"
+    "$root/src/runtime/filesystem/watcher.cc"
+    "$root/src/runtime/http/headers.cc"
+    "$root/src/runtime/io/write.cc"
+    "$root/src/runtime/iroh/library.cc"
+    "$root/src/runtime/iroh/uniffi_manager.cc"
+    "$root/src/runtime/json/any.cc"
+    "$root/src/runtime/json/array.cc"
+    "$root/src/runtime/json/boolean.cc"
+    "$root/src/runtime/json/entity.cc"
+    "$root/src/runtime/json/error.cc"
+    "$root/src/runtime/json/null.cc"
+    "$root/src/runtime/json/number.cc"
+    "$root/src/runtime/json/object.cc"
+    "$root/src/runtime/json/parse.cc"
+    "$root/src/runtime/json/raw.cc"
+    "$root/src/runtime/json/string.cc"
+    "$root/src/runtime/loop/loop.cc"
+    "$root/src/runtime/mcp/http_server.cc"
+    "$root/src/runtime/mcp/protocol.cc"
+    "$root/src/runtime/mcp/resource.cc"
+    "$root/src/runtime/mcp/tool.cc"
+    "$root/src/runtime/platform/platform.cc"
+    "$root/src/runtime/process/unix.cc"
+    "$root/src/runtime/string/string.cc"
+    "$root/src/runtime/url/codec.cc"
+    "$root/src/runtime/url/path.cc"
+    "$root/src/runtime/url/search.cc"
+    "$root/src/runtime/url/url.cc"
+    "$root/src/runtime/webview/tls_pins.cc"
+  )
+
+  if (( ! syntax_only )); then
+    sources+=(
+      "$root/build/sqlite/sqlite3.c"
+      "$root/build/llama/src/llama.cpp"
+    )
+  fi
+
+  echo "# building the Android CI host CLI runtime surface"
+fi
+
 if [[ -n "${CLANG_C:-}" ]]; then
   clang_c="$CLANG_C"
 elif [[ "$platform" = "android" ]]; then

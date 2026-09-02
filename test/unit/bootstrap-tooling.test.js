@@ -916,8 +916,8 @@ test('VM context windows use an explicit startup handshake', () => {
   )
   assert.match(
     ipc,
-    /tx\.postMessage\([\s\S]*?options\.transfer\n\s*\)/,
-    'IPC MessagePorts should pass their resolved transferable list to the native port'
+    /const nativeTransfers = options\.transfer\.filter\([\s\S]*?entry instanceof IPCMessagePort[\s\S]*?tx\.postMessage\([\s\S]*?nativeTransfers\n\s*\)/,
+    'IPC MessagePorts should keep logical port transfers out of the native transfer list'
   )
   assert.match(
     ipc,
@@ -928,6 +928,16 @@ test('VM context windows use an explicit startup handshake', () => {
     ipc,
     /else \{\s+add\(object\)\s+return object\s+\}\s+\} else if \(Object\.getPrototypeOf/,
     'IPC transferable discovery should not leave its plain-object branch unreachable'
+  )
+  assert.match(
+    ipc,
+    /else if \(object instanceof MessagePort\) \{\s+transfers\.delete\(object\)[\s\S]*createIPCMessagePortBridge\(options\)[\s\S]*nativePort\.addEventListener\('message'[\s\S]*relay\.addEventListener\('message'/,
+    'native MessagePorts should be bridged through paired IPC endpoints instead of replaced by disconnected ports'
+  )
+  assert.match(
+    ipc,
+    /\[Symbol\.for\('oro\.runtime\.serialize'\)\][\s\S]*transferred: true,[\s\S]*\/\/ swap rx\/tx/,
+    'a received IPC port should preserve its channel orientation when transferred through another worker hop'
   )
   assert.match(
     sharedWorkerInit,
@@ -994,6 +1004,11 @@ test('VM context windows use an explicit startup handshake', () => {
 test('macOS window teardown preserves WebKit-owned views', () => {
   const appleWindow = readFile('src/runtime/window/apple.mm')
 
+  assert.match(
+    appleWindow,
+    /initWithContentRect:[\s\S]*?defer: NO\s+\];\s+this->window\.releasedWhenClosed = NO;/,
+    'the C++ Window owner should retain the NSWindow until its destructor releases it'
+  )
   assert.doesNotMatch(
     appleWindow,
     /for \(NSView\* view in contentView\.subviews\)[\s\S]*\[view release\]/,
@@ -1012,6 +1027,35 @@ test('macOS window teardown preserves WebKit-owned views', () => {
     shouldClose,
     /window->window\.delegate = nullptr;[\s\S]*objc_setAssociatedObject\(self, "window", nil,[\s\S]*app->dispatch\([\s\S]*destroyWindow\(index\)/,
     'the close delegate should detach callbacks and defer manager-owned teardown'
+  )
+})
+
+test('Windows AI archives are installed and linked with shared ggml', () => {
+  const install = readFile('bin/install.sh')
+
+  for (const archive of [
+    'llama.lib',
+    'whisper.lib',
+    'ggml.lib',
+    'ggml-cpu.lib',
+    'ggml-base.lib'
+  ]) {
+    assert.match(
+      install,
+      new RegExp(`win_static_libs\\+=\\(.*?${archive.replace('.', '\\.')}.*?\\)`),
+      `the Windows CLI should link ${archive}`
+    )
+  }
+
+  assert.match(
+    install,
+    /_cmake_configure \.\. \. \\\s+-DCMAKE_INSTALL_PREFIX=.*?\\\s+-DCMAKE_INSTALL_LIBDIR="lib\$d"[\s\S]*?cmake --install \. --config "\$config"[\s\S]*?missing installed \$windows_llama_archive/,
+    'the Windows llama build should install and validate its current CMake archive layout'
+  )
+  assert.match(
+    install,
+    /local ggml_dir="\$BUILD_DIR\/\$target-\$platform\/lib\$d\/cmake\/ggml"[\s\S]*?WHISPER_USE_SYSTEM_GGML=ON[\s\S]*?_cmake_configure \.\. \. \\\s+-DCMAKE_INSTALL_PREFIX=.*?cmake --install \. --config "\$config"[\s\S]*?missing installed whisper\.lib/,
+    'Whisper should reuse the installed llama ggml package and install its archive before linking'
   )
 })
 
@@ -1814,6 +1858,34 @@ test('runtime target builds share the detected CPU budget', () => {
     runtimeBuilder,
     /host" = "Win32"[\s\S]*command -v sccache[\s\S]*runtime_compiler_launcher="sccache"[\s\S]*run_runtime_compiler/,
     'direct Windows runtime compilation should use the configured sccache service'
+  )
+})
+
+test('Android CI compiles only the host runtime surface used by its CLI', () => {
+  const workflow = readFile('.github/workflows/ci.yml')
+  const runtimeBuilder = readFile('bin/build-runtime-library.sh')
+
+  assert.match(
+    workflow,
+    /BUILD_ANDROID" == "true"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY=1/,
+    'Android shards should request the reduced host CLI runtime'
+  )
+  assert.match(
+    runtimeBuilder,
+    /host" = "Linux"[\s\S]*platform" = "desktop"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*sources=\([\s\S]*runtime\/config\/config\.cc[\s\S]*runtime\/mcp\/tool\.cc[\s\S]*runtime\/process\/unix\.cc[\s\S]*build\/sqlite\/sqlite3\.c[\s\S]*build\/llama\/src\/llama\.cpp/,
+    'the reduced host archive should retain every translation unit consumed by the Android build CLI'
+  )
+  assert.match(
+    readFile('bin/install.sh'),
+    /ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*building Android runtimes before the reduced host CLI[\s\S]*runtime_index = 1[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$CPU_CORES"[\s\S]*runtime_arches\[0\]/,
+    'Android CI should give each smaller runtime build the full CPU budget without oversubscription'
+  )
+  assert.doesNotMatch(
+    runtimeBuilder.match(
+      /if \[\[ "\$host" = "Linux" \]\] &&[\s\S]*?building the Android CI host CLI runtime"\nfi/
+    )?.[0] ?? '',
+    /runtime\/window\/linux\.cc|runtime\/core\/services\.cc|runtime\/serviceworker/,
+    'the Android packaging CLI should not compile desktop UI and service backends'
   )
 })
 

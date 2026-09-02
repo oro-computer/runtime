@@ -1920,6 +1920,7 @@ export function findIPCMessageTransfers (transfers, object) {
       add(object)
       return object
     } else if (object instanceof MessagePort) {
+      transfers.delete(object)
       const port = IPCMessagePort.create(object)
       add(port)
       return port
@@ -1936,7 +1937,8 @@ export function findIPCMessageTransfers (transfers, object) {
     if (
       value &&
       !transfers.has(value) &&
-      !(Symbol.for('oro.runtime.serialize') in value)
+      (value instanceof IPCMessagePort ||
+        !(Symbol.for('oro.runtime.serialize') in value))
     ) {
       transfers.add(value)
     }
@@ -1987,6 +1989,13 @@ export class IPCMessagePort extends MessagePort {
    * @return {IPCMessagePort}
    */
   static create (options = null) {
+    if (
+      options instanceof MessagePort &&
+      !(options instanceof IPCMessagePort)
+    ) {
+      return createIPCMessagePortBridge(options)
+    }
+
     const id = String(options?.id ?? rand64())
 
     if (IPCMessagePort.ports.has(id)) {
@@ -2165,12 +2174,16 @@ export class IPCMessagePort extends MessagePort {
       }
     }
 
+    const nativeTransfers = options.transfer.filter(
+      (entry) => !(entry instanceof IPCMessagePort)
+    )
+
     tx.postMessage(
       {
         token: this[Symbol.for('oro.runtime.ipc.IPCMessagePort.token')],
         data: serializedMessage
       },
-      options.transfer
+      nativeTransfers
     )
   }
 
@@ -2260,6 +2273,7 @@ export class IPCMessagePort extends MessagePort {
     }
     return {
       __type__: 'IPCMessagePort',
+      transferred: true,
       // swap rx/tx
       rx: this[Symbol.for('oro.runtime.ipc.IPCMessagePort.tx')]?.name ?? null,
       tx: this[Symbol.for('oro.runtime.ipc.IPCMessagePort.rx')]?.name ?? null,
@@ -2372,6 +2386,23 @@ export class IPCMessageChannel extends MessageChannel {
   get port2 () {
     return this.#port2
   }
+}
+
+function createIPCMessagePortBridge (nativePort) {
+  const channel = new IPCMessageChannel()
+  const relay = channel.port1
+
+  nativePort.addEventListener('message', (event) => {
+    relay.postMessage(event.data)
+  })
+
+  relay.addEventListener('message', (event) => {
+    nativePort.postMessage(event.data)
+  })
+
+  nativePort.start()
+  relay.start()
+  return channel.port2
 }
 
 /**
