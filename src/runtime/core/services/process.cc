@@ -473,7 +473,10 @@ namespace oro::runtime::core::services {
           {"data", JSON::Object::Entries {
             {"id", std::to_string(id)},
             {"status", "exit"},
-            {"code", code}
+            {"code", code},
+            // Process::closeFDs joins the stdout/stderr readers before this
+            // callback, so this count is a complete output watermark.
+            {"outputCount", outputCount->load(std::memory_order_acquire)}
           }}
         };
 

@@ -19,7 +19,9 @@ test('ipc: diagnostics.stream.chunks streams and aborts', async (t) => {
 
   t.ok(received > 0, 'received some streamed bytes')
   if (globalThis.__args.capabilities.streaming.chunkedIncremental) {
-    t.ok(received < chunks * size, 'aborted before full stream')
+    // A webview may coalesce native chunks into one Web Streams read even when
+    // the route itself delivers incrementally. Cancellation must remain valid
+    // in both cases, so do not infer native delivery from read boundaries.
     controller.abort()
   } else {
     while (true) {

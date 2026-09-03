@@ -1684,7 +1684,7 @@ namespace oro::runtime::window {
 
   void Window::minimize () {
     if (this->options.headless) {
-      this->eval("window.dispatchEvent(new Event('blur'))");
+      this->eval("window.dispatchEvent(new Event('applicationpause')); window.dispatchEvent(new Event('blur'))");
     } else {
       ShowWindow(window, SW_MINIMIZE);
       this->evalDomBlurThrottled();
@@ -1693,7 +1693,7 @@ namespace oro::runtime::window {
 
   void Window::restore () {
     if (this->options.headless) {
-      this->eval("window.dispatchEvent(new Event('focus'))");
+      this->eval("window.dispatchEvent(new Event('applicationresume')); window.dispatchEvent(new Event('focus'))");
     } else {
       ShowWindow(window, SW_RESTORE);
       this->evalDomFocusThrottled();
@@ -1944,7 +1944,7 @@ namespace oro::runtime::window {
         SetFocus(this->window);
         this->evalDomFocusThrottled();
       } else {
-        this->eval("window.dispatchEvent(new Event('focus'))");
+        this->eval("window.dispatchEvent(new Event('applicationresume')); window.dispatchEvent(new Event('focus'))");
       }
     }
   }
@@ -1955,7 +1955,7 @@ namespace oro::runtime::window {
         SetWindowPos(this->window, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         this->evalDomBlurThrottled();
       } else {
-        this->eval("window.dispatchEvent(new Event('blur'))");
+        this->eval("window.dispatchEvent(new Event('applicationpause')); window.dispatchEvent(new Event('blur'))");
       }
     }
   }

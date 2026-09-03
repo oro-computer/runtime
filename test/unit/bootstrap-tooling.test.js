@@ -1144,18 +1144,18 @@ test('desktop headless window actions dispatch deterministic lifecycle events', 
     const source = readFile(relativePath)
     assert.match(
       source,
-      /options\.headless[\s\S]*window\.dispatchEvent\(new Event\('blur'\)\)/,
-      `${relativePath} should dispatch DOM blur without native window activation`
+      /options\.headless[\s\S]*window\.dispatchEvent\(new Event\('applicationpause'\)\)[\s\S]*window\.dispatchEvent\(new Event\('blur'\)\)/,
+      `${relativePath} should dispatch applicationpause and DOM blur without native window activation`
     )
     assert.match(
       source,
-      /options\.headless[\s\S]*window\.dispatchEvent\(new Event\('focus'\)\)/,
-      `${relativePath} should dispatch DOM focus without native window activation`
+      /options\.headless[\s\S]*window\.dispatchEvent\(new Event\('applicationresume'\)\)[\s\S]*window\.dispatchEvent\(new Event\('focus'\)\)/,
+      `${relativePath} should dispatch applicationresume and DOM focus without native window activation`
     )
     assert.doesNotMatch(
       source,
       /options\.headless[\s\S]*windowManager\.emit\("application(?:pause|resume)"\)/,
-      `${relativePath} should keep window focus separate from application lifecycle`
+      `${relativePath} should not depend on native application lifecycle delivery when headless`
     )
   }
 })
@@ -1175,8 +1175,18 @@ test('child process completion cannot outrun output and await listeners', () => 
   )
   assert.match(
     childWorker,
+    /data\.status === 'exit'[\s\S]*output watermark[\s\S]*pendingClose = data/,
+    'the child worker should use the exit output watermark when scheduling close'
+  )
+  assert.match(
+    childWorker,
     /await Promise\.all\(\[[\s\S]*Writable\.drained\(process\.stdout\)[\s\S]*Writable\.drained\(process\.stderr\)[\s\S]*state\.lifecycle = 'close'/,
     'the child worker should flush both output transports before reporting close'
+  )
+  assert.match(
+    readFile('src/runtime/core/services/process.cc'),
+    /\{"status", "exit"\}[\s\S]*\{"outputCount", outputCount->load\(std::memory_order_acquire\)\}/,
+    'the native process service should include its completed output watermark with exit'
   )
 })
 
@@ -1245,6 +1255,11 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     cflags,
     /-Wl,-NODEFAULTLIB:libcmt[\s\S]*-Wl,-NXCOMPAT[\s\S]*-Wl,-DYNAMICBASE[\s\S]*-Wl,-HIGHENTROPYVA[\s\S]*-Wl,-guard:cf/,
     'Windows linker options should remain opaque to Git Bash path conversion'
+  )
+  assert.match(
+    cflags,
+    /if \[\[ -n "\$DEBUG" \]\]; then[\s\S]*-Wl,-NODEFAULTLIB:msvcrt[\s\S]*-Wl,-DEFAULTLIB:msvcrtd[\s\S]*-Wl,-DEFAULTLIB:ucrtbased[\s\S]*-Wl,-DEFAULTLIB:vcruntimed/,
+    'Windows debug links should select the dynamic debug CRT instead of mixing release archives'
   )
   assert.doesNotMatch(
     [cflags, cli].join('\n'),
@@ -2638,6 +2653,7 @@ test('Android bootstrap separates build packages from emulator packages', () => 
   const generatedGradle = readFile('bin/generate-gradle-files.sh')
   const cli = readFile('src/cli/main.cc')
   const cliTemplates = readFile('src/cli/templates.hh')
+  const secureStorage = readFile('src/runtime/securestorage/secure_storage.kt')
   const emulatorBootstrap = readFile(
     'test/scripts/bootstrap-android-emulator.sh'
   )
@@ -2676,6 +2692,16 @@ test('Android bootstrap separates build packages from emulator packages', () => 
     cliTemplates,
     /<uses-sdk/,
     'Android SDK levels should come from Gradle instead of the application manifest'
+  )
+  assert.match(
+    cli,
+    /\{pkg \/ "main\.kt", "src\/android\/main\.kt"\},[\s\S]*\{pkg \/ "UsbService\.kt", "src\/android\/UsbService\.kt"\}/,
+    'Android application staging should include the UsbService referenced by MainActivity'
+  )
+  assert.doesNotMatch(
+    secureStorage,
+    /console\.error\([^\n]*,\s*err\)/,
+    'Android secure storage logging should use the single-argument console API'
   )
 
   assert.match(
@@ -2752,6 +2778,7 @@ test('test runners resolve the host architecture instead of assuming x64', () =>
 
 test('iOS simulator application builds use the host architecture', () => {
   const cli = readFile('src/cli/main.cc')
+  const templates = readFile('src/cli/templates.hh')
 
   assert.match(
     cli,
@@ -2767,6 +2794,16 @@ test('iOS simulator application builds use the host architecture', () => {
     cli,
     /flagBuildForSimulator \? "x86_64"|ARCHS=x86_64/,
     'simulator application builds should not force Intel artifacts on Apple Silicon'
+  )
+  assert.match(
+    cli,
+    /<< " -lllama"[\s\S]*<< " -lwhisper"[\s\S]*<< " -lggml"[\s\S]*<< " -lggml-cpu"[\s\S]*<< " -lggml-base"[\s\S]*<< " -lusb-1\.0"[\s\S]*<< " -lsodium"[\s\S]*<< " -framework Security"/,
+    'iOS native extensions should link every transitive runtime archive and Security.framework'
+  )
+  assert.match(
+    templates,
+    /Security\.framework in Frameworks[\s\S]*Security\.framework \*\//,
+    'generated iOS projects should link Security.framework for secure storage'
   )
 })
 

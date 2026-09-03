@@ -35,7 +35,7 @@ object SecureStorageManager {
       primaryPreferences(context).edit().putString(storageKey, encoded).apply()
       true
     } catch (err: Exception) {
-      console.error("SecureStorageManager: failed to store value", err)
+      console.error("SecureStorageManager: failed to store value: ${err.message}")
       false
     }
   }
@@ -49,7 +49,7 @@ object SecureStorageManager {
       try {
         return decrypt(primaryEncoded, PRIMARY_KEYSTORE_ALIAS)
       } catch (err: Exception) {
-        console.error("SecureStorageManager: failed to read value", err)
+        console.error("SecureStorageManager: failed to read value: ${err.message}")
       }
     }
 
@@ -64,7 +64,7 @@ object SecureStorageManager {
       primaryPreferences(context).edit().remove(primaryKey).apply()
       true
     } catch (err: Exception) {
-      console.error("SecureStorageManager: failed to remove value", err)
+      console.error("SecureStorageManager: failed to remove value: ${err.message}")
       false
     }
   }
@@ -75,7 +75,7 @@ object SecureStorageManager {
       clearByPrefix(primaryPreferences(context), storagePrefix(PRIMARY_PREFIX, scope))
       true
     } catch (err: Exception) {
-      console.error("SecureStorageManager: failed to clear values", err)
+      console.error("SecureStorageManager: failed to clear values: ${err.message}")
       false
     }
   }
@@ -87,7 +87,7 @@ object SecureStorageManager {
       collectKeys(primaryPreferences(context), storagePrefix(PRIMARY_PREFIX, scope), keys)
       keys.toTypedArray()
     } catch (err: Exception) {
-      console.error("SecureStorageManager: failed to list keys", err)
+      console.error("SecureStorageManager: failed to list keys: ${err.message}")
       emptyArray()
     }
   }

@@ -9445,6 +9445,7 @@ int main (int argc, char* argv[]) {
         // android app package files
         {pkg / "app.kt", "src/android/app.kt"},
         {pkg / "main.kt", "src/android/main.kt"},
+        {pkg / "UsbService.kt", "src/android/UsbService.kt"},
 
         // runtime package files
         {runtime / "app" / "app.kt", "src/runtime/app/app.kt"},
@@ -10047,6 +10048,12 @@ int main (int argc, char* argv[]) {
             << " " << runtimeLinkFlag()
             << " -luv"
             << " -lllama"
+            << " -lwhisper"
+            << " -lggml"
+            << " -lggml-cpu"
+            << " -lggml-base"
+            << " -lusb-1.0"
+            << " -lsodium"
             << " -isysroot " << iosSdkPath << "/"
             << " -iframeworkwithsysroot /System/Library/Frameworks/"
             << " -F " << iosSdkPath << "/System/Library/Frameworks/"
@@ -10055,6 +10062,7 @@ int main (int argc, char* argv[]) {
             << " -framework CoreLocation"
             << " -framework Foundation"
             << " -framework Network"
+            << " -framework Security"
             << " -framework UserNotifications"
             << " -framework Metal"
             << " -framework Accelerate"

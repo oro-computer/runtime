@@ -905,7 +905,7 @@ namespace oro::runtime::window {
   #if ORO_RUNTIME_PLATFORM_MACOS
     if (this->window) {
       if (this->options.headless) {
-        this->eval("window.dispatchEvent(new Event('blur'))");
+        this->eval("window.dispatchEvent(new Event('applicationpause')); window.dispatchEvent(new Event('blur'))");
       } else {
         [this->window miniaturize: this->window];
         this->evalDomBlurThrottled();
@@ -918,7 +918,7 @@ namespace oro::runtime::window {
   #if ORO_RUNTIME_PLATFORM_MACOS
     if (this->window) {
       if (this->options.headless) {
-        this->eval("window.dispatchEvent(new Event('focus'))");
+        this->eval("window.dispatchEvent(new Event('applicationresume')); window.dispatchEvent(new Event('focus'))");
       } else {
         [this->window deminiaturize: this->window];
         this->evalDomFocusThrottled();
@@ -1151,7 +1151,7 @@ namespace oro::runtime::window {
         [this->window makeKeyAndOrderFront: nil];
         this->evalDomFocusThrottled();
       } else {
-        this->eval("window.dispatchEvent(new Event('focus'))");
+        this->eval("window.dispatchEvent(new Event('applicationresume')); window.dispatchEvent(new Event('focus'))");
       }
     }
   #elif ORO_RUNTIME_PLATFORM_IOS
@@ -1166,7 +1166,7 @@ namespace oro::runtime::window {
         [this->window orderBack: nil];
         this->evalDomBlurThrottled();
       } else {
-        this->eval("window.dispatchEvent(new Event('blur'))");
+        this->eval("window.dispatchEvent(new Event('applicationpause')); window.dispatchEvent(new Event('blur'))");
       }
     }
   #elif ORO_RUNTIME_PLATFORM_IOS

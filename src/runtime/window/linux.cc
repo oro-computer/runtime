@@ -2628,7 +2628,7 @@ namespace oro::runtime::window {
 
   void Window::minimize () {
     if (this->options.headless) {
-      this->eval("window.dispatchEvent(new Event('blur'))");
+      this->eval("window.dispatchEvent(new Event('applicationpause')); window.dispatchEvent(new Event('blur'))");
     } else {
       gtk_window_iconify(GTK_WINDOW(window));
       this->evalDomBlurThrottled();
@@ -2637,7 +2637,7 @@ namespace oro::runtime::window {
 
   void Window::restore () {
     if (this->options.headless) {
-      this->eval("window.dispatchEvent(new Event('focus'))");
+      this->eval("window.dispatchEvent(new Event('applicationresume')); window.dispatchEvent(new Event('focus'))");
     } else {
       gtk_window_deiconify(GTK_WINDOW(window));
       this->evalDomFocusThrottled();
@@ -2787,7 +2787,7 @@ namespace oro::runtime::window {
         gtk_window_present(GTK_WINDOW(this->window));
         this->evalDomFocusThrottled();
       } else {
-        this->eval("window.dispatchEvent(new Event('focus'))");
+        this->eval("window.dispatchEvent(new Event('applicationresume')); window.dispatchEvent(new Event('focus'))");
       }
     }
   }
@@ -2801,7 +2801,7 @@ namespace oro::runtime::window {
         }
         this->evalDomBlurThrottled();
       } else {
-        this->eval("window.dispatchEvent(new Event('blur'))");
+        this->eval("window.dispatchEvent(new Event('applicationpause')); window.dispatchEvent(new Event('blur'))");
       }
     }
   }

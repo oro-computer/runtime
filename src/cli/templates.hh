@@ -1499,6 +1499,7 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
     {{__ios_native_extensions_build_context_sections}}
 		034B592125768A7B005D0134 /* lib/default.metallib in Resources */ = {isa = PBXBuildFile; fileRef = 034B592025768A7B005D0134 /* lib/default.metallib */; };
 		171C1C2B2AC38A70005F587F /* CoreLocation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 171C1C2A2AC38A70005F587F /* CoreLocation.framework */; };
+		171C1C2C2AC38A70005F587F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 171C1C2D2AC38A70005F587F /* Security.framework */; };
 		179989D22A867B260041EDC1 /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 179989D12A867B260041EDC1 /* UniformTypeIdentifiers.framework */; };
 		17A7F8F229358D220051D146 /* init.cc in Sources */ = {isa = PBXBuildFile; fileRef = 17A7F8EE29358D180051D146 /* init.cc */; };
 		17A7F8F529358D430051D146 /* liboro-runtime.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F8F329358D430051D146 /* liboro-runtime.a */; };
@@ -1531,6 +1532,7 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 /* Begin PBXFileReference section */
     {{__ios_native_extensions_build_context_refs}}
 		171C1C2A2AC38A70005F587F /* CoreLocation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreLocation.framework; path = System/Library/Frameworks/CoreLocation.framework; sourceTree = SDKROOT; };
+		171C1C2D2AC38A70005F587F /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		179989D12A867B260041EDC1 /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
 		17A7F8EE29358D180051D146 /* init.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = init.cc; sourceTree = "<group>"; };
 		17A7F8F129358D180051D146 /* main.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = main.o; sourceTree = "<group>"; };
@@ -1577,6 +1579,7 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 				17E5B4C72D40623300C40EB2 /* libggml-metal.a in Frameworks */,
 				17E5B4C82D40623300C40EB2 /* libggml.a in Frameworks */,
 				171C1C2B2AC38A70005F587F /* CoreLocation.framework in Frameworks */,
+				171C1C2C2AC38A70005F587F /* Security.framework in Frameworks */,
 				179989D22A867B260041EDC1 /* UniformTypeIdentifiers.framework in Frameworks */,
 				17A7F8F529358D430051D146 /* liboro-runtime.a in Frameworks */,
 				17A7F8F629358D430051D146 /* libuv.a in Frameworks */,
@@ -1658,6 +1661,7 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 				17E5B4C02D40623300C40EB2 /* libggml-cpu.a */,
 				17E5B4C22D40623300C40EB2 /* libggml-metal.a */,
 				171C1C2A2AC38A70005F587F /* CoreLocation.framework */,
+				171C1C2D2AC38A70005F587F /* Security.framework */,
 				179989D12A867B260041EDC1 /* UniformTypeIdentifiers.framework */,
 				17A7F8F329358D430051D146 /* liboro-runtime.a */,
 				17A7F8F429358D430051D146 /* libuv.a */,

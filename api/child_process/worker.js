@@ -132,6 +132,12 @@ parentPort.onmessage = async ({ data: { id, method, args } }) => {
         state.lifecycle = 'exit'
         parentPort.postMessage({ method: 'state', args: [state] })
         exited = true
+        // The native process has joined its output readers before emitting
+        // exit. Use its output watermark to complete close even if the later
+        // service-cleanup notification is delayed.
+        if (!pendingClose) {
+          pendingClose = data
+        }
         flushClose()
       }
     }
