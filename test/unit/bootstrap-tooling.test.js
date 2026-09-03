@@ -1950,6 +1950,16 @@ test('quiet native builds preserve command failure diagnostics', () => {
   )
 })
 
+test('Windows CI builds the debug artifacts consumed by its tests', () => {
+  const workflow = readFile('.github/workflows/ci.yml')
+
+  assert.match(
+    workflow,
+    /DEBUG: '1'[\s\S]*Build Oro Runtime CLI \(Windows\)[\s\S]*install\.ps1 -yesdeps -debug/,
+    'Windows CI should stage debug-suffixed runtime objects and libraries for its debug test builds'
+  )
+})
+
 test('runtime target builds share the detected CPU budget', () => {
   const installer = readFile('bin/install.sh')
   const runtimeBuilder = readFile('bin/build-runtime-library.sh')
@@ -2651,5 +2661,76 @@ test('test runners resolve the host architecture instead of assuming x64', () =>
     readFile('test/scripts/test-android.js'),
     /execFileSync\([\s\S]*cli,[\s\S]*'--platform=android'/,
     'Android tests should preserve the CLI path and argument boundaries without a shell command string'
+  )
+})
+
+test('iOS simulator application builds use the host architecture', () => {
+  const cli = readFile('src/cli/main.cc')
+
+  assert.match(
+    cli,
+    /auto arch = String\(flagBuildForSimulator \? platform\.arch : "arm64"\);[\s\S]*auto deviceType = arch \+ "-iPhone"[\s\S]*auto libdir = prefixFile\(String\("lib\/"\) \+ deviceType\);/,
+    'simulator inputs should be selected from the runtime target matching the macOS host'
+  )
+  assert.match(
+    cli,
+    /if \(flagBuildForSimulator\) \{\s+archiveCommand << " ARCHS=" << platform\.arch << " ONLY_ACTIVE_ARCH=NO";/,
+    'Xcode simulator builds should compile for the macOS host architecture'
+  )
+  assert.doesNotMatch(
+    cli,
+    /flagBuildForSimulator \? "x86_64"|ARCHS=x86_64/,
+    'simulator application builds should not force Intel artifacts on Apple Silicon'
+  )
+})
+
+test('verbose copy-map logging uses portable path strings', () => {
+  const cli = readFile('src/cli/main.cc')
+
+  assert.match(
+    cli,
+    /relativeSource = convertWStringToString\(fs::relative\(src, targetPath\)\.native\(\)\);[\s\S]*relativeDestination = convertWStringToString\(fs::relative\(dst, targetPath\)\.native\(\)\);[\s\S]*"copy %s ~> %s"/,
+    'verbose logging should convert native paths before passing them to the narrow debug formatter'
+  )
+  assert.doesNotMatch(
+    cli,
+    /copy %ls/,
+    'Unix builds should not interpret narrow filesystem paths as wide strings'
+  )
+})
+
+test('Android application scaffolding is compatible with current Gradle', () => {
+  const cli = readFile('src/cli/main.cc')
+  const templates = readFile('src/cli/templates.hh')
+
+  assert.match(
+    cli,
+    /"init "[\s\S]*"--dsl groovy "[\s\S]*"--use-defaults "[\s\S]*"--overwrite"/,
+    'Gradle initialization should generate the Groovy scripts that the CLI replaces'
+  )
+  assert.equal(
+    templates.match(/proguard-android-optimize\.txt/g)?.length,
+    2,
+    'release and debug configuration should use the supported optimized ProGuard defaults'
+  )
+  assert.doesNotMatch(
+    templates,
+    /getDefaultProguardFile\('proguard-android\.txt'\)/,
+    'AGP 9 should not receive the removed non-optimizing ProGuard defaults'
+  )
+})
+
+test('CI stops stalled mobile tests at twenty minutes', () => {
+  const workflow = readFile('.github/workflows/ci.yml')
+
+  assert.match(
+    workflow,
+    /Boot iOS Simulator and run tests[\s\S]*?timeout-minutes: 20/,
+    'iOS simulator tests should honor the CI stall cutoff'
+  )
+  assert.match(
+    workflow,
+    /Run Android emulator tests[\s\S]*?timeout-minutes: 20/,
+    'Android emulator tests should honor the CI stall cutoff'
   )
 })

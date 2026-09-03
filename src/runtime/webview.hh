@@ -303,6 +303,7 @@ namespace oro::runtime::webview {
       #if ORO_RUNTIME_PLATFORM_LINUX
         GInputStream* platformResponseStream = nullptr;
         GOutputStream* platformResponseOutput = nullptr;
+        bool platformResponseStarted = false;
       #elif ORO_RUNTIME_PLATFORM_WINDOWS
         IStream* platformResponseStream = nullptr;
       #endif

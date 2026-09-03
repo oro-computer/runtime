@@ -4500,10 +4500,12 @@ Vector<Path> handleBuildPhaseForCopyMappedFiles (
     }
 
     if (flagVerboseMode) {
+      const auto relativeSource = convertWStringToString(fs::relative(src, targetPath).native());
+      const auto relativeDestination = convertWStringToString(fs::relative(dst, targetPath).native());
       debug(
-        "copy %ls ~> %ls",
-        fs::relative(src, targetPath).c_str(),
-        fs::relative(dst, targetPath).c_str()
+        "copy %s ~> %s",
+        relativeSource.c_str(),
+        relativeDestination.c_str()
       );
     }
 
@@ -8615,6 +8617,7 @@ int main (int argc, char* argv[]) {
         << "--offline "
         << "--quiet "
         << "init "
+        << "--dsl groovy "
         << "--use-defaults "
         << "--overwrite";
 
@@ -9580,8 +9583,8 @@ int main (int argc, char* argv[]) {
         }
       }
 
-      // --platform=ios should always build for arm64 even on Darwin x86_64
-      auto arch = String(flagBuildForSimulator ? "x86_64" : "arm64");
+      // iOS devices use arm64; simulator bundles must match the macOS host.
+      auto arch = String(flagBuildForSimulator ? platform.arch : "arm64");
       auto deviceType = arch + "-iPhone" + (flagBuildForSimulator ? "Simulator" : "OS");
 
       auto deviceLibs = prefixPath("lib") / deviceType;
@@ -9753,12 +9756,10 @@ int main (int argc, char* argv[]) {
           );
 
           auto objects = StringStream();
-          auto libdir = platform.arch == "arm64"
-            ? prefixFile(String("lib/arm64-") + (flagBuildForSimulator ? "iPhoneSimulator" : "iPhoneOS"))
-            : prefixFile(String("lib/") + (flagBuildForSimulator ? "x86_64-iPhoneSimulator" : "arm64-iPhoneOS"));
+          auto libdir = prefixFile(String("lib/") + deviceType);
 
           if (std::find(extensions.begin(), extensions.end(), extension) == extensions.end()) {
-            logInfo("Building extension: " + extension + " (" + (flagBuildForSimulator ? "x86_64-iPhoneSimulator" : "arm64-iPhoneOS") + ")");
+            logInfo("Building extension: " + extension + " (" + deviceType + ")");
             extensions.push_back(extension);
           }
 
@@ -10798,7 +10799,7 @@ int main (int argc, char* argv[]) {
       }
 
       if (flagBuildForSimulator) {
-        archiveCommand << " ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO";
+        archiveCommand << " ARCHS=" << platform.arch << " ONLY_ACTIVE_ARCH=NO";
       }
 
       if (!flagCodeSign) {
@@ -12278,7 +12279,7 @@ int main (int argc, char* argv[]) {
       }
 
       if (flagBuildForSimulator) {
-        archiveCommand << " ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO";
+        archiveCommand << " ARCHS=" << platform.arch << " ONLY_ACTIVE_ARCH=NO";
       }
 
       archiveCommand

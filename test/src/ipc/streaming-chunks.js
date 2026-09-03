@@ -28,5 +28,13 @@ test('ipc: diagnostics.stream.chunks streams and aborts', async (t) => {
   }
 
   t.ok(received > 0, 'received some streamed bytes')
-  t.ok(received < chunks * size, 'aborted before full stream')
+  if (globalThis.__args.capabilities.streaming.chunkedIncremental) {
+    t.ok(received < chunks * size, 'aborted before full stream')
+  } else {
+    t.equal(
+      received,
+      chunks * size,
+      'received the complete stream on a buffering webview backend'
+    )
+  }
 })

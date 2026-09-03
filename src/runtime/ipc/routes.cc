@@ -502,6 +502,37 @@ namespace {
   constexpr int kClockRealtimeId = 0;
   constexpr int kClockMonotonicId = 1;
   constexpr int kTimerAbstimeFlag = 1;
+  constexpr uint64_t kMaxDiagnosticStreamItems = 256;
+  constexpr uint64_t kMaxDiagnosticStreamInterval = 1000;
+  constexpr uint64_t kMaxDiagnosticChunkBytes = 64 * 1024;
+  constexpr uint64_t kMaxDiagnosticStreamBytes = 4 * 1024 * 1024;
+
+  bool parseDiagnosticStreamParameter (
+    const Message& message,
+    const String& name,
+    uint64_t fallback,
+    uint64_t minimum,
+    uint64_t maximum,
+    uint64_t& value,
+    String& error
+  ) {
+    value = fallback;
+    if (!message.has(name)) {
+      return true;
+    }
+
+    if (
+      !parseUint64(message.get(name), value) ||
+      value < minimum ||
+      value > maximum
+    ) {
+      error = "'" + name + "' must be between " +
+        std::to_string(minimum) + " and " + std::to_string(maximum);
+      return false;
+    }
+
+    return true;
+  }
 
   std::optional<std::chrono::nanoseconds> durationFromTimespec (
     int64_t seconds,
@@ -6015,6 +6046,197 @@ static void mapIPCRoutes (Router *router) {
       message.seq,
       RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
     );
+  });
+
+  /**
+   * Reports the streaming behavior of the active webview backend.
+   */
+  router->map("diagnostics.capabilities", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_WINDOWS
+    constexpr bool incremental = false;
+  #else
+    constexpr bool incremental = true;
+  #endif
+    return reply(Result::Data {
+      message,
+      JSON::Object::Entries {
+        {"streaming", JSON::Object::Entries {
+          {"sseIncremental", incremental},
+          {"chunkedIncremental", incremental}
+        }}
+      }
+    });
+  });
+
+  /**
+   * Emits a bounded diagnostic server-sent event stream.
+   */
+  router->map("diagnostics.stream.sse", [](auto message, auto router, auto reply) {
+    if (!message.isHTTP) {
+      return reply(Result::Err {
+        message,
+        JSON::Object::Entries {{"message", "Diagnostic streams require an HTTP transport"}}
+      });
+    }
+
+    uint64_t count = 0;
+    uint64_t interval = 0;
+    String parameterError;
+    if (
+      !parseDiagnosticStreamParameter(
+        message,
+        "count",
+        8,
+        1,
+        kMaxDiagnosticStreamItems,
+        count,
+        parameterError
+      ) ||
+      !parseDiagnosticStreamParameter(
+        message,
+        "interval",
+        25,
+        1,
+        kMaxDiagnosticStreamInterval,
+        interval,
+        parameterError
+      )
+    ) {
+      return reply(Result::Err {
+        message,
+        JSON::Object::Entries {{"message", parameterError}}
+      });
+    }
+
+    auto eventName = message.get("name", "message");
+    const auto invalidName = std::find_if(eventName.begin(), eventName.end(), [](unsigned char character) {
+      return !std::isalnum(character) && character != '-' && character != '_' && character != '.';
+    });
+    if (eventName.empty() || eventName.size() > 64 || invalidName != eventName.end()) {
+      return reply(Result::Err {
+        message,
+        JSON::Object::Entries {{
+          "message",
+          "'name' must contain 1 to 64 letters, digits, hyphens, underscores, or periods"
+        }}
+      });
+    }
+
+    auto stream = std::make_shared<QueuedResponse::EventStreamCallback>(
+      [](const char*, const unsigned char*, bool) {
+        return false;
+      }
+    );
+    auto response = QueuedResponse {};
+    response.headers.set("content-type", "text/event-stream; charset=utf-8");
+    response.headers.set("cache-control", "no-store");
+    response.eventStreamCallback = stream;
+    auto emitted = std::make_shared<uint64_t>(0);
+    auto runtime = router->bridge.getRuntime();
+    response.streamStartCallback = [runtime, stream, emitted, count, eventName, interval] {
+      runtime->services.timers.setInterval(
+        interval,
+        [stream, emitted, count, eventName](auto cancel) {
+          const auto data = std::to_string(*emitted);
+          *emitted += 1;
+          const bool finished = *emitted >= count;
+          const bool sent = (*stream)(
+            eventName.c_str(),
+            reinterpret_cast<const unsigned char*>(data.c_str()),
+            finished
+          );
+          if (!sent || finished) {
+            cancel();
+          }
+        }
+      );
+    };
+    reply(Result::Data { message, JSON::Object {}, response });
+  });
+
+  /**
+   * Emits a bounded diagnostic binary stream.
+   */
+  router->map("diagnostics.stream.chunks", [](auto message, auto router, auto reply) {
+    if (!message.isHTTP) {
+      return reply(Result::Err {
+        message,
+        JSON::Object::Entries {{"message", "Diagnostic streams require an HTTP transport"}}
+      });
+    }
+
+    uint64_t chunks = 0;
+    uint64_t chunkSize = 0;
+    uint64_t interval = 0;
+    String parameterError;
+    if (
+      !parseDiagnosticStreamParameter(
+        message,
+        "chunks",
+        8,
+        1,
+        kMaxDiagnosticStreamItems,
+        chunks,
+        parameterError
+      ) ||
+      !parseDiagnosticStreamParameter(
+        message,
+        "chunkSize",
+        1024,
+        1,
+        kMaxDiagnosticChunkBytes,
+        chunkSize,
+        parameterError
+      ) ||
+      !parseDiagnosticStreamParameter(
+        message,
+        "interval",
+        25,
+        1,
+        kMaxDiagnosticStreamInterval,
+        interval,
+        parameterError
+      )
+    ) {
+      return reply(Result::Err {
+        message,
+        JSON::Object::Entries {{"message", parameterError}}
+      });
+    }
+
+    if (chunks * chunkSize > kMaxDiagnosticStreamBytes) {
+      return reply(Result::Err {
+        message,
+        JSON::Object::Entries {{"message", "Diagnostic chunk streams are limited to 4194304 bytes"}}
+      });
+    }
+
+    auto stream = std::make_shared<QueuedResponse::ChunkStreamCallback>(
+      [](const unsigned char*, size_t, bool) {
+        return false;
+      }
+    );
+    auto response = QueuedResponse {};
+    response.headers.set("content-type", "application/octet-stream");
+    response.headers.set("transfer-encoding", "chunked");
+    response.chunkStreamCallback = stream;
+    auto emitted = std::make_shared<uint64_t>(0);
+    auto chunk = std::make_shared<Vector<unsigned char>>(chunkSize, 0x5a);
+    auto runtime = router->bridge.getRuntime();
+    response.streamStartCallback = [runtime, stream, emitted, chunks, chunk, interval] {
+      runtime->services.timers.setInterval(
+        interval,
+        [stream, emitted, chunks, chunk](auto cancel) {
+          *emitted += 1;
+          const bool finished = *emitted >= chunks;
+          const bool sent = (*stream)(chunk->data(), chunk->size(), finished);
+          if (!sent || finished) {
+            cancel();
+          }
+        }
+      );
+    };
+    reply(Result::Data { message, JSON::Object {}, response });
   });
 
   /**

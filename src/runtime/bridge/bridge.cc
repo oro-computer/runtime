@@ -333,10 +333,7 @@ export * from '{{url}}'
         if (result.queuedResponse.eventStreamCallback != nullptr) {
           response->setHeader("content-type", "text/event-stream; charset=utf-8");
           response->setHeader("cache-control", "no-store");
-          // Coalesce small SSE events to reduce per-write overhead
-          auto sseBuffer = std::make_shared<String>();
-          static constexpr size_t kFlushThreshold = 4096; // 4KB
-          *result.queuedResponse.eventStreamCallback = [request, response, message, callback, sseBuffer](
+          *result.queuedResponse.eventStreamCallback = [request, response, message, callback](
             const char* name,
             const unsigned char* data,
             bool finished
@@ -363,19 +360,10 @@ export * from '{{url}}'
             const auto event = SchemeHandlers::Response::Event { name, reinterpret_cast<const char*>(data) };
 
             if (event.count() > 0) {
-              // Accumulate into a small buffer, then flush when threshold reached
-              sseBuffer->append(event.str());
-              if (sseBuffer->size() >= kFlushThreshold) {
-                response->write(*sseBuffer);
-                sseBuffer->clear();
-              }
+              response->write(event.str());
             }
 
             if (finished) {
-              if (!sseBuffer->empty()) {
-                response->write(*sseBuffer);
-                sseBuffer->clear();
-              }
               callback(*response);
               delete response;
               response = nullptr;
@@ -383,16 +371,16 @@ export * from '{{url}}'
 
             return true;
           };
+          if (result.queuedResponse.streamStartCallback != nullptr) {
+            result.queuedResponse.streamStartCallback();
+          }
           return;
         }
 
         // handle chunk streams
         if (result.queuedResponse.chunkStreamCallback != nullptr) {
           response->setHeader("transfer-encoding", "chunked");
-          // Coalesce small chunks into a larger buffer to reduce write calls
-          auto chunkBuffer = std::make_shared<Vector<unsigned char>>();
-          static constexpr size_t kChunkFlushThreshold = 16 * 1024; // 16KB
-          *result.queuedResponse.chunkStreamCallback = [request, response, message, callback, chunkBuffer](
+          *result.queuedResponse.chunkStreamCallback = [request, response, message, callback](
             const unsigned char* chunk,
             size_t size,
             bool finished
@@ -416,20 +404,10 @@ export * from '{{url}}'
 
             response->writeHead(200);
             if (chunk && size > 0) {
-              const auto start = chunkBuffer->size();
-              chunkBuffer->resize(start + size);
-              memcpy(chunkBuffer->data() + start, chunk, size);
-              if (chunkBuffer->size() >= kChunkFlushThreshold) {
-                response->write(chunkBuffer->size(), chunkBuffer->data());
-                chunkBuffer->clear();
-              }
+              response->write(size, chunk);
             }
 
             if (finished) {
-              if (!chunkBuffer->empty()) {
-                response->write(chunkBuffer->size(), chunkBuffer->data());
-                chunkBuffer->clear();
-              }
               callback(*response);
               delete response;
               response = nullptr;
@@ -437,6 +415,9 @@ export * from '{{url}}'
 
             return true;
           };
+          if (result.queuedResponse.streamStartCallback != nullptr) {
+            result.queuedResponse.streamStartCallback();
+          }
           return;
         }
 

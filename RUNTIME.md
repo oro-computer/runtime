@@ -260,9 +260,11 @@ Notes
 
 - If a primary window (index 0) exists, window-specific routes use that bridge by default. Routes requiring a window will no-op if no window is yet associated.
 - Streaming (SSE and chunked) is supported:
-  - SSE: `diagnostics.stream.sse?count=N&interval=ms` yields `text/event-stream` with `event:` and `data:` lines.
-    - Chunked: `diagnostics.stream.chunks?chunks=N&chunkSize=K&interval=ms` yields `application/octet-stream` via chunked transfer.
-      **Embedded LLaMA Server (AI, OpenAI-compatible)**
+  - SSE: `diagnostics.stream.sse?count=N&interval=ms` yields `text/event-stream` with `event:` and `data:` lines. `count` is limited to 256 and `interval` to 1–1000 ms.
+  - Chunked: `diagnostics.stream.chunks?chunks=N&chunkSize=K&interval=ms` yields `application/octet-stream` via chunked transfer. Streams are limited to 256 chunks, 64 KiB per chunk, and 4 MiB total.
+
+**Embedded LLaMA Server (AI, OpenAI-compatible)**
+
 - A llama.cpp-based server is embedded and exposed via the in-process `oro:` scheme.
 - No external sockets are opened; endpoints are only available as custom-scheme requests.
 - Default prefix: `/ai/llama` under your app origin `oro://<bundle>`.

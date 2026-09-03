@@ -309,6 +309,9 @@ namespace oro::runtime::core::services {
                   }
                   return true;
                 });
+              if (result.queuedResponse.streamStartCallback != nullptr) {
+                result.queuedResponse.streamStartCallback();
+              }
               return; // handler returns; streaming continues
             }
 
@@ -371,6 +374,9 @@ namespace oro::runtime::core::services {
                   }
                   return true;
                 });
+              if (result.queuedResponse.streamStartCallback != nullptr) {
+                result.queuedResponse.streamStartCallback();
+              }
               return;
             }
 
@@ -490,6 +496,9 @@ namespace oro::runtime::core::services {
                 }
                 return true;
               });
+            if (result.queuedResponse.streamStartCallback != nullptr) {
+              result.queuedResponse.streamStartCallback();
+            }
             return;
           }
 
@@ -540,6 +549,9 @@ namespace oro::runtime::core::services {
                 if (finished->load()) { sink.done(); open->store(false); return true; }
                 return true;
               });
+            if (result.queuedResponse.streamStartCallback != nullptr) {
+              result.queuedResponse.streamStartCallback();
+            }
             return;
           }
 

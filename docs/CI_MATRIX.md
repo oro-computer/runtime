@@ -75,7 +75,7 @@ Ubuntu arm64 leg is therefore native Linux arm64 coverage, not a second Android 
 ## Runtime build settings
 
 The CI workflow stages the runtime beneath runner-temporary `ORO_HOME` and `PREFIX` directories.
-Unix jobs use `./bin/install.sh --yes-deps`; Windows uses `bin/install.ps1 -yesdeps -verbose`.
+Unix jobs use `./bin/install.sh --yes-deps`; Windows uses `bin/install.ps1 -yesdeps -debug` so its staged artifacts match the job-wide `DEBUG=1` test configuration.
 All legs set `DEBUG=1` and `VERBOSE=1` for diagnosable CI builds.
 
 Target inclusion is declared independently on every matrix leg:

@@ -828,7 +828,7 @@ jobs:
         if: matrix.windows
         timeout-minutes: 20
         shell: pwsh
-        run: .\bin\install.ps1 -yesdeps
+        run: .\bin\install.ps1 -yesdeps -debug
 
       - name: Validate staged target families
         id: validate-targets-unix
@@ -950,7 +950,7 @@ jobs:
 
       - name: Boot iOS Simulator and run tests
         if: ${{ always() && matrix.test_ios && steps.smoke-test.outcome == 'success' }}
-        timeout-minutes: 30
+        timeout-minutes: 20
         shell: bash
         run: |
           simulator_udid="$(python3 - <<'PY'
@@ -999,7 +999,7 @@ jobs:
 
       - name: Run Android emulator tests
         if: ${{ always() && matrix.test_android && steps.android-emulator-cache.outcome == 'success' && steps.android-kvm.outcome == 'success' }}
-        timeout-minutes: 30
+        timeout-minutes: 20
         shell: bash
         run: npm run test:android-emulator
 

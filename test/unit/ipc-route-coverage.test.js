@@ -88,3 +88,69 @@ test('queued IPC events preserve payload sources and dispatch on the UI loop', (
     'queued responses should enter the UI dispatcher before bridge delivery'
   )
 })
+
+test('IPC streams deliver data before the producer finishes', () => {
+  const bridge = readFileSync(
+    path.join(repoRoot, 'src', 'runtime', 'bridge', 'bridge.cc'),
+    'utf8'
+  )
+  const routes = readFileSync(
+    path.join(repoRoot, 'src', 'runtime', 'ipc', 'routes.cc'),
+    'utf8'
+  )
+  const schemeHandlers = readFileSync(
+    path.join(repoRoot, 'src', 'runtime', 'webview', 'scheme_handlers.cc'),
+    'utf8'
+  )
+
+  assert.match(
+    bridge,
+    /event\.count\(\) > 0\) \{\s+response->write\(event\.str\(\)\);/,
+    'SSE events should be written as they are emitted'
+  )
+  assert.match(
+    bridge,
+    /if \(chunk && size > 0\) \{\s+response->write\(size, chunk\);/,
+    'binary chunks should be written as they are emitted'
+  )
+  assert.doesNotMatch(
+    bridge,
+    /kFlushThreshold|kChunkFlushThreshold/,
+    'small streams should not remain buffered until completion'
+  )
+  assert.match(
+    routes,
+    /router->map\("diagnostics\.stream\.sse"[\s\S]*eventStreamCallback = stream;/,
+    'the documented diagnostic SSE route should register a stream producer'
+  )
+  assert.match(
+    routes,
+    /router->map\("diagnostics\.stream\.chunks"[\s\S]*chunkStreamCallback = stream;/,
+    'the documented diagnostic chunk route should register a stream producer'
+  )
+  assert.match(
+    routes,
+    /kMaxDiagnosticStreamItems = 256[\s\S]*kMaxDiagnosticStreamBytes = 4 \* 1024 \* 1024/,
+    'diagnostic stream allocation and duration inputs should remain bounded'
+  )
+  assert.match(
+    bridge,
+    /eventStreamCallback = \[.*[\s\S]*streamStartCallback\(\);[\s\S]*chunkStreamCallback = \[.*[\s\S]*streamStartCallback\(\);/,
+    'custom-scheme producers should start only after their transport callbacks are installed'
+  )
+  assert.match(
+    schemeHandlers,
+    /if \(isChunked \|\| isSSE\) \{\s+webkit_uri_scheme_request_finish_with_response\([\s\S]*platformResponseStarted = true;/,
+    'Linux WebKit should receive streaming response headers before the producer finishes'
+  )
+  assert.match(
+    schemeHandlers,
+    /const bool requestActive =[\s\S]*if \(requestActive && !this->platformResponseStarted\)[\s\S]*g_output_stream_close[\s\S]*g_object_unref\(this->platformResponse\);/,
+    'cancelled Linux streams should close and release their pipe without finishing the request twice'
+  )
+  assert.match(
+    schemeHandlers,
+    /DeleteGlobalRef\(this->platformResponse\);\s+this->platformResponse = nullptr;/,
+    'Android responses should release their global reference before clearing it'
+  )
+})

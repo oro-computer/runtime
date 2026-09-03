@@ -87,6 +87,11 @@ namespace oro::runtime {
      * as a chunked stream. The callback is responsible for sending each chunk.
      */
     SharedPointer<ChunkStreamCallback> chunkStreamCallback = nullptr;
+
+    /**
+     * Starts a producer after the transport has installed its stream callback.
+     */
+    Function<void()> streamStartCallback = nullptr;
   };
 
   /**

@@ -1985,6 +1985,14 @@ namespace oro::runtime::webview {
       statusText.size() > 0 ? statusText.c_str() : nullptr
     );
 
+    if (isChunked || isSSE) {
+      webkit_uri_scheme_request_finish_with_response(
+        this->request->platformRequest,
+        this->platformResponse
+      );
+      this->platformResponseStarted = true;
+    }
+
     cdpEmitResponseReceived(this);
     return true;
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
@@ -2282,48 +2290,40 @@ namespace oro::runtime::webview {
   }
 
   bool SchemeHandlers::Response::finish () {
-    // fail if already finished
     if (this->finished) {
       return false;
     }
 
-    if (
-      !this->handlers->isRequestActive(this->id) ||
-      this->handlers->isRequestCancelled(this->id)
-    ) {
-      return false;
-    }
+    const bool requestActive = (
+      this->handlers->isRequestActive(this->id) &&
+      !this->handlers->isRequestCancelled(this->id)
+    );
 
     if (!this->platformResponse) {
-      if (!this->writeHead() || !this->platformResponse) {
+      if (!requestActive || !this->writeHead() || !this->platformResponse) {
         return false;
       }
     }
 
-    if (
-      !this->handlers->isRequestActive(this->id) ||
-      this->handlers->isRequestCancelled(this->id)
-    ) {
-      return false;
-    }
-
     Lock lock(this->mutex);
   #if ORO_RUNTIME_PLATFORM_APPLE
-    @try {
-      [this->request->platformRequest didFinish];
-    } @catch (::id) {}
+    if (requestActive) {
+      @try {
+        [this->request->platformRequest didFinish];
+      } @catch (::id) {}
+    }
   #if !__has_feature(objc_arc)
     [this->platformResponse release];
   #endif
     this->platformResponse = nullptr;
   #elif ORO_RUNTIME_PLATFORM_LINUX
     if (this->request && this->request->platformRequest && this->platformResponse) {
-      webkit_uri_scheme_request_finish_with_response(
-        this->request->platformRequest,
-        this->platformResponse
-      );
-
-      this->request->platformRequest = nullptr;
+      if (requestActive && !this->platformResponseStarted) {
+        webkit_uri_scheme_request_finish_with_response(
+          this->request->platformRequest,
+          this->platformResponse
+        );
+      }
 
       // Close streams
       if (this->platformResponseOutput != nullptr) {
@@ -2336,7 +2336,9 @@ namespace oro::runtime::webview {
         g_object_unref(this->platformResponseStream);
         this->platformResponseStream = nullptr;
       }
+      g_object_unref(this->platformResponse);
       this->platformResponse = nullptr;
+      this->platformResponseStarted = false;
     }
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
     this->platformResponseStream = nullptr;
@@ -2353,8 +2355,8 @@ namespace oro::runtime::webview {
         "()V"
       );
 
-      this->platformResponse = nullptr;
       attachment.env->DeleteGlobalRef(this->platformResponse);
+      this->platformResponse = nullptr;
     }
   #else
     this->platformResponse = nullptr;
@@ -2362,7 +2364,7 @@ namespace oro::runtime::webview {
 
     // Persist captured body (bounded) for Network.getResponseBody and emit a
     // matching Network.loadingFinished.
-    if (this->request && cdpShouldInstrument(this->request)) {
+    if (requestActive && this->request && cdpShouldInstrument(this->request)) {
       const auto mimeType = this->headers.get("content-type").value.str();
       const bool looksText = cdpMimeTypeLooksText(mimeType);
 
@@ -2400,7 +2402,7 @@ namespace oro::runtime::webview {
     }
 
     this->finished = true;
-    return true;
+    return requestActive;
   }
 
   void SchemeHandlers::Response::setHeader (const String& name, const Headers::Value& value) {
