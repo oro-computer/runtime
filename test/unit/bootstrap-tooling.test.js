@@ -1141,8 +1141,8 @@ test('OTP tests inject their request transport without mutating ESM imports', ()
 
   assert.match(
     credentials,
-    /async function get \(options, request = ipc\.request\)[\s\S]*await request\(/,
-    'credentials.get should provide an injectable request transport'
+    /async function get \(options, \.\.\.args\)[\s\S]*typeof args\[0\] === 'function'[\s\S]*ipc\.request\('otp\.credentials\.get'/,
+    'credentials.get should provide an injectable request transport while preserving its literal production route'
   )
   assert.doesNotMatch(
     otpTest,
