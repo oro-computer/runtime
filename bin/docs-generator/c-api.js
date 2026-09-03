@@ -83,7 +83,7 @@ function stripIncludePrefix (location) {
 
 const HEADER_MANIFEST = {
   'include/oro/extension.h': {
-    pageName: 'oro-extension',
+    pageName: 'oro-extension-c',
     summary: 'public C extension ABI for Oro Runtime',
     description: [
       'The oro/extension.h header defines the native extension ABI used by Oro Runtime loadable modules and embedders.',
@@ -135,7 +135,7 @@ const HEADER_MANIFEST = {
     }
   },
   'include/oro/dbus.h': {
-    pageName: 'oro-dbus',
+    pageName: 'oro-dbus-c',
     summary: 'D-Bus feature-detection macros for Oro Runtime builds',
     description: [
       'The oro/dbus.h header centralizes detection of libdbus header availability for builds that integrate D-Bus-backed services.',
@@ -146,7 +146,7 @@ const HEADER_MANIFEST = {
     }
   },
   'include/iroh/oro_iroh.h': {
-    pageName: 'oro-iroh',
+    pageName: 'oro-iroh-c',
     summary: 'experimental UniFFI-backed iroh bridge for native runtime code',
     description: [
       'The iroh/oro_iroh.h header declares the experimental C ABI that bridges Oro Runtime to the Rust-based iroh implementation.',

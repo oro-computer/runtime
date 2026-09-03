@@ -1,0 +1,14 @@
+.TH ORO-DBUS-C 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro\-dbus\-c \- D\-Bus feature\-detection macros for Oro Runtime builds
+.SH SYNOPSIS
+.nf
+#include <oro/dbus.h>
+.fi
+.SH DESCRIPTION
+.PP
+The oro/dbus.h header centralizes detection of libdbus header availability for builds that integrate D\-Bus\-backed services.
+.PP
+It keeps the public contract intentionally small: include the header, inspect ORO_RUNTIME_HAVE_DBUS, and compile optional integrations accordingly.
+.SH HEADER
+include/oro/dbus.h

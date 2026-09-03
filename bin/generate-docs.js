@@ -41,6 +41,26 @@ async function removeGeneratedPages (destDir, matcher) {
   }
 }
 
+function assertUniqueManpageFilenames (manpages, section) {
+  const seen = new Set()
+  const duplicates = new Set()
+
+  for (const { filename } of manpages) {
+    if (seen.has(filename)) {
+      duplicates.add(filename)
+    }
+    seen.add(filename)
+  }
+
+  if (duplicates.size > 0) {
+    throw new Error(
+      `Duplicate generated section ${section} manpage filenames: ${[
+        ...duplicates
+      ].join(', ')}`
+    )
+  }
+}
+
 async function listFilesRecursive (dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true })
   const files = await Promise.all(
@@ -254,11 +274,14 @@ const templateDocSource = templateFileSource
     })
   )
 
+  const section3Manpages = [...moduleManpages, ...cApiManpages]
+  assertUniqueManpageFilenames(section3Manpages, 3)
+
   await fs.mkdir(API_MANPAGE_DIR, { recursive: true })
   await removeGeneratedPages(API_MANPAGE_DIR, (name) => /^oro.*\.3$/.test(name))
 
   await Promise.all(
-    [...moduleManpages, ...cApiManpages].map(({ filename, content }) =>
+    section3Manpages.map(({ filename, content }) =>
       writeTextFile(path.join(API_MANPAGE_DIR, filename), content)
     )
   )

@@ -1,18 +1,23 @@
 .TH ORO-DBUS 3 "" "Oro Runtime" "Oro Runtime API Manual"
 .SH NAME
-oro\-dbus \- D\-Bus feature\-detection macros for Oro Runtime builds
+oro:dbus \- JavaScript API module
 .SH SYNOPSIS
 .nf
-#include <oro/dbus.h>
+import * as module from 'oro:dbus'
 .fi
 .SH DESCRIPTION
 .PP
-The oro/dbus.h header centralizes detection of libdbus header availability for builds that integrate D\-Bus\-backed services.
-.PP
-It keeps the public contract intentionally small: include the header, inspect ORO_RUNTIME_HAVE_DBUS, and compile optional integrations accordingly.
-.SH HEADER
-include/oro/dbus.h
-s.
+oro:dbus is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBBUS\fR
+Enumerates buses understood by the runtime.
+.TP
+\fBNAME_FLAGS\fR
+Flags for `requestName` calls, mirroring `DBUS_NAME_FLAG_*` constants.
+.TP
+\fBREQUEST_NAME_REPLY\fR
+Replies for `requestName`, mirroring `DBUS_REQUEST_NAME_REPLY_*` constants.
 .TP
 \fBRELEASE_NAME_REPLY\fR
 Replies for `releaseName`, mirroring `DBUS_RELEASE_NAME_REPLY_*` constants.
