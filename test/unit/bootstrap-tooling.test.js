@@ -1238,6 +1238,11 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     installer,
+    /win_static_libs\+=\("\$BUILD_DIR\/\$arch-\$platform\/lib\$d\/libusb-1\.0\.lib"\)/,
+    'the Windows CLI should link the libusb archive used by its dependency report'
+  )
+  assert.match(
+    installer,
     /install_prefix="\$BUILD_DIR\/\$target-\$platform"[\s\S]*host" == "Win32"[\s\S]*native_path "\$install_prefix"[\s\S]*CMAKE_INSTALL_PREFIX="\$install_prefix"/,
     'native Windows CMake should receive a native zlib install prefix'
   )
@@ -1510,6 +1515,58 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     [tlsClient, tlsServer, tlsUtil].join('\n'),
     /ERROR_BAD_PASSWORD|PCCERT_ALT_NAME_INFO|CRYPT_KEY_CONTEXT|fCallerFreeProvOrNCryptKey|CryptDecryptPrivateKeyInfo|\.ProtoStatus|\bApplicationProtocolNegotiationStatus_Success|SCHANNEL_SHUTDOWN token/,
     'Schannel sources should not reference nonexistent Windows SDK declarations'
+  )
+})
+
+test('Android runtime and extensions link transitive static dependencies', () => {
+  const dependencies = readFile('src/runtime/deps.hh')
+  const templates = readFile('src/cli/templates.hh')
+  const cli = readFile('src/cli/main.cc')
+
+  assert.match(
+    dependencies,
+    /defined\(ORO_RUNTIME_ENABLE_MBEDTLS\) && __has_include\(<mbedtls\/version\.h>\)/,
+    'cross-target headers should not enable mbedTLS without its selected provider and libraries'
+  )
+  assert.match(
+    templates,
+    /LOCAL_MODULE := libggml[\s\S]*LOCAL_STATIC_LIBRARIES := libggml-cpu libggml-base[\s\S]*LOCAL_MODULE := libggml-cpu[\s\S]*LOCAL_STATIC_LIBRARIES := libggml-base/,
+    'Android ggml modules should declare their archive dependency order'
+  )
+  assert.match(
+    templates,
+    /LOCAL_MODULE := liboro-runtime-static[\s\S]*LOCAL_STATIC_LIBRARIES := libuv libllama libwhisper libggml libusb libsodium[\s\S]*LOCAL_EXPORT_LDLIBS := -lz/,
+    'the Android runtime archive should export its native dependencies'
+  )
+  assert.match(
+    cli,
+    /LOCAL_LDLIBS \+= -landroid -llog -lz[\s\S]*LOCAL_STATIC_LIBRARIES \+= liboro-runtime-static libuv libllama [\s\S]*libwhisper libggml libggml-cpu libggml-base libusb libsodium/,
+    'generated Android extensions should link the runtime dependency closure in dependent-first order'
+  )
+})
+
+test('SQLite bindings preserve JSON values and operation-local changes', () => {
+  const sqlite = readFile('src/runtime/core/services/sqlite.cc')
+
+  assert.doesNotMatch(
+    sqlite,
+    /if \(param\.isString\(\)\) \{[^}]*param\.str\(\)|(?:type|valueAny|encoding|dataAny)\.str\(\)/,
+    'SQLite bindings should use decoded JSON string values instead of serialized JSON'
+  )
+  assert.match(
+    sqlite,
+    /param\.as<JSON::String>\(\)\.value\(\)/,
+    'plain SQLite text parameters should be bound without JSON quotes'
+  )
+  assert.match(
+    sqlite,
+    /encoding\.as<JSON::String>\(\)\.value\(\) == "base64"/,
+    'SQLite blob wrappers should compare the decoded encoding value'
+  )
+  assert.match(
+    sqlite,
+    /totalChangesBefore = sqlite3_total_changes64\(connection\)[\s\S]*totalChangesAfter = sqlite3_total_changes64\(connection\)[\s\S]*totalChangesAfter == totalChangesBefore[\s\S]*sqlite3_changes64\(connection\)/,
+    'SQLite results should not reuse the connection previous change count'
   )
 })
 
@@ -1936,14 +1993,19 @@ test('runtime target builds share the detected CPU budget', () => {
   )
 })
 
-test('mobile CI compiles only the host runtime surface used by its CLI', () => {
+test('mobile CI gives each target the full CPU budget', () => {
   const workflow = readFile('.github/workflows/ci.yml')
   const runtimeBuilder = readFile('bin/build-runtime-library.sh')
 
   assert.match(
     workflow,
-    /RELEASE_SUPPORT" != "desktop"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY=1/,
-    'Android and Apple-mobile shards should request the reduced host CLI runtime'
+    /RELEASE_SUPPORT" != "desktop"[\s\S]*ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS=1/,
+    'mobile shards should build their runtime targets sequentially'
+  )
+  assert.match(
+    workflow,
+    /BUILD_ANDROID" == "true"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY=1/,
+    'Android shards should request the reduced host CLI runtime'
   )
   assert.match(
     runtimeBuilder,
@@ -1952,7 +2014,7 @@ test('mobile CI compiles only the host runtime surface used by its CLI', () => {
   )
   assert.match(
     readFile('bin/install.sh'),
-    /ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*runtime_target_count > 1[\s\S]*building mobile runtimes before the reduced host CLI[\s\S]*runtime_index = 1[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$CPU_CORES"[\s\S]*runtime_arches\[0\]/,
+    /ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS[\s\S]*runtime_target_count > 1[\s\S]*building mobile runtimes before the host runtime[\s\S]*runtime_index = 1[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$CPU_CORES"[\s\S]*runtime_arches\[0\]/,
     'mobile CI should give each runtime build the full CPU budget without oversubscription'
   )
   assert.doesNotMatch(
@@ -1966,6 +2028,11 @@ test('mobile CI compiles only the host runtime surface used by its CLI', () => {
     readFile('test/scripts/test-android.js'),
     /--platform=android'[\s\S]*'--allow-exec'/,
     'Android tests should explicitly authorize their fixture extension build'
+  )
+  assert.match(
+    readFile('test/scripts/test-ios-simulator.js'),
+    /--platform=ios-simulator'[\s\S]*'--allow-exec'[\s\S]*ORO_DEBUG_IPC: process\.env\.ORO_DEBUG_IPC \|\| '1'/,
+    'iOS simulator tests should authorize fixture builds and provide their requested debug IPC environment'
   )
 })
 

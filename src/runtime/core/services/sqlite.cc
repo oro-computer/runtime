@@ -244,23 +244,24 @@ namespace oro::runtime::core::services {
       }
 
       if (param.isString()) {
-        return statement.bindText(index, param.str());
+        return statement.bindText(index, param.as<JSON::String>().value());
       }
 
       if (param.isObject()) {
         const auto object = param.as<JSON::Object>();
         const auto type = object.get("type");
         if (type.isString()) {
-          const auto typeString = type.str();
+          const auto typeString = type.as<JSON::String>().value();
           const auto valueAny = object.get("value");
 
           if (typeString == "integer") {
             if (valueAny.isString()) {
+              const auto value = valueAny.as<JSON::String>().value();
               try {
-                const sqlite3_int64 parsed = static_cast<sqlite3_int64>(std::stoll(valueAny.str()));
+                const sqlite3_int64 parsed = static_cast<sqlite3_int64>(std::stoll(value));
                 return statement.bindInt64(index, parsed);
               } catch (const std::exception&) {
-                return statement.bindText(index, valueAny.str());
+                return statement.bindText(index, value);
               }
             }
 
@@ -270,14 +271,16 @@ namespace oro::runtime::core::services {
           } else if (typeString == "float" && valueAny.isNumber()) {
             return statement.bindDouble(index, valueAny.as<JSON::Number>().value());
           } else if (typeString == "text" && valueAny.isString()) {
-            return statement.bindText(index, valueAny.str());
+            return statement.bindText(index, valueAny.as<JSON::String>().value());
           }
         }
 
         const auto encoding = object.get("encoding");
-        if (encoding.isString() && encoding.str() == "base64") {
+        if (encoding.isString() && encoding.as<JSON::String>().value() == "base64") {
           const auto dataAny = object.get("data");
-          const String encoded = dataAny.isString() ? dataAny.str() : String();
+          const String encoded = dataAny.isString()
+            ? dataAny.as<JSON::String>().value()
+            : String();
           const String decoded = bytes::base64::decode(encoded);
           return statement.bindBlob(index, decoded.data(), static_cast<int>(decoded.size()));
         }
@@ -309,7 +312,7 @@ namespace oro::runtime::core::services {
       }
 
       if (param.isString()) {
-        const auto value = param.str();
+        const auto value = param.as<JSON::String>().value();
         return sqlite3_bind_text(
           stmt,
           index,
@@ -323,16 +326,16 @@ namespace oro::runtime::core::services {
         const auto object = param.as<JSON::Object>();
         const auto type = object.get("type");
         if (type.isString()) {
-          const auto typeString = type.str();
+          const auto typeString = type.as<JSON::String>().value();
           const auto valueAny = object.get("value");
 
           if (typeString == "integer") {
             if (valueAny.isString()) {
+              const auto value = valueAny.as<JSON::String>().value();
               try {
-                const sqlite3_int64 parsed = static_cast<sqlite3_int64>(std::stoll(valueAny.str()));
+                const sqlite3_int64 parsed = static_cast<sqlite3_int64>(std::stoll(value));
                 return sqlite3_bind_int64(stmt, index, parsed) == SQLITE_OK;
               } catch (const std::exception&) {
-                const auto value = valueAny.str();
                 return sqlite3_bind_text(
                   stmt,
                   index,
@@ -351,7 +354,7 @@ namespace oro::runtime::core::services {
             const auto value = valueAny.as<JSON::Number>().value();
             return sqlite3_bind_double(stmt, index, value) == SQLITE_OK;
           } else if (typeString == "text" && valueAny.isString()) {
-            const auto value = valueAny.str();
+            const auto value = valueAny.as<JSON::String>().value();
             return sqlite3_bind_text(
               stmt,
               index,
@@ -363,9 +366,11 @@ namespace oro::runtime::core::services {
         }
 
         const auto encoding = object.get("encoding");
-        if (encoding.isString() && encoding.str() == "base64") {
+        if (encoding.isString() && encoding.as<JSON::String>().value() == "base64") {
           const auto dataAny = object.get("data");
-          const String encoded = dataAny.isString() ? dataAny.str() : String();
+          const String encoded = dataAny.isString()
+            ? dataAny.as<JSON::String>().value()
+            : String();
           const String decoded = bytes::base64::decode(encoded);
           return sqlite3_bind_blob(
             stmt,
@@ -706,6 +711,8 @@ namespace oro::runtime::core::services {
         return;
       }
 
+      const sqlite3_int64 totalChangesBefore = sqlite3_total_changes64(connection);
+
       JSON::Array::Entries rows;
       JSON::Array::Entries columnsJson;
       JSON::Array::Entries columnsMeta;
@@ -946,9 +953,11 @@ namespace oro::runtime::core::services {
 
       database.setLastResult(SQLITE_OK);
 
-      sqlite3* raw = connection;
-      const int changes = raw ? sqlite3_changes(raw) : 0;
-      const sqlite3_int64 lastInsertRowId = raw ? sqlite3_last_insert_rowid(raw) : 0;
+      const sqlite3_int64 totalChangesAfter = sqlite3_total_changes64(connection);
+      const sqlite3_int64 changes = totalChangesAfter == totalChangesBefore
+        ? 0
+        : sqlite3_changes64(connection);
+      const sqlite3_int64 lastInsertRowId = sqlite3_last_insert_rowid(connection);
       const auto meta = buildColumnsMeta(columnNames, columnDeclTypes, columnRuntimeTypes);
 
       const auto json = JSON::Object::Entries {
@@ -1213,6 +1222,8 @@ namespace oro::runtime::core::services {
         return;
       }
 
+      const sqlite3_int64 totalChangesBefore = sqlite3_total_changes64(connection);
+
       JSON::Array::Entries rows;
       rows.reserve(stepLimit);
 
@@ -1282,7 +1293,10 @@ namespace oro::runtime::core::services {
         handle->columnRuntimeTypes
       );
 
-      const int changes = sqlite3_changes(connection);
+      const sqlite3_int64 totalChangesAfter = sqlite3_total_changes64(connection);
+      const sqlite3_int64 changes = totalChangesAfter == totalChangesBefore
+        ? 0
+        : sqlite3_changes64(connection);
       const sqlite3_int64 lastInsertRowId = sqlite3_last_insert_rowid(connection);
 
       JSON::Array::Entries columnsJson;

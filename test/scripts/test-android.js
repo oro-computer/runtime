@@ -18,6 +18,10 @@ const fixturesPath = '/data/local/tmp/oro-test-fixtures'
 // Resolve local oroc binary if not on PATH
 const repoRoot = path.resolve(root, '..')
 const cli = resolveOrocExecutable(repoRoot)
+const cliEnv = {
+  ...process.env,
+  ORO_DEBUG_IPC: process.env.ORO_DEBUG_IPC || '1'
+}
 
 try {
   execFileSync(adb, ['uninstall', id], { stdio: 'inherit' })
@@ -38,7 +42,8 @@ if (ORO_ANDROID_CI) {
       '--env=ORO_ANDROID_CI'
     ],
     {
-      stdio: 'inherit'
+      stdio: 'inherit',
+      env: cliEnv
     }
   )
 } else {
@@ -57,7 +62,8 @@ if (ORO_ANDROID_CI) {
       'ORO_DEBUG_IPC'
     ],
     {
-      stdio: 'inherit'
+      stdio: 'inherit',
+      env: cliEnv
     }
   )
 }

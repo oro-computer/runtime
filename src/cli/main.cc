@@ -9392,14 +9392,17 @@ int main (int argc, char* argv[]) {
           }
           make << std::endl;
 
-          make << "LOCAL_LDLIBS += -landroid -llog" << std::endl;
+          make << "LOCAL_LDLIBS += -landroid -llog -lz" << std::endl;
 
           for (const auto& lib : libs) {
             make << "LOCAL_STATIC_LIBRARIES += " << lib << std::endl;
           }
           make << std::endl;
 
-          make << "LOCAL_STATIC_LIBRARIES += libuv liboro-runtime-static" << std::endl;
+          make
+            << "LOCAL_STATIC_LIBRARIES += liboro-runtime-static libuv libllama "
+            << "libwhisper libggml libggml-cpu libggml-base libusb libsodium"
+            << std::endl;
           make << "LOCAL_SRC_FILES = init.cc" <<  std::endl;
 
           for (const auto& source : parseStringList(sources.str(), ' ')) {

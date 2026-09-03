@@ -101,7 +101,7 @@ test('sqlite OPEN_READONLY does not create new files', async (t) => {
   const missingPath = uniquePath('ro-missing')
   t.throws(
     () => open(missingPath, { flags: OPEN_READONLY }),
-    /NotFound/i,
+    /Database path does not exist/i,
     'read-only open rejects missing file'
   )
 
@@ -114,6 +114,7 @@ test('sqlite OPEN_READONLY does not create new files', async (t) => {
   const dbPath = uniquePath('ro-existing')
   const writable = open(dbPath)
   writable.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)')
+  writable.exec("INSERT INTO t (value) VALUES ('persisted')")
   writable.close()
 
   const readonly = open(dbPath, { flags: OPEN_READONLY })

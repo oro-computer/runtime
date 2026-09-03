@@ -687,6 +687,7 @@ function _build_cli {
     win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/ggml.lib")
     win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/ggml-cpu.lib")
     win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/ggml-base.lib")
+    win_static_libs+=("$BUILD_DIR/$arch-$platform/lib$d/libusb-1.0.lib")
     if [[ "${ORO_SKIP_LIBIPFS:-0}" != "1" ]]; then
       local libipfs_win_archive="$BUILD_DIR/$arch-$platform/lib$d/libipfs${d}.lib"
       local libipfs_win_archive_a="$BUILD_DIR/$arch-$platform/lib$d/libipfs${d}.a"
@@ -786,10 +787,10 @@ function _build_runtime_library() {
 
   local runtime_target_count=${#runtime_arches[@]}
 
-  if [[ "${ORO_RUNTIME_DESKTOP_CLI_ONLY:-0}" = "1" ]] &&
+  if [[ "${ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS:-0}" = "1" ]] &&
      (( runtime_target_count > 1 )); then
     local runtime_index=0
-    echo "# building mobile runtimes before the reduced host CLI with $CPU_CORES compile jobs"
+    echo "# building mobile runtimes before the host runtime with $CPU_CORES compile jobs"
 
     for (( runtime_index = 1; runtime_index < runtime_target_count; runtime_index++ )); do
       ORO_RUNTIME_BUILD_JOBS="$CPU_CORES" \
@@ -806,7 +807,7 @@ function _build_runtime_library() {
         --platform "${runtime_platforms[0]}" \
         $pass_force $pass_ignore_header_mtimes
 
-    die $? "not ok - unable to build the reduced desktop CLI runtime library"
+    die $? "not ok - unable to build the desktop host runtime library"
     return
   fi
 

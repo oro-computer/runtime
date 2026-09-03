@@ -14,7 +14,7 @@
 #define ORO_RUNTIME_HAS_SODIUM 0
 #endif
 
-#if __has_include(<mbedtls/version.h>)
+#if defined(ORO_RUNTIME_ENABLE_MBEDTLS) && __has_include(<mbedtls/version.h>)
 #include <mbedtls/version.h>
 #define ORO_RUNTIME_HAS_MBEDTLS 1
 #else

@@ -19,6 +19,7 @@ const child = spawn(
     '--headless',
     '--test=./index.js',
     '--platform=ios-simulator',
+    '--allow-exec',
     '-r',
     '-o',
     '--env',
@@ -26,7 +27,11 @@ const child = spawn(
   ],
   {
     stdio: 'inherit',
-    cwd: root
+    cwd: root,
+    env: {
+      ...process.env,
+      ORO_DEBUG_IPC: process.env.ORO_DEBUG_IPC || '1'
+    }
   }
 )
 

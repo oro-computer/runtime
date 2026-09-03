@@ -2416,6 +2416,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libggml
 
 LOCAL_SRC_FILES = ../libs/$(TARGET_ARCH_ABI)/libggml.a
+LOCAL_STATIC_LIBRARIES := libggml-cpu libggml-base
 include $(PREBUILT_STATIC_LIBRARY)
 
 ## libggml-base.a
@@ -2430,6 +2431,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libggml-cpu
 
 LOCAL_SRC_FILES = ../libs/$(TARGET_ARCH_ABI)/libggml-cpu.a
+LOCAL_STATIC_LIBRARIES := libggml-base
 include $(PREBUILT_STATIC_LIBRARY)
 
 ## libllama.a
@@ -2437,6 +2439,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libllama
 
 LOCAL_SRC_FILES = ../libs/$(TARGET_ARCH_ABI)/libllama.a
+LOCAL_STATIC_LIBRARIES := libggml
 include $(PREBUILT_STATIC_LIBRARY)
 
 ## libusb-1.0.a
@@ -2458,6 +2461,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libwhisper
 
 LOCAL_SRC_FILES = ../libs/$(TARGET_ARCH_ABI)/libwhisper.a
+LOCAL_STATIC_LIBRARIES := libggml
 include $(PREBUILT_STATIC_LIBRARY)
 
 ## liboro-runtime.a
@@ -2465,6 +2469,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := liboro-runtime-static
 
 LOCAL_SRC_FILES = ../libs/$(TARGET_ARCH_ABI)/liboro-runtime.a
+LOCAL_STATIC_LIBRARIES := libuv libllama libwhisper libggml libusb libsodium
+LOCAL_EXPORT_LDLIBS := -lz
 include $(PREBUILT_STATIC_LIBRARY)
 
 ## Injected extensions
@@ -2488,22 +2494,22 @@ LOCAL_CFLAGS +=                                                                \
 
 LOCAL_CFLAGS += {{cflags}}
 
-LOCAL_LDLIBS := -landroid -llog
+LOCAL_LDLIBS := -landroid -llog -lz
 LOCAL_SRC_FILES =                                                              \
   init.cc
 
 LOCAL_STATIC_LIBRARIES :=                                                      \
-  libggml                                                                      \
-  libggml-base                                                                 \
-  libggml-cpu                                                                  \
   libllama                                                                     \
+  libwhisper                                                                   \
+  libggml                                                                      \
+  libggml-cpu                                                                  \
+  libggml-base                                                                 \
   libusb                                                                       \
   libsodium                                                                    \
-  libwhisper                                                                   \
 
 LOCAL_WHOLE_STATIC_LIBRARIES :=                                                \
-  libuv                                                                        \
-  liboro-runtime-static
+  liboro-runtime-static                                                        \
+  libuv
 
 include $(BUILD_SHARED_LIBRARY)
 

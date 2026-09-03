@@ -750,11 +750,12 @@ jobs:
             echo "ORO_SKIP_LIBIPFS=1"
 
             if [[ "$RELEASE_SUPPORT" != "desktop" ]]; then
-              echo "ORO_RUNTIME_DESKTOP_CLI_ONLY=1"
+              echo "ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS=1"
             fi
 
             if [[ "$BUILD_ANDROID" == "true" ]]; then
               echo "ORO_ANDROID_CI=1"
+              echo "ORO_RUNTIME_DESKTOP_CLI_ONLY=1"
               echo "ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes"
             fi
           } >> "$GITHUB_ENV"
