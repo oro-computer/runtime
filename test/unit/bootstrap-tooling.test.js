@@ -2292,7 +2292,7 @@ test('CI caches dependencies and runs focused platform coverage', () => {
   }
   assert.match(
     workflow,
-    /Build Oro Runtime CLI\n\s+timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Unix\)[\s\S]*timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Windows\)[\s\S]*timeout-minutes: 20/,
+    /Build Oro Runtime CLI\n\s+id: build-runtime\n\s+timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Unix\)\n\s+id: build-runtime-unix[\s\S]*timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Windows\)\n\s+id: build-runtime-windows[\s\S]*timeout-minutes: 20/,
     'CI should stop native builds that exceed the twenty-minute cutoff'
   )
   for (const nativeWorkflow of [workflow, releaseWorkflow, publishWorkflow]) {
