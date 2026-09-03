@@ -1135,6 +1135,22 @@ test('Linux headless focus changes bypass native compositor operations', () => {
   )
 })
 
+test('OTP tests inject their request transport without mutating ESM imports', () => {
+  const credentials = readFile('api/internal/credentials.js')
+  const otpTest = readFile('test/src/otp.js')
+
+  assert.match(
+    credentials,
+    /async function get \(options, request = ipc\.request\)[\s\S]*await request\(/,
+    'credentials.get should provide an injectable request transport'
+  )
+  assert.doesNotMatch(
+    otpTest,
+    /ipc\.request\s*=/,
+    'OTP tests should not assign to a read-only ESM module namespace'
+  )
+})
+
 test('Windows runtime builds avoid incompatible headers and archives', () => {
   const platform = readFile('src/runtime/platform/system.hh')
   const cflags = readFile('bin/cflags.sh')
@@ -1182,22 +1198,22 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     cflags,
-    /-Wl,\/NODEFAULTLIB:libcmt[\s\S]*-Wl,\/NXCOMPAT[\s\S]*-Wl,\/DYNAMICBASE[\s\S]*-Wl,\/HIGHENTROPYVA[\s\S]*-Wl,\/guard:cf/,
+    /-Wl,-NODEFAULTLIB:libcmt[\s\S]*-Wl,-NXCOMPAT[\s\S]*-Wl,-DYNAMICBASE[\s\S]*-Wl,-HIGHENTROPYVA[\s\S]*-Wl,-guard:cf/,
     'Windows linker options should remain opaque to Git Bash path conversion'
   )
   assert.doesNotMatch(
     [cflags, cli].join('\n'),
-    /-Xlinker \/(?:NODEFAULTLIB|NXCOMPAT|DYNAMICBASE|HIGHENTROPYVA|guard:cf)/,
+    /(?:-Xlinker |-Wl,)\/(?:NODEFAULTLIB|NXCOMPAT|DYNAMICBASE|HIGHENTROPYVA|guard:cf)/,
     'Windows build commands should not emit path-like slash linker arguments'
   )
   assert.equal(
-    (cli.match(/-Wl,\/NODEFAULTLIB:libcmt/g) || []).length,
+    (cli.match(/-Wl,-NODEFAULTLIB:libcmt/g) || []).length,
     2,
     'CLI-generated Windows build commands should keep linker options opaque to Git Bash'
   )
   assert.match(
     pkgConfig,
-    /ldflags\+=\("-Wl,\/NODEFAULTLIB:libcmt"\)/,
+    /ldflags\+=\("-Wl,-NODEFAULTLIB:libcmt"\)/,
     'Windows pkg-config metadata should expose linker options through Libs without path conversion'
   )
   assert.match(
@@ -1920,31 +1936,36 @@ test('runtime target builds share the detected CPU budget', () => {
   )
 })
 
-test('Android CI compiles only the host runtime surface used by its CLI', () => {
+test('mobile CI compiles only the host runtime surface used by its CLI', () => {
   const workflow = readFile('.github/workflows/ci.yml')
   const runtimeBuilder = readFile('bin/build-runtime-library.sh')
 
   assert.match(
     workflow,
-    /BUILD_ANDROID" == "true"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY=1/,
-    'Android shards should request the reduced host CLI runtime'
+    /RELEASE_SUPPORT" != "desktop"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY=1/,
+    'Android and Apple-mobile shards should request the reduced host CLI runtime'
   )
   assert.match(
     runtimeBuilder,
-    /host" = "Linux"[\s\S]*platform" = "desktop"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*sources=\([\s\S]*runtime\/config\/config\.cc[\s\S]*runtime\/mcp\/tool\.cc[\s\S]*runtime\/process\/unix\.cc[\s\S]*runtime\/version\.cc[\s\S]*build\/sqlite\/sqlite3\.c[\s\S]*build\/llama\/src\/llama\.cpp/,
-    'the reduced host archive should retain every translation unit consumed by the Android build CLI'
+    /host" = "Linux" \|\| "\$host" = "Darwin"[\s\S]*platform" = "desktop"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*sources=\([\s\S]*runtime\/config\/config\.cc[\s\S]*runtime\/mcp\/tool\.cc[\s\S]*runtime\/process\/unix\.cc[\s\S]*runtime\/version\.cc[\s\S]*build\/sqlite\/sqlite3\.c[\s\S]*build\/llama\/src\/llama\.cpp/,
+    'the reduced host archive should retain every translation unit consumed by mobile build CLIs'
   )
   assert.match(
     readFile('bin/install.sh'),
-    /ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*building Android runtimes before the reduced host CLI[\s\S]*runtime_index = 1[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$CPU_CORES"[\s\S]*runtime_arches\[0\]/,
-    'Android CI should give each smaller runtime build the full CPU budget without oversubscription'
+    /ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*runtime_target_count > 1[\s\S]*building mobile runtimes before the reduced host CLI[\s\S]*runtime_index = 1[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$CPU_CORES"[\s\S]*runtime_arches\[0\]/,
+    'mobile CI should give each runtime build the full CPU budget without oversubscription'
   )
   assert.doesNotMatch(
     runtimeBuilder.match(
-      /if \[\[ "\$host" = "Linux" \]\] &&[\s\S]*?building the Android CI host CLI runtime"\nfi/
+      /if \[\[ "\$host" = "Linux" \|\| "\$host" = "Darwin" \]\] &&[\s\S]*?building the mobile CI host CLI runtime surface"\nfi/
     )?.[0] ?? '',
     /runtime\/window\/linux\.cc|runtime\/core\/services\.cc|runtime\/serviceworker/,
-    'the Android packaging CLI should not compile desktop UI and service backends'
+    'mobile packaging CLIs should not compile desktop UI and service backends'
+  )
+  assert.match(
+    readFile('test/scripts/test-android.js'),
+    /--platform=android'[\s\S]*'--allow-exec'/,
+    'Android tests should explicitly authorize their fixture extension build'
   )
 })
 
@@ -1971,6 +1992,16 @@ test('CI correctness builds avoid redundant native compile work', () => {
     workflow,
     /Reclaim Android build disk[\s\S]*cache_directories=\([\s\S]*sudo chown -R "\$USER":"\$android_group" "\$directory"[\s\S]*Restore Android build SDK cache/,
     'Android SDK cache targets should be writable before archive restoration'
+  )
+  assert.match(
+    workflow,
+    /id: smoke-test[\s\S]*Run desktop tests[\s\S]*always\(\) && steps\.smoke-test\.outcome == 'success'[\s\S]*Run child process integration tests[\s\S]*always\(\) && steps\.smoke-test\.outcome == 'success'[\s\S]*Run MCP integration tests[\s\S]*always\(\) && steps\.smoke-test\.outcome == 'success'[\s\S]*Run runtime-core tests/,
+    'independent Linux integration suites should continue after an earlier suite fails'
+  )
+  assert.match(
+    workflow,
+    /id: validate-targets-unix[\s\S]*id: validate-targets-windows[\s\S]*id: smoke-test[\s\S]*always\(\)[\s\S]*Run desktop tests[\s\S]*steps\.smoke-test\.outcome == 'success'[\s\S]*Run child process integration tests[\s\S]*steps\.smoke-test\.outcome == 'success'[\s\S]*Boot iOS Simulator and run tests[\s\S]*steps\.smoke-test\.outcome == 'success'[\s\S]*Run Android emulator tests/,
+    'cross-platform test suites should depend on build readiness rather than prior test outcomes'
   )
 })
 

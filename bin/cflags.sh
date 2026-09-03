@@ -330,11 +330,11 @@ if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then
       -DWINVER=0x0A00
       -D_WIN32_WINNT=0x0A00
       -DNTDDI_VERSION=0x0A000000
-      "-Wl,/NODEFAULTLIB:libcmt"
-      "-Wl,/NXCOMPAT"
-      "-Wl,/DYNAMICBASE"
-      "-Wl,/HIGHENTROPYVA"
-      "-Wl,/guard:cf"
+      "-Wl,-NODEFAULTLIB:libcmt"
+      "-Wl,-NXCOMPAT"
+      "-Wl,-DYNAMICBASE"
+      "-Wl,-HIGHENTROPYVA"
+      "-Wl,-guard:cf"
       -Wno-nonportable-include-path
     )
     if [[ -n "$DEBUG" ]]; then

@@ -66,7 +66,7 @@ function normalizeTransports (input) {
   return [String(input)]
 }
 
-async function get (options) {
+async function get (options, request = ipc.request) {
   if (nativeGet && isIOS) {
     return nativeGet(options)
   }
@@ -134,7 +134,7 @@ async function get (options) {
     requestOptions.timeout = timeout
   }
 
-  const result = await ipc.request(
+  const result = await request(
     'otp.credentials.get',
     payload,
     requestOptions

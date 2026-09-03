@@ -267,12 +267,13 @@ elif [[ "$host" = "Win32" ]]; then
   sources+=("$root/src/runtime/process/win.cc")
 fi
 
-if [[ "$host" = "Linux" ]] &&
+if [[ "$host" = "Linux" || "$host" = "Darwin" ]] &&
    [[ "$platform" = "desktop" ]] &&
    [[ "${ORO_RUNTIME_DESKTOP_CLI_ONLY:-0}" = "1" ]]; then
-  # Android CI needs the host executable only to package and launch the Android
+  # Mobile CI needs the host executable only to package and launch the target
   # app. Keep the translation units that the CLI link consumes instead of
-  # compiling the complete desktop application runtime alongside the NDK build.
+  # compiling the complete desktop application runtime alongside the mobile
+  # build.
   sources=(
     "$root/src/runtime/ini.cc"
     "$root/src/runtime/semver.cc"
@@ -335,7 +336,7 @@ if [[ "$host" = "Linux" ]] &&
     )
   fi
 
-  echo "# building the Android CI host CLI runtime surface"
+  echo "# building the mobile CI host CLI runtime surface"
 fi
 
 if [[ -n "${CLANG_C:-}" ]]; then

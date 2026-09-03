@@ -787,9 +787,9 @@ function _build_runtime_library() {
   local runtime_target_count=${#runtime_arches[@]}
 
   if [[ "${ORO_RUNTIME_DESKTOP_CLI_ONLY:-0}" = "1" ]] &&
-     [[ -n "$BUILD_ANDROID" ]]; then
+     (( runtime_target_count > 1 )); then
     local runtime_index=0
-    echo "# building Android runtimes before the reduced host CLI with $CPU_CORES compile jobs"
+    echo "# building mobile runtimes before the reduced host CLI with $CPU_CORES compile jobs"
 
     for (( runtime_index = 1; runtime_index < runtime_target_count; runtime_index++ )); do
       ORO_RUNTIME_BUILD_JOBS="$CPU_CORES" \

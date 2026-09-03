@@ -33,6 +33,7 @@ if (ORO_ANDROID_CI) {
       '--test=./index.js',
       '--headless',
       '--platform=android',
+      '--allow-exec',
       '--env=CI',
       '--env=ORO_ANDROID_CI'
     ],
@@ -51,6 +52,7 @@ if (ORO_ANDROID_CI) {
       '--prod',
       '--headless',
       '--platform=android',
+      '--allow-exec',
       '--env',
       'ORO_DEBUG_IPC'
     ],

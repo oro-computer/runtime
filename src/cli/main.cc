@@ -10500,7 +10500,7 @@ int main (int argc, char* argv[]) {
         " -D_DLL"
         " -DWIN32"
         " -DWIN32_LEAN_AND_MEAN"
-        " -Wl,/NODEFAULTLIB:libcmt"
+        " -Wl,-NODEFAULTLIB:libcmt"
         " -Wno-nonportable-include-path"
         " -I\"" + Path(paths.platformSpecificOutputPath / "include").string() + "\""
         " -I\"" + prefix + "include\""
@@ -11761,7 +11761,7 @@ int main (int argc, char* argv[]) {
             << " -D_DLL"
             << " -DWIN32"
             << " -DWIN32_LEAN_AND_MEAN"
-            << " -Wl,/NODEFAULTLIB:libcmt"
+            << " -Wl,-NODEFAULTLIB:libcmt"
             << " -Wno-nonportable-include-path"
           #else
             << " " << flags
