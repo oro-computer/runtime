@@ -1244,11 +1244,6 @@ constexpr auto gAndroidManifest = R"XML(
 <manifest
   xmlns:android="http://schemas.android.com/apk/res/android"
 >
-  <uses-sdk
-    android:minSdkVersion="26"
-    android:targetSdkVersion="37"
-  />
-
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
@@ -2296,9 +2291,9 @@ apply plugin: 'com.android.application'
 
 android {
   compileSdk 37
-  ndkVersion "29.0.14206865"
+  ndkVersion = "29.0.14206865"
   flavorDimensions "default"
-  namespace '{{android_bundle_identifier}}'
+  namespace = '{{android_bundle_identifier}}'
 
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17

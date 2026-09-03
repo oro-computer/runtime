@@ -655,16 +655,19 @@ function captureExecOutput (child, options, callback) {
     })
   }
 
-  child.once('error', (err) => {
-    hasError = true
-    stdout.splice(0, stdout.length)
-    stderr.splice(0, stderr.length)
-    if (typeof callback === 'function') {
-      callback(err, null, null)
-    }
-  })
+  // Register completion listeners immediately. Fast children can close before
+  // Promise assimilation calls this object's then() method.
+  const completion = new Promise((resolve, reject) => {
+    child.once('error', (err) => {
+      hasError = true
+      stdout.splice(0, stdout.length)
+      stderr.splice(0, stderr.length)
+      reject(err)
+      if (typeof callback === 'function') {
+        callback(err, null, null)
+      }
+    })
 
-  if (typeof callback === 'function') {
     child.once('close', () => {
       closed = true
 
@@ -672,74 +675,48 @@ function captureExecOutput (child, options, callback) {
         return
       }
 
+      let result
       if (options?.encoding === 'buffer') {
-        callback(null, Buffer.concat(stdout), Buffer.concat(stderr))
+        result = {
+          stdout: Buffer.concat(stdout),
+          stderr: Buffer.concat(stderr)
+        }
       } else {
         const encoding = options?.encoding ?? 'utf8'
-        callback(
-          null,
+        result = {
           // @ts-ignore
-          Buffer.concat(stdout).toString(encoding),
+          stdout: Buffer.concat(stdout).toString(encoding),
           // @ts-ignore
-          Buffer.concat(stderr).toString(encoding)
-        )
+          stderr: Buffer.concat(stderr).toString(encoding)
+        }
       }
 
       stdout.splice(0, stdout.length)
       stderr.splice(0, stderr.length)
+      resolve(result)
+      if (typeof callback === 'function') {
+        callback(null, result.stdout, result.stderr)
+      }
     })
-  }
+  })
+
+  // Callback-only callers do not consume the thenable. Mark the shared
+  // completion rejection handled while preserving it for later consumers.
+  completion.catch(() => {})
 
   // Intentionally make the ChildProcess awaitable.
   return Object.assign(child, {
     // oxlint-disable-next-line unicorn/no-thenable
     then (resolve, reject) {
-      const promise = new Promise((resolve, reject) => {
-        child.once('error', (err) => {
-          hasError = true
-          stdout.splice(0, stdout.length)
-          stderr.splice(0, stderr.length)
-          reject(err)
-        })
-
-        child.once('close', () => {
-          closed = true
-
-          if (options?.encoding === 'buffer') {
-            resolve({
-              stdout: Buffer.concat(stdout),
-              stderr: Buffer.concat(stderr)
-            })
-          } else {
-            const encoding = options?.encoding ?? 'utf8'
-            resolve({
-              // @ts-ignore
-              stdout: Buffer.concat(stdout).toString(encoding),
-              // @ts-ignore
-              stderr: Buffer.concat(stderr).toString(encoding)
-            })
-          }
-
-          stdout.splice(0, stdout.length)
-          stderr.splice(0, stderr.length)
-        })
-      })
-
-      if (resolve && reject) {
-        return promise.then(resolve, reject)
-      } else if (resolve) {
-        return promise.then(resolve)
-      }
-
-      return promise
+      return completion.then(resolve, reject)
     },
 
     catch (reject) {
-      return this.then().catch(reject)
+      return completion.catch(reject)
     },
 
     finally (next) {
-      return this.then().finally(next)
+      return completion.finally(next)
     }
   })
 }

@@ -2627,11 +2627,21 @@ namespace oro::runtime::window {
   }
 
   void Window::minimize () {
-    gtk_window_iconify(GTK_WINDOW(window));
+    if (this->options.headless) {
+      this->eval("window.dispatchEvent(new Event('blur'))");
+    } else {
+      gtk_window_iconify(GTK_WINDOW(window));
+      this->evalDomBlurThrottled();
+    }
   }
 
   void Window::restore () {
-    gtk_window_deiconify(GTK_WINDOW(window));
+    if (this->options.headless) {
+      this->eval("window.dispatchEvent(new Event('focus'))");
+    } else {
+      gtk_window_deiconify(GTK_WINDOW(window));
+      this->evalDomFocusThrottled();
+    }
   }
 
   void Window::navigate (const String& url) {
@@ -2775,8 +2785,10 @@ namespace oro::runtime::window {
     if (this->window) {
       if (this->options.headless == false) {
         gtk_window_present(GTK_WINDOW(this->window));
+        this->evalDomFocusThrottled();
+      } else {
+        this->eval("window.dispatchEvent(new Event('focus'))");
       }
-      this->evalDomFocusThrottled();
     }
   }
 
@@ -2787,8 +2799,10 @@ namespace oro::runtime::window {
         if (gdk) {
           gdk_window_lower(gdk);
         }
+        this->evalDomBlurThrottled();
+      } else {
+        this->eval("window.dispatchEvent(new Event('blur'))");
       }
-      this->evalDomBlurThrottled();
     }
   }
 

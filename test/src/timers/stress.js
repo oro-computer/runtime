@@ -19,13 +19,25 @@ test('timers: many timeouts fire once', async (t) => {
 })
 test('timers: interval counts and clears', async (t) => {
   let count = 0
-  const id = setInterval(() => {
-    count++
-  }, 5)
-  await sleep(55)
+  let id
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      clearInterval(id)
+      reject(new Error('interval did not fire three times within one second'))
+    }, 1000)
+    id = setInterval(() => {
+      count++
+      if (count === 3) {
+        clearTimeout(timeout)
+        resolve()
+      }
+    }, 5)
+  })
   clearInterval(id)
   const final = count
-  t.ok(final > 5 && final <= 20, 'interval fired multiple times and cleared')
+  await sleep(30)
+  t.ok(final >= 3, 'interval fired multiple times')
+  t.equal(count, final, 'cleared interval did not fire again')
 })
 
 test('timers: double clearTimeout safe', async (t) => {

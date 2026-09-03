@@ -2,6 +2,7 @@ import { parentPort } from '../worker_threads.js'
 import process from '../process.js'
 import signal from '../process/signal.js'
 import ipc from '../ipc.js'
+import { Writable } from '../stream.js'
 
 const SPAWN_COMMAND = 'child_process.spawn'
 const KILL_COMMAND = 'child_process.kill'
@@ -10,6 +11,7 @@ const state = {}
 let outputCount = 0
 let exited = false
 let pendingClose = null
+let flushingClose = false
 
 const propagateWorkerError = (err) =>
   parentPort.postMessage({
@@ -70,10 +72,21 @@ parentPort.onmessage = async ({ data: { id, method, args } }) => {
 
     let ready = false
     const pendingEvents = []
-    const flushClose = () => {
-      if (!pendingClose || !exited) return
+    const flushClose = async () => {
+      if (!pendingClose || !exited || flushingClose) return
       const expectedOutputCount = Number(pendingClose.outputCount ?? 0)
       if (outputCount < expectedOutputCount) return
+
+      flushingClose = true
+      await Promise.all([
+        process.stdout ? Writable.drained(process.stdout) : true,
+        process.stderr ? Writable.drained(process.stderr) : true
+      ])
+
+      if (!pendingClose) {
+        flushingClose = false
+        return
+      }
 
       state.exitCode = pendingClose.code
       state.lifecycle = 'close'

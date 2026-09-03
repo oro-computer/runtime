@@ -333,6 +333,11 @@ export * from '{{url}}'
         if (result.queuedResponse.eventStreamCallback != nullptr) {
           response->setHeader("content-type", "text/event-stream; charset=utf-8");
           response->setHeader("cache-control", "no-store");
+          if (!response->writeHead(200)) {
+            callback(*response);
+            delete response;
+            return;
+          }
           *result.queuedResponse.eventStreamCallback = [request, response, message, callback](
             const char* name,
             const unsigned char* data,
@@ -354,8 +359,6 @@ export * from '{{url}}'
               }
               return false;
             }
-
-            response->writeHead(200);
 
             const auto event = SchemeHandlers::Response::Event { name, reinterpret_cast<const char*>(data) };
 
@@ -380,6 +383,14 @@ export * from '{{url}}'
         // handle chunk streams
         if (result.queuedResponse.chunkStreamCallback != nullptr) {
           response->setHeader("transfer-encoding", "chunked");
+          if (!response->hasHeader("content-type")) {
+            response->setHeader("content-type", "application/octet-stream");
+          }
+          if (!response->writeHead(200)) {
+            callback(*response);
+            delete response;
+            return;
+          }
           *result.queuedResponse.chunkStreamCallback = [request, response, message, callback](
             const unsigned char* chunk,
             size_t size,
@@ -402,7 +413,6 @@ export * from '{{url}}'
               return false;
             }
 
-            response->writeHead(200);
             if (chunk && size > 0) {
               response->write(size, chunk);
             }

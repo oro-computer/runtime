@@ -138,6 +138,20 @@ test('IPC streams deliver data before the producer finishes', () => {
     /eventStreamCallback = \[.*[\s\S]*streamStartCallback\(\);[\s\S]*chunkStreamCallback = \[.*[\s\S]*streamStartCallback\(\);/,
     'custom-scheme producers should start only after their transport callbacks are installed'
   )
+  const streamBridge = bridge.match(
+    /\/\/ handle event source streams([\s\S]*?)if \(result\.queuedResponse\.body != nullptr\)/
+  )?.[1]
+  assert.ok(streamBridge, 'the custom-scheme stream bridge should exist')
+  assert.equal(
+    (streamBridge.match(/response->writeHead\(200\)/g) || []).length,
+    2,
+    'each streaming response should write its headers exactly once'
+  )
+  assert.match(
+    streamBridge,
+    /response->writeHead\(200\)[\s\S]*eventStreamCallback = \[[\s\S]*content-type[\s\S]*application\/octet-stream[\s\S]*response->writeHead\(200\)[\s\S]*chunkStreamCallback = \[/,
+    'complete streaming response headers should be written before each producer callback is installed'
+  )
   assert.match(
     schemeHandlers,
     /if \(isChunked \|\| isSSE\) \{\s+webkit_uri_scheme_request_finish_with_response\([\s\S]*platformResponseStarted = true;/,

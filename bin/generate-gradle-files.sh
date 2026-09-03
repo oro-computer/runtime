@@ -30,9 +30,9 @@ allprojects {
 apply plugin: 'com.android.application'
 
 android {
-  namespace "oro.runtime"
+  namespace = "oro.runtime"
   compileSdk 37
-  ndkVersion "29.0.14206865"
+  ndkVersion = "29.0.14206865"
   flavorDimensions "default"
 
   compileOptions {

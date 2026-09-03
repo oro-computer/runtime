@@ -848,32 +848,45 @@ function _build_runtime_library() {
   die "$runtime_status" "not ok - unable to build runtime library"
 }
 
-function _check_windows_runtime_source_syntax() {
-  if [[ "$host" != "Win32" ]]; then
-    return
+function _check_runtime_source_syntax() {
+  local enabled="${ORO_RUNTIME_SOURCE_PREFLIGHT:-}"
+  if [[ -z "$enabled" ]] && [[ "$host" == "Win32" ]]; then
+    enabled="${CI:-}"
   fi
-
-  local enabled="${ORO_RUNTIME_SOURCE_PREFLIGHT:-${CI:-}}"
   if [[ "$enabled" != "1" ]] && [[ "$enabled" != "true" ]]; then
     return
   fi
 
-  echo "# checking Windows runtime source syntax before dependency compilation"
-  ORO_TLS_BUILD_PROVIDER=schannel "$root/bin/build-runtime-library.sh" \
-    --arch "$(host_arch)" \
-    --platform desktop \
-    --syntax-only
-  die $? "not ok - Windows runtime source syntax check failed"
+  echo "# checking host runtime source syntax before dependency compilation"
+  if [[ "$host" == "Win32" ]]; then
+    ORO_TLS_BUILD_PROVIDER=schannel "$root/bin/build-runtime-library.sh" \
+      --arch "$(host_arch)" \
+      --platform desktop \
+      --syntax-only
+  else
+    "$root/bin/build-runtime-library.sh" \
+      --arch "$(host_arch)" \
+      --platform desktop \
+      --syntax-only
+  fi
+  die $? "not ok - host runtime source syntax check failed"
 
   local -a source_cflags=()
   local source_cflags_output=""
-  source_cflags_output="$(ORO_TLS_BUILD_PROVIDER=schannel "$root/bin/cflags.sh")" || {
-    local source_cflags_status=$?
-    die "$source_cflags_status" "not ok - unable to resolve Windows entrypoint compiler flags"
-  }
+  if [[ "$host" == "Win32" ]]; then
+    source_cflags_output="$(ORO_TLS_BUILD_PROVIDER=schannel "$root/bin/cflags.sh")"
+  else
+    source_cflags_output="$("$root/bin/cflags.sh")"
+  fi
+  local source_cflags_status=$?
+  if (( source_cflags_status != 0 )); then
+    die "$source_cflags_status" "not ok - unable to resolve host entrypoint compiler flags"
+  fi
   read -r -a source_cflags <<< "$source_cflags_output"
   local source_status=0
+  local source_rc=0
   local source=""
+  local -a source_pids=()
   local -a entrypoint_sources=(
     "$root/src/init.cc"
     "$root"/src/cli/*.cc
@@ -884,12 +897,31 @@ function _check_windows_runtime_source_syntax() {
     if [[ ! -f "$source" ]]; then
       continue
     fi
-    echo "# checking Windows entrypoint syntax $(basename "$source")"
-    "$CXX" "${source_cflags[@]}" -ferror-limit=0 -fsyntax-only "$source" || source_status=1
+    while (( ${#source_pids[@]} >= CPU_CORES )); do
+      wait "${source_pids[0]}" 2>/dev/null
+      source_rc=$?
+      if (( source_rc != 0 )); then
+        source_status=1
+      fi
+      source_pids=("${source_pids[@]:1}")
+    done
+
+    (
+      echo "# checking host entrypoint syntax $(basename "$source")"
+      "$CXX" "${source_cflags[@]}" -ferror-limit=0 -fsyntax-only "$source"
+    ) & source_pids+=("$!")
   done
 
-  die "$source_status" "not ok - Windows entrypoint source syntax check failed"
-  echo "ok - Windows entrypoint source syntax check passed"
+  for pid in "${source_pids[@]}"; do
+    wait "$pid" 2>/dev/null
+    source_rc=$?
+    if (( source_rc != 0 )); then
+      source_status=1
+    fi
+  done
+
+  die "$source_status" "not ok - host entrypoint source syntax check failed"
+  echo "ok - host entrypoint source syntax check passed"
 }
 
 function _get_web_view2() {
@@ -2362,13 +2394,17 @@ function _compile_llama {
 
     local cc="$(xcrun -sdk $sdk -find clang)"
     local cxx="$(xcrun -sdk $sdk -find clang++)"
-    local cflags="--target=$target-apple-ios -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION -DLLAMA_METAL_EMBED_LIBRARY=ON -DUSE_NEON_DOTPROD "
+    local target_triple="$target-apple-ios"
+    if [[ "$platform" == "iPhoneSimulator" ]]; then
+      target_triple="$target-apple-ios-simulator"
+    fi
+    local cflags="--target=$target_triple -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION -DLLAMA_METAL_EMBED_LIBRARY=ON -DUSE_NEON_DOTPROD "
     if [ "$platform" == "iPhoneOS" ]; then
       cflags+="-march=armv8.2-a+dotprod"
     elif [ "$platform" == "iPhoneSimulator" ] && [ "$target" == "arm64" ]; then
       cflags+="-march=armv8.2-a+dotprod"
     elif [ "$platform" == "iPhoneSimulator" ] && [ "$target" == "x86_64" ]; then
-      cflags+="-march=x86-64 --target=x86-apple-ios-simulator"
+      cflags+="-march=x86-64"
     fi
 
     local sdkroot="$PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
@@ -2704,13 +2740,17 @@ function _compile_whisper {
     export AR="$ar"
     export RANLIB="$ranlib"
 
-    local cflags="--target=$target-apple-ios -isysroot $sdkroot -m$sdk-version-min=$SDKMINVERSION -fembed-bitcode"
+    local target_triple="$target-apple-ios"
+    if [[ "$platform" == "iPhoneSimulator" ]]; then
+      target_triple="$target-apple-ios-simulator"
+    fi
+    local cflags="--target=$target_triple -isysroot $sdkroot -m$sdk-version-min=$SDKMINVERSION -fembed-bitcode"
     if [ "$platform" == "iPhoneOS" ]; then
       cflags+=" -march=armv8.2-a+dotprod"
     elif [ "$target" == "arm64" ]; then
       cflags+=" -march=armv8.2-a+dotprod"
     elif [ "$target" == "x86_64" ]; then
-      cflags+=" -march=x86-64 --target=x86_64-apple-ios-simulator"
+      cflags+=" -march=x86-64"
     fi
 
     export CFLAGS="$cflags"
@@ -3541,8 +3581,11 @@ function _compile_zlib {
       local staged_base="$STAGING_DIR/build/$config"
       if [[ -d "$staged_base" ]]; then
         for candidate in \
-          "$staged_base/zlibstatic.lib" \
-          "$staged_base/zlib.lib"       \
+          "$staged_base/zlibstatic${suffix}.lib" \
+          "$staged_base/zlib${suffix}.lib"       \
+          "$staged_base/z${suffix}.lib"          \
+          "$staged_base/zlibstatic.lib"          \
+          "$staged_base/zlib.lib"                \
           "$staged_base/z.lib"
         do
           if [[ -f "$candidate" ]]; then
@@ -3554,8 +3597,11 @@ function _compile_zlib {
 
       if [[ -z "$staged_lib" ]]; then
         for candidate in \
-          "$BUILD_DIR/$target-$platform/lib/zlibstatic.lib" \
-          "$BUILD_DIR/$target-$platform/lib/zlib.lib"       \
+          "$BUILD_DIR/$target-$platform/lib/zlibstatic${suffix}.lib" \
+          "$BUILD_DIR/$target-$platform/lib/zlib${suffix}.lib"       \
+          "$BUILD_DIR/$target-$platform/lib/z${suffix}.lib"          \
+          "$BUILD_DIR/$target-$platform/lib/zlibstatic.lib"          \
+          "$BUILD_DIR/$target-$platform/lib/zlib.lib"                \
           "$BUILD_DIR/$target-$platform/lib/z.lib"
         do
           if [[ -f "$candidate" ]]; then
@@ -4110,7 +4156,12 @@ cd "$BUILD_DIR" || exit 1
 trap onsignal INT TERM
 
 _get_web_view2
-_check_windows_runtime_source_syntax
+_check_runtime_source_syntax
+
+if [[ "${ORO_RUNTIME_COMPILE_ONLY:-false}" == "true" ]]; then
+  echo "ok - host runtime compile-only validation passed"
+  exit 0
+fi
 
 if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
   quiet xcode-select -p

@@ -1135,6 +1135,51 @@ test('Linux headless focus changes bypass native compositor operations', () => {
   )
 })
 
+test('desktop headless window actions dispatch deterministic lifecycle events', () => {
+  for (const relativePath of [
+    'src/runtime/window/apple.mm',
+    'src/runtime/window/linux.cc',
+    'src/runtime/window/win.cc'
+  ]) {
+    const source = readFile(relativePath)
+    assert.match(
+      source,
+      /options\.headless[\s\S]*window\.dispatchEvent\(new Event\('blur'\)\)/,
+      `${relativePath} should dispatch DOM blur without native window activation`
+    )
+    assert.match(
+      source,
+      /options\.headless[\s\S]*window\.dispatchEvent\(new Event\('focus'\)\)/,
+      `${relativePath} should dispatch DOM focus without native window activation`
+    )
+    assert.doesNotMatch(
+      source,
+      /options\.headless[\s\S]*windowManager\.emit\("application(?:pause|resume)"\)/,
+      `${relativePath} should keep window focus separate from application lifecycle`
+    )
+  }
+})
+
+test('child process completion cannot outrun output and await listeners', () => {
+  const childProcess = readFile('api/child_process.js')
+  const childWorker = readFile('api/child_process/worker.js')
+  const capture = childProcess.match(
+    /function captureExecOutput[\s\S]*?\n}\n\n\/\*\*/
+  )?.[0]
+
+  assert.ok(capture, 'the child process output capture helper should exist')
+  assert.match(
+    capture,
+    /const completion = new Promise[\s\S]*child\.once\('close'[\s\S]*then \(resolve, reject\) \{\s*return completion\.then\(resolve, reject\)/,
+    'exec completion should be observed before a fast child can close and should preserve both Promise handlers'
+  )
+  assert.match(
+    childWorker,
+    /await Promise\.all\(\[[\s\S]*Writable\.drained\(process\.stdout\)[\s\S]*Writable\.drained\(process\.stderr\)[\s\S]*state\.lifecycle = 'close'/,
+    'the child worker should flush both output transports before reporting close'
+  )
+})
+
 test('OTP tests inject their request transport without mutating ESM imports', () => {
   const credentials = readFile('api/internal/credentials.js')
   const otpTest = readFile('test/src/otp.js')
@@ -1245,6 +1290,11 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     installer,
     /install_prefix="\$BUILD_DIR\/\$target-\$platform"[\s\S]*host" == "Win32"[\s\S]*native_path "\$install_prefix"[\s\S]*CMAKE_INSTALL_PREFIX="\$install_prefix"/,
     'native Windows CMake should receive a native zlib install prefix'
+  )
+  assert.match(
+    installer,
+    /zlibstatic\$\{suffix\}\.lib[\s\S]*zlib\$\{suffix\}\.lib[\s\S]*z\$\{suffix\}\.lib/,
+    'Windows zlib discovery should account for CMake debug postfixes'
   )
   assert.doesNotMatch(
     processService,
@@ -1473,8 +1523,8 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     installer,
-    /_prepare\s+cd "\$BUILD_DIR" \|\| exit 1[\s\S]{0,160}_get_web_view2\s+_check_windows_runtime_source_syntax[\s\S]*_compile_llama/,
-    'opt-in Windows source audits should run before dependency compilation'
+    /_prepare\s+cd "\$BUILD_DIR" \|\| exit 1[\s\S]*_get_web_view2\s+_check_runtime_source_syntax[\s\S]*_compile_llama/,
+    'opt-in host source audits should run before dependency compilation'
   )
   assert.match(
     installer,
@@ -1484,7 +1534,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   assert.match(
     installer,
     /entrypoint_sources=\([\s\S]*src\/init\.cc[\s\S]*src\/cli\/\*\.cc[\s\S]*src\/desktop\/\*\.cc[\s\S]*-ferror-limit=0 -fsyntax-only "\$source"/,
-    'the early Windows source preflight should include CLI and desktop entrypoints'
+    'the early host source preflight should include CLI and desktop entrypoints'
   )
   assert.match(
     [tlsClient, tlsServer].join('\n'),
@@ -1708,12 +1758,16 @@ test('Cargo license collection is locked, offline, and target-aware', () => {
   )
 })
 
-test('iOS llama cross-builds do not probe host BLAS', () => {
+test('iOS AI cross-builds select the correct SDK target', () => {
   const installer = readFile('bin/install.sh')
   const llamaCompiler = installer.match(
     /function _compile_llama \{([\s\S]*?)\n\}/
   )?.[1]
+  const whisperCompiler = installer.match(
+    /function _compile_whisper \{([\s\S]*?)\n\}/
+  )?.[1]
   assert.ok(llamaCompiler, 'the llama compiler function should exist')
+  assert.ok(whisperCompiler, 'the whisper compiler function should exist')
 
   const iosCompiler = llamaCompiler.match(
     /elif \[ "\$platform" == "iPhoneOS" \] \|\| \[ "\$platform" == "iPhoneSimulator" \]; then([\s\S]*?)elif \[ "\$platform" == "android" \]; then/
@@ -1724,6 +1778,21 @@ test('iOS llama cross-builds do not probe host BLAS', () => {
     /-DGGML_BLAS=OFF/,
     'iOS llama builds should disable the host-oriented BLAS backend'
   )
+  for (const [name, compiler] of [
+    ['llama', llamaCompiler],
+    ['whisper', whisperCompiler]
+  ]) {
+    assert.match(
+      compiler,
+      /local target_triple="\$target-apple-ios"[\s\S]*target_triple="\$target-apple-ios-simulator"[\s\S]*--target=\$target_triple/,
+      `${name} should compile Simulator archives with a Simulator target triple`
+    )
+    assert.doesNotMatch(
+      compiler,
+      /--target=x86(?:_64)?-apple-ios-simulator/,
+      `${name} should derive the Simulator target from the requested architecture`
+    )
+  }
 })
 
 test('Apple prebuilds restore host tools and select target headers', () => {
@@ -2048,6 +2117,7 @@ test('mobile CI gives each target the full CPU budget', () => {
 
 test('CI correctness builds avoid redundant native compile work', () => {
   const cflags = readFile('bin/cflags.sh')
+  const installer = readFile('bin/install.sh')
   const workflow = readFile('.github/workflows/ci.yml')
 
   assert.equal(
@@ -2062,8 +2132,18 @@ test('CI correctness builds avoid redundant native compile work', () => {
   )
   assert.match(
     workflow,
-    /archive build compiles the complete Windows source surface[\s\S]*ORO_RUNTIME_SOURCE_PREFLIGHT=0/,
-    'Windows CI should not syntax-compile the full runtime immediately before compiling it again'
+    /Archive builds compile the complete source surface[\s\S]*ORO_RUNTIME_SOURCE_PREFLIGHT=0/,
+    'archive CI should not syntax-compile the full runtime immediately before compiling it again'
+  )
+  assert.match(
+    workflow,
+    /name: macOS x64[\s\S]*compile_only: true[\s\S]*ORO_RUNTIME_COMPILE_ONLY:[\s\S]*ORO_RUNTIME_SOURCE_PREFLIGHT=1/,
+    'the Intel macOS lane should compile-check its complete source surface without rebuilding the linked Apple Silicon coverage'
+  )
+  assert.match(
+    installer,
+    /ORO_RUNTIME_COMPILE_ONLY:-false[\s\S]*host runtime compile-only validation passed[\s\S]*exit 0/,
+    'compile-only CI should stop before expensive dependency and archive builds'
   )
   assert.match(
     workflow,
@@ -2587,10 +2667,16 @@ test('Android bootstrap separates build packages from emulator packages', () => 
   for (const source of [generatedGradle, cliTemplates]) {
     assert.match(source, /com\.android\.tools\.build:gradle:9\.3\.2/)
     assert.match(source, /compileSdk 37/)
-    assert.match(source, /ndkVersion "29\.0\.14206865"/)
+    assert.match(source, /ndkVersion = "29\.0\.14206865"/)
+    assert.match(source, /namespace = /)
     assert.match(source, /JavaVersion\.VERSION_17/)
     assert.doesNotMatch(source, /kotlin-android/)
   }
+  assert.doesNotMatch(
+    cliTemplates,
+    /<uses-sdk/,
+    'Android SDK levels should come from Gradle instead of the application manifest'
+  )
 
   assert.match(
     cli,

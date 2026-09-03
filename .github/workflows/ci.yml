@@ -440,6 +440,7 @@ jobs:
           - name: macOS x64
             id: macos-x64
             runs_on: macos-15-intel
+            compile_only: true
             release_support: desktop
             build_android: false
             exclude_android: true
@@ -493,6 +494,7 @@ jobs:
       ORO_CI_APPLE_MOBILE_TARGETS: ${{ matrix.apple_mobile_targets }}
       ORO_CI_FAST_COMPILE: '1'
       ORO_CI_ID: ${{ matrix.id }}
+      ORO_RUNTIME_COMPILE_ONLY: ${{ matrix.compile_only }}
       ORO_PRUNE_BUILD_OUTPUTS_AFTER_INSTALL: ${{ matrix.test_android }}
       ORO_PRUNE_IROH_BUILD_OUTPUTS: ${{ matrix.build_android }}
       ORO_PRUNE_TRANSIENT_BUILD_OUTPUTS: ${{ matrix.build_android }}
@@ -728,9 +730,15 @@ jobs:
             echo "ORO_HOME=$RUNNER_TEMP/oro-ci-$ORO_CI_ID"
             echo "PREFIX=$RUNNER_TEMP/oro-ci-$ORO_CI_ID"
 
-            # The archive build compiles the complete Windows source surface.
-            # Do not syntax-compile every translation unit a second time first.
-            echo "ORO_RUNTIME_SOURCE_PREFLIGHT=0"
+            if [[ "$ORO_RUNTIME_COMPILE_ONLY" == "true" ]]; then
+              # The Intel macOS lane validates every host translation unit.
+              # Apple Silicon performs the complete archive, link, and tests.
+              echo "ORO_RUNTIME_SOURCE_PREFLIGHT=1"
+            else
+              # Archive builds compile the complete source surface. Do not
+              # syntax-compile every translation unit a second time first.
+              echo "ORO_RUNTIME_SOURCE_PREFLIGHT=0"
+            fi
 
             if [[ "$EXCLUDE_ANDROID" == "true" ]]; then
               echo "NO_ANDROID=1"
@@ -832,7 +840,7 @@ jobs:
 
       - name: Validate staged target families
         id: validate-targets-unix
-        if: ${{ always() && runner.os != 'Windows' && steps.build-runtime-unix.outcome == 'success' }}
+        if: ${{ always() && runner.os != 'Windows' && matrix.compile_only != true && steps.build-runtime-unix.outcome == 'success' }}
         shell: bash
         run: |
           shopt -s nullglob

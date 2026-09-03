@@ -93,6 +93,12 @@ export function fetch (input, init = {}) {
     let ended = false
     let cancelled = false
     let controller = null
+    const timeout = setTimeout(() => {
+      try {
+        if (!child.killed) child.kill()
+      } catch {}
+      fail(new Error(`MCP HTTP request timed out: ${String(input)}`))
+    }, 10_000)
 
     const body = new ReadableStream({
       start (value) {
@@ -100,11 +106,15 @@ export function fetch (input, init = {}) {
       },
       cancel () {
         cancelled = true
-        if (!child.killed) child.kill()
+        clearTimeout(timeout)
+        try {
+          if (!child.killed) child.kill()
+        } catch {}
       }
     })
 
     const fail = (error) => {
+      clearTimeout(timeout)
       if (!settled) {
         settled = true
         reject(error)
@@ -134,6 +144,7 @@ export function fetch (input, init = {}) {
         controller.enqueue(Buffer.from(message.data, 'base64'))
       } else if (message.type === 'end' && !ended) {
         ended = true
+        clearTimeout(timeout)
         controller.close()
       }
     }
@@ -156,7 +167,10 @@ export function fetch (input, init = {}) {
     child.on('error', fail)
     child.on('close', (code) => {
       if (stdout.length > 0) processLine(stdout)
-      if (cancelled || ended) return
+      if (cancelled || ended) {
+        clearTimeout(timeout)
+        return
+      }
       fail(
         new Error(
           stderr || `MCP HTTP client exited before completing (code ${code})`

@@ -903,13 +903,27 @@ namespace oro::runtime::window {
 
   void Window::minimize () {
   #if ORO_RUNTIME_PLATFORM_MACOS
-    [this->window miniaturize: this->window];
+    if (this->window) {
+      if (this->options.headless) {
+        this->eval("window.dispatchEvent(new Event('blur'))");
+      } else {
+        [this->window miniaturize: this->window];
+        this->evalDomBlurThrottled();
+      }
+    }
   #endif
   }
 
   void Window::restore () {
   #if ORO_RUNTIME_PLATFORM_MACOS
-    [this->window deminiaturize: this->window];
+    if (this->window) {
+      if (this->options.headless) {
+        this->eval("window.dispatchEvent(new Event('focus'))");
+      } else {
+        [this->window deminiaturize: this->window];
+        this->evalDomFocusThrottled();
+      }
+    }
   #endif
   }
 
@@ -1132,9 +1146,13 @@ namespace oro::runtime::window {
   void Window::focus () {
   #if ORO_RUNTIME_PLATFORM_MACOS
     if (this->window) {
-      [NSApp activateIgnoringOtherApps: YES];
-      [this->window makeKeyAndOrderFront: nil];
-      this->eval("window.focus()");
+      if (!this->options.headless) {
+        [NSApp activateIgnoringOtherApps: YES];
+        [this->window makeKeyAndOrderFront: nil];
+        this->evalDomFocusThrottled();
+      } else {
+        this->eval("window.dispatchEvent(new Event('focus'))");
+      }
     }
   #elif ORO_RUNTIME_PLATFORM_IOS
     // No-op on iOS – single window focus managed by system
@@ -1144,8 +1162,12 @@ namespace oro::runtime::window {
   void Window::blur () {
   #if ORO_RUNTIME_PLATFORM_MACOS
     if (this->window) {
-      [this->window orderBack: nil];
-      this->eval("window.blur()");
+      if (!this->options.headless) {
+        [this->window orderBack: nil];
+        this->evalDomBlurThrottled();
+      } else {
+        this->eval("window.dispatchEvent(new Event('blur'))");
+      }
     }
   #elif ORO_RUNTIME_PLATFORM_IOS
     // No-op on iOS

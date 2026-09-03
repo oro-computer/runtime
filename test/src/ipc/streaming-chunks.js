@@ -14,23 +14,19 @@ test('ipc: diagnostics.stream.chunks streams and aborts', async (t) => {
 
   const reader = res.body.getReader()
   let received = 0
-  let readChunks = 0
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    received += value.byteLength
-    readChunks++
-    if (readChunks >= Math.ceil(chunks / 2)) {
-      controller.abort()
-      break
-    }
-  }
+  const first = await reader.read()
+  if (!first.done) received += first.value.byteLength
 
   t.ok(received > 0, 'received some streamed bytes')
   if (globalThis.__args.capabilities.streaming.chunkedIncremental) {
     t.ok(received < chunks * size, 'aborted before full stream')
+    controller.abort()
   } else {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      received += value.byteLength
+    }
     t.equal(
       received,
       chunks * size,
