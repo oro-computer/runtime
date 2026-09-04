@@ -338,17 +338,7 @@ if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then
       -Wno-nonportable-include-path
     )
     if [[ -n "$DEBUG" ]]; then
-      # Every archive in a debug build uses the dynamic debug CRT. Prevent the
-      # linker from satisfying its default-library directives with release CRT
-      # archives when the CLI is linked.
-      cflags+=(
-        "-D_DEBUG"
-        "-Wl,-NODEFAULTLIB:msvcrt"
-        "-Wl,-NODEFAULTLIB:libcmtd"
-        "-Wl,-DEFAULTLIB:msvcrtd"
-        "-Wl,-DEFAULTLIB:ucrtbased"
-        "-Wl,-DEFAULTLIB:vcruntimed"
-      )
+      cflags+=("-D_DEBUG")
     fi
 
     ## TODO(@jwerle): figure this out for macOS

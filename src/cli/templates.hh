@@ -1504,7 +1504,6 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 		17A7F8F229358D220051D146 /* init.cc in Sources */ = {isa = PBXBuildFile; fileRef = 17A7F8EE29358D180051D146 /* init.cc */; };
 		17A7F8F529358D430051D146 /* liboro-runtime.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F8F329358D430051D146 /* liboro-runtime.a */; };
 		17A7F8F629358D430051D146 /* libuv.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F8F429358D430051D146 /* libuv.a */; };
-		17A7F8F829358D430051D146 /* libusb-1.0.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F8F429358D430051D148 /* libusb-1.0.a */; };
 		17A7F8FA29358D430051D146 /* libsodium.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F8FA29358D430051D14A /* libsodium.a */; };
 		17A7F8F629358D4A0051D146 /* libllama.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F8F429358D430051D147 /* libllama.a */; };
 		17A7F90029358D4A0051D148 /* libwhisper.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F90029358D430051D149 /* libwhisper.a */; };
@@ -1538,7 +1537,6 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 		17A7F8F129358D180051D146 /* main.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = main.o; sourceTree = "<group>"; };
 		17A7F8F329358D430051D146 /* liboro-runtime.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "liboro-runtime.a"; path = "lib/liboro-runtime.a"; sourceTree = "<group>"; };
 		17A7F8F429358D430051D146 /* libuv.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libuv.a; path = lib/libuv.a; sourceTree = "<group>"; };
-		17A7F8F429358D430051D148 /* libusb-1.0.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libusb-1.0.a"; path = "lib/libusb-1.0.a"; sourceTree = "<group>"; };
 		17A7F8FA29358D430051D14A /* libsodium.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libsodium.a; path = lib/libsodium.a; sourceTree = "<group>"; };
 		17A7F8F429358D430051D147 /* libllama.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libllama.a; path = lib/libllama.a; sourceTree = "<group>"; };
 		17A7F90029358D430051D149 /* libwhisper.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libwhisper.a; path = lib/libwhisper.a; sourceTree = "<group>"; };
@@ -1583,7 +1581,6 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 				179989D22A867B260041EDC1 /* UniformTypeIdentifiers.framework in Frameworks */,
 				17A7F8F529358D430051D146 /* liboro-runtime.a in Frameworks */,
 				17A7F8F629358D430051D146 /* libuv.a in Frameworks */,
-				17A7F8F829358D430051D146 /* libusb-1.0.a in Frameworks */,
 				17A7F8FA29358D430051D146 /* libsodium.a in Frameworks */,
         17A7F8F629358D4A0051D146 /* libllama.a in Frameworks */,
         17A7F90029358D4A0051D148 /* libwhisper.a in Frameworks */,
@@ -1665,7 +1662,6 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 				179989D12A867B260041EDC1 /* UniformTypeIdentifiers.framework */,
 				17A7F8F329358D430051D146 /* liboro-runtime.a */,
 				17A7F8F429358D430051D146 /* libuv.a */,
-				17A7F8F429358D430051D148 /* libusb-1.0.a */,
 				17A7F8FA29358D430051D14A /* libsodium.a */,
 				17A7F8F429358D430051D147 /* libllama.a */,
         17A7F90029358D430051D149 /* libwhisper.a */,

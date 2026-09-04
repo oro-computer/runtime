@@ -9453,6 +9453,8 @@ int main (int argc, char* argv[]) {
         {runtime / "debug" / "console.kt", "src/runtime/debug/console.kt"},
         {runtime / "ipc" / "message.kt", "src/runtime/ipc/message.kt"},
         {runtime / "securestorage" / "secure_storage.kt", "src/runtime/securestorage/secure_storage.kt"},
+        {runtime / "usb" / "oro.kt", "src/runtime/usb/oro.kt"},
+        {runtime / "usb" / "usb.kt", "src/runtime/usb/usb.kt"},
         {runtime / "webview.kt", "src/runtime/webview.kt"},
         {runtime / "webview" / "navigator.kt", "src/runtime/webview/navigator.kt"},
         {runtime / "webview" / "scheme_handlers.kt", "src/runtime/webview/scheme_handlers.kt"},
@@ -10052,7 +10054,6 @@ int main (int argc, char* argv[]) {
             << " -lggml"
             << " -lggml-cpu"
             << " -lggml-base"
-            << " -lusb-1.0"
             << " -lsodium"
             << " -isysroot " << iosSdkPath << "/"
             << " -iframeworkwithsysroot /System/Library/Frameworks/"

@@ -200,7 +200,7 @@ open class UsbService : Service() {
     builder
       .setContentTitle("USB service active")
       .setContentText("Listening for USB devices")
-      .setSmallIcon(android.R.drawable.stat_sys_data_usb)
+      .setSmallIcon(android.R.drawable.ic_dialog_info)
       .setOngoing(true)
     return builder.build()
   }

@@ -631,6 +631,98 @@ namespace oro::runtime::core::services::usb {
   }
 }
 
+#elif ORO_RUNTIME_PLATFORM_IOS
+
+#include "../../../json.hh"
+#include "../../../queued_response.hh"
+
+namespace oro::runtime::core::services::usb {
+  namespace {
+    JSON::Object makeUnsupportedError() {
+      return JSON::Object::Entries {{
+        {"err", JSON::Object::Entries {{
+          {"type", String("NotSupportedError")},
+          {"message", String("WebUSB is unavailable on iOS")}
+        }}}
+      }};
+    }
+
+    JSON::Object makeOkObject() {
+      return JSON::Object::Entries {{ "data", JSON::Object::Entries {{ "ok", true }} }};
+    }
+  }
+
+  class IOSBackend final : public USB::Backend {
+    public:
+      void getDevices(const String& seq, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void requestDevice(const String& seq, const USB::RequestDeviceOptions&, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void forgetDevice(const String& seq, const String&, const Callback cb) override {
+        cb(seq, makeOkObject(), oro::runtime::QueuedResponse{});
+      }
+      void open(const String& seq, const String&, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void close(const String& seq, const String&, const Callback cb) override {
+        cb(seq, makeOkObject(), oro::runtime::QueuedResponse{});
+      }
+      void selectConfiguration(const String& seq, const String&, uint8_t, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void claimInterface(const String& seq, const String&, uint8_t, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void releaseInterface(const String& seq, const String&, uint8_t, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void selectAlternateInterface(const String& seq, const String&, uint8_t, uint8_t, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void controlTransferIn(const String& seq, const String&, const JSON::Any&, uint32_t, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void controlTransferOut(const String& seq, const String&, const JSON::Any&, const bytes::Buffer&, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void transferIn(const String& seq, const String&, uint8_t, uint32_t, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void transferOut(const String& seq, const String&, uint8_t, const bytes::Buffer&, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void clearHalt(const String& seq, const String&, uint8_t, bool, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void reset(const String& seq, const String&, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void enumerateDevices(Function<void(const EnumerateResult&)> completion) override {
+        completion(EnumerateResult{.ok = true});
+      }
+      bool authorizeDevice(const String&) override {
+        return false;
+      }
+      bool isDeviceAuthorized(const String&) const override {
+        return false;
+      }
+      void revokeDevice(const String&) override {
+      }
+      void chooseDevice(const String& seq, const USB::DeviceSelection&, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+      void cancelRequest(const String& seq, const Callback cb) override {
+        cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
+      }
+  };
+
+  std::unique_ptr<USB::Backend> makeUSBBackend(USB&) {
+    return std::make_unique<IOSBackend>();
+  }
+}
+
 #else
 
 #include "../../../json.hh"

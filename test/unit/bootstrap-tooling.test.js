@@ -1211,6 +1211,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   const cflags = readFile('bin/cflags.sh')
   const ldflags = readFile('bin/ldflags.sh')
   const installer = readFile('bin/install.sh')
+  const windowsInstaller = readFile('bin/install.ps1')
   const pkgConfig = readFile('bin/generate-oro-runtime-pkg-config.sh')
   const runtimeBuilder = readFile('bin/build-runtime-library.sh')
   const bridge = readFile('src/runtime/bridge/bridge.cc')
@@ -1257,9 +1258,9 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     'Windows linker options should remain opaque to Git Bash path conversion'
   )
   assert.match(
-    cflags,
-    /if \[\[ -n "\$DEBUG" \]\]; then[\s\S]*-Wl,-NODEFAULTLIB:msvcrt[\s\S]*-Wl,-DEFAULTLIB:msvcrtd[\s\S]*-Wl,-DEFAULTLIB:ucrtbased[\s\S]*-Wl,-DEFAULTLIB:vcruntimed/,
-    'Windows debug links should select the dynamic debug CRT instead of mixing release archives'
+    windowsInstaller,
+    /WindowsSdkDir[\s\S]*ucrtd\.osmode_permissive\.lib[\s\S]*\$env:WIN_DEBUG_LIBS=/,
+    'Windows debug links should explicitly receive the installed UCRT debug import library'
   )
   assert.doesNotMatch(
     [cflags, cli].join('\n'),
@@ -1842,6 +1843,7 @@ test('Apple runtime sources exclude APIs unavailable to iOS builds', () => {
   const xpcBackend = readFile('src/runtime/core/services/xpc.mm')
   const cookies = readFile('src/runtime/webview/cookies.cc')
   const process = readFile('src/runtime/process/unix.cc')
+  const usbBackend = readFile('src/runtime/core/services/usb/libusb_backend.cc')
 
   assert.match(
     hidBackend,
@@ -1862,6 +1864,11 @@ test('Apple runtime sources exclude APIs unavailable to iOS builds', () => {
     process,
     /#if defined\(__APPLE__\)[\s\S]*unsetenv\(name\.c_str\(\)\)[\s\S]*#else[\s\S]*clearenv\(\)/,
     'Apple process launches should clear inherited variables without unavailable clearenv'
+  )
+  assert.match(
+    usbBackend,
+    /#elif ORO_RUNTIME_PLATFORM_IOS[\s\S]*WebUSB is unavailable on iOS[\s\S]*#else[\s\S]*libusb/,
+    'iOS USB builds should use an unsupported backend instead of linking unavailable libusb'
   )
 })
 
@@ -2698,6 +2705,11 @@ test('Android bootstrap separates build packages from emulator packages', () => 
     /\{pkg \/ "main\.kt", "src\/android\/main\.kt"\},[\s\S]*\{pkg \/ "UsbService\.kt", "src\/android\/UsbService\.kt"\}/,
     'Android application staging should include the UsbService referenced by MainActivity'
   )
+  assert.match(
+    cli,
+    /\{runtime \/ "usb" \/ "oro\.kt", "src\/runtime\/usb\/oro\.kt"\},[\s\S]*\{runtime \/ "usb" \/ "usb\.kt", "src\/runtime\/usb\/usb\.kt"\}/,
+    'Android application staging should include the USBPlatform implementation used by UsbService'
+  )
   assert.doesNotMatch(
     secureStorage,
     /console\.error\([^\n]*,\s*err\)/,
@@ -2797,8 +2809,13 @@ test('iOS simulator application builds use the host architecture', () => {
   )
   assert.match(
     cli,
-    /<< " -lllama"[\s\S]*<< " -lwhisper"[\s\S]*<< " -lggml"[\s\S]*<< " -lggml-cpu"[\s\S]*<< " -lggml-base"[\s\S]*<< " -lusb-1\.0"[\s\S]*<< " -lsodium"[\s\S]*<< " -framework Security"/,
-    'iOS native extensions should link every transitive runtime archive and Security.framework'
+    /<< " -lllama"[\s\S]*<< " -lwhisper"[\s\S]*<< " -lggml"[\s\S]*<< " -lggml-cpu"[\s\S]*<< " -lggml-base"[\s\S]*<< " -lsodium"[\s\S]*<< " -framework Security"/,
+    'iOS native extensions should link every available transitive runtime archive and Security.framework'
+  )
+  assert.doesNotMatch(
+    templates,
+    /17A7F8F[0-9A-F]*[^\n]*libusb-1\.0\.a/,
+    'generated iOS projects must not link libusb because upstream does not support iOS'
   )
   assert.match(
     templates,

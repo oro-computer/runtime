@@ -1684,7 +1684,10 @@ namespace oro::runtime::window {
 
   void Window::minimize () {
     if (this->options.headless) {
-      this->eval("window.dispatchEvent(new Event('applicationpause')); window.dispatchEvent(new Event('blur'))");
+      if (auto app = App::sharedApplication()) {
+        app->pause();
+      }
+      this->eval("window.dispatchEvent(new Event('blur'))");
     } else {
       ShowWindow(window, SW_MINIMIZE);
       this->evalDomBlurThrottled();
@@ -1693,7 +1696,10 @@ namespace oro::runtime::window {
 
   void Window::restore () {
     if (this->options.headless) {
-      this->eval("window.dispatchEvent(new Event('applicationresume')); window.dispatchEvent(new Event('focus'))");
+      if (auto app = App::sharedApplication()) {
+        app->resume();
+      }
+      this->eval("window.dispatchEvent(new Event('focus'))");
     } else {
       ShowWindow(window, SW_RESTORE);
       this->evalDomFocusThrottled();

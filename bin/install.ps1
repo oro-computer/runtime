@@ -1102,24 +1102,25 @@ Download size: 5.5GB, Installed size: 10.2GB y/[N]"
       $global:install_errors += "not ok - unable to install clang++."
     }
 
-    if ($env:CI -eq $null) {
-      if (($env:WindowsSdkDir -eq $null) -or ((Test-Path $env:WindowsSdkDir -PathType Container) -eq $false)) {
+    if (($env:WindowsSdkDir -eq $null) -or ((Test-Path $env:WindowsSdkDir -PathType Container) -eq $false)) {
+      if ($env:CI -eq $null) {
         # Had this situation occur after uninstalling SDK from add/remove programs instead of VS Installer.
         $global:install_errors += "`$WindowsSdkDir ($env:WindowsSdkDir) still not present, please install manually."
-      } else {
-        # Find lib required for debug builds (Prevents 'Debug Assertion Failed. Expression: (_osfile(fh) & fopen)' error)
-        $WIN_DEBUG_LIBS="$($env:WindowsSdkDir)Lib\$($env:WindowsSDKLibVersion)ucrt\x64\ucrtd.osmode_permissive.lib"
-        Write-Log "d" "WIN_DEBUG_LIBS: $WIN_DEBUG_LIBS, exists: $(Test-Path $WIN_DEBUG_LIBS -PathType Leaf)"
-        if ((Test-Path $WIN_DEBUG_LIBS -PathType Leaf) -eq $false) {
-          if ($shbuild -eq $true) {
-            # Only report issue for Oro CLI devs
-            $global:path_advice += "WARNING: Unable to determine ucrtd.osmode_permissive.lib path. This is only required for DEBUG builds."
-          }
-        } else {
-          # Use short path, spaces cause issues in install.sh
-          $WIN_DEBUG_LIBS = (New-Object -ComObject Scripting.FileSystemObject).GetFile($WIN_DEBUG_LIBS).ShortPath
-          $env:WIN_DEBUG_LIBS="$WIN_DEBUG_LIBS"
+      }
+    } else {
+      # Explicitly pass the installed debug CRT import library to install.sh.
+      # vcvars may omit the UCRT debug directory from LIB on hosted runners.
+      $WIN_DEBUG_LIBS="$($env:WindowsSdkDir)Lib\$($env:WindowsSDKLibVersion)ucrt\x64\ucrtd.osmode_permissive.lib"
+      Write-Log "d" "WIN_DEBUG_LIBS: $WIN_DEBUG_LIBS, exists: $(Test-Path $WIN_DEBUG_LIBS -PathType Leaf)"
+      if ((Test-Path $WIN_DEBUG_LIBS -PathType Leaf) -eq $false) {
+        if ($shbuild -eq $true) {
+          # Only report issue for Oro CLI devs
+          $global:path_advice += "WARNING: Unable to determine ucrtd.osmode_permissive.lib path. This is only required for DEBUG builds."
         }
+      } else {
+        # Use short path, spaces cause issues in install.sh
+        $WIN_DEBUG_LIBS = (New-Object -ComObject Scripting.FileSystemObject).GetFile($WIN_DEBUG_LIBS).ShortPath
+        $env:WIN_DEBUG_LIBS="$WIN_DEBUG_LIBS"
       }
     }
 
