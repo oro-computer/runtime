@@ -1301,7 +1301,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     cli,
-    /auto compiler = trim\(env::get\("CXX"\)\);[\s\S]*compiler\.front\(\) == '"'[\s\S]*compiler = compiler\.substr\(1, compiler\.size\(\) - 2\);[\s\S]*const auto compilerCommand = platform\.win[\s\S]*String\("\\\""\) \+ compiler \+ "\\\""[\s\S]*compileCommand[\s\S]*<< compilerCommand[\s\S]*ORO_RUNTIME_VERSION_HASH=.*VERSION_HASH_STRING;/,
+    /auto compiler = trim\(env::get\("CXX"\)\);[\s\S]*compiler\.front\(\) == '"'[\s\S]*compiler = compiler\.substr\(1, compiler\.size\(\) - 2\);[\s\S]*const auto compilerCommand = platform\.win[\s\S]*String\("[\\]""\) \+ compiler \+ "[\\]""[\s\S]*compileCommand[\s\S]*<< compilerCommand[\s\S]*ORO_RUNTIME_VERSION_HASH=.*VERSION_HASH_STRING;/,
     'Windows builds should quote only the compiler path, not the entire command'
   )
   assert.match(
