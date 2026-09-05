@@ -13,21 +13,6 @@ namespace oro::runtime::core::services {
   namespace {
     static constexpr size_t kMaxPendingMcpRequests = 1024;
 
-    thread_local bool suppressSynchronousTransportSend = false;
-
-    struct SynchronousResponseGuard {
-      bool previous = false;
-
-      SynchronousResponseGuard ()
-        : previous(suppressSynchronousTransportSend) {
-        suppressSynchronousTransportSend = true;
-      }
-
-      ~SynchronousResponseGuard() {
-        suppressSynchronousTransportSend = this->previous;
-      }
-    };
-
     bool isModernRequest(const nlohmann::json& request) {
       if (!request.is_object() || !request.contains("params") || !request["params"].is_object()) {
         return false;
@@ -725,7 +710,6 @@ namespace oro::runtime::core::services {
     }
 
     std::optional<String> onJsonRpcRequest(const String& sessionId, const String& payload) override {
-      SynchronousResponseGuard guard;
       nlohmann::json request;
       try {
         request = nlohmann::json::parse(payload);
@@ -1233,9 +1217,6 @@ namespace oro::runtime::core::services {
   }
 
   bool MCP::sendJsonRpcNotification(const String& sessionId, const nlohmann::json& message) {
-    if (suppressSynchronousTransportSend) {
-      return false;
-    }
     if (!this->server || !this->server->isRunning()) {
       return false;
     }

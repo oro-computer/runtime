@@ -196,12 +196,6 @@ namespace oro::runtime::app {
       return;
     }
 
-    // Debounce duplicate resume emits across all platforms
-    const auto tnow = now_ms();
-    if (tnow - this->lastResumeEmitMs.load(std::memory_order_relaxed) < 100) {
-      return;
-    }
-    this->lastResumeEmitMs.store(tnow, std::memory_order_relaxed);
   #if ORO_RUNTIME_PLATFORM_DESKTOP
     const bool alwaysRunning = (
       this->runtime.userConfig.contains("lifecycle_desktop_always_running")
@@ -214,6 +208,13 @@ namespace oro::runtime::app {
       return;
     }
   #endif
+    // Mobile lifecycle callbacks can arrive in a burst. Desktop's
+    // always-running mode must deliver every explicit window action.
+    const auto tnow = now_ms();
+    if (tnow - this->lastResumeEmitMs.load(std::memory_order_relaxed) < 100) {
+      return;
+    }
+    this->lastResumeEmitMs.store(tnow, std::memory_order_relaxed);
   #if !ORO_RUNTIME_PLATFORM_DESKTOP
     if (this->paused()) {
       this->isPaused = false;
@@ -248,12 +249,6 @@ namespace oro::runtime::app {
       return;
     }
 
-    // Debounce duplicate pause emits across all platforms
-    const auto tnow = now_ms();
-    if (tnow - this->lastPauseEmitMs.load(std::memory_order_relaxed) < 100) {
-      return;
-    }
-    this->lastPauseEmitMs.store(tnow, std::memory_order_relaxed);
   #if ORO_RUNTIME_PLATFORM_DESKTOP
     const bool alwaysRunning = (
       this->runtime.userConfig.contains("lifecycle_desktop_always_running")
@@ -272,6 +267,13 @@ namespace oro::runtime::app {
       return;
     }
   #endif
+    // Mobile lifecycle callbacks can arrive in a burst. Desktop's
+    // always-running mode must deliver every explicit window action.
+    const auto tnow = now_ms();
+    if (tnow - this->lastPauseEmitMs.load(std::memory_order_relaxed) < 100) {
+      return;
+    }
+    this->lastPauseEmitMs.store(tnow, std::memory_order_relaxed);
   #if !ORO_RUNTIME_PLATFORM_DESKTOP
     if (!this->paused()) {
       this->isPaused = true;

@@ -1158,6 +1158,33 @@ test('desktop headless window actions dispatch deterministic lifecycle events', 
       `${relativePath} should not depend on native application lifecycle delivery when headless`
     )
   }
+
+  const app = readFile('src/runtime/app/app.cc')
+  assert.match(
+    app,
+    /if \(alwaysRunning\) \{[\s\S]*windowManager\.emit\("applicationresume"\)[\s\S]*return;[\s\S]*Mobile lifecycle callbacks can arrive in a burst[\s\S]*lastResumeEmitMs/,
+    'desktop resume events must not be suppressed by the startup lifecycle debounce'
+  )
+  assert.match(
+    app,
+    /if \(alwaysRunning\) \{[\s\S]*windowManager\.emit\("applicationpause"\)[\s\S]*return;[\s\S]*Mobile lifecycle callbacks can arrive in a burst[\s\S]*lastPauseEmitMs/,
+    'desktop pause events must not be suppressed by the mobile lifecycle debounce'
+  )
+})
+
+test('MCP asynchronous replies remain deliverable while handling a request', () => {
+  const service = readFile('src/runtime/core/services/mcp.cc')
+
+  assert.doesNotMatch(
+    service,
+    /suppressSynchronousTransportSend|SynchronousResponseGuard/,
+    'MCP resource and tool completions must be able to queue their HTTP response during request handling'
+  )
+  assert.match(
+    service,
+    /bool MCP::sendJsonRpcNotification[\s\S]*this->server->sendEvent/,
+    'MCP asynchronous results should be queued on the owning HTTP session'
+  )
 })
 
 test('child process completion cannot outrun output and await listeners', () => {
@@ -1274,8 +1301,8 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     cli,
-    /auto compiler = trim\(env::get\("CXX"\)\);[\s\S]*compiler\.front\(\) == '"'[\s\S]*compiler = compiler\.substr\(1, compiler\.size\(\) - 2\);/,
-    'Windows builds should remove inherited compiler-path quotes before quoting the command'
+    /auto compiler = trim\(env::get\("CXX"\)\);[\s\S]*compiler\.front\(\) == '"'[\s\S]*compiler = compiler\.substr\(1, compiler\.size\(\) - 2\);[\s\S]*const auto compilerCommand = platform\.win[\s\S]*String\("\\\""\) \+ compiler \+ "\\\""[\s\S]*compileCommand[\s\S]*<< compilerCommand[\s\S]*ORO_RUNTIME_VERSION_HASH=.*VERSION_HASH_STRING;/,
+    'Windows builds should quote only the compiler path, not the entire command'
   )
   assert.match(
     pkgConfig,
@@ -1593,6 +1620,7 @@ test('Android runtime and extensions link transitive static dependencies', () =>
   const dependencies = readFile('src/runtime/deps.hh')
   const templates = readFile('src/cli/templates.hh')
   const cli = readFile('src/cli/main.cc')
+  const window = readFile('src/runtime/window/android.cc')
 
   assert.match(
     dependencies,
@@ -1613,6 +1641,16 @@ test('Android runtime and extensions link transitive static dependencies', () =>
     cli,
     /LOCAL_LDLIBS \+= -landroid -llog -lz[\s\S]*LOCAL_STATIC_LIBRARIES \+= liboro-runtime-static libuv libllama [\s\S]*libwhisper libggml libggml-cpu libggml-base libusb libsodium/,
     'generated Android extensions should link the runtime dependency closure in dependent-first order'
+  )
+  assert.doesNotMatch(
+    window,
+    /CallVoidClassMethodFromAndroidEnvironment\([\s\S]{0,240}?"\([^"\n]*\)Z"/,
+    'Android JNI calls with boolean signatures must use CallBooleanMethod, not CallVoidMethod'
+  )
+  assert.match(
+    window,
+    /CallClassMethodFromAndroidEnvironment\([\s\S]*?Boolean,[\s\S]*?"setWindowSize",[\s\S]*?"\(III\)Z"/,
+    'Android window size updates must call their boolean Kotlin method with CallBooleanMethod'
   )
 })
 
@@ -2819,8 +2857,13 @@ test('iOS simulator application builds use the host architecture', () => {
   )
   assert.match(
     cli,
-    /<< " -lllama"[\s\S]*<< " -lwhisper"[\s\S]*<< " -lggml"[\s\S]*<< " -lggml-cpu"[\s\S]*<< " -lggml-base"[\s\S]*<< " -lsodium"[\s\S]*<< " -framework Security"/,
+    /<< " -lllama"[\s\S]*<< " -lwhisper"[\s\S]*<< " -lggml"[\s\S]*<< " -lggml-metal"[\s\S]*<< " -lggml-cpu"[\s\S]*<< " -lggml-base"[\s\S]*<< " -lsodium"[\s\S]*<< " -framework Security"/,
     'iOS native extensions should link every available transitive runtime archive and Security.framework'
+  )
+  assert.match(
+    readFile('src/runtime/ipc/routes.cc'),
+    /#if ORO_RUNTIME_HAS_LIBUSB && !ORO_RUNTIME_PLATFORM_IOS[\s\S]*libusb_get_version\(\)[\s\S]*#endif/,
+    'iOS routes must not reference libusb when its archive is intentionally omitted'
   )
   assert.doesNotMatch(
     templates,

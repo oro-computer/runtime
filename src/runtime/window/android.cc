@@ -376,9 +376,10 @@ namespace oro::runtime::window {
 
     const auto app = App::sharedApplication();
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
-    // `activity.setWindowSize(index, w): Int`
-    CallVoidClassMethodFromAndroidEnvironment(
+    // `activity.setWindowSize(index, width, height): Boolean`
+    CallClassMethodFromAndroidEnvironment(
       attachment.env,
+      Boolean,
       app->runtime.android.activity,
       "setWindowSize",
       "(III)Z",
@@ -398,9 +399,10 @@ namespace oro::runtime::window {
     const auto app = App::sharedApplication();
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
 
-    // `activity.setWindowPosition(index, x, y)`
-    CallVoidClassMethodFromAndroidEnvironment(
+    // `activity.setWindowPosition(index, x, y): Boolean`
+    CallClassMethodFromAndroidEnvironment(
       attachment.env,
+      Boolean,
       app->runtime.android.activity,
       "setWindowPosition",
       "(IFF)Z",
@@ -447,9 +449,10 @@ namespace oro::runtime::window {
 
     const auto app = App::sharedApplication();
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
-    // `activity.setWindowBackgroundColor(index, color)`
-    CallVoidClassMethodFromAndroidEnvironment(
+    // `activity.setWindowBackgroundColor(index, color): Boolean`
+    CallClassMethodFromAndroidEnvironment(
       attachment.env,
+      Boolean,
       app->runtime.android.activity,
       "setWindowBackgroundColor",
       "(IJ)Z",
@@ -467,9 +470,10 @@ namespace oro::runtime::window {
 
     const auto app = App::sharedApplication();
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
-    // `activity.setWindowBackgroundColor(index, color)`
-    CallVoidClassMethodFromAndroidEnvironment(
+    // `activity.setWindowBackgroundColor(index, color): Boolean`
+    CallClassMethodFromAndroidEnvironment(
       attachment.env,
+      Boolean,
       app->runtime.android.activity,
       "setWindowBackgroundColor",
       "(IJ)Z",
@@ -486,9 +490,10 @@ namespace oro::runtime::window {
 
     const auto app = App::sharedApplication();
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
-    // `activity.setWindowBackgroundColor(index, color)`
-    CallVoidClassMethodFromAndroidEnvironment(
+    // `activity.setWindowBackgroundColor(index, color): Boolean`
+    CallClassMethodFromAndroidEnvironment(
       attachment.env,
+      Boolean,
       app->runtime.android.activity,
       "setWindowBackgroundColor",
       "(IJ)Z",

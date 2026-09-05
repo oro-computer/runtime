@@ -10051,6 +10051,7 @@ int main (int argc, char* argv[]) {
             << " -lllama"
             << " -lwhisper"
             << " -lggml"
+            << " -lggml-metal"
             << " -lggml-cpu"
             << " -lggml-base"
             << " -lsodium"
@@ -11862,11 +11863,11 @@ int main (int argc, char* argv[]) {
       }
 
       // windows / spaces in bin path - https://stackoverflow.com/a/27976653/3739540
-          compileCommand
-        << quote // win32 - quote the entire command
-        << quote // win32 - quote the binary path
-        << compiler
-        << quote // win32 - quote the binary path
+      const auto compilerCommand = platform.win
+        ? String("\"") + compiler + "\""
+        : compiler;
+      compileCommand
+        << compilerCommand
         << " " << files
         << " " << flags
         << " " << extraFlags
@@ -11877,8 +11878,7 @@ int main (int argc, char* argv[]) {
         << " -DHOST=" << "\\\"" << devHost << "\\\""
         << " -DPORT=" << devPort
             << " -DORO_RUNTIME_VERSION=" << VERSION_STRING
-            << " -DORO_RUNTIME_VERSION_HASH=" << VERSION_HASH_STRING
-            << quote; // win32 - quote the entire command
+            << " -DORO_RUNTIME_VERSION_HASH=" << VERSION_HASH_STRING;
 
       if (env::get("DEBUG") == "1" || env::get("VERBOSE") == "1")
         logVerbose(compileCommand.str());

@@ -9174,7 +9174,7 @@ static void mapIPCRoutes (Router *router) {
       sqliteVersion = value;
     }
 
-#if ORO_RUNTIME_HAS_LIBUSB
+#if ORO_RUNTIME_HAS_LIBUSB && !ORO_RUNTIME_PLATFORM_IOS
     String libusbVersion;
     if (const libusb_version* info = libusb_get_version()) {
       libusbVersion = std::to_string(info->major);
@@ -9285,7 +9285,7 @@ static void mapIPCRoutes (Router *router) {
     }
 #endif
 
-#if ORO_RUNTIME_HAS_LIBUSB
+#if ORO_RUNTIME_HAS_LIBUSB && !ORO_RUNTIME_PLATFORM_IOS
     if (!libusbVersion.empty()) {
       JSON::Object::Entries libusbInfo;
       libusbInfo["version"] = libusbVersion;
