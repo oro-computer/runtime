@@ -1273,6 +1273,11 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     'CLI-generated Windows build commands should keep linker options opaque to Git Bash'
   )
   assert.match(
+    cli,
+    /auto compiler = trim\(env::get\("CXX"\)\);[\s\S]*compiler\.front\(\) == '"'[\s\S]*compiler = compiler\.substr\(1, compiler\.size\(\) - 2\);/,
+    'Windows builds should remove inherited compiler-path quotes before quoting the command'
+  )
+  assert.match(
     pkgConfig,
     /ldflags\+=\("-Wl,-NODEFAULTLIB:libcmt"\)/,
     'Windows pkg-config metadata should expose linker options through Libs without path conversion'
@@ -2707,8 +2712,13 @@ test('Android bootstrap separates build packages from emulator packages', () => 
   )
   assert.match(
     cli,
-    /\{runtime \/ "usb" \/ "oro\.kt", "src\/runtime\/usb\/oro\.kt"\},[\s\S]*\{runtime \/ "usb" \/ "usb\.kt", "src\/runtime\/usb\/usb\.kt"\}/,
+    /\{runtime \/ "usb" \/ "usb\.kt", "src\/runtime\/usb\/usb\.kt"\}/,
     'Android application staging should include the USBPlatform implementation used by UsbService'
+  )
+  assert.doesNotMatch(
+    cli,
+    /\{runtime \/ "usb" \/ "oro\.kt", "src\/runtime\/usb\/oro\.kt"\}/,
+    'Android application staging must not add the self-referential USBPlatform alias'
   )
   assert.doesNotMatch(
     secureStorage,

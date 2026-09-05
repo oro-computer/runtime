@@ -9453,7 +9453,6 @@ int main (int argc, char* argv[]) {
         {runtime / "debug" / "console.kt", "src/runtime/debug/console.kt"},
         {runtime / "ipc" / "message.kt", "src/runtime/ipc/message.kt"},
         {runtime / "securestorage" / "secure_storage.kt", "src/runtime/securestorage/secure_storage.kt"},
-        {runtime / "usb" / "oro.kt", "src/runtime/usb/oro.kt"},
         {runtime / "usb" / "usb.kt", "src/runtime/usb/usb.kt"},
         {runtime / "webview.kt", "src/runtime/webview.kt"},
         {runtime / "webview" / "navigator.kt", "src/runtime/webview/navigator.kt"},
@@ -11853,12 +11852,20 @@ int main (int argc, char* argv[]) {
         exit(1);
       }
       StringStream compileCommand;
+      auto compiler = trim(env::get("CXX"));
+      if (
+        compiler.size() >= 2 &&
+        compiler.front() == '"' &&
+        compiler.back() == '"'
+      ) {
+        compiler = compiler.substr(1, compiler.size() - 2);
+      }
 
       // windows / spaces in bin path - https://stackoverflow.com/a/27976653/3739540
           compileCommand
         << quote // win32 - quote the entire command
         << quote // win32 - quote the binary path
-        << env::get("CXX")
+        << compiler
         << quote // win32 - quote the binary path
         << " " << files
         << " " << flags

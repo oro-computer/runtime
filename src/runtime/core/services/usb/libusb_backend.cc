@@ -654,6 +654,9 @@ namespace oro::runtime::core::services::usb {
 
   class IOSBackend final : public USB::Backend {
     public:
+      using Callback = USB::Callback;
+      using EnumerateResult = USB::Backend::EnumerateResult;
+
       void getDevices(const String& seq, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
