@@ -31,10 +31,11 @@ test('Windows compiler paths survive shell and INI environment loading', () => {
   assert.equal(result.status, 0, result.stderr)
   assert.equal(flattenIni(result.stdout).CXX, compiler)
 
-  const loaded = spawnSync('bash', ['-c', `
-    source /dev/stdin
-    printf '%s' "$CXX"
-  `], { input: result.stdout, encoding: 'utf8' })
+  const loaded = spawnSync('bash', ['-e', '-s'], {
+    input: `${result.stdout}\nprintf '%s' "$CXX"\n`,
+    env: { ...process.env, CXX: '' },
+    encoding: 'utf8'
+  })
 
   assert.equal(loaded.status, 0, loaded.stderr)
   assert.equal(loaded.stdout, compiler)
