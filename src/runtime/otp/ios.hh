@@ -1,6 +1,7 @@
 #ifndef ORO_RUNTIME_OTP_IOS_H
 #define ORO_RUNTIME_OTP_IOS_H
 
+#include <oro/platform.h>
 #include "../platform/types.hh"
 #include <cstdint>
 

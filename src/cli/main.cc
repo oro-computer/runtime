@@ -10060,6 +10060,7 @@ int main (int argc, char* argv[]) {
             << " -F " << iosSdkPath << "/System/Library/Frameworks/"
             << " -framework UniformTypeIdentifiers"
             << " -framework CoreBluetooth"
+            << " -framework CoreGraphics"
             << " -framework CoreLocation"
             << " -framework Foundation"
             << " -framework Network"

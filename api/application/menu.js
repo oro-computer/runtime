@@ -554,7 +554,7 @@ export async function setMenu (options, type) {
     options.value = encodeURIComponent(options.value)
   }
 
-  return await ipc.send(command, options)
+  return await ipc.request(command, options)
 }
 
 /**

@@ -267,6 +267,11 @@ extern "C" {
 
     app->run();
 
+    if (!app->runtime.start()) {
+      ANDROID_THROW(env, "Unable to start runtime services after configuring the Activity");
+      return;
+    }
+
     // Recreate/reattach any existing native windows to the new Activity instance.
     // If Android restored fragments, WindowFragmentManager will reuse them; otherwise
     // these calls will create the missing fragments for each existing window index.

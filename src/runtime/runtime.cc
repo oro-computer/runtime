@@ -20,7 +20,9 @@ namespace oro::runtime {
       background(options.background),
       services(*this, { this->dispatcher, options.features, this->background }),
       options(options) {
-    this->init();
+    if (options.autoStart) {
+      this->init();
+    }
   }
 
   Runtime::~Runtime() {
@@ -161,6 +163,9 @@ namespace oro::runtime {
 #endif
     bool expected = false;
     if (!this->destroyed.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+      return true;
+    }
+    if (this->loop.state == loop::Loop::State::None) {
       return true;
     }
     #if defined(DEBUG)

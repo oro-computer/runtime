@@ -27,6 +27,7 @@ namespace oro::runtime {
         loop::Loop::Options loop;
         Features features;
         BackgroundOptions background;
+        bool autoStart = true;
       };
 
       struct Counters {

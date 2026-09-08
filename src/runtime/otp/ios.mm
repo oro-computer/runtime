@@ -1,8 +1,9 @@
+#include "ios.hh"
+
 #if ORO_RUNTIME_PLATFORM_IOS
 
 #import <UIKit/UIKit.h>
 
-#include "ios.hh"
 #include "../app.hh"
 #include "../core/services/otp.hh"
 #include "../string.hh"
@@ -156,7 +157,7 @@ using oro::runtime::core::services::OTP;
     oro::runtime::types::String code(trimmed.UTF8String ? trimmed.UTF8String : "");
     service->handleCode(self.requestId, code);
   }
-  stopIOSOTPRequest(self.requestId);
+  oro::runtime::core::services::stopIOSOTPRequest(self.requestId);
 }
 
 @end

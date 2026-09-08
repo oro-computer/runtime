@@ -1,9 +1,21 @@
+#include "src/runtime/runtime.hh"
 #include "tests.hh"
 #include "src/runtime/loop.hh"
 #include <future>
 
 namespace oro::Tests {
   void restart (Harness& t) {
+    t.test("Runtime: service startup can wait for platform configuration", [](auto t) {
+      runtime::Runtime instance(runtime::Runtime::Options {
+        .autoStart = false
+      });
+
+      t.assert(!instance.loop.started(), "loop waits for explicit startup");
+      t.assert(!instance.services.state.isReady(), "state storage waits for explicit startup");
+      t.assert(instance.destroy(), "runtime can be destroyed before startup");
+      t.assert(!instance.loop.started(), "destroy does not start the loop");
+    });
+
     t.test("Loop: start/stop/restart drains handles", [](auto t) {
       using oro::runtime::loop::Loop;
       const int iterations = 5;

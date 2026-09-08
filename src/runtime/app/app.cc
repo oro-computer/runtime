@@ -71,6 +71,10 @@ namespace oro::runtime::app {
         runtimeOptions.loop = options.loop;
         runtimeOptions.background = resolveBackgroundOptions(options);
         runtimeOptions.features = resolveRuntimeFeatures(options, runtimeOptions.background);
+      #if ORO_RUNTIME_PLATFORM_ANDROID
+        // The Activity configures storage paths and the JVM before services start.
+        runtimeOptions.autoStart = false;
+      #endif
         return runtimeOptions;
       }()) {
     if (sharedApplicationInstance == nullptr) {
