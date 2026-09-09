@@ -182,8 +182,12 @@ export function toString (code) {
  * @return {errno}
  */
 export function getCode (name) {
+  const code = typeof name === 'number' ? Math.abs(name) : NaN
+  if (Number.isInteger(code) && Object.values(constants).includes(code)) {
+    return code
+  }
   if (typeof name !== 'string') {
-    name = name.toString()
+    return 0
   }
 
   name = name.toUpperCase()

@@ -133,7 +133,37 @@ if (globalThis.__args?.config && typeof globalThis.__args.config === 'object') {
 }
 
 /**
+ * @typedef {{ strict?: boolean }} URLParseOptions
+ */
+
+/**
+ * @typedef {object} ParsedURL
+ * @property {string|null} protocol
+ * @property {string|null} host
+ * @property {string|null} hostname
+ * @property {string|null} origin
+ * @property {string|null} auth
+ * @property {string|null} username
+ * @property {string|null} password
+ * @property {string|null} port
+ * @property {string|null} pathname
+ * @property {string|null} path
+ * @property {string|null} search
+ * @property {string|null} hash
+ * @property {string} href
+ * @property {URLSearchParams} searchParams
+ * @property {string|Record<string, any>} [query]
+ */
+
+/**
+ * @typedef {Partial<ParsedURL>} URLFormatOptions
+ */
+
+/**
  * Parse a URL-like input into a structured object.
+ * @param {string} input
+ * @param {boolean|URLParseOptions|null} [options]
+ * @returns {ParsedURL|null}
  * - When `options === true`, includes a Node-compatible `query` object.
  * - When `options?.strict === true`, returns `null` if input cannot be parsed.
  *
@@ -188,7 +218,7 @@ export function parse (input, options = null) {
   }
 
   const out = {
-    hash: u.hash || null,
+    hash: u.hash || (u.href.endsWith('#') ? '#' : null),
     host,
     hostname,
     origin,
@@ -201,7 +231,7 @@ export function parse (input, options = null) {
     path: u.pathname || null,
     port: u.port || null,
     protocol: u.protocol || null,
-    search: u.search || null,
+    search: u.search || (u.href.split('#')[0].endsWith('?') ? '?' : null),
     searchParams: u.searchParams,
     username: username || null,
     [Symbol.toStringTag]: 'URL (Parsed)'
@@ -279,7 +309,7 @@ function parseIPv6Zone (input) {
  * Example:
  * ```js
  * resolve('http://example.com/a/b', '../c') // => 'http://example.com/c'
- * resolve('/a/b', 'c') // => '/a/b/c'
+ * resolve('/a/b', 'c') // => '/a/c'
  * ```
  */
 export function resolve (from, to) {
@@ -311,6 +341,8 @@ export function resolve (from, to) {
  * Notes
  * - When specifying `hostname` with an IPv6 literal, brackets are added automatically.
  *   Alternatively, you can pass `host` directly as `[2001:db8::1]:8080`.
+ * @param {string|URLFormatOptions} input
+ * @returns {string}
  */
 export function format (input) {
   if (!input || (typeof input !== 'string' && typeof input !== 'object')) {
@@ -333,8 +365,8 @@ export function format (input) {
     formatted += `${input.protocol}//`
   }
 
-  if (input.username) {
-    formatted += encodeURIComponent(input.username)
+  if (input.username || input.password) {
+    formatted += encodeURIComponent(input.username || '')
 
     if (input.password) {
       formatted += `:${encodeURIComponent(input.password)}`
@@ -368,14 +400,16 @@ export function format (input) {
     }
   }
 
-  if (input.query && typeof input.query === 'object') {
+  if (typeof input.search === 'string' && input.search.length > 0) {
+    formatted += input.search.startsWith('?') ? input.search : `?${input.search}`
+  } else if (input.query && typeof input.query === 'object') {
     formatted += `?${qs.stringify(input.query)}`
   } else if (input.query && typeof input.query === 'string') {
     if (!input.query.startsWith('?')) {
       formatted += '?'
     }
 
-    formatted += encodeURIComponent(decodeURIComponent(input.query))
+    formatted += input.query
   }
 
   if (input.hash && typeof input.hash === 'string') {

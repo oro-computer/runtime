@@ -90,10 +90,11 @@ test('Buffer read/write integers/floats', (t) => {
   b.writeUInt16LE(0x1234, 0)
   b.writeUInt16BE(0x5678, 2)
   b.writeInt8(-1, 4)
-  b.writeFloatLE(1.5, 0)
-  t.equal(b.readUInt16LE(0), b.readUInt16LE(0))
+  t.equal(b.readUInt16LE(0), 0x1234)
   t.equal(b.readUInt16BE(2), 0x5678)
   t.equal(b.readInt8(4), -1)
+  b.writeFloatLE(1.5, 0)
+  t.equal(b.readFloatLE(0), 1.5)
 })
 
 // swap16/swap32 no-throw and changes content size-wise

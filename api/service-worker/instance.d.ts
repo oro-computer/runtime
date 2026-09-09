@@ -1,4 +1,16 @@
-export function createServiceWorker(currentState?: any, options?: any): any;
+/**
+ * @typedef {object} ServiceWorkerOptions
+ * @property {string|null} [id]
+ * @property {string|null} [scriptURL]
+ * @property {boolean} [subscribe]
+ */
+/**
+ * Creates an observable handle to a worker registration.
+ * @param {string|null} [currentState]
+ * @param {ServiceWorkerOptions} [options]
+ * @returns {globalThis.ServiceWorker}
+ */
+export function createServiceWorker(currentState?: string | null, options?: ServiceWorkerOptions): globalThis.ServiceWorker;
 export const channel: BroadcastChannel;
 export const ServiceWorker: {
     new (): ServiceWorker;
@@ -20,3 +32,8 @@ export const ServiceWorker: {
     };
 };
 export default createServiceWorker;
+export type ServiceWorkerOptions = {
+    id?: string | null;
+    scriptURL?: string | null;
+    subscribe?: boolean;
+};

@@ -68,8 +68,14 @@ export function debug (section) {
   return logger
 }
 
+/**
+ * Tests whether an object owns a string or symbol property.
+ * @param {object} object
+ * @param {string|number|symbol} property
+ * @returns {boolean}
+ */
 export function hasOwnProperty (object, property) {
-  return ObjectPrototype.hasOwnProperty.call(object, String(property))
+  return ObjectPrototype.hasOwnProperty.call(object, property)
 }
 
 export function isDate (object) {
@@ -189,8 +195,13 @@ export function isErrorLike (error) {
   return isObject(error) && 'name' in error && 'message' in error
 }
 
+/**
+ * Tests whether a value is an ECMAScript class constructor.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
 export function isClass (value) {
-  return typeof value === 'function' && value.prototype.constructor !== Function
+  return typeof value === 'function' && /^class(?:\s|\{)/.test(Function.prototype.toString.call(value))
 }
 
 export function isBuffer (value) {

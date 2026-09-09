@@ -34,6 +34,19 @@ export const ServiceWorker =
     postMessage () {}
   }
 
+/**
+ * @typedef {object} ServiceWorkerOptions
+ * @property {string|null} [id]
+ * @property {string|null} [scriptURL]
+ * @property {boolean} [subscribe]
+ */
+
+/**
+ * Creates an observable handle to a worker registration.
+ * @param {string|null} [currentState]
+ * @param {ServiceWorkerOptions} [options]
+ * @returns {globalThis.ServiceWorker}
+ */
 export function createServiceWorker (
   currentState = state.serviceWorker.state,
   options = null
@@ -165,23 +178,18 @@ export function createServiceWorker (
           data.serviceWorker.state &&
           data.serviceWorker.state !== currentState
         ) {
-          const scope = new URL(location.href).pathname
-          if (scope.startsWith(data.serviceWorker.scope)) {
-            if (data.serviceWorker.scriptURL) {
-              scriptURL = data.serviceWorker.scriptURL
-            }
-
-            if (data.serviceWorker.state !== currentState) {
-              currentState = data.serviceWorker.state
-              const event = new Event('statechange')
-
-              Object.defineProperties(event, {
-                target: { value: serviceWorker }
-              })
-
-              eventTarget.dispatchEvent(event)
-            }
+          if (data.serviceWorker.scriptURL) {
+            scriptURL = data.serviceWorker.scriptURL
           }
+
+          currentState = data.serviceWorker.state
+          const event = new Event('statechange')
+
+          Object.defineProperties(event, {
+            target: { value: serviceWorker }
+          })
+
+          eventTarget.dispatchEvent(event)
         }
       }
     })

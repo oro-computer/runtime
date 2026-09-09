@@ -1423,7 +1423,7 @@ test('tar: append rejects bodies for non-file entries', async (t) => {
 
   await t.rejects(
     archive.append({ path: 'dir/', kind: 'directory', size: 1 }, null),
-    /header\\.size.*0/i,
+    /header\.size.*0/i,
     'directory entries enforce size 0'
   )
 

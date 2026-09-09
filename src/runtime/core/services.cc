@@ -133,6 +133,7 @@ namespace oro::runtime::core {
       }
       const bool ok = service->start();
       if (!ok) {
+        debug("Services: failed to start %s", entry.name);
         return false;
       }
     }

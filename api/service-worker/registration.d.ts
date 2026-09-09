@@ -10,6 +10,10 @@ export class ServiceWorkerRegistration extends EventTarget {
     get navigationPreload(): any;
     getNotifications(): Promise<any>;
     showNotification(title: any, options: any): Promise<void>;
+    /**
+     * Removes this registration from the native service worker container.
+     * @returns {Promise<boolean>}
+     */
     unregister(): Promise<boolean>;
     update(): Promise<void>;
     #private;

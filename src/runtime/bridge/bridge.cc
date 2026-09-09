@@ -1653,8 +1653,18 @@ export * from '{{url}}'
             fetch.headers.set("origin", this->navigator.location.origin);
           }
 
+          auto normalizedQuery = request->query;
+          if (normalizedQuery.starts_with("?")) {
+            normalizedQuery = normalizedQuery.substr(1);
+          }
+          const auto key = std::to_string(request->client.id) + "|" + request->scheme + "|" + request->hostname + "|" + request->pathname + "|" + normalizedQuery;
+          this->swPendingRequest.insert_or_assign(key, request);
+          this->swPendingCallback.insert_or_assign(key, callback);
+
           const auto options = serviceworker::Fetch::Options { request->client };
-          const auto fetched = serviceWorker->fetch(fetch, options, [request, callback] (auto res) mutable {
+          const auto fetched = serviceWorker->fetch(fetch, options, [this, request, callback, key] (auto res) mutable {
+            this->swPendingRequest.erase(key);
+            this->swPendingCallback.erase(key);
             if (!request->isActive()) {
               return;
             }
@@ -1680,6 +1690,9 @@ export * from '{{url}}'
             });
             return;
           }
+
+          this->swPendingRequest.erase(key);
+          this->swPendingCallback.erase(key);
         }
 
         response.writeHead(404);

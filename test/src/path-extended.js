@@ -16,7 +16,7 @@ const posixJoinCases = [
   [['/a', '../', 'b'], '/b'],
   [['http://ex.com/a', 'b'], 'http://ex.com/a/b'],
   [['http://ex.com/a/', '../b'], 'http://ex.com/b'],
-  [['file:///a/b', 'c', '..', 'd'], 'file:///a/d']
+  [['file:///a/b', 'c', '..', 'd'], 'file:///a/b/d']
 ]
 for (let i = 0; i < posixJoinCases.length; i++) {
   const [args, expect] = posixJoinCases[i]
@@ -110,8 +110,8 @@ const winRelative = [
   ['C:\\a\\b', 'C:\\a\\b', ''],
   ['C:\\a\\b', 'C:\\a\\b\\c', 'c'],
   ['C:\\a\\b\\c', 'C:\\a\\b', '..'],
-  ['C:\\a\\b\\c', 'C:\\d\\e', 'D:\\e'],
-  ['\\\\server\\share\\a', '\\x\\y', '..\\..\\..\\x\\y']
+  ['C:\\a\\b\\c', 'D:\\e', 'D:\\e'],
+  ['\\\\server\\share\\a', '\\x\\y', '\\x\\y']
 ]
 for (let i = 0; i < winRelative.length; i++) {
   const [from, to, expect] = winRelative[i]

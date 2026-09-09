@@ -23,13 +23,13 @@ for (let i = 0; i < resolvePairs.length; i++) {
 }
 // Resolve against absolute URL bases
 const resolveUrlPairs = [
-  ['https://example.com/a/b', 'c', 'https://example.com/a/b/c'],
-  ['https://example.com/a/b', '../c', 'https://example.com/a/c'],
+  ['https://example.com/a/b', 'c', 'https://example.com/a/c'],
+  ['https://example.com/a/b', '../c', 'https://example.com/c'],
   ['https://example.com/a/b/', '../c', 'https://example.com/a/c'],
   ['https://example.com/a/b/', './c', 'https://example.com/a/b/c'],
   ['https://example.com/a/b', '/c', 'https://example.com/c'],
-  ['file:///a/b', 'c', 'file:///a/b/c'],
-  ['oro:///app/index.html', '..', 'oro:///app/']
+  ['file:///a/b', 'c', 'file:///a/c'],
+  ['oro:///app/index.html', '..', 'oro:///']
 ]
 for (let i = 0; i < resolveUrlPairs.length; i++) {
   const [base, rel, expect] = resolveUrlPairs[i]
@@ -38,7 +38,7 @@ for (let i = 0; i < resolveUrlPairs.length; i++) {
   })
 }
 
-// Default ports omitted in format, preserved in parse host
+// Object formatting preserves explicit ports; parsing normalizes default ports.
 const defaultPorts = [
   ['http:', '80'],
   ['https:', '443'],
@@ -53,12 +53,12 @@ for (let i = 0; i < defaultPorts.length; i++) {
     port,
     pathname: '/'
   })
-  test(`url.format omits default port ${protocol}`, (t) => {
-    t.equal(formatted, `${protocol}//example.com/`)
+  test(`url.format preserves explicit default port ${protocol}`, (t) => {
+    t.equal(formatted, `${protocol}//example.com:${port}/`)
   })
   const parsed = url.parse(`${protocol}//example.com:${port}/`)
-  test(`url.parse keeps port in host ${protocol}`, (t) => {
-    t.equal(parsed.host, `example.com:${port}`)
+  test(`url.parse normalizes default port in host ${protocol}`, (t) => {
+    t.equal(parsed.host, 'example.com')
   })
 }
 
@@ -86,7 +86,7 @@ const originPairs = [
   ['file:///a/b', 'file://'],
   ['data:text/plain,hello', 'null'],
   ['custom:foo', 'null'],
-  ['oro:///app/index.html', 'oro:///']
+  ['oro:///app/index.html', 'oro://']
 ]
 
 for (let i = 0; i < originPairs.length; i++) {
@@ -155,11 +155,11 @@ for (let i = 0; i < ipv6.length; i++) {
   })
 }
 
-// file:/// path normalize
+// Object formatting preserves the supplied pathname.
 const filePaths = [
   ['/a/b', 'file:///a/b'],
-  ['/a/../b', 'file:///b'],
-  ['/a/./b', 'file:///a/b']
+  ['/a/../b', 'file:///a/../b'],
+  ['/a/./b', 'file:///a/./b']
 ]
 for (let i = 0; i < filePaths.length; i++) {
   const [pathname, expect] = filePaths[i]

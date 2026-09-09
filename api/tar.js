@@ -305,7 +305,7 @@ async function lstatMaybe (path) {
   try {
     return await fs.promises.lstat(path)
   } catch (err) {
-    if (err?.code === 'ENOENT') return null
+    if (err?.code === 'ENOENT' || err?.name === 'ENOENT') return null
     throw err
   }
 }
@@ -346,7 +346,7 @@ async function ensureExtractPath (root, relativePath) {
     try {
       await fs.promises.mkdir(current)
     } catch (err) {
-      if (err?.code !== 'EEXIST') {
+      if (err?.code !== 'EEXIST' && err?.name !== 'EEXIST') {
         throw err
       }
 

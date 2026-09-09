@@ -45,13 +45,9 @@ namespace oro::runtime::context {
 
     return true;
   #elif ORO_RUNTIME_PLATFORM_APPLE
-    auto priority = DISPATCH_QUEUE_PRIORITY_DEFAULT;
-    auto queue = dispatch_get_global_queue(priority, 0);
-
-    dispatch_async(queue, ^{
-      dispatch_sync(dispatch_get_main_queue(), ^{
-        callback();
-      });
+    // Captured windows must also be released on the main queue after execution.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      callback();
     });
 
     return true;

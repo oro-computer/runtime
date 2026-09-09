@@ -14,7 +14,15 @@ oro:querystring is a JavaScript API module exposed by the Oro Runtime.
 This is an exported `FunctionDeclaration` named `unescapeBuffer`, but it does not yet have a dedicated description in the generated reference.
 .TP
 \fBunescape(s, decodeSpaces)\fR
-This is an exported `FunctionDeclaration` named `unescape`, but it does not yet have a dedicated description in the generated reference.
+Decodes percent escapes, replacing malformed UTF\-8 sequences.
+\fBParameters:\fR
+.br
+\fIs\fR (string; required)
+.br
+\fIdecodeSpaces\fR (boolean; optional)
+\fBReturns:\fR
+.br
+\fIstring\fR
 .TP
 \fBescape(str)\fR
 This is an exported `FunctionDeclaration` named `escape`, but it does not yet have a dedicated description in the generated reference.
@@ -23,7 +31,19 @@ This is an exported `FunctionDeclaration` named `escape`, but it does not yet ha
 This is an exported `FunctionDeclaration` named `stringify`, but it does not yet have a dedicated description in the generated reference.
 .TP
 \fBparse(qs, sep, eq, options)\fR
-This is an exported `FunctionDeclaration` named `parse`, but it does not yet have a dedicated description in the generated reference.
+Parses key/value pairs separated by the supplied delimiters.
+\fBParameters:\fR
+.br
+\fIqs\fR (string; required)
+.br
+\fIsep\fR (string; optional)
+.br
+\fIeq\fR (string; optional)
+.br
+\fIoptions\fR (ParseOptions; optional)
+\fBReturns:\fR
+.br
+\fIRecord<string, string \\| string[]>\fR
 .TP
 \fBdecode\fR
 This is an exported `VariableDeclaration` named `decode`, but it does not yet have a dedicated description in the generated reference.

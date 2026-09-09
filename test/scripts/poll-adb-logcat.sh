@@ -1,25 +1,22 @@
 #!/usr/bin/env bash
 
 function dump_runtime_error() {
-  local logcat_pid
-  # logcat blocks, output, switch to bg, wait a bit, quit
-  $adb logcat | grep "E AndroidRuntime" & logcat_pid=$?
-  sleep 3
-  kill $logcat_pid
+  "$adb" logcat -d -b all -s AndroidRuntime:E '*:S'
+  if [[ -n "$poll_adb_watchdog_file" ]]; then
+    watchdog_file_update 1
+  fi
   exit 1
 }
 
 function dump_pid() {
   local app_pid="$1"
   local exit_code="$2"
-  local logcat_pid
-
   [[ -z "$exit_code" ]] && exit_code=1
-  # logcat blocks, output, switch to bg, wait a bit, quit
-  $adb logcat --pid="$app_pid" & logcat_pid=$?
-  sleep 1
-  kill $logcat_pid
-  exit $exit_code
+  "$adb" logcat -d -b all --pid="$app_pid"
+  if [[ -n "$poll_adb_watchdog_file" ]]; then
+    watchdog_file_update "$exit_code"
+  fi
+  exit "$exit_code"
 }
 
 function exit_on_adb_crash_signal() {

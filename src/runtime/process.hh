@@ -90,6 +90,8 @@ namespace oro::runtime::process {
     Array<char, 128> buffer;
 
     #if ORO_RUNTIME_PLATFORM_WINDOWS
+      // cmd.exe strips the outer quotes before parsing a quoted executable path.
+      command = "\"" + command + "\"";
       //
       // https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/popen-wpopen?view=msvc-160
       // _popen works fine in a console application... ok fine that's all we need it for... thanks.

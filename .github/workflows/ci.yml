@@ -981,6 +981,17 @@ jobs:
           xcrun simctl bootstatus "$simulator_udid" -b
           npm run test:ios-simulator
 
+      - name: Upload macOS crash reports
+        if: ${{ failure() && runner.os == 'macOS' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: macos-crash-reports-${{ runner.arch }}
+          path: |
+            ~/Library/Logs/DiagnosticReports/**/oro-runtime-javascript-tests*
+            /Library/Logs/DiagnosticReports/**/oro-runtime-javascript-tests*
+          if-no-files-found: ignore
+          retention-days: 7
+
       # Restore the multi-gigabyte emulator only after native outputs have been
       # staged and pruned so both trees do not consume runner disk together.
       - name: Restore Android emulator cache

@@ -107,9 +107,13 @@ export class ServiceWorkerRegistration extends EventTarget {
     return await showNotification(this, title, options)
   }
 
+  /**
+   * Removes this registration from the native service worker container.
+   * @returns {Promise<boolean>}
+   */
   async unregister () {
     const result = await ipc.request('serviceWorker.unregister', {
-      scope: this.scope
+      id: this.#info.registration.id
     })
 
     if (result.err) {

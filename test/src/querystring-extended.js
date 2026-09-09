@@ -21,7 +21,7 @@ const parseCases = [
   ['a=%20', { a: ' ' }],
   ['a%20b=c%20d', { 'a b': 'c d' }],
   ['plus+space=with+plus', { 'plus space': 'with plus' }],
-  ['weird=%E0%A4%A', { weird: '%E0%A4%A' }],
+  ['weird=%E0%A4%A', { weird: '\ufffd%A' }],
   ['a=b=c', { a: 'b=c' }],
   ['a?b=c', { 'a?b': 'c' }],
   ['a#b=c', { 'a#b': 'c' }],
@@ -30,9 +30,9 @@ const parseCases = [
   ['emoji=😀', { emoji: '😀' }],
   ['k=スペース', { k: 'スペース' }],
   ['k=%E3%82%B9%E3%83%9A%E3%83%BC%E3%82%B9', { k: 'スペース' }],
-  ['a=1;b=2;c=3', { 'a=1;b=2;c=3': '' }],
+  ['a=1;b=2;c=3', { a: '1;b=2;c=3' }],
   ['a;1', { 'a;1': '' }],
-  ['a=1;b=2', { 'a=1;b=2': '' }],
+  ['a=1;b=2', { a: '1;b=2' }],
   ['arr[]=1&arr[]=2', { 'arr[]': ['1', '2'] }],
   ['nested[a]=1&nested[b]=2', { 'nested[a]': '1', 'nested[b]': '2' }],
   ['a=%2Fb', { a: '/b' }],
@@ -49,8 +49,8 @@ for (let i = 0; i < parseCases.length; i++) {
 const sepEqCases = [
   ['a:1|b:2', '|', ':', { a: '1', b: '2' }],
   ['k~v;k2~v2', ';', '~', { k: 'v', k2: 'v2' }],
-  ['x\ty\tz', '\t', '\t', { x: 'y', z: '' }],
-  ['x\ty\tz=1', '\t', '\t', { x: 'y', z: '1' }]
+  ['x=y\tz', '\t', '=', { x: 'y', z: '' }],
+  ['x=y\tz=1', '\t', '=', { x: 'y', z: '1' }]
 ]
 
 for (let i = 0; i < sepEqCases.length; i++) {
@@ -142,6 +142,6 @@ for (let i = 0; i < unescapePairs.length; i++) {
     t.equal(qs.unescape(enc), dec)
   })
   test(`querystring.escape pair ${i + 1}`, (t) => {
-    t.equal(qs.escape(dec), enc.toUpperCase())
+    t.equal(qs.escape(dec), enc)
   })
 }

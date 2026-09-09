@@ -225,6 +225,7 @@ export class FetchEvent extends ExtendableEvent {
    * default fetch handling, and allows you to provide a promise for a
    * `Response` yourself.
    * @param {Response|Promise<Response>} response
+   * @returns {void}
    */
   respondWith (response) {
     if (this.#responded) {
@@ -272,46 +273,23 @@ export class FetchEvent extends ExtendableEvent {
           return
         }
 
-        let arrayBuffer = null
-        let statusCode = response.status ?? 200
-
-        // just follow the redirect here now
-        if (
-          statusCode >= 300 &&
-          statusCode < 400 &&
+        let remainingRedirects = FETCH_EVENT_MAX_RESPONSE_REDIRECTS
+        while (
+          response.status >= 300 &&
+          response.status < 400 &&
           response.headers.has('location')
         ) {
-          let previousResponse = response
-          let remainingRedirects = FETCH_EVENT_MAX_RESPONSE_REDIRECTS
-
-          while (remainingRedirects-- > 0) {
-            const redirectLocation = previousResponse.headers.get('location')
-
-            if (!redirectLocation) {
-              statusCode = 404
-              break
-            }
-
-            const url = new URL(redirectLocation, location.origin)
-            previousResponse = await fetch(url.href)
-
-            if (
-              previousResponse.status >= 200 &&
-              previousResponse.status < 300
-            ) {
-              arrayBuffer = await previousResponse.arrayBuffer()
-              break
-            } else if (previousResponse.status >= 300 && statusCode < 400) {
-              continue
-            } else {
-              statusCode = previousResponse.statusCode
-              arrayBuffer = await previousResponse.arrayBuffer()
-              break
-            }
+          if (remainingRedirects-- === 0) {
+            throw new TypeError('Service worker response exceeded the redirect limit')
           }
-        } else {
-          arrayBuffer = await response.arrayBuffer()
+
+          const url = new URL(response.headers.get('location'), response.url || location.origin)
+          response = await fetch(url.href)
         }
+
+        const statusCode = response.status ?? 200
+        const streaming = Boolean(response.body && typeof response.body.getReader === 'function')
+        const arrayBuffer = streaming ? null : await response.arrayBuffer()
 
         // Prepare response headers and streaming mode
         let headerEntries = Array.from(response.headers.entries())
@@ -322,10 +300,7 @@ export class FetchEvent extends ExtendableEvent {
         params['runtime-preload-injection'] =
           response.headers.get('runtime-preload-injection') || 'auto'
 
-        // Stream if response.body is readable; else fallback to arrayBuffer
-        let streaming = false
-        if (response.body && typeof response.body.getReader === 'function') {
-          streaming = true
+        if (streaming) {
           // Hint native layer for streaming on platforms that support it
           headerEntries.push(['transfer-encoding', 'chunked'])
         }

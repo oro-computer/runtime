@@ -12658,14 +12658,13 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
-      auto options = window->options;
-      if (options.userConfig["build_headless"] != "true") {
-      #if ORO_RUNTIME_PLATFORM_DESKTOP
-        window->restore();
-      #else
+    #if ORO_RUNTIME_PLATFORM_DESKTOP
+      window->restore();
+    #else
+      if (!window->options.headless) {
         window->show();
-      #endif
       }
+    #endif
       reply(Result::Data { message, window->json() });
     });
   });

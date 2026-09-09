@@ -1737,6 +1737,8 @@ function _install {
       ln -sf "$BUILD_DIR/$arch-desktop/include/sodium.h" "$ORO_HOME/include"
       ln -sf "$BUILD_DIR/$arch-desktop/include/sodium" "$ORO_HOME/include"
       ln -sf "$root"/build/whisper.cpp/include/* "$ORO_HOME/include"
+      ln -sf "$root"/build/llama/include/*.h "$ORO_HOME/include"
+      ln -sf "$root"/build/llama/ggml/include/*.h "$ORO_HOME/include"
       if [[ "$host" = "Linux" && -d "$BUILD_DIR/include/mbedtls" ]]; then
         rm -rf "$ORO_HOME/include/mbedtls"
         ln -sf "$BUILD_DIR/include/mbedtls" "$ORO_HOME/include/mbedtls"
@@ -1752,6 +1754,8 @@ function _install {
       cp -fp "$BUILD_DIR/$arch-desktop/include/sodium.h" "$ORO_HOME/include"
       cp -rfp "$BUILD_DIR/$arch-desktop/include/sodium" "$ORO_HOME/include"
       cp -rfp "$root"/build/whisper.cpp/include/* "$ORO_HOME/include"
+      cp -fp "$root"/build/llama/include/*.h "$ORO_HOME/include"
+      cp -fp "$root"/build/llama/ggml/include/*.h "$ORO_HOME/include"
       if [[ "$host" = "Linux" && -d "$BUILD_DIR/include/mbedtls" ]]; then
         rm -rf "$ORO_HOME/include/mbedtls"
         cp -rfp "$BUILD_DIR/include/mbedtls" "$ORO_HOME/include"

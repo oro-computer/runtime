@@ -17,6 +17,9 @@ namespace oro::runtime::core::services {
 
   #elif ORO_RUNTIME_PLATFORM_LINUX
     this->monitor = g_network_monitor_get_default();
+  #else
+    // Native network monitoring is implemented only on Apple and Linux.
+    this->enabled = false;
   #endif
   }
 

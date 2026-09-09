@@ -699,7 +699,11 @@ namespace oro::runtime::process {
                   static_cast<size_t>(n)
                 ));
               }
-            } else if (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
+              // POLLHUP can arrive with more buffered output than one read.
+              // Keep polling until every byte has been consumed.
+              any_open = true;
+              continue;
+            } else if (n == 0 || (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)) {
               pollfds[i].fd = -1;
               continue;
             }

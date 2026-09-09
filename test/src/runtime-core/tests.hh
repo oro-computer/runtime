@@ -84,6 +84,7 @@ namespace oro::Tests {
   void toml (Harness&);
   void platform (Harness&);
   void preload (Harness&);
+  void process (Harness&);
   void state_manager (Harness&);
   void string (Harness&);
   void version (Harness&);

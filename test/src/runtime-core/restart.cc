@@ -12,6 +12,9 @@ namespace oro::Tests {
 
       t.assert(!instance.loop.started(), "loop waits for explicit startup");
       t.assert(!instance.services.state.isReady(), "state storage waits for explicit startup");
+    #if !ORO_RUNTIME_PLATFORM_APPLE && !ORO_RUNTIME_PLATFORM_LINUX
+      t.assert(!instance.services.networkStatus.enabled, "unavailable native network monitor is disabled");
+    #endif
       t.assert(instance.destroy(), "runtime can be destroyed before startup");
       t.assert(!instance.loop.started(), "destroy does not start the loop");
     });

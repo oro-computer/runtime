@@ -202,11 +202,43 @@ declare module "oro:buffer" {
 
 declare module "oro:querystring" {
     export function unescapeBuffer(s: any, decodeSpaces: any): any;
-    export function unescape(s: any, decodeSpaces: any): any;
+    /**
+     * Decodes percent escapes, replacing malformed UTF-8 sequences.
+     * @param {string} s
+     * @param {boolean} [decodeSpaces]
+     * @returns {string}
+     */
+    export function unescape(s: string, decodeSpaces?: boolean): string;
     export function escape(str: any): any;
     export function stringify(obj: any, sep: any, eq: any, options: any): string;
-    export function parse(qs: any, sep: any, eq: any, options: any): {};
-    export function decode(qs: any, sep: any, eq: any, options: any): {};
+    /**
+     * @typedef {object} ParseOptions
+     * @property {number} [maxKeys]
+     * @property {(value: string) => string} [decodeURIComponent]
+     */
+    /**
+     * Parses key/value pairs separated by the supplied delimiters.
+     * @param {string} qs
+     * @param {string} [sep]
+     * @param {string} [eq]
+     * @param {ParseOptions} [options]
+     * @returns {Record<string, string|string[]>}
+     */
+    export function parse(qs: string, sep?: string, eq?: string, options?: ParseOptions): Record<string, string | string[]>;
+    /**
+     * @typedef {object} ParseOptions
+     * @property {number} [maxKeys]
+     * @property {(value: string) => string} [decodeURIComponent]
+     */
+    /**
+     * Parses key/value pairs separated by the supplied delimiters.
+     * @param {string} qs
+     * @param {string} [sep]
+     * @param {string} [eq]
+     * @param {ParseOptions} [options]
+     * @returns {Record<string, string|string[]>}
+     */
+    export function decode(qs: string, sep?: string, eq?: string, options?: ParseOptions): Record<string, string | string[]>;
     export function encode(obj: any, sep: any, eq: any, options: any): string;
     namespace _default {
         export { decode };
@@ -217,6 +249,10 @@ declare module "oro:querystring" {
         export { unescape };
     }
     export default _default;
+    export type ParseOptions = {
+        maxKeys?: number;
+        decodeURIComponent?: (value: string) => string;
+    };
 }
 
 declare module "oro:internal/runtime-schemes" {
@@ -263,7 +299,34 @@ declare module "oro:internal/runtime-schemes" {
 
 declare module "oro:url/index" {
     /**
+     * @typedef {{ strict?: boolean }} URLParseOptions
+     */
+    /**
+     * @typedef {object} ParsedURL
+     * @property {string|null} protocol
+     * @property {string|null} host
+     * @property {string|null} hostname
+     * @property {string|null} origin
+     * @property {string|null} auth
+     * @property {string|null} username
+     * @property {string|null} password
+     * @property {string|null} port
+     * @property {string|null} pathname
+     * @property {string|null} path
+     * @property {string|null} search
+     * @property {string|null} hash
+     * @property {string} href
+     * @property {URLSearchParams} searchParams
+     * @property {string|Record<string, any>} [query]
+     */
+    /**
+     * @typedef {Partial<ParsedURL>} URLFormatOptions
+     */
+    /**
      * Parse a URL-like input into a structured object.
+     * @param {string} input
+     * @param {boolean|URLParseOptions|null} [options]
+     * @returns {ParsedURL|null}
      * - When `options === true`, includes a Node-compatible `query` object.
      * - When `options?.strict === true`, returns `null` if input cannot be parsed.
      *
@@ -278,22 +341,7 @@ declare module "oro:url/index" {
      * // }
      * ```
      */
-    export function parse(input: any, options?: any): {
-        hash: any;
-        host: any;
-        hostname: any;
-        origin: any;
-        auth: string;
-        password: any;
-        pathname: any;
-        path: any;
-        port: any;
-        protocol: any;
-        search: any;
-        searchParams: any;
-        username: any;
-        [Symbol.toStringTag]: string;
-    };
+    export function parse(input: string, options?: boolean | URLParseOptions | null): ParsedURL | null;
     /**
      * Resolve a target URL/path `to` against a base `from`.
      * Mirrors Node.js `url.resolve()` semantics.
@@ -301,7 +349,7 @@ declare module "oro:url/index" {
      * Example:
      * ```js
      * resolve('http://example.com/a/b', '../c') // => 'http://example.com/c'
-     * resolve('/a/b', 'c') // => '/a/b/c'
+     * resolve('/a/b', 'c') // => '/a/c'
      * ```
      */
     export function resolve(from: any, to: any): any;
@@ -323,8 +371,10 @@ declare module "oro:url/index" {
      * Notes
      * - When specifying `hostname` with an IPv6 literal, brackets are added automatically.
      *   Alternatively, you can pass `host` directly as `[2001:db8::1]:8080`.
+     * @param {string|URLFormatOptions} input
+     * @returns {string}
      */
-    export function format(input: any): any;
+    export function format(input: string | URLFormatOptions): string;
     export function fileURLToPath(url: any): any;
     /**
      * @type {Set & { handlers: Set<string> }}
@@ -333,6 +383,27 @@ declare module "oro:url/index" {
         handlers: Set<string>;
     };
     export default URL;
+    export type URLParseOptions = {
+        strict?: boolean;
+    };
+    export type ParsedURL = {
+        protocol: string | null;
+        host: string | null;
+        hostname: string | null;
+        origin: string | null;
+        auth: string | null;
+        username: string | null;
+        password: string | null;
+        port: string | null;
+        pathname: string | null;
+        path: string | null;
+        search: string | null;
+        hash: string | null;
+        href: string;
+        searchParams: URLSearchParams;
+        query?: string | Record<string, any>;
+    };
+    export type URLFormatOptions = Partial<ParsedURL>;
     export class URL {
         private constructor();
     }
@@ -1922,7 +1993,13 @@ declare module "oro:util" {
         (...args: any[]): void;
         enabled: boolean;
     };
-    export function hasOwnProperty(object: any, property: any): any;
+    /**
+     * Tests whether an object owns a string or symbol property.
+     * @param {object} object
+     * @param {string|number|symbol} property
+     * @returns {boolean}
+     */
+    export function hasOwnProperty(object: object, property: string | number | symbol): boolean;
     export function isDate(object: any): boolean;
     export function isTypedArray(object: any): boolean;
     export function isArrayLike(input: any): boolean;
@@ -1945,7 +2022,12 @@ declare module "oro:util" {
     export function isBufferLike(object: any): boolean;
     export function isFunction(value: any): boolean;
     export function isErrorLike(error: any): boolean;
-    export function isClass(value: any): boolean;
+    /**
+     * Tests whether a value is an ECMAScript class constructor.
+     * @param {unknown} value
+     * @returns {boolean}
+     */
+    export function isClass(value: unknown): boolean;
     export function isBuffer(value: any): boolean;
     export function isPromiseLike(object: any): boolean;
     export function toString(object: any): any;
@@ -12906,6 +12988,7 @@ declare module "oro:service-worker/events" {
          * default fetch handling, and allows you to provide a promise for a
          * `Response` yourself.
          * @param {Response|Promise<Response>} response
+         * @returns {void}
          */
         respondWith(response: Response | Promise<Response>): void;
         #private;
@@ -21443,7 +21526,19 @@ declare module "oro:usb" {
 }
 
 declare module "oro:service-worker/instance" {
-    export function createServiceWorker(currentState?: any, options?: any): any;
+    /**
+     * @typedef {object} ServiceWorkerOptions
+     * @property {string|null} [id]
+     * @property {string|null} [scriptURL]
+     * @property {boolean} [subscribe]
+     */
+    /**
+     * Creates an observable handle to a worker registration.
+     * @param {string|null} [currentState]
+     * @param {ServiceWorkerOptions} [options]
+     * @returns {globalThis.ServiceWorker}
+     */
+    export function createServiceWorker(currentState?: string | null, options?: ServiceWorkerOptions): globalThis.ServiceWorker;
     export const channel: BroadcastChannel;
     export const ServiceWorker: {
         new (): ServiceWorker;
@@ -21465,6 +21560,11 @@ declare module "oro:service-worker/instance" {
         };
     };
     export default createServiceWorker;
+    export type ServiceWorkerOptions = {
+        id?: string | null;
+        scriptURL?: string | null;
+        subscribe?: boolean;
+    };
 }
 
 declare module "oro:worker" {
@@ -23061,6 +23161,10 @@ declare module "oro:service-worker/registration" {
         get navigationPreload(): any;
         getNotifications(): Promise<any>;
         showNotification(title: any, options: any): Promise<void>;
+        /**
+         * Removes this registration from the native service worker container.
+         * @returns {Promise<boolean>}
+         */
         unregister(): Promise<boolean>;
         update(): Promise<void>;
         #private;
@@ -23093,7 +23197,13 @@ declare module "oro:service-worker/container" {
          * @ignore
          */
         init(): Promise<any>;
-        register(scriptURL: any, options?: any): Promise<globalThis.ServiceWorkerRegistration | ServiceWorkerRegistration>;
+        /**
+         * Registers a service worker and returns its registration.
+         * @param {string|URL} scriptURL
+         * @param {RegistrationOptions} [options]
+         * @returns {Promise<ServiceWorkerRegistration>}
+         */
+        register(scriptURL: string | URL, options?: RegistrationOptions): Promise<ServiceWorkerRegistration>;
         getRegistration(clientURL: any): Promise<globalThis.ServiceWorkerRegistration | ServiceWorkerRegistration>;
         getRegistrations(options: any): Promise<readonly globalThis.ServiceWorkerRegistration[] | ServiceWorkerRegistration[]>;
         startMessages(): void;

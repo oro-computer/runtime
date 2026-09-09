@@ -106,6 +106,7 @@ export class FetchEvent extends ExtendableEvent {
      * default fetch handling, and allows you to provide a promise for a
      * `Response` yourself.
      * @param {Response|Promise<Response>} response
+     * @returns {void}
      */
     respondWith(response: Response | Promise<Response>): void;
     #private;

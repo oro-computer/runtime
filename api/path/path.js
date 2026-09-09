@@ -319,6 +319,8 @@ export function join (options, ...components) {
   const { sep } = options
   const resolved = []
   const isWindows = sep === '\\'
+  const trailingSeparator = !isWindows && components.length > 0 &&
+    toComponentString(components.at(-1)).endsWith(sep)
   let absolute = String(toComponentString(components[0] || ''))
     .trim()
     .startsWith(sep)
@@ -380,16 +382,18 @@ export function join (options, ...components) {
       if (!part) continue
       if (part === '.') continue
       if (part === '..') {
-        if (resolved.length > 1 && resolved[0] !== '..') {
+        const floor = isWindows ? (uncRoot ? 2 : drive ? 1 : 0) : 0
+        if (resolved.length > floor && resolved.at(-1) !== '..') {
           resolved.pop()
           continue
         }
+        if (absolute || url) continue
       }
       resolved.push(part)
     }
   }
 
-  const joined = resolved.join(sep)
+  const joined = resolved.join(sep) + (trailingSeparator && resolved.length > 0 ? sep : '')
 
   if (url) {
     const rel = (absolute ? sep : '') + joined
@@ -503,6 +507,25 @@ export function normalize (options, path) {
   if (sep === '\\') return normalizeWindowsPath(path)
 
   path = String(path)
+  if (!maybeURL(path)) {
+    const absolute = path.startsWith(sep)
+    const trailingSeparator = path.endsWith(sep)
+    const parts = []
+    for (const part of path.split(sep)) {
+      if (!part || part === '.') continue
+      if (part === '..') {
+        if (parts.length > 0 && parts.at(-1) !== '..') {
+          parts.pop()
+        } else if (!absolute) {
+          parts.push(part)
+        }
+      } else {
+        parts.push(part)
+      }
+    }
+    const normalized = (absolute ? sep : '') + parts.join(sep) || '.'
+    return normalized + (trailingSeparator && !normalized.endsWith(sep) ? sep : '')
+  }
   const [drive] = path.match(windowsDriveRegex) || []
   const isWindows = sep === '\\'
   const hasDrive = Boolean(drive)
@@ -892,17 +915,10 @@ export class Path {
    * @type {string}
    */
   get ext () {
-    let i = this.pathname.lastIndexOf('/')
-
-    if (i === -1) {
-      i = this.pathname.lastIndexOf('\\')
-    }
-
-    const pathname = i > -1 ? this.pathname.slice(i) : this.pathname
-
-    i = pathname.lastIndexOf('.')
-    if (i === -1) return ''
-    return pathname.slice(i >= 0 ? i : undefined)
+    const basename = this.base
+    const index = basename.lastIndexOf('.')
+    if (index <= 0 || basename === '..') return ''
+    return basename.slice(index)
   }
 
   /**

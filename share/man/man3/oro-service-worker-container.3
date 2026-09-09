@@ -18,3 +18,14 @@ Predicate to determine if service workers are allowed
 .TP
 \fBServiceWorkerContainer (extends EventTarget)\fR
 A `ServiceWorkerContainer` implementation that is attached to the global `globalThis.navigator.serviceWorker` object.
+.TP
+\fBregister(scriptURL, options)\fR
+Registers a service worker and returns its registration.
+\fBParameters:\fR
+.br
+\fIscriptURL\fR (string \\| URL; required)
+.br
+\fIoptions\fR (RegistrationOptions; optional; default null)
+\fBReturns:\fR
+.br
+\fIPromise<ServiceWorkerRegistration>\fR

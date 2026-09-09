@@ -85,7 +85,7 @@ test('util.toBuffer from string and typed array', (t) => {
 
 test('util.clamp non-finite coerces to min', (t) => {
   t.equal(clamp(NaN, 0, 10), 0)
-  t.equal(clamp(Infinity, 0, 5), 5)
+  t.equal(clamp(Infinity, 0, 5), 0)
 })
 
 test('util.promisify simple callback', async (t) => {

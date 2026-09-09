@@ -1189,7 +1189,28 @@ MAIN {
   SET_DEFAULT_WINDOW_SIGNAL_HANDLER(SIGALRM)
 #endif
 #if defined(SIGCHLD)
-  SET_DEFAULT_WINDOW_SIGNAL_HANDLER(SIGCHLD)
+  if (!signalsDisabled || std::find(signals.begin(), signals.end(), "SIGCHLD") != signals.end()) {
+    app.runtime.loop.dispatch([]() {
+      static uv_signal_t childSignal;
+      auto status = uv_signal_init(app.runtime.loop.get(), &childSignal);
+      if (status != 0) {
+        debug("Unable to initialize SIGCHLD watcher: %s", uv_strerror(status));
+        return;
+      }
+
+      // Deliver child exits outside the signal handler, where GTK locks are safe.
+      status = uv_signal_start(&childSignal, [](uv_signal_t*, int signum) {
+        defaultWindowSignalHandler(signum);
+      }, SIGCHLD);
+      if (status != 0) {
+        debug("Unable to start SIGCHLD watcher: %s", uv_strerror(status));
+        uv_close(reinterpret_cast<uv_handle_t*>(&childSignal), [](uv_handle_t*) {});
+        return;
+      }
+
+      uv_unref(reinterpret_cast<uv_handle_t*>(&childSignal));
+    });
+  }
 #endif
 #if defined(SIGCONT)
   SET_DEFAULT_WINDOW_SIGNAL_HANDLER(SIGCONT)

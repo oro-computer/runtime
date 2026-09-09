@@ -22,7 +22,13 @@ export class ServiceWorkerContainer extends EventTarget {
      * @ignore
      */
     init(): Promise<any>;
-    register(scriptURL: any, options?: any): Promise<globalThis.ServiceWorkerRegistration | ServiceWorkerRegistration>;
+    /**
+     * Registers a service worker and returns its registration.
+     * @param {string|URL} scriptURL
+     * @param {RegistrationOptions} [options]
+     * @returns {Promise<ServiceWorkerRegistration>}
+     */
+    register(scriptURL: string | URL, options?: RegistrationOptions): Promise<ServiceWorkerRegistration>;
     getRegistration(clientURL: any): Promise<globalThis.ServiceWorkerRegistration | ServiceWorkerRegistration>;
     getRegistrations(options: any): Promise<readonly globalThis.ServiceWorkerRegistration[] | ServiceWorkerRegistration[]>;
     startMessages(): void;

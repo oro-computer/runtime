@@ -436,6 +436,12 @@ export class ServiceWorkerContainer extends EventTarget {
     return registrations
   }
 
+  /**
+   * Registers a service worker and returns its registration.
+   * @param {string|URL} scriptURL
+   * @param {RegistrationOptions} [options]
+   * @returns {Promise<ServiceWorkerRegistration>}
+   */
   async register (scriptURL, options = null) {
     await internal.get(this).init
 
@@ -479,7 +485,7 @@ export class ServiceWorkerContainer extends EventTarget {
     const info = result.data
 
     if (!info?.registration) {
-      return // registration likely never completed
+      throw new Error('Service worker registration did not complete')
     }
 
     const url = 'blob:'.startsWith(globalThis.location.origin)
@@ -490,8 +496,11 @@ export class ServiceWorkerContainer extends EventTarget {
       : new URL(info.registration.scope, globalThis.location.origin)
 
     const container = this
+    const scopePath = new URL(options.scope, globalThis.location.href).pathname
+    const requestedScope = scopePath.replace(/\/+$/, '') || '/'
+    const registeredScope = url.pathname.replace(/\/+$/, '') || '/'
 
-    if (info?.registration && url.pathname.startsWith(options.scope)) {
+    if (registeredScope === requestedScope) {
       state.serviceWorker.state = info.registration.state.replace(
         'registered',
         'installing'
@@ -513,6 +522,8 @@ export class ServiceWorkerContainer extends EventTarget {
           ) {
             serviceWorker.removeEventListener('statechange', onStateChange)
 
+            if (!globalThis.location.pathname.startsWith(scopePath)) return
+
             queueMicrotask(() => {
               container.dispatchEvent(new Event('controllerchange'))
             })
@@ -526,6 +537,8 @@ export class ServiceWorkerContainer extends EventTarget {
 
       return registration
     }
+
+    throw new Error('Service worker registration returned a different scope')
   }
 
   startMessages () {

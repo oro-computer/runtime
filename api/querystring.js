@@ -95,11 +95,18 @@ export function unescapeBuffer(s, decodeSpaces) {
   return out.slice(0, outIndex - 1)
 }
 
+/**
+ * Decodes percent escapes, replacing malformed UTF-8 sequences.
+ * @param {string} s
+ * @param {boolean} [decodeSpaces]
+ * @returns {string}
+ */
 export function unescape(s, decodeSpaces) {
   try {
     return decodeURIComponent(s)
   } catch (e) {
-    return unescapeBuffer(s, decodeSpaces).toString()
+    const bytes = unescapeBuffer(s, decodeSpaces)
+    return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes)
   }
 }
 
@@ -219,7 +226,20 @@ export function stringify(obj, sep, eq, options) {
   return ''
 }
 
-// Parse a key/val string.
+/**
+ * @typedef {object} ParseOptions
+ * @property {number} [maxKeys]
+ * @property {(value: string) => string} [decodeURIComponent]
+ */
+
+/**
+ * Parses key/value pairs separated by the supplied delimiters.
+ * @param {string} qs
+ * @param {string} [sep]
+ * @param {string} [eq]
+ * @param {ParseOptions} [options]
+ * @returns {Record<string, string|string[]>}
+ */
 export function parse(qs, sep, eq, options) {
   sep = sep || '&'
   eq = eq || '='
@@ -266,6 +286,12 @@ export function parse(qs, sep, eq, options) {
       if (++sepIdx === sepLen) {
         // Key/value pair separator match!
         var end = i - sepIdx + 1
+        if (lastPos === end && eqIdx === 0 && key.length === 0) {
+          lastPos = i + 1
+          sepIdx = 0
+          if (--pairs === 0) break
+          continue
+        }
         if (eqIdx < eqLen) {
           // If we didn't find the key/value separator, treat the substring as
           // part of the key instead of the value

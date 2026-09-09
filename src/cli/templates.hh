@@ -1510,7 +1510,6 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 		17A7F90029358D4A0051D148 /* libwhisper.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F90029358D430051D149 /* libwhisper.a */; };
 		17E5B4C42D40623300C40EB2 /* libggml-base.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17E5B4BF2D40623200C40EB2 /* libggml-base.a */; };
 		17E5B4C52D40623300C40EB2 /* libggml-cpu.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17E5B4C02D40623300C40EB2 /* libggml-cpu.a */; };
-		17E5B4C62D40623300C40EB2 /* libggml-blas.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17E5B4C12D40623300C40EB2 /* libggml-blas.a */; };
 		17E5B4C72D40623300C40EB2 /* libggml-metal.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17E5B4C22D40623300C40EB2 /* libggml-metal.a */; };
 		17E5B4C82D40623300C40EB2 /* libggml.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17E5B4C32D40623300C40EB2 /* libggml.a */; };
 		17A7F8F729358D4D0051D146 /* main.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A7F8F129358D180051D146 /* main.o */; };
@@ -1545,7 +1544,6 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 		17C230B928E9398700301440 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		17E5B4BF2D40623200C40EB2 /* libggml-base.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libggml-base.a"; path = "lib/libggml-base.a"; sourceTree = "<group>"; };
 		17E5B4C02D40623300C40EB2 /* libggml-cpu.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libggml-cpu.a"; path = "lib/libggml-cpu.a"; sourceTree = "<group>"; };
-		17E5B4C12D40623300C40EB2 /* libggml-blas.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libggml-blas.a"; path = "lib/libggml-blas.a"; sourceTree = "<group>"; };
 		17E5B4C22D40623300C40EB2 /* libggml-metal.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libggml-metal.a"; path = "lib/libggml-metal.a"; sourceTree = "<group>"; };
 		17E5B4C32D40623300C40EB2 /* libggml.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libggml.a; path = lib/libggml.a; sourceTree = "<group>"; };
 		17E73FEE28FCD3360087604F /* libuv-ios.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libuv-ios.a"; path = "lib/libuv-ios.a"; sourceTree = "<group>"; };
@@ -1575,7 +1573,6 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
         {{__ios_native_extensions_build_ids}}
 				17E5B4C42D40623300C40EB2 /* libggml-base.a in Frameworks */,
 				17E5B4C52D40623300C40EB2 /* libggml-cpu.a in Frameworks */,
-				17E5B4C62D40623300C40EB2 /* libggml-blas.a in Frameworks */,
 				17E5B4C72D40623300C40EB2 /* libggml-metal.a in Frameworks */,
 				17E5B4C82D40623300C40EB2 /* libggml.a in Frameworks */,
 				171C1C2B2AC38A70005F587F /* CoreLocation.framework in Frameworks */,
@@ -1657,7 +1654,6 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
         {{__ios_native_extensions_build_refs}}
 				17E5B4C32D40623300C40EB2 /* libggml.a */,
 				17E5B4BF2D40623200C40EB2 /* libggml-base.a */,
-				17E5B4C12D40623300C40EB2 /* libggml-blas.a */,
 				17E5B4C02D40623300C40EB2 /* libggml-cpu.a */,
 				17E5B4C22D40623300C40EB2 /* libggml-metal.a */,
 				171C1C2A2AC38A70005F587F /* CoreLocation.framework */,

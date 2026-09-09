@@ -1828,7 +1828,7 @@ Binary semantics: binary request body
 .br
 Modules: oro:service\-worker/events, oro:service\-worker/init
 .br
-Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L262); oro:service\-worker/init onFetch() (api/service\-worker/init.js#L264)
+Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L263); oro:service\-worker/init onFetch() (api/service\-worker/init.js#L264)
 .br
 Notes: The `respondWith()` method of `FetchEvent` prevents the webview's default fetch handling, and allows you to provide a promise for a `Response` yourself.
 .TP
@@ -1837,7 +1837,7 @@ Transports: request
 .br
 Modules: oro:service\-worker/events
 .br
-Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L374)
+Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L349)
 .br
 Notes: The `respondWith()` method of `FetchEvent` prevents the webview's default fetch handling, and allows you to provide a promise for a `Response` yourself.
 .TP
@@ -1848,7 +1848,7 @@ Binary semantics: binary request body
 .br
 Modules: oro:service\-worker/events
 .br
-Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L347); oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L361)
+Exposed by: oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L322); oro:service\-worker/events FetchEvent.respondWith() (api/service\-worker/events.js#L336)
 .br
 Notes: The `respondWith()` method of `FetchEvent` prevents the webview's default fetch handling, and allows you to provide a promise for a `Response` yourself.
 .TP
@@ -1864,14 +1864,16 @@ Transports: request
 .br
 Modules: oro:service\-worker/container, oro:service\-worker/init, oro:service\-worker/instance
 .br
-Exposed by: oro:service\-worker/container ServiceWorkerContainer.getRegistrations() (api/service\-worker/container.js#L413); oro:service\-worker/init (api/service\-worker/init.js#L431); oro:service\-worker/instance createServiceWorker() (api/service\-worker/instance.js#L194)
+Exposed by: oro:service\-worker/container ServiceWorkerContainer.getRegistrations() (api/service\-worker/container.js#L413); oro:service\-worker/init (api/service\-worker/init.js#L431); oro:service\-worker/instance createServiceWorker() (api/service\-worker/instance.js#L202)
 .TP
 \fBserviceWorker.register\fR
 Transports: request
 .br
 Modules: oro:service\-worker/container
 .br
-Exposed by: oro:service\-worker/container ServiceWorkerContainer.register() (api/service\-worker/container.js#L466)
+Exposed by: oro:service\-worker/container ServiceWorkerContainer.register() (api/service\-worker/container.js#L472)
+.br
+Notes: Registers a service worker and returns its registration.
 .TP
 \fBserviceWorker.skipWaiting\fR
 Transports: request
@@ -1930,7 +1932,9 @@ Transports: request
 .br
 Modules: oro:service\-worker/registration
 .br
-Exposed by: oro:service\-worker/registration ServiceWorkerRegistration.unregister() (api/service\-worker/registration.js#L111)
+Exposed by: oro:service\-worker/registration ServiceWorkerRegistration.unregister() (api/service\-worker/registration.js#L115)
+.br
+Notes: Removes this registration from the native service worker container.
 .TP
 \fBserviceWorker.updateState\fR
 Transports: request
