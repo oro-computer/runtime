@@ -209,30 +209,8 @@ declare pass_ignore_header_mtimes=""
 
 declare d=""
 if [[ "$host" == "Win32" ]]; then
-  # We have to differentiate release and debug for Win32
-  # Problem:
-  # When building libuv and the runtime static library with debug enabled, our apps crash when
-  # using ifstream:
-  # `Debug Assertion Failed. Expression: (_osfile(fh) & fopen)`
-  # This build issue also prevents debugging in Visual Studio.
-
-  # This occurs because by default clang incorrectly links to the non
-  # threaded, production version of C runtime .lib (libcrt)
-  # After taking the nessary steps to manually link to the correct lib
-  # (Including adding preprocessor definitions for /MT[d]), see ldflags.sh under Win32
-  # the CLI and apps won't link, therefore:
-
-  # Solution:
-  # Splits debug and release build artifacts:
-  # d is set if $DEBUG and $host == Win32
-  # The file[d].lib suffix is commonly used within the Windows SDK to differentiate debug and non debug files
-  # In Visual Studio, Debug profiles usually have to be manually modified to include eg ole32d.lib instead ole32.lib.
-  # I have used this convention to separate debug objects and libs where possible
-  # *.o files are now named *$d.o
-  # Libs are copied to build/platform/lib$d (libuv.lib didn't support being renamed, this would require modification of the build chain)
-  # The runtime archive (liboro-runtime.a) now follows the same debug suffix convention.
-  # oroc build --prod defines whether or not the app is being built for debug
-  # and therefore links to the app being built to the correct liboro-runtime$d.a
+  # Keep debug and release objects and runtime archives separate. cflags.sh
+  # selects the matching DLL CRT, and oroc build --prod selects release artifacts.
   if [[ -n "$DEBUG" ]]; then
     d="d"
   fi

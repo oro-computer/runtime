@@ -94,6 +94,16 @@ open class WindowWebViewUserMessageHandler (window: Window) {
 /**
  */
 open class WindowWebChromeClient (val window: Window) : WebChromeClient() {
+  override fun onConsoleMessage (message: android.webkit.ConsoleMessage): Boolean {
+    val text = "WebView: ${message.message()} (${message.sourceId()}:${message.lineNumber()})"
+    when (message.messageLevel()) {
+      android.webkit.ConsoleMessage.MessageLevel.ERROR -> console.error(text)
+      android.webkit.ConsoleMessage.MessageLevel.WARNING -> console.debug(text)
+      else -> return super.onConsoleMessage(message)
+    }
+    return true
+  }
+
   override fun onGeolocationPermissionsShowPrompt (
     origin: String,
     callback: GeolocationPermissions.Callback

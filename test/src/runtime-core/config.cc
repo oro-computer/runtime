@@ -1,10 +1,36 @@
 #include "./tests.hh"
 #include "src/runtime/config.hh"
+#include "src/cli/test-config.hh"
 
 namespace oro::Tests {
   using runtime::config::Config;
 
   void config (Harness& t) {
+    t.test("Mobile test entry survives embedded configuration serialization", [](auto t) {
+      using namespace runtime::config;
+      for (const auto format : {UserConfigFormat::Ini, UserConfigFormat::Toml}) {
+        const String source = R"CONFIG(
+[application]
+argv = "--headless,--test=old.js,--allow-exec"
+[meta]
+title = "A quoted \"title\""
+[webview]
+service_worker_mode = "native"
+)CONFIG";
+        auto expected = parseUserConfigSource(source, format);
+        expected["application_argv"] = "--headless,--allow-exec,--test=tests/new entry.js";
+        const auto embedded = cli::configureMobileTestEntry(source, format, "tests/new entry.js");
+        const auto actual = parseUserConfigSource(embedded, format);
+        t.assert(actual == expected, "all configuration values survive with the requested test entry");
+
+        const auto replaced = parseUserConfigSource(
+          cli::configureMobileTestEntry(embedded, format, "next.js"), format
+        );
+        t.equals(replaced.at("application_argv"), "--headless,--allow-exec,--test=next.js",
+          "a later test entry replaces the previous one");
+      }
+    });
+
     t.test("oro::Config::get()", [](auto t) {
       const auto config = Config(R"INI(
       [a]

@@ -5,7 +5,8 @@ import fs from 'oro:fs'
 import os from 'oro:os'
 import path from 'oro:path'
 
-const TMPDIR = `${os.tmpdir()}${path.sep}`
+// Resolve system aliases such as macOS /var before testing extraction paths.
+const TMPDIR = `${await fs.promises.realpath(os.tmpdir())}${path.sep}`
 
 function randomArchivePath (prefix = 'oro-tar') {
   const id = Math.random().toString(16).slice(2)
@@ -753,7 +754,7 @@ test('tar: extract writes entry to filesystem using streaming', async (t) => {
   const archivePath = await createSampleArchive(t)
   const archive = await tar.open(archivePath)
 
-  const destDir = os.tmpdir()
+  const destDir = TMPDIR
   const destPath = path.join(
     destDir,
     `oro-tar-extract-${Math.random().toString(16).slice(2)}.txt`
@@ -797,7 +798,7 @@ test('tar: extractAll writes all file entries to destination directory', async (
   const archive = await tar.open(archivePath)
 
   const destDir = path.join(
-    os.tmpdir(),
+    TMPDIR,
     `oro-tar-extract-all-${Math.random().toString(16).slice(2)}`
   )
   await archive.extractAll(destDir)
@@ -1231,7 +1232,7 @@ test('tar: symlink and hardlink entries (read + extractAll preserveLinks)', asyn
   t.equal(hard.linkpath, 'target.txt', 'hardlink linkpath is preserved')
 
   const destDir = path.join(
-    os.tmpdir(),
+    TMPDIR,
     `oro-tar-links-${Math.random().toString(16).slice(2)}`
   )
   await archive.extractAll(destDir, { preserveLinks: true })
@@ -1265,7 +1266,7 @@ test('tar: extractAll refuses to traverse symlinks in destination tree', async (
   await archive.finalize()
 
   const destDir = path.join(
-    os.tmpdir(),
+    TMPDIR,
     `oro-tar-symlink-traversal-${Math.random().toString(16).slice(2)}`
   )
   await fs.promises.mkdir(destDir, { recursive: true })
@@ -1295,7 +1296,7 @@ test('tar: extract refuses to traverse symlinks in destination tree', async (t) 
   await archive.finalize()
 
   const destDir = path.join(
-    os.tmpdir(),
+    TMPDIR,
     `oro-tar-extract-symlink-traversal-${Math.random().toString(16).slice(2)}`
   )
   await fs.promises.mkdir(destDir, { recursive: true })
@@ -1329,11 +1330,11 @@ test('tar: extractAll refuses hardlink targets that traverse symlinks', async (t
   await archive.finalize()
 
   const destDir = path.join(
-    os.tmpdir(),
+    TMPDIR,
     `oro-tar-hardlink-symlink-${Math.random().toString(16).slice(2)}`
   )
   const outsideDir = path.join(
-    os.tmpdir(),
+    TMPDIR,
     `oro-tar-hardlink-outside-${Math.random().toString(16).slice(2)}`
   )
 
@@ -1373,11 +1374,11 @@ test('tar: extract refuses hardlink targets that traverse symlinks', async (t) =
   await archive.finalize()
 
   const destDir = path.join(
-    os.tmpdir(),
+    TMPDIR,
     `oro-tar-extract-hardlink-symlink-${Math.random().toString(16).slice(2)}`
   )
   const outsideDir = path.join(
-    os.tmpdir(),
+    TMPDIR,
     `oro-tar-extract-hardlink-outside-${Math.random().toString(16).slice(2)}`
   )
 

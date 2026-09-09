@@ -1522,7 +1522,7 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 		2996EDB22770BC1F00C672A0 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2996EDB12770BC1F00C672B1 /* Accelerate.framework */; };
 		2996EDB22770BC1F00C672A1 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2996EDB12770BC1F00C672A1 /* Metal.framework */; };
 		2996EDB22770BC1F00C672A2 /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2996EDB12770BC1F00C672A2 /* Network.framework */; };
-/* CoreBluetooth.framework removed */
+		2996EDB22770BC1F00C672A3 /* CoreBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2996EDB12770BC1F00C672A3 /* CoreBluetooth.framework */; };
 		2996EDB22770BC1F00C672A4 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2996EDB12770BC1F00C672A4 /* UserNotifications.framework */; };
 		2996EDB22770BC1F00C672B0 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2996EDB12770BC1F00C672B0 /* QuartzCore.framework */; };
 		2996EDB22770BC1F00C672A5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 29124C5E2761336B001832A1 /* Assets.xcassets */; };
@@ -1560,7 +1560,7 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
     2996EDB12770BC1F00C672B1 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
     2996EDB12770BC1F00C672A1 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		2996EDB12770BC1F00C672A2 /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
-/* CoreBluetooth.framework file reference removed */
+		2996EDB12770BC1F00C672A3 /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
 		2996EDB12770BC1F00C672A4 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		2996EDB12770BC1F00C672B0 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Quartzcore.framework; path = System/Library/Frameworks/Quartzcore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -1589,7 +1589,7 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
 				2996EDB22770BC1F00C672A0 /* Accelerate.framework in Frameworks */,
 				2996EDB22770BC1F00C672A1 /* Metal.framework in Frameworks */,
 				2996EDB22770BC1F00C672A2 /* Network.framework in Frameworks */,
-                /* CoreBluetooth.framework in Frameworks removed */
+				2996EDB22770BC1F00C672A3 /* CoreBluetooth.framework in Frameworks */,
 				2996EDB22770BC1F00C672A4 /* UserNotifications.framework in Frameworks */,
         2996EDB22770BC1F00C672B0 /* QuartzCore.framework in Frameworks */,
 				294A3CA02768C429007B5B9A /* WebKit.framework in Frameworks */,
@@ -1670,7 +1670,7 @@ constexpr auto gXCodeProject = R"ASCII(// !$*UTF8*$!
         2996EDB12770BC1F00C672A1 /* Metal.framework */,
         2996EDB12770BC1F00C672B1 /* Accelerate.framework */,
 				2996EDB12770BC1F00C672A2 /* Network.framework */,
-                /* CoreBluetooth.framework removed */
+				2996EDB12770BC1F00C672A3 /* CoreBluetooth.framework */,
 				2996EDB12770BC1F00C672A4 /* UserNotifications.framework */,
 				2996EDB12770BC1F00C672B0 /* QuartzCore.framework */,
 				294A3C7B2763EA7F007B5B9A /* WebKit.framework */,

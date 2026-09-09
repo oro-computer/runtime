@@ -223,16 +223,16 @@ elif [ "$host" == "Win32" ]; then
       cflags+=("-Wno-unused-command-line-argument")
     fi
 
-    # https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features?view=msvc-170
-    # Because we can't pass /MT[d] directly, we have to manually set the flags
+    # Keep downstream extensions on the same DLL CRT as the runtime.
+    crt_flag="-fms-runtime-lib=dll"
+    [[ -n "$DEBUG" ]] && crt_flag="-fms-runtime-lib=dll_dbg"
     cflags+=(
-      "-D_MT"
-      "-D_DLL"
+      "$crt_flag"
       "-DWIN32"
       "-DWIN32_LEAN_AND_MEAN"
       "-Wno-nonportable-include-path"
     )
-    ldflags+=("-Wl,-NODEFAULTLIB:libcmt")
+    ldflags+=("$crt_flag")
   fi
 elif [ "$host" == "Darwin" ]; then
   if [ "$platform" == "desktop" ]; then

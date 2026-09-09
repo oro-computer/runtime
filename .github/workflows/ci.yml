@@ -1022,6 +1022,23 @@ jobs:
         shell: bash
         run: npm run test:android-emulator
 
+      - name: Capture Android failure logs
+        if: ${{ failure() && matrix.test_android }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-failure-logs"
+          adb logcat -d -b all > "$RUNNER_TEMP/android-failure-logs/logcat.txt" 2>&1 || true
+          adb shell dumpsys activity activities > "$RUNNER_TEMP/android-failure-logs/activities.txt" 2>&1 || true
+
+      - name: Upload Android failure logs
+        if: ${{ failure() && matrix.test_android }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: android-failure-logs-${{ runner.arch }}
+          path: ${{ runner.temp }}/android-failure-logs
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Report native compiler cache
         if: always() && runner.os != 'Windows'
         shell: bash

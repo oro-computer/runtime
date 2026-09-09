@@ -319,18 +319,14 @@ if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then
   elif [[ "$host" = "Linux" ]]; then
     cflags+=($(pkg-config --cflags --static gtk+-3.0 webkit2gtk-4.1 gio-unix-2.0) -fPIC)
   elif [[ "$host" = "Win32" ]]; then
-    # https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features?view=msvc-170
-    # Because we can't pass /MT[d] directly, we have to manually set the flags
+    # Select the DLL CRT for both compiler declarations and linker directives.
     cflags+=(
-      -D_MT
-      -D_DLL
       -DWIN32
       -DWIN32_LEAN_AND_MEAN
       -DNOMINMAX
       -DWINVER=0x0A00
       -D_WIN32_WINNT=0x0A00
       -DNTDDI_VERSION=0x0A000000
-      "-Wl,-NODEFAULTLIB:libcmt"
       "-Wl,-NXCOMPAT"
       "-Wl,-DYNAMICBASE"
       "-Wl,-HIGHENTROPYVA"
@@ -338,7 +334,9 @@ if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then
       -Wno-nonportable-include-path
     )
     if [[ -n "$DEBUG" ]]; then
-      cflags+=("-D_DEBUG")
+      cflags+=("-fms-runtime-lib=dll_dbg")
+    else
+      cflags+=("-fms-runtime-lib=dll")
     fi
 
     ## TODO(@jwerle): figure this out for macOS

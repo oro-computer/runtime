@@ -17,7 +17,6 @@
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "kernel32.lib")
-#pragma comment(lib, "msvcrt.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "psapi.lib")
@@ -99,6 +98,7 @@ namespace fs = std::filesystem;
 #include "../cli.hh"
 
 #include "templates.hh"
+#include "test-config.hh"
 #include "mcp.hh"
 
 #ifndef ORO_RUNTIME_BUILD_TIME
@@ -6834,6 +6834,15 @@ int main (int argc, char* argv[]) {
         gEmbeddedConfigFormat = configFormat;
 
         try {
+          const auto target = optionsWithValue["--platform"];
+          const auto testFile = optionsWithValue["--test"];
+          if (
+            subcommand == "build" && !testFile.empty() &&
+            (target == "android" || target == "android-emulator" ||
+             target == "ios" || target == "ios-simulator")
+          ) {
+            settingsSource = oro::cli::configureMobileTestEntry(settingsSource, configFormat, testFile);
+          }
           const auto userConfig = parseUserConfigSource(settingsSource, configFormat);
           extendMap(settings, userConfig);
         } catch (const std::exception& error) {
@@ -10510,11 +10519,8 @@ int main (int argc, char* argv[]) {
       auto prefix = prefixFile();
 
       flags = " -std=c++2a"
-        " -D_MT"
-        " -D_DLL"
         " -DWIN32"
         " -DWIN32_LEAN_AND_MEAN"
-        " -Wl,-NODEFAULTLIB:libcmt"
         " -Wno-nonportable-include-path"
         " -I\"" + Path(paths.platformSpecificOutputPath / "include").string() + "\""
         " -I\"" + prefix + "include\""
@@ -10542,7 +10548,9 @@ int main (int argc, char* argv[]) {
       }
 
       if (debugBuild) {
-        flags += " -D_DEBUG -g";
+        flags += " -fms-runtime-lib=dll_dbg -g";
+      } else {
+        flags += " -fms-runtime-lib=dll";
       }
 
       auto d = String(debugBuild ? "d" : "" );
@@ -11538,8 +11546,7 @@ int main (int argc, char* argv[]) {
               << (" -L" + quote + trim(prefixFile("lib")) + quote)
             #if defined(_WIN32)
               << (" -L" + quote + trim(prefixFile("lib\\" + platform.arch + "-desktop")) + quote)
-              << " -D_MT"
-              << " -D_DLL"
+              << (debugBuild ? " -fms-runtime-lib=dll_dbg" : " -fms-runtime-lib=dll")
               << " -DWIN32"
               << " -DWIN32_LEAN_AND_MEAN"
               << " -Wno-nonportable-include-path"
@@ -11662,8 +11669,6 @@ int main (int argc, char* argv[]) {
               << " -Wl,--demangle"
             #if defined(_WIN32)
               << (" -L" + quote + trim(prefixFile("lib\\" + platform.arch + "-desktop")) + quote)
-              << " -D_MT"
-              << " -D_DLL"
               << " -DWIN32"
               << " -DWIN32_LEAN_AND_MEAN"
               << " -Wno-nonportable-include-path"
@@ -11771,11 +11776,9 @@ int main (int argc, char* argv[]) {
             << " " << objects.str()
           #if defined(_WIN32)
             << (" -L" + quote + trim(prefixFile("lib\\" + platform.arch + "-desktop")) + quote)
-            << " -D_MT"
-            << " -D_DLL"
+            << (debugBuild ? " -fms-runtime-lib=dll_dbg" : " -fms-runtime-lib=dll")
             << " -DWIN32"
             << " -DWIN32_LEAN_AND_MEAN"
-            << " -Wl,-NODEFAULTLIB:libcmt"
             << " -Wno-nonportable-include-path"
           #else
             << " " << flags

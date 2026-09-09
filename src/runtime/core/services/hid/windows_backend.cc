@@ -18,6 +18,7 @@
 #include <setupapi.h>
 #include <hidsdi.h>
 #include <hidpi.h>
+#include <initguid.h>
 #include <hidclass.h>
 #include <dbt.h>
 

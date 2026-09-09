@@ -1281,7 +1281,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     cflags,
-    /-Wl,-NODEFAULTLIB:libcmt[\s\S]*-Wl,-NXCOMPAT[\s\S]*-Wl,-DYNAMICBASE[\s\S]*-Wl,-HIGHENTROPYVA[\s\S]*-Wl,-guard:cf/,
+    /-Wl,-NXCOMPAT[\s\S]*-Wl,-DYNAMICBASE[\s\S]*-Wl,-HIGHENTROPYVA[\s\S]*-Wl,-guard:cf/,
     'Windows linker options should remain opaque to Git Bash path conversion'
   )
   assert.match(
@@ -1294,11 +1294,12 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
     /(?:-Xlinker |-Wl,)\/(?:NODEFAULTLIB|NXCOMPAT|DYNAMICBASE|HIGHENTROPYVA|guard:cf)/,
     'Windows build commands should not emit path-like slash linker arguments'
   )
-  assert.equal(
-    (cli.match(/-Wl,-NODEFAULTLIB:libcmt/g) || []).length,
-    2,
-    'CLI-generated Windows build commands should keep linker options opaque to Git Bash'
-  )
+  for (const source of [cflags, cli, pkgConfig]) {
+    assert.match(source, /-fms-runtime-lib=dll_dbg/, 'debug builds should select the debug DLL CRT')
+    assert.match(source, /-fms-runtime-lib=dll\b/, 'release builds should select the release DLL CRT')
+    assert.doesNotMatch(source, /-D_(?:MT|DLL)\b|-NODEFAULTLIB:libcmt\b/,
+      'the compiler should select matching CRT declarations and linker directives')
+  }
   assert.match(
     cli,
     /auto compiler = trim\(env::get\("CXX"\)\);[\s\S]*compiler\.front\(\) == '"'[\s\S]*compiler = compiler\.substr\(1, compiler\.size\(\) - 2\);[\s\S]*const auto compilerCommand = platform\.win[\s\S]*String\("[\\]""\) \+ compiler \+ "[\\]""[\s\S]*compileCommand[\s\S]*<< compilerCommand[\s\S]*ORO_RUNTIME_VERSION_HASH=.*VERSION_HASH_STRING;/,
@@ -1306,8 +1307,8 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     pkgConfig,
-    /ldflags\+=\("-Wl,-NODEFAULTLIB:libcmt"\)/,
-    'Windows pkg-config metadata should expose linker options through Libs without path conversion'
+    /cflags\+=\(\s*"\$crt_flag"[\s\S]*ldflags\+=\("\$crt_flag"\)/,
+    'Windows pkg-config metadata should expose the same CRT selection to the compiler and linker'
   )
   assert.match(
     cflags,
