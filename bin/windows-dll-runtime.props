@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <RuntimeLibrary Condition="$(Configuration.StartsWith('Debug'))">MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary Condition="$(Configuration.StartsWith('Release'))">MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>
