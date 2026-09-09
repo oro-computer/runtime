@@ -161,6 +161,11 @@ fi
 
 node "$root/scripts/test-android.js" || {
   rc=$?
+  if [[ -n "$RUNNER_TEMP" ]]; then
+    mkdir -p "$RUNNER_TEMP/android-failure-logs"
+    "$adb" logcat -d -b all > "$RUNNER_TEMP/android-failure-logs/logcat.txt" 2>&1 || true
+    "$adb" shell dumpsys activity activities > "$RUNNER_TEMP/android-failure-logs/activities.txt" 2>&1 || true
+  fi
   echo "info: Shutting Android Emulator due to failed build."
   "$adb" devices | grep emulator | cut -f1 | while read -r line; do
     "$adb" -s "$line" emu kill

@@ -32,18 +32,13 @@ function watchdog_file_set() {
 }
 
 function watchdog_file_update() {
-  exit_code=$1
-  if [[ "$exit_code" != "0" ]]; then
-    echo "$exit_code" > "$poll_adb_watchdog_file"
-  else
-    rm -r "$poll_adb_watchdog_file"
-  fi
+  printf '%s\n' "$1" > "$poll_adb_watchdog_file"
 }
 
 function watchdog_file_exists() {
   if [ -f "$poll_adb_watchdog_file" ]; then
     data="$(cat "$poll_adb_watchdog_file")"
-    if [ -z "$data" ]; then
+    if [[ -z "$data" || "$data" == "running" ]]; then
       echo "0"
       return
     fi
@@ -62,6 +57,7 @@ if [[ ! -f "$adb" ]]; then
 fi
 
 "$adb" logcat -c
+trap 'kill "$adb_crash_pid" "${logcat_pid:-}" 2>/dev/null || true' EXIT
 exit_on_adb_crash_signal & adb_crash_pid=$!
 "$adb" shell am start -n "$id/.MainActivity" || exit $?
 
@@ -121,12 +117,16 @@ while read -r line; do
 
     echo "$line"
 
+    if [[ "$line" == "TAP version 13" ]]; then
+      watchdog_file_update running
+    fi
+
     if [[ "$line" == "# ok" ]]; then
       watchdog_file_update 0
       exit
     fi
 
-    if [[ "$line" == "# fail" ]]; then
+    if [[ "$line" == "# fail" || "$line" == "# fail "* ]]; then
       watchdog_file_update 1
       exit 1
     fi
@@ -138,6 +138,8 @@ done < <($adb logcat --pid="$pid") & logcat_pid=$!
 count=0
 timeout=600
 [[ -z "$CI" ]] && timeout=30
+timeout="${ORO_ANDROID_TEST_TIMEOUT_SECONDS:-$timeout}"
+startup_timeout="${ORO_ANDROID_TEST_STARTUP_TIMEOUT_SECONDS:-120}"
 [[ -z "$CI" ]] && echo "Waiting 30s before aborting tests..."
 [[ -n "$CI" ]] && echo "Waiting 10m before aborting tests..."
 
@@ -147,6 +149,11 @@ while (( count < timeout )) ; do
     break
   fi
 
+  if (( count >= startup_timeout )) && [[ ! -s "$poll_adb_watchdog_file" ]]; then
+    echo "No TAP output after ${startup_timeout}s; dumping application logs."
+    dump_pid "$pid" 124
+  fi
+
   (( count > 0 )) && (( count % 30 == 0 )) && echo "Timeout count: $count/$timeout"
   sleep 1
   (( count++ ))
@@ -154,13 +161,11 @@ done
 
 if [[ "$(watchdog_file_exists)" == "0" ]]; then
   echo "Timeout exceeded."
+  dump_pid "$pid" 124
 else
   exit_code="$(cat "$poll_adb_watchdog_file" 2>/dev/null)"
-  if [[ -z "$exit_code" ]]; then
-    date
-    dump_pid "$logcat_pid" 25
-  else
-    exit $exit_code
+  if [[ "$exit_code" =~ ^[0-9]+$ ]]; then
+    exit "$exit_code"
   fi
 fi
 

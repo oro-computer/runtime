@@ -3277,7 +3277,8 @@ function _compile_libusb {
       fi
 
       local output_lib="$BUILD_DIR/$target-$platform/lib$suffix/libusb-1.0.lib"
-      if ! test -f "$output_lib"; then
+      local runtime_props="$root/bin/windows-dll-runtime.props"
+      if ! test -f "$output_lib" || [[ "$runtime_props" -nt "$output_lib" ]]; then
         local msbuild_platform=""
         case "$target" in
           x86_64|amd64) msbuild_platform="x64" ;;
@@ -3297,7 +3298,8 @@ function _compile_libusb {
         quiet env "_CL_=${_CL_:+$_CL_ }-wd5287" MSBuild.exe "$libusb_project" \
           "-m:$CPU_CORES" \
           "-p:Configuration=$config" \
-          "-p:Platform=$msbuild_platform"
+          "-p:Platform=$msbuild_platform" \
+          "-p:ForceImportBeforeCppTargets=$(cygpath -w "$runtime_props")"
         die $? "not ok - libusb MSBuild build (Win32)"
 
         mkdir -p "$BUILD_DIR/$target-$platform/lib$suffix"

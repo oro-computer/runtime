@@ -1,7 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const source = readFileSync(
   new URL('../scripts/poll-adb-logcat.sh', import.meta.url),
@@ -41,5 +44,53 @@ for (const [command, status, filter] of [
     assert.ok(result.stdout.includes(filter), result.stdout)
     assert.ok(result.stdout.includes(`watchdog=${status}`), result.stdout)
     assert.doesNotMatch(result.stdout, /unexpected/)
+  })
+}
+
+for (const [mode, status, expected] of [
+  ['success', 0, /# ok/],
+  ['failure', 1, /# fail 1/],
+  ['exit', 7, /got process pid: 1234/],
+  ['startup-timeout', 124, /No TAP output after 1s/],
+  ['test-timeout', 124, /Timeout exceeded/]
+]) {
+  test(`Android log polling reports ${mode}`, () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'oro-adb-poll-'))
+    const adb = path.join(directory, 'adb')
+    writeFileSync(adb, `#!/usr/bin/env bash
+case "$*" in
+  'shell am start '*) echo 'Starting activity' ;;
+  'shell ps') echo 'u0_a123 1234 1 computer.oro.runtime.tests' ;;
+  'logcat -d -b all --pid=1234') echo 'application diagnostics' ;;
+  'logcat --pid=1234')
+    case "$ORO_MOCK_ADB_MODE" in
+      success) printf 'I Console : TAP version 13\\nI Console : # ok\\n' ;;
+      failure) printf 'I Console : TAP version 13\\nI Console : # fail 1\\n' ;;
+      exit) echo 'I Console : __EXIT_SIGNAL__=7' ;;
+      test-timeout) echo 'I Console : TAP version 13' ;;
+    esac
+    ;;
+esac
+`, { mode: 0o755 })
+    const result = spawnSync('bash', [fileURLToPath(new URL('../scripts/poll-adb-logcat.sh', import.meta.url))], {
+      env: {
+        ...process.env,
+        adb,
+        CI: 'true',
+        TMPDIR: directory,
+        ORO_MOCK_ADB_MODE: mode,
+        ORO_ANDROID_TEST_STARTUP_TIMEOUT_SECONDS: '1',
+        ORO_ANDROID_TEST_TIMEOUT_SECONDS: '2'
+      },
+      encoding: 'utf8',
+      timeout: 6000
+    })
+    assert.equal(result.status, status, `${result.stdout}\n${result.stderr}`)
+    assert.match(result.stdout, expected)
+    if (status === 124) {
+      assert.match(result.stdout, /application diagnostics/)
+    } else {
+      assert.doesNotMatch(result.stdout, /application diagnostics/)
+    }
   })
 }

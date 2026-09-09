@@ -11102,6 +11102,12 @@ int main (int argc, char* argv[]) {
         localDirPrefix + "gradlew :app:bundleDebug --warning-mode all" :
         localDirPrefix + "gradlew :app:bundle";
 
+      if (flagBuildTest) {
+        // Test runs install one APK; they do not consume bundles or release APKs.
+        bundle = localDirPrefix + "gradlew :app:assemble" +
+          (flagDebugMode ? "DevDebug" : "LiveDebug") + " --warning-mode all";
+      }
+
       if (debugEnv || verboseEnv) logVerbose(bundle);
       if (!ensureExecAllowed(settings, "build")) exit(1);
       if (runSystemOrFail(
@@ -11118,10 +11124,12 @@ int main (int argc, char* argv[]) {
         << localDirPrefix
         << "gradlew assemble";
 
-      if (debugEnv || verboseEnv) logVerbose(gradlew.str());
-      if (std::system(gradlew.str().c_str()) != 0) {
-        logError("failed to invoke `gradlew assemble` command. Ensure Gradle and JDK are installed. See README (Troubleshooting)");
-        exit(1);
+      if (!flagBuildTest) {
+        if (debugEnv || verboseEnv) logVerbose(gradlew.str());
+        if (std::system(gradlew.str().c_str()) != 0) {
+          logError("failed to invoke `gradlew assemble` command. Ensure Gradle and JDK are installed. See README (Troubleshooting)");
+          exit(1);
+        }
       }
 
       androidState.androidHome = androidHome;

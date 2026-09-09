@@ -790,7 +790,7 @@ jobs:
       - name: Build Oro Runtime CLI (Unix)
         id: build-runtime-unix
         if: runner.os != 'Windows'
-        timeout-minutes: 20
+        timeout-minutes: 45
         shell: bash
         run: ./bin/install.sh --yes-deps
 
@@ -1027,8 +1027,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/android-failure-logs"
-          adb logcat -d -b all > "$RUNNER_TEMP/android-failure-logs/logcat.txt" 2>&1 || true
-          adb shell dumpsys activity activities > "$RUNNER_TEMP/android-failure-logs/activities.txt" 2>&1 || true
+          if [[ ! -s "$RUNNER_TEMP/android-failure-logs/logcat.txt" ]]; then
+            "$ANDROID_HOME/platform-tools/adb" logcat -d -b all > "$RUNNER_TEMP/android-failure-logs/logcat.txt" 2>&1 || true
+          fi
+          if [[ ! -s "$RUNNER_TEMP/android-failure-logs/activities.txt" ]]; then
+            "$ANDROID_HOME/platform-tools/adb" shell dumpsys activity activities > "$RUNNER_TEMP/android-failure-logs/activities.txt" 2>&1 || true
+          fi
 
       - name: Upload Android failure logs
         if: ${{ failure() && matrix.test_android }}

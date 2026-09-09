@@ -32,7 +32,6 @@ if (ORO_ANDROID_CI) {
     cli,
     [
       'build',
-      '-r',
       '-o',
       '--test=./index.js',
       '--headless',
@@ -51,7 +50,6 @@ if (ORO_ANDROID_CI) {
     cli,
     [
       'build',
-      '-r',
       '-o',
       '--test=./index.js',
       '--prod',
@@ -67,6 +65,11 @@ if (ORO_ANDROID_CI) {
     }
   )
 }
+
+const flavor = ORO_ANDROID_CI ? 'dev' : 'live'
+const apk = path.join(root, 'build', 'android', 'app', 'build', 'outputs', 'apk',
+  flavor, 'debug', `app-${flavor}-debug.apk`)
+execFileSync(adb, ['install', '-r', apk], { stdio: 'inherit' })
 
 try {
   execFileSync(adb, ['shell', 'rm', '-rf', fixturesPath], {
