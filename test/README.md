@@ -25,6 +25,13 @@ variable for a mobile target you intend to test. See
 The Android emulator target installs the emulator and one Google APIs system
 image matching the host architecture if its versioned AVD is not already
 available. A normal runtime build or relink does not download emulator packages.
+With `ORO_ANDROID_CI` set, the test APK is installed with runtime permissions
+granted so unattended runs do not wait on permission dialogs.
+
+The iOS Simulator target installs fixtures before launching tests on the booted
+simulator, or on `ORO_IOS_SIMULATOR_UDID` when set. CI supplies that UUID both to
+the harness and to the build through an `ORO_RC` override of
+`[settings.ios] simulator_uuid`, so the build and launch use the same device.
 
 ### Developer Ergonomics
 

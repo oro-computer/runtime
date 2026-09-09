@@ -232,7 +232,7 @@ elif [ "$host" == "Win32" ]; then
       "-DWIN32_LEAN_AND_MEAN"
       "-Wno-nonportable-include-path"
     )
-    ldflags+=("$crt_flag")
+    ldflags+=("$crt_flag" "-Wl,-NODEFAULTLIB:libcmt")
   fi
 elif [ "$host" == "Darwin" ]; then
   if [ "$platform" == "desktop" ]; then

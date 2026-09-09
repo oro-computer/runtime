@@ -1297,8 +1297,12 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   for (const source of [cflags, cli, pkgConfig]) {
     assert.match(source, /-fms-runtime-lib=dll_dbg/, 'debug builds should select the debug DLL CRT')
     assert.match(source, /-fms-runtime-lib=dll\b/, 'release builds should select the release DLL CRT')
-    assert.doesNotMatch(source, /-D_(?:MT|DLL)\b|-NODEFAULTLIB:libcmt\b/,
+    assert.doesNotMatch(source, /-D_(?:MT|DLL)\b/,
       'the compiler should select matching CRT declarations and linker directives')
+  }
+  for (const source of [ldflags, cli, pkgConfig]) {
+    assert.match(source, /-Wl,-NODEFAULTLIB:libcmt\b/,
+      'Windows links should suppress the static CRT implicitly added by the Clang driver')
   }
   assert.match(
     cli,
@@ -1307,7 +1311,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   )
   assert.match(
     pkgConfig,
-    /cflags\+=\(\s*"\$crt_flag"[\s\S]*ldflags\+=\("\$crt_flag"\)/,
+    /cflags\+=\(\s*"\$crt_flag"[\s\S]*ldflags\+=\("\$crt_flag" "-Wl,-NODEFAULTLIB:libcmt"\)/,
     'Windows pkg-config metadata should expose the same CRT selection to the compiler and linker'
   )
   assert.match(
@@ -2460,6 +2464,11 @@ test('CI covers every supported host and mobile target family', () => {
   )
   assert.match(
     workflow,
+    /ORO_IOS_SIMULATOR_UDID="\$simulator_udid"[\s\S]*ORO_RC="\$RUNNER_TEMP\/oro-ios-tests\.ororc"[\s\S]*simulator_uuid = "%s"[\s\S]*"\$simulator_udid" > "\$ORO_RC"/,
+    'iOS builds and test launches should use the same simulator selected by CI'
+  )
+  assert.match(
+    workflow,
     /Validate staged target families \(Windows\)/,
     'Windows CI should reject unexpected mobile artifacts'
   )
@@ -2826,11 +2835,6 @@ test('test runners resolve the host architecture instead of assuming x64', () =>
     'runtime-core should fail when the CLI process cannot be spawned'
   )
   assert.match(
-    readFile('test/scripts/test-ios-simulator.js'),
-    /fixturesReady[\s\S]*child\.once\('exit'[\s\S]*process\.exitCode/,
-    'iOS Simulator tests should fail when fixture setup or the child process fails'
-  )
-  assert.match(
     readFile('test/scripts/test-android.js'),
     /execFileSync\([\s\S]*cli,[\s\S]*'--platform=android'/,
     'Android tests should preserve the CLI path and argument boundaries without a shell command string'
@@ -2839,6 +2843,11 @@ test('test runners resolve the host architecture instead of assuming x64', () =>
 
 test('iOS simulator application builds use the host architecture', () => {
   const cli = readFile('src/cli/main.cc')
+  assert.match(
+    cli,
+    /\? "id=" \+ settings\["ios_simulator_uuid"\]\s*: "OS=latest,name=" \+ settings\["ios_simulator_device"\];[\s\S]*\? "platform=iOS Simulator," \+ deviceIdentity/,
+    'an explicit simulator UUID should not also require the latest runtime version'
+  )
   const templates = readFile('src/cli/templates.hh')
 
   assert.match(

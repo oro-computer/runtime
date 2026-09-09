@@ -186,6 +186,8 @@ elif [[ "$host" = "Linux" ]]; then
     ldflags+=("-fsanitize=address,undefined")
   fi
 elif [[ "$host" = "Win32" ]]; then
+  # Clang's GNU driver adds libcmt even when objects select the DLL CRT.
+  ldflags+=("-Wl,-NODEFAULTLIB:libcmt")
   if [[ -n "$DEBUG" ]]; then
     # https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features?view=msvc-170
     # TODO: populate debug library list from vcvars64.bat

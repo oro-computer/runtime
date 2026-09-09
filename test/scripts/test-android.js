@@ -69,7 +69,9 @@ if (ORO_ANDROID_CI) {
 const flavor = ORO_ANDROID_CI ? 'dev' : 'live'
 const apk = path.join(root, 'build', 'android', 'app', 'build', 'outputs', 'apk',
   flavor, 'debug', `app-${flavor}-debug.apk`)
-execFileSync(adb, ['install', '-r', apk], { stdio: 'inherit' })
+// CI has no operator to answer runtime permission dialogs during startup.
+const installArgs = ['install', '-r', ...(ORO_ANDROID_CI ? ['-g'] : []), apk]
+execFileSync(adb, installArgs, { stdio: 'inherit' })
 
 try {
   execFileSync(adb, ['shell', 'rm', '-rf', fixturesPath], {

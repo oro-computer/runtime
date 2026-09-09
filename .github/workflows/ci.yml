@@ -979,6 +979,9 @@ jobs:
           trap 'xcrun simctl shutdown "$simulator_udid" || true' EXIT
           xcrun simctl boot "$simulator_udid" || true
           xcrun simctl bootstatus "$simulator_udid" -b
+          export ORO_IOS_SIMULATOR_UDID="$simulator_udid"
+          export ORO_RC="$RUNNER_TEMP/oro-ios-tests.ororc"
+          printf '[settings.ios]\nsimulator_uuid = "%s"\n' "$simulator_udid" > "$ORO_RC"
           npm run test:ios-simulator
 
       - name: Upload macOS crash reports

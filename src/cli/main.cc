@@ -10519,6 +10519,7 @@ int main (int argc, char* argv[]) {
       auto prefix = prefixFile();
 
       flags = " -std=c++2a"
+        " -Wl,-NODEFAULTLIB:libcmt"
         " -DWIN32"
         " -DWIN32_LEAN_AND_MEAN"
         " -Wno-nonportable-include-path"
@@ -10786,10 +10787,10 @@ int main (int argc, char* argv[]) {
       StringStream archiveCommand;
       String deviceIdentity = settings.count("ios_simulator_uuid") > 0
         ? "id=" + settings["ios_simulator_uuid"]
-        : "name=" + settings["ios_simulator_device"];
+        : "OS=latest,name=" + settings["ios_simulator_device"];
 
       String destination = flagBuildForSimulator
-        ? "platform=iOS Simulator,OS=latest," + deviceIdentity
+        ? "platform=iOS Simulator," + deviceIdentity
         : "generic/platform=iOS";
 
       String deviceType;
@@ -11785,6 +11786,7 @@ int main (int argc, char* argv[]) {
           #if defined(_WIN32)
             << (" -L" + quote + trim(prefixFile("lib\\" + platform.arch + "-desktop")) + quote)
             << (debugBuild ? " -fms-runtime-lib=dll_dbg" : " -fms-runtime-lib=dll")
+            << " -Wl,-NODEFAULTLIB:libcmt"
             << " -DWIN32"
             << " -DWIN32_LEAN_AND_MEAN"
             << " -Wno-nonportable-include-path"
