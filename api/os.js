@@ -13,7 +13,7 @@
 import ipc, { primordials } from './ipc.js'
 import { toProperCase } from './util.js'
 import constants from './os/constants.js'
-import { HOME } from './path/well-known.js'
+import { HOME, TMP } from './path/well-known.js'
 
 export { constants }
 
@@ -281,10 +281,11 @@ export function tmpdir () {
     // derive default
     if (!path) {
       if (platform() === 'ios') {
-        // @TODO(jwerle): use a path module
-        path = [primordials.cwd, 'tmp'].join('/')
+        // The bundle's working directory is separate from its writable container.
+        path = TMP || '/tmp'
       } else if (platform() === 'android') {
-        path = '/data/local/tmp'
+        // /data/local/tmp belongs to the adb shell; apps use their cache directory.
+        path = TMP || '/data/local/tmp'
       } else {
         path = '/tmp'
       }

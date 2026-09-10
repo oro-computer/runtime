@@ -2008,6 +2008,12 @@ namespace oro::runtime::webview {
 
     if (result == S_OK) {
       cdpEmitResponseReceived(this);
+    } else {
+      debug(
+        "SchemeHandlers::Response: CreateWebResourceResponse failed (HRESULT 0x%08lx) for %s",
+        static_cast<unsigned long>(result),
+        this->request->str().c_str()
+      );
     }
     return result == S_OK;
   #elif ORO_RUNTIME_PLATFORM_ANDROID

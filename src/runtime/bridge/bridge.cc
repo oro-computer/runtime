@@ -320,7 +320,7 @@ export * from '{{url}}'
       };
 
       const auto size = request->body.size();
-      const auto invoked = this->router.invoke(message, request->body.shared(), size, [=](ipc::Result result) {
+      const auto respond = [=](ipc::Result result) {
         if (!request->isActive()) {
           return;
         }
@@ -440,6 +440,18 @@ export * from '{{url}}'
         callback(*response);
         delete response;
         response = nullptr;
+      };
+
+      const auto invoked = this->router.invoke(message, request->body.shared(), size, [=, this](ipc::Result result) {
+      #if ORO_RUNTIME_PLATFORM_WINDOWS
+        // Native services can reply from the libuv thread. WebView2 response
+        // objects must be created on the UI thread that owns the WebView.
+        this->dispatch([respond, result]() {
+          respond(result);
+        });
+      #else
+        respond(result);
+      #endif
       });
 
       if (!invoked) {

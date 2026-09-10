@@ -17,11 +17,12 @@ test('fs.watch can stop and restart cleanly', async (t) => {
   await write(file, 'initial')
 
   // first watcher
-  const first = new fs.Watcher(file)
+  const first = new fs.Watcher(file, { start: false })
   const firstEvent = new Promise((resolve) => {
     first.on('change', (evt, filename) => resolve({ evt, filename }))
   })
 
+  await first.start()
   await write(file, 'first-change')
   const ev1 = await Promise.race([
     firstEvent,
@@ -38,11 +39,12 @@ test('fs.watch can stop and restart cleanly', async (t) => {
   await first.close()
 
   // second watcher
-  const second = new fs.Watcher(file)
+  const second = new fs.Watcher(file, { start: false })
   const secondEvent = new Promise((resolve) => {
     second.on('change', (evt, filename) => resolve({ evt, filename }))
   })
 
+  await second.start()
   await write(file, 'second-change')
   const ev2 = await Promise.race([
     secondEvent,

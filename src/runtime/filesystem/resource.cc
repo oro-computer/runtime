@@ -153,6 +153,12 @@ namespace oro::runtime::filesystem {
 
   bool Resource::isDirectory (const Path& resourcePath) {
   #if ORO_RUNTIME_PLATFORM_ANDROID
+    // AAssetManager_openDir also returns a handle for file paths. Check files
+    // first so packaged HTML and modules are served without directory routing.
+    if (Resource::isFile(resourcePath)) {
+      return false;
+    }
+
     if (sharedAndroidAssetManager) {
       const auto assetPath = getRelativeAndroidAssetManagerPath(resourcePath);
       const auto assetDir = AAssetManager_openDir(

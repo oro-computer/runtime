@@ -1,6 +1,8 @@
 import { primordials } from 'oro:ipc'
 import { test } from 'oro:test'
 import * as os from 'oro:os'
+import fs from 'oro:fs/promises'
+import path from 'oro:path'
 
 const archs = ['arm64', 'ia32', 'x64', 'unknown']
 const platforms = [
@@ -101,6 +103,18 @@ test('os.isWindows()', (t) => {
 test('os.tmpdir()', (t) => {
   t.equal(typeof os.tmpdir(), 'string', 'os.type() value is a string')
   t.ok(os.tmpdir().length > 0, 'tmpdir length > 0')
+})
+
+test('os.tmpdir() exists and is writable', async (t) => {
+  const directory = await fs.realpath(os.tmpdir())
+  t.ok((await fs.stat(directory)).isDirectory(), 'temporary directory exists')
+  const filename = path.join(directory, `oro-os-tmpdir-${Date.now()}.txt`)
+  await fs.writeFile(filename, 'temporary data')
+  try {
+    t.equal(await fs.readFile(filename, 'utf8'), 'temporary data', 'temporary files can be written and read')
+  } finally {
+    await fs.unlink(filename)
+  }
 })
 
 test('os.networkInterfaces()', (t) => {

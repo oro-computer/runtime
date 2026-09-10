@@ -1475,7 +1475,8 @@ namespace oro::runtime::window {
                 ) {
                   ICoreWebView2WebResourceRequest* platformRequest = nullptr;
                   ICoreWebView2Environment* env = nullptr;
-                  ICoreWebView2Deferral* deferral = nullptr;
+                  ComPtr<ICoreWebView2Deferral> deferral;
+                  ComPtr<ICoreWebView2WebResourceRequestedEventArgs> requestArgs = args;
 
                   // get platform request and environment from event args
                   do {
@@ -1558,9 +1559,15 @@ namespace oro::runtime::window {
                     return E_FAIL;
                   }
 
-                  const auto handled = this->bridge->schemeHandlers.handleRequest(req, [=](const auto& response) mutable {
-                    args->put_Response(response.platformResponse);
-                    deferral->Complete();
+                  const auto bridge = this->bridge;
+                  const auto handled = bridge->schemeHandlers.handleRequest(req, [bridge, requestArgs, deferral](const auto& response) {
+                    // Stream completion may arrive on a native worker thread.
+                    // Keep COM objects alive until the UI thread delivers the response.
+                    ComPtr<ICoreWebView2WebResourceResponse> platformResponse = response.platformResponse;
+                    bridge->dispatch([requestArgs, deferral, platformResponse]() {
+                      requestArgs->put_Response(platformResponse.Get());
+                      deferral->Complete();
+                    });
                   });
 
                   if (!handled) {
