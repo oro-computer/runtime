@@ -87,10 +87,15 @@ namespace oro::runtime::ipc {
     SharedPointer<unsigned char[]> bytes,
     size_t size
   ) {
-    return this->invoke(uri, bytes, size, [this](auto result) {
-      this->dispatcher.dispatch([this, result] () {
-        this->bridge.send(result.seq, result.str(), result.queuedResponse);
-      });
+    const auto weak = this->bridge.weak_from_this();
+    return this->invoke(uri, bytes, size, [weak](auto result) {
+      if (const auto bridge = weak.lock()) {
+        bridge->dispatcher.dispatch([weak, result] () {
+          if (const auto bridge = weak.lock()) {
+            bridge->send(result.seq, result.str(), result.queuedResponse);
+          }
+        });
+      }
     });
   }
 
@@ -168,26 +173,31 @@ namespace oro::runtime::ipc {
       listener.callback(incomingMessage, this, [](const auto& _) {});
     }
 
-    if (context.async) {
-      auto invokeRoute = [
-        this,
-        context = std::move(context),
-        callback = std::move(callback),
-        incomingMessage = std::move(incomingMessage)
-      ]() mutable {
-        context.callback(incomingMessage, this, [this, incomingMessage, callback](const auto result) mutable {
-          if (result.seq == "-1") {
-            this->dispatcher.dispatch([this, result] {
-              this->bridge.send(
-                result.seq,
-                result.str(),
-                result.queuedResponse
-              );
-            });
-          } else {
-            callback(result);
+    const auto weak = this->bridge.weak_from_this();
+    const auto reply = [weak, callback](const auto result) {
+      const auto bridge = weak.lock();
+      if (bridge == nullptr) {
+        return;
+      }
+
+      if (result.seq == "-1") {
+        bridge->dispatcher.dispatch([weak, result] {
+          if (const auto bridge = weak.lock()) {
+            bridge->send(result.seq, result.str(), result.queuedResponse);
           }
         });
+      } else {
+        callback(result);
+      }
+    };
+
+    if (context.async) {
+      // A window can close before the UI queue reaches this route. Resolve its
+      // bridge at execution time and keep it alive while calling the handler.
+      auto invokeRoute = [weak, context, reply, incomingMessage]() mutable {
+        if (const auto bridge = weak.lock()) {
+          context.callback(incomingMessage, &bridge->router, reply);
+        }
       };
 
       if (this->bridge.dispatchRouterCallbacksWithBridge) {
@@ -197,22 +207,7 @@ namespace oro::runtime::ipc {
       return this->dispatcher.dispatch(std::move(invokeRoute));
     }
 
-    context.callback(incomingMessage, this, [
-      this,
-      callback = std::move(callback)
-    ](const auto result) mutable {
-      if (result.seq == "-1") {
-        this->dispatcher.dispatch([this, result] {
-          this->bridge.send(
-            result.seq,
-            result.str(),
-            result.queuedResponse
-          );
-        });
-      } else {
-        callback(result);
-      }
-    });
+    context.callback(incomingMessage, this, reply);
 
     return true;
   }

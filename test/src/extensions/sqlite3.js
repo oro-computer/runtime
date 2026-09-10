@@ -2,6 +2,7 @@
 import extension from 'oro:extension'
 import process from 'oro:process'
 import path from 'oro:path'
+import os from 'oro:os'
 import test from 'oro:test'
 import fs from 'oro:fs/promises'
 
@@ -11,7 +12,7 @@ test('extension.load(name) - sqlite3', async (t) => {
     return
   }
 
-  const databasePath = process.cwd() + path.sep + 'data.db'
+  const databasePath = path.join(os.tmpdir(), 'oro-test-sqlite3 data.db')
   let sqlite3
   let query
 

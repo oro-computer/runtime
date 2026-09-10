@@ -2347,7 +2347,18 @@ namespace oro::runtime::webview {
       this->platformResponseStarted = false;
     }
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
-    this->platformResponseStream = nullptr;
+    if (this->platformResponseStream != nullptr) {
+      // WebView2 reads from the stream's current position after completion.
+      LARGE_INTEGER start = {};
+      const auto result = this->platformResponseStream->Seek(start, STREAM_SEEK_SET, nullptr);
+      if (FAILED(result)) {
+        debug("SchemeHandlers::Response: failed to rewind response stream (HRESULT 0x%08lx)",
+          static_cast<unsigned long>(result));
+        return false;
+      }
+      this->platformResponseStream->Release();
+      this->platformResponseStream = nullptr;
+    }
     // TODO(@jwerle): move more `WebResourceRequested` logic to here
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     if (this->platformResponse != nullptr) {

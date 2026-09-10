@@ -131,6 +131,7 @@ namespace oro::runtime::ipc {
   }
 
   Message& Message::operator = (const Message& msg) {
+    this->decodedValues.clear();
     this->buffer = msg.buffer;
     this->client = msg.client;
     this->index = msg.index;
@@ -145,6 +146,7 @@ namespace oro::runtime::ipc {
   }
 
   Message& Message::operator = (Message&& msg) {
+    this->decodedValues.clear();
     this->buffer = std::move(msg.buffer);
     this->client = std::move(msg.client);
     this->index = msg.index;
@@ -176,7 +178,15 @@ namespace oro::runtime::ipc {
   }
 
   const String& Message::at (const String& key) const {
-    return this->uri.searchParams.at(key).data;
+    const auto& value = this->uri.searchParams.at(key).data;
+    const auto entry = this->decodedValues.find(key);
+    if (entry != this->decodedValues.end()) {
+      return entry->second;
+    }
+
+    // C extension accessors return pointers owned by the message. Decode once
+    // and retain each value so another lookup cannot invalidate those pointers.
+    return this->decodedValues.emplace(key, decodeURIComponent(value)).first->second;
   }
 
   const String Message::get (const String& key) const {

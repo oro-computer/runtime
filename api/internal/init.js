@@ -911,16 +911,11 @@ class RuntimeQueuedResponses extends ConcurrentQueue {
       params = {}
     }
 
-    // The native side has already materialized this body in memory before it
-    // evaluates the dispatch script. A synchronous read avoids leaving the
-    // shared queue blocked if a custom-scheme async XHR stalls in WebKit.
-    const result = ipc.sendSync(
-      'queuedResponse',
-      { id },
-      {
-        responseType: 'arraybuffer'
-      }
-    )
+    // Chromium documents cannot use a binary responseType with synchronous XHR.
+    // WebKit reads synchronously because custom-scheme async XHR can stall.
+    const result = /android|win32/i.test(ipc.primordials.platform)
+      ? await ipc.request('queuedResponse', { id }, { responseType: 'arraybuffer' })
+      : ipc.sendSync('queuedResponse', { id }, { responseType: 'arraybuffer' })
 
     const worker = workerId
       ? RuntimeWorker.pool.get(workerId)?.deref?.()

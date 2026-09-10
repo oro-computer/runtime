@@ -42,6 +42,9 @@ namespace oro::runtime::ipc {
   };
 
   class Message {
+    private:
+      mutable Map<String, String> decodedValues;
+
     public:
       using Seq = String;
 

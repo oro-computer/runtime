@@ -26,7 +26,7 @@ namespace oro::runtime::bridge {
    * The `Bridge` class represents a bi-directional interface between the
    * runtime services and a window.
    */
-  class Bridge : public window::IBridge {
+  class Bridge : public window::IBridge, public std::enable_shared_from_this<Bridge> {
     public:
       using ID = uint64_t;
       using DispatchHandler = Function<void(const context::DispatchCallback)>;

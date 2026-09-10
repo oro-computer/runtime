@@ -724,7 +724,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1082)
+Exposed by: oro:internal/init (api/internal/init.js#L1077)
 .TP
 \fBfs.copyFile\fR
 Transports: request, send, sendSync
@@ -1597,7 +1597,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1083)
+Exposed by: oro:internal/init (api/internal/init.js#L1078)
 .TP
 \fBos.cpus\fR
 Transports: sendSync
@@ -1677,7 +1677,7 @@ Transports: send, sendSync
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L840); oro:internal/init (api/internal/init.js#L1212)
+Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L840); oro:internal/init (api/internal/init.js#L1207)
 .TP
 \fBplatform.openExternal\fR
 Transports: request
@@ -1738,13 +1738,13 @@ Exposed by: oro:protocol\-handlers getServiceWorker() (api/protocol\-handlers.js
 .SS queuedResponse
 .TP
 \fBqueuedResponse\fR
-Transports: sendSync
+Transports: request, sendSync
 .br
 Binary semantics: binary response body
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L917)
+Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L917); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L918)
 .SS secureStorage
 .TP
 \fBsecureStorage.clear\fR

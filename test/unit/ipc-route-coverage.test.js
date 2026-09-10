@@ -84,7 +84,7 @@ test('queued IPC events preserve payload sources and dispatch on the UI loop', (
   )
   assert.match(
     router,
-    /if \(result\.seq == "-1"\) \{\s+this->dispatcher\.dispatch/,
+    /if \(result\.seq == "-1"\) \{\s+bridge->dispatcher\.dispatch/,
     'queued responses should enter the UI dispatcher before bridge delivery'
   )
 })
