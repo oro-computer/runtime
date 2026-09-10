@@ -67,10 +67,6 @@ function normalizeTransports (input) {
 }
 
 async function get (options, ...args) {
-  if (nativeGet && isIOS) {
-    return nativeGet(options)
-  }
-
   if (arguments.length === 0) {
     throw new TypeError(
       'Failed to execute \u2018get\u2019 on \u2018CredentialsContainer\u2019: 1 argument required, but only 0 present.'
@@ -81,6 +77,11 @@ async function get (options, ...args) {
     throw new TypeError(
       'Failed to execute \u2018get\u2019 on \u2018CredentialsContainer\u2019: parameter 1 (\u2018options\u2019) is not an object'
     )
+  }
+
+  // WebKit's credentials container supports passkeys, but not Web OTP.
+  if (nativeGet && isIOS && !('otp' in options) && typeof args[0] !== 'function') {
+    return nativeGet(options)
   }
 
   const { otp = null, signal = undefined, mediation } = options

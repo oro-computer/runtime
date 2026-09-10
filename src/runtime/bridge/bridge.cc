@@ -432,7 +432,22 @@ export * from '{{url}}'
         }
 
         if (result.queuedResponse.body != nullptr) {
-          response->write(result.queuedResponse.length, result.queuedResponse.body);
+          if (message.get("__sync_binary__") == "true") {
+            // Synchronous Chromium document XHR cannot select arraybuffer.
+            const auto body = String(
+              reinterpret_cast<const char*>(result.queuedResponse.body.get()),
+              result.queuedResponse.length
+            );
+            response->setHeader("content-type", "text/plain; charset=us-ascii");
+            response->setHeader("x-oro-ipc-encoding", "base64");
+            const auto exposed = response->getHeader("access-control-expose-headers");
+            response->setHeader("access-control-expose-headers",
+              exposed.empty() ? "x-oro-ipc-encoding" : exposed + ", x-oro-ipc-encoding"
+            );
+            response->write(bytes::base64::encode(body));
+          } else {
+            response->write(result.queuedResponse.length, result.queuedResponse.body);
+          }
         } else {
           response->write(result.json());
         }

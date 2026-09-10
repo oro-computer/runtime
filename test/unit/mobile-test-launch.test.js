@@ -17,7 +17,7 @@ function prepareHarness (platform, failure = '') {
   mkdirSync(path.join(root, 'fixtures'))
   writeFileSync(path.join(root, 'fixtures', 'ready.txt'), 'fixture ready')
   writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}')
-  for (const filename of ['oroc-path.js', `test-${platform}.js`]) {
+  for (const filename of ['oroc-path.js', 'android-fixtures.js', `test-${platform}.js`]) {
     copyFileSync(new URL(`../scripts/${filename}`, import.meta.url), path.join(scripts, filename))
   }
   const mock = `#!/usr/bin/env node
@@ -28,6 +28,10 @@ const command = path.basename(process.argv[1])
 appendFileSync(process.env.ORO_MOCK_LOG, JSON.stringify({ command, args }) + '\\n')
 const step = command === 'oroc' ? 'build' : args[1]
 if (step === process.env.ORO_MOCK_FAILURE) process.exit(7)
+if (command === 'adb' && args.includes('tar')) {
+  const archive = readFileSync(0)
+  if (!archive.includes(Buffer.from('fixture ready'))) process.exit(8)
+}
 if (command === 'xcrun' && step === 'get_app_container') {
   console.log(process.env.ORO_MOCK_FAILURE === 'empty-container' ? '' : process.env.ORO_MOCK_CONTAINER)
 }
@@ -113,6 +117,10 @@ for (const ci of ['1', '']) {
     const build = commands.find(({ command }) => command === 'oroc')
     assert.ok(!build.args.includes('-r'))
     assert.equal(commands.at(-1).command, 'mock-shell')
-    assert.equal(commands.at(-2).args[0], 'push', 'fixtures must be copied before the log poller launches the app')
+    assert.deepEqual(commands.at(-2).args, [
+      'shell', '-T', 'run-as', 'computer.oro.runtime.tests',
+      'tar', '-xf', '-', '-C', 'cache/oro-test-fixtures'
+    ], 'fixtures must be extracted as the app UID before launch')
+    assert.ok(build.args.includes('--env=ORO_TEST_FIXTURES_DIR'))
   })
 }

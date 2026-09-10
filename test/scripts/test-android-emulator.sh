@@ -141,24 +141,6 @@ echo "info: Android Emulator booted"
 
 rm "$temp"
 
-"$adb" uninstall "$id"
-
-echo "Removing old fixtures..."
-"$adb" shell rm -rf "/data/local/tmp/oro-test-fixtures"
-echo "Pushing fixtures..."
-
-fixtures_path="$root/fixtures"
-# adb on windows doesn't handle incorrect slashes (hangs)
-if [[ "$host" != "Win32" ]]; then
-  "$adb" push "$fixtures_path" "/data/local/tmp/oro-test-fixtures"
-else
-  # adb push just doesn't work under mingw (It hangs, attempts to prefix DEST path with c:\Program Files\Git...)
-  fixtures_path="${fixtures_path/"$(pwd)/"/}"
-  # change to a relative native path (So we don't have to fix drive letter)
-  fixtures_path="${fixtures_path//\//\\}"
-  "$COMSPEC" "/k $adb push $fixtures_path /data/local/tmp/oro-test-fixtures && exit "
-fi
-
 node "$root/scripts/test-android.js" || {
   rc=$?
   if [[ -n "$RUNNER_TEMP" ]]; then

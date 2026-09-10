@@ -58,33 +58,15 @@ namespace oro::runtime::context {
       return true;
     }
 
-    // If not yet ready, queue the callback for later
-    if (!this->ready.load(std::memory_order_acquire)) {
-      Lock lock(this->mutex);
-      this->pending.push(callback);
-      if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
-        debug("Dispatcher: queued callback (not ready)");
-      }
-      return true; // queued
-    }
-
-    auto threadCallback = reinterpret_cast<LPARAM>(new DispatchCallback(std::move(callback)));
-    const BOOL ok = PostThreadMessage(this->mainThreadId, WM_APP, 0, threadCallback);
-    if (!ok) {
-      // Could not post; keep it safe by queuing for later retry
-      auto cb = reinterpret_cast<DispatchCallback*>(threadCallback);
-      const auto fn = *cb;
-      delete cb;
-      Lock lock(this->mutex);
-      this->pending.push(fn);
-      if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
-        debug("Dispatcher: PostThreadMessage failed; queued for retry");
-      }
+    Lock lock(this->mutex);
+    // Window messages reach the window procedure in nested COM/modal pumps.
+    // Thread messages have no HWND and can be consumed without dispatching them.
+    if (this->ready.load(std::memory_order_acquire) &&
+        !PostMessageW(this->messageWindow, WM_APP, 0, 0)) {
+      debug("Dispatcher: PostMessage failed: %lu", GetLastError());
       return false;
     }
-    if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
-      debug("Dispatcher: posted callback via WM_APP");
-    }
+    this->pending.push(callback);
     return true;
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     this->android.looper.dispatch([this, callback = std::move(callback)] () {
@@ -97,51 +79,78 @@ namespace oro::runtime::context {
   }
 
 #if ORO_RUNTIME_PLATFORM_WINDOWS
+  Dispatcher::~Dispatcher () {
+    if (this->messageWindow != nullptr) {
+      DestroyWindow(this->messageWindow);
+      this->messageWindow = nullptr;
+    }
+  }
+
+  LRESULT CALLBACK Dispatcher::onMessage (HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
+    if (message == WM_NCCREATE) {
+      const auto create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+      SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+    }
+
+    if (message == WM_APP) {
+      const auto dispatcher = reinterpret_cast<Dispatcher*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+      if (dispatcher != nullptr) {
+        dispatcher->drain();
+      }
+      return 0;
+    }
+
+    return DefWindowProcW(window, message, wparam, lparam);
+  }
+
   void Dispatcher::notifyReady () {
-    // Called from the main thread once the message pump is about to run
     if (GetCurrentThreadId() != this->mainThreadId) {
       return;
     }
 
-    // Ensure the thread has a message queue
-    MSG msg;
-    PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE);
-
-    this->ready.store(true, std::memory_order_release);
-    if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
-      debug("Dispatcher: notifyReady(); flushing queued callbacks");
+    Lock lock(this->mutex);
+    if (this->ready.load(std::memory_order_acquire)) {
+      return;
     }
 
-    // Flush any pending callbacks by posting them as thread messages.
-    // If posting fails, execute inline (we're on main thread).
+    const auto instance = GetModuleHandleW(nullptr);
+    WNDCLASSW windowClass = {};
+    windowClass.lpfnWndProc = Dispatcher::onMessage;
+    windowClass.hInstance = instance;
+    windowClass.lpszClassName = L"OroRuntimeDispatcher";
+    if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+      throw std::runtime_error("Could not register the Windows dispatcher window");
+    }
+
+    this->messageWindow = CreateWindowExW(
+      0, windowClass.lpszClassName, L"", 0, 0, 0, 0, 0,
+      HWND_MESSAGE, nullptr, instance, this
+    );
+    if (this->messageWindow == nullptr) {
+      throw std::runtime_error("Could not create the Windows dispatcher window");
+    }
+
+    this->ready.store(true, std::memory_order_release);
+    if (!this->pending.empty() && !PostMessageW(this->messageWindow, WM_APP, 0, 0)) {
+      throw std::runtime_error("Could not schedule pending Windows UI callbacks");
+    }
+  }
+
+  void Dispatcher::drain () {
     while (true) {
       Callback fn;
       {
         Lock lock(this->mutex);
-        if (this->pending.empty()) break;
+        if (this->pending.empty()) {
+          break;
+        }
         fn = std::move(this->pending.front());
         this->pending.pop();
       }
 
-      if (fn == nullptr) continue;
-
-      auto lparam = reinterpret_cast<LPARAM>(new DispatchCallback(std::move(fn)));
-      if (!PostThreadMessage(this->mainThreadId, WM_APP, 0, lparam)) {
-        auto cb = reinterpret_cast<DispatchCallback*>(lparam);
-        auto run = *cb;
-        delete cb;
-        if (run) run();
-        if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
-          debug("Dispatcher: inline executed pending callback (post failed)");
-        }
-      } else {
-        if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
-          debug("Dispatcher: flushed pending callback via WM_APP");
-        }
+      if (fn != nullptr) {
+        fn();
       }
-    }
-    if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
-      debug("Dispatcher: notifyReady() complete");
     }
   }
 #endif

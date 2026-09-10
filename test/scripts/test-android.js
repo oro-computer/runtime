@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { resolveOrocExecutable } from './oroc-path.js'
+import { stageAndroidFixtures } from './android-fixtures.js'
 
 const { ANDROID_HOME, ORO_ANDROID_CI } = process.env
 const dirname = path.dirname(import.meta.url.replace('file://', ''))
@@ -13,13 +14,13 @@ const adb = ANDROID_HOME
   )
   : process.platform === 'win32' ? 'adb.exe' : 'adb'
 const id = 'computer.oro.runtime.tests'
-const fixturesPath = '/data/local/tmp/oro-test-fixtures'
 
 // Resolve local oroc binary if not on PATH
 const repoRoot = path.resolve(root, '..')
 const cli = resolveOrocExecutable(repoRoot)
 const cliEnv = {
   ...process.env,
+  ORO_TEST_FIXTURES_DIR: `/data/data/${id}/cache/oro-test-fixtures`,
   ORO_DEBUG_IPC: process.env.ORO_DEBUG_IPC || '1'
 }
 
@@ -38,6 +39,7 @@ if (ORO_ANDROID_CI) {
       '--platform=android',
       '--allow-exec',
       '--env=CI',
+      '--env=ORO_TEST_FIXTURES_DIR',
       '--env=ORO_ANDROID_CI'
     ],
     {
@@ -56,6 +58,7 @@ if (ORO_ANDROID_CI) {
       '--headless',
       '--platform=android',
       '--allow-exec',
+      '--env=ORO_TEST_FIXTURES_DIR',
       '--env',
       'ORO_DEBUG_IPC'
     ],
@@ -73,15 +76,7 @@ const apk = path.join(root, 'build', 'android', 'app', 'build', 'outputs', 'apk'
 const installArgs = ['install', '-r', ...(ORO_ANDROID_CI ? ['-g'] : []), apk]
 execFileSync(adb, installArgs, { stdio: 'inherit' })
 
-try {
-  execFileSync(adb, ['shell', 'rm', '-rf', fixturesPath], {
-    stdio: 'inherit'
-  })
-} catch {}
-
-execFileSync(adb, ['push', path.join(root, 'fixtures'), fixturesPath], {
-  stdio: 'inherit'
-})
+stageAndroidFixtures(adb, id, path.join(root, 'fixtures'))
 
 execFileSync(
   process.env.SHELL || (process.platform === 'win32' ? 'bash' : 'sh'),

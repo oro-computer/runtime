@@ -64,16 +64,18 @@ namespace oro::runtime::filesystem {
 
 #if ORO_RUNTIME_PLATFORM_ANDROID
   static Path getRelativeAndroidAssetManagerPath (const Path& resourcePath) {
-    auto resourcesPath = Resource::getResourcesPath();
-    auto assetPath = replace(resourcePath.string(), resourcesPath.string(), "");
+    const auto resourcesPath = Resource::getResourcesPath().lexically_normal();
+    auto assetPath = resourcePath.lexically_normal();
 
-    if (assetPath.starts_with("/")) {
-      assetPath = assetPath.substr(1);
-    } else if (assetPath.starts_with("./")) {
-      assetPath = assetPath.substr(2);
+    if (assetPath.is_absolute() && !resourcesPath.empty()) {
+      const auto relative = assetPath.lexically_relative(resourcesPath);
+      if (!relative.empty() && *relative.begin() != "..") {
+        assetPath = relative;
+      }
     }
 
-    return Path(assetPath);
+    // AAssetManager expects a relative name without dot path components.
+    return assetPath == "." ? Path {} : assetPath.relative_path();
   }
 #endif
 

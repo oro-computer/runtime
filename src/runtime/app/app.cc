@@ -130,6 +130,7 @@ namespace oro::runtime::app {
     NSApplication.sharedApplication.delegate = this->delegate;
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
     OleInitialize(nullptr);
+    this->runtime.dispatcher.notifyReady();
   #endif
   }
 
@@ -166,16 +167,6 @@ namespace oro::runtime::app {
       if (msg.hwnd) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
-      }
-
-      if (msg.message == WM_APP) {
-        // from PostThreadMessage
-        auto callback = (Function<void()> *)(msg.lParam);
-        if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
-          debug("App::run(): WM_APP received; executing callback");
-        }
-        (*callback)();
-        delete callback;
       }
 
       if (msg.message == WM_QUIT && this->shouldExit) {

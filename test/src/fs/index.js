@@ -8,8 +8,36 @@ import { FileHandle } from 'oro:fs/handle'
 import os from 'oro:os'
 import process from 'oro:process'
 import FIXTURES from '../fixtures.js'
+import ipc from 'oro:ipc'
 
 const TMPDIR = `${os.tmpdir()}${path.sep}`
+
+test('fs synchronous binary reads preserve every byte and native text transport', async (t) => {
+  const filename = path.join(TMPDIR, `oro-binary-${Date.now()}.bin`)
+  const bytes = Buffer.from(Array.from({ length: 256 }, (_, i) => i))
+  await fs.promises.writeFile(filename, bytes)
+  try {
+    t.same(fs.readFileSync(filename), bytes, 'synchronous read preserves all byte values')
+    const handle = await fs.promises.open(filename, 'r')
+    try {
+      const result = ipc.sendSync('fs.read', {
+        id: handle.id,
+        size: bytes.length,
+        offset: 0,
+        __sync_binary__: 'true'
+      })
+      if (result.err) throw result.err
+      t.same(Buffer.from(result.data, 'base64'), bytes, 'native base64 response preserves all byte values')
+      t.equal(result.headers.get('x-oro-ipc-encoding'), 'base64', 'encoding header is exposed to JavaScript')
+    } finally {
+      await handle.close()
+    }
+    await fs.promises.writeFile(filename, '')
+    t.equal(fs.readFileSync(filename).length, 0, 'empty binary files remain empty')
+  } finally {
+    await fs.promises.unlink(filename)
+  }
+})
 
 test('fs.access', async (t) => {
   const { F_OK, R_OK, W_OK, X_OK } = fs.constants

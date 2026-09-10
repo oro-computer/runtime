@@ -1216,6 +1216,11 @@ export function sendSync (command, value = '', options = null, buffer = null) {
 
   const params = new IPCSearchParams(value, Date.now())
   params.set('__sync__', 'true')
+  const binaryTextResponse = options?.responseType === 'arraybuffer' &&
+    globalThis.document && /android|win32/i.test(primordials.platform)
+  if (binaryTextResponse) {
+    params.set('__sync_binary__', 'true')
+  }
   const uri = `ipc://${command}?${params}`
 
   if (
@@ -1246,11 +1251,9 @@ export function sendSync (command, value = '', options = null, buffer = null) {
     debug.log('ipc.sendSync: %s', uri)
   }
 
-  if (options?.responseType && typeof primordials !== 'undefined') {
-    if (!(/android/i.test(primordials.platform) && globalThis.document)) {
-      // @ts-ignore
-      request.responseType = options.responseType
-    }
+  if (options?.responseType && !binaryTextResponse) {
+    // @ts-ignore
+    request.responseType = options.responseType
   }
 
   if (buffer != null) {
@@ -1261,7 +1264,13 @@ export function sendSync (command, value = '', options = null, buffer = null) {
     request.send()
   }
 
-  const response = getRequestResponse(request, options)
+  // Chromium only permits text in synchronous document XHR. The native bridge
+  // encodes binary bodies as base64; JSON error envelopes remain ordinary JSON.
+  const response = binaryTextResponse
+    ? request.getResponseHeader('x-oro-ipc-encoding') === 'base64'
+      ? Buffer.from(request.responseText, 'base64')
+      : getRequestResponse(request, { ...options, responseType: '' })
+    : getRequestResponse(request, options)
   const headers = request.getAllResponseHeaders()
   const result = Result.from(response, null, command, headers)
 

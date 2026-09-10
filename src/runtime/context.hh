@@ -100,12 +100,16 @@ namespace oro::runtime::context {
       Dispatcher (RuntimeContext&);
       bool dispatch (const Callback);
     #if ORO_RUNTIME_PLATFORM_WINDOWS
-      // Mark the dispatcher as ready to receive thread messages and flush any queued work.
+      ~Dispatcher ();
+      // Create the UI message window and schedule any queued work.
       void notifyReady ();
     #endif
     private:
     #if ORO_RUNTIME_PLATFORM_WINDOWS
       unsigned long mainThreadId = 0; // set in ctor on Windows
+      HWND messageWindow = nullptr;
+      static LRESULT CALLBACK onMessage (HWND, UINT, WPARAM, LPARAM);
+      void drain ();
       Atomic<bool> ready = false;
       Mutex mutex;
       std::queue<Callback> pending;
