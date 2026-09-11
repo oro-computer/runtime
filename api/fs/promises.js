@@ -501,9 +501,13 @@ export async function rmdir (path) {
  */
 export async function stat (path, options) {
   path = normalizePath(path)
-  return await visit(path, {}, async (handle) => {
-    return await handle.stat(options)
-  })
+  if (typeof path !== 'string') {
+    return await visit(path, {}, async (handle) => handle.stat(options))
+  }
+  // Metadata lookup must not require opening the file for reading.
+  const result = await ipc.request('fs.stat', { path }, options)
+  if (result.err) throw result.err
+  return Stats.from(result.data, Boolean(options?.bigint))
 }
 
 /**
@@ -529,9 +533,13 @@ export async function fstat (fd, options) {
  */
 export async function lstat (path, options) {
   path = normalizePath(path)
-  return await visit(path, {}, async (handle) => {
-    return await handle.lstat(options)
-  })
+  if (typeof path !== 'string') {
+    return await visit(path, {}, async (handle) => handle.lstat(options))
+  }
+  // Opening the path would follow symlinks and reject unreadable targets.
+  const result = await ipc.request('fs.lstat', { path }, options)
+  if (result.err) throw result.err
+  return Stats.from(result.data, Boolean(options?.bigint))
 }
 
 /**

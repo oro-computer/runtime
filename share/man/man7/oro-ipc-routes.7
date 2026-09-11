@@ -724,7 +724,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1077)
+Exposed by: oro:internal/init (api/internal/init.js#L1081)
 .TP
 \fBfs.copyFile\fR
 Transports: request, send, sendSync
@@ -770,7 +770,7 @@ Transports: request, send, sendSync
 .br
 Modules: oro:fs, oro:fs/promises
 .br
-Exposed by: oro:fs futimes() (api/fs/index.js#L2585); oro:fs futimesSync() (api/fs/index.js#L2604); oro:fs/promises futimes() (api/fs/promises.js#L599)
+Exposed by: oro:fs futimes() (api/fs/index.js#L2585); oro:fs futimesSync() (api/fs/index.js#L2604); oro:fs/promises futimes() (api/fs/promises.js#L607)
 .TP
 \fBfs.getOpenDescriptors\fR
 Transports: sendSync
@@ -803,9 +803,9 @@ Exposed by: oro:fs link() (api/fs/index.js#L884); oro:fs linkSync() (api/fs/inde
 \fBfs.lstat\fR
 Transports: request, sendSync
 .br
-Modules: oro:fs, oro:fs/handle
+Modules: oro:fs, oro:fs/handle, oro:fs/promises
 .br
-Exposed by: oro:fs lstatSync() (api/fs/index.js#L1848); oro:fs/handle FileHandle.lstat() (api/fs/handle.js#L867)
+Exposed by: oro:fs lstatSync() (api/fs/index.js#L1848); oro:fs/handle FileHandle.lstat() (api/fs/handle.js#L867); oro:fs/promises lstat() (api/fs/promises.js#L540)
 .br
 Notes: Returns the stats of the underlying symbolic link.
 .TP
@@ -814,7 +814,7 @@ Transports: request, send, sendSync
 .br
 Modules: oro:fs, oro:fs/promises
 .br
-Exposed by: oro:fs lutimes() (api/fs/index.js#L2542); oro:fs lutimesSync() (api/fs/index.js#L2559); oro:fs/promises lutimes() (api/fs/promises.js#L615)
+Exposed by: oro:fs lutimes() (api/fs/index.js#L2542); oro:fs lutimesSync() (api/fs/index.js#L2559); oro:fs/promises lutimes() (api/fs/promises.js#L623)
 .TP
 \fBfs.mkdir\fR
 Transports: request, sendSync
@@ -904,11 +904,11 @@ Modules: oro:fs, oro:fs/promises
 Exposed by: oro:fs rmdir() (api/fs/index.js#L1662); oro:fs rmdirSync() (api/fs/index.js#L1682); oro:fs/promises rmdir() (api/fs/promises.js#L487)
 .TP
 \fBfs.stat\fR
-Transports: sendSync
+Transports: request, sendSync
 .br
-Modules: oro:fs
+Modules: oro:fs, oro:fs/promises
 .br
-Exposed by: oro:fs statSync() (api/fs/index.js#L1698)
+Exposed by: oro:fs statSync() (api/fs/index.js#L1698); oro:fs/promises stat() (api/fs/promises.js#L508)
 .TP
 \fBfs.stopWatch\fR
 Transports: request
@@ -924,21 +924,21 @@ Transports: request, send, sendSync
 .br
 Modules: oro:fs, oro:fs/promises
 .br
-Exposed by: oro:fs symlink() (api/fs/index.js#L1892); oro:fs symlinkSync() (api/fs/index.js#L1924); oro:fs/promises symlink() (api/fs/promises.js#L568)
+Exposed by: oro:fs symlink() (api/fs/index.js#L1892); oro:fs symlinkSync() (api/fs/index.js#L1924); oro:fs/promises symlink() (api/fs/promises.js#L576)
 .TP
 \fBfs.unlink\fR
 Transports: request, send, sendSync
 .br
 Modules: oro:fs, oro:fs/promises
 .br
-Exposed by: oro:fs unlink() (api/fs/index.js#L1944); oro:fs unlinkSync() (api/fs/index.js#L1967); oro:fs/promises unlink() (api/fs/promises.js#L631)
+Exposed by: oro:fs unlink() (api/fs/index.js#L1944); oro:fs unlinkSync() (api/fs/index.js#L1967); oro:fs/promises unlink() (api/fs/promises.js#L639)
 .TP
 \fBfs.utimes\fR
 Transports: request, send, sendSync
 .br
 Modules: oro:fs, oro:fs/promises
 .br
-Exposed by: oro:fs utimes() (api/fs/index.js#L2520); oro:fs utimesSync() (api/fs/index.js#L2570); oro:fs/promises utimes() (api/fs/promises.js#L585)
+Exposed by: oro:fs utimes() (api/fs/index.js#L2520); oro:fs utimesSync() (api/fs/index.js#L2570); oro:fs/promises utimes() (api/fs/promises.js#L593)
 .TP
 \fBfs.watch\fR
 Transports: request
@@ -1597,7 +1597,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1078)
+Exposed by: oro:internal/init (api/internal/init.js#L1082)
 .TP
 \fBos.cpus\fR
 Transports: sendSync
@@ -1677,7 +1677,7 @@ Transports: send, sendSync
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L840); oro:internal/init (api/internal/init.js#L1207)
+Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L844); oro:internal/init (api/internal/init.js#L1211)
 .TP
 \fBplatform.openExternal\fR
 Transports: request
@@ -1744,7 +1744,7 @@ Binary semantics: binary response body
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L917); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L918)
+Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L921); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L922)
 .SS secureStorage
 .TP
 \fBsecureStorage.clear\fR
@@ -1949,56 +1949,56 @@ Transports: sendSync
 .br
 Modules: oro:sqlite
 .br
-Exposed by: oro:sqlite Database.close() (api/sqlite.js#L633); oro:sqlite Database.kFinalize() (api/sqlite.js#L756)
+Exposed by: oro:sqlite Database.close() (api/sqlite.js#L637); oro:sqlite Database.kFinalize() (api/sqlite.js#L760)
 .TP
 \fBsqlite.exec\fR
 Transports: send, sendSync
 .br
 Modules: oro:sqlite
 .br
-Exposed by: oro:sqlite Database.exec() (api/sqlite.js#L658); oro:sqlite Database.execAsync() (api/sqlite.js#L682)
+Exposed by: oro:sqlite Database.exec() (api/sqlite.js#L662); oro:sqlite Database.execAsync() (api/sqlite.js#L686)
 .TP
 \fBsqlite.open\fR
 Transports: sendSync
 .br
 Modules: oro:sqlite
 .br
-Exposed by: oro:sqlite (api/sqlite.js#L621)
+Exposed by: oro:sqlite (api/sqlite.js#L625)
 .TP
 \fBsqlite.prepare\fR
 Transports: sendSync
 .br
 Modules: oro:sqlite
 .br
-Exposed by: oro:sqlite Database.prepare() (api/sqlite.js#L704)
+Exposed by: oro:sqlite Database.prepare() (api/sqlite.js#L708)
 .TP
 \fBsqlite.statement.bind\fR
 Transports: sendSync
 .br
 Modules: oro:sqlite
 .br
-Exposed by: oro:sqlite Statement.bind() (api/sqlite.js#L375)
+Exposed by: oro:sqlite Statement.bind() (api/sqlite.js#L379)
 .TP
 \fBsqlite.statement.finalize\fR
 Transports: sendSync
 .br
 Modules: oro:sqlite
 .br
-Exposed by: oro:sqlite (api/sqlite.js#L529); oro:sqlite Statement.kFinalize() (api/sqlite.js#L557)
+Exposed by: oro:sqlite (api/sqlite.js#L533); oro:sqlite Statement.kFinalize() (api/sqlite.js#L561)
 .TP
 \fBsqlite.statement.reset\fR
 Transports: sendSync
 .br
 Modules: oro:sqlite
 .br
-Exposed by: oro:sqlite Statement.reset() (api/sqlite.js#L411)
+Exposed by: oro:sqlite Statement.reset() (api/sqlite.js#L415)
 .TP
 \fBsqlite.statement.step\fR
 Transports: sendSync
 .br
 Modules: oro:sqlite
 .br
-Exposed by: oro:sqlite Statement.step() (api/sqlite.js#L399)
+Exposed by: oro:sqlite Statement.step() (api/sqlite.js#L403)
 .SS stderr
 .TP
 \fBstderr\fR

@@ -1,7 +1,5 @@
 import { test } from 'oro:test'
-import process from 'oro:process'
 import dns from 'oro:dns'
-import os from 'oro:os'
 
 // node compat
 // import dns from 'node:dns'
@@ -11,9 +9,7 @@ const IPV4_REGEX =
 const IPV6_REGEX =
   /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/
 
-const isOnline = Boolean(
-  globalThis?.navigator?.onLine || process?.versions?.node
-)
+// Exercise the system resolver without depending on public DNS availability.
 const LOCALHOST = 'localhost'
 
 test('dns exports', (t) => {
@@ -40,14 +36,10 @@ test('dns.lookup executes asynchronously', async (t) => {
 })
 
 test('dns.lookup', async (t) => {
-  if (!isOnline) {
-    return t.comment('skipping offline')
-  }
-
   await Promise.all([
-    new Promise((resolve) => {
-      dns.lookup('google.com', (err, address, family) => {
-        if (err) return t.fail(err)
+    new Promise((resolve, reject) => {
+      dns.lookup(LOCALHOST, (err, address, family) => {
+        if (err) return reject(err)
 
         const isValidFamily = family === 4 || family === 6
 
@@ -60,26 +52,25 @@ test('dns.lookup', async (t) => {
         resolve()
       })
     }),
-    new Promise((resolve) => {
-      dns.lookup('example.com', { family: 'IPv4' }, (err, address, family) => {
-        if (err) return t.fail(err)
+    new Promise((resolve, reject) => {
+      dns.lookup(LOCALHOST, { family: 'IPv4' }, (err, address, family) => {
+        if (err) return reject(err)
         t.equal(family, 4, 'is IPv4 family')
         t.ok(IPV4_REGEX.test(address), 'has valid IPv4 address')
         resolve()
       })
     }),
-    os.platform() !== 'win32' &&
-      new Promise((resolve) => {
-        dns.lookup('google.com', 6, (err, address, family) => {
-          if (err) return t.fail(err)
-          t.equal(family, 6, 'is IPv6 family')
-          t.ok(IPV6_REGEX.test(address), 'has valid IPv6 address')
-          resolve()
-        })
-      }),
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
+      dns.lookup('::1', 6, (err, address, family) => {
+        if (err) return reject(err)
+        t.equal(family, 6, 'is IPv6 family')
+        t.ok(IPV6_REGEX.test(address), 'has valid IPv6 address')
+        resolve()
+      })
+    }),
+    new Promise((resolve, reject) => {
       dns.lookup(LOCALHOST, { all: true }, (err, addresses) => {
-        if (err) return t.fail(err)
+        if (err) return reject(err)
         t.ok(Array.isArray(addresses), 'all=true returns an array')
         t.ok(addresses.length > 0, 'returns at least one address')
         for (const entry of addresses) {
@@ -95,16 +86,14 @@ test('dns.lookup', async (t) => {
   ])
 })
 
-const BAD_HOSTNAME = 'oro-runtime-does-not-exist.invalid'
+// Whitespace is invalid in a hostname and fails without a DNS server.
+const BAD_HOSTNAME = 'invalid hostname'
 const LOOKUP_FAILURE_CODES = ['ENOTFOUND', 'EAI_AGAIN']
 
 test('dns.lookup bad hostname', async (t) => {
-  if (!isOnline) {
-    return t.comment('skipping offline')
-  }
-
-  await new Promise((resolve) => {
+  await new Promise((resolve, reject) => {
     dns.lookup(BAD_HOSTNAME, (err) => {
+      if (!err) return reject(new Error('Expected invalid hostname to fail'))
       t.ok(err instanceof Error, 'returns an error instance')
       t.ok(
         LOOKUP_FAILURE_CODES.includes(err.code),
@@ -117,12 +106,8 @@ test('dns.lookup bad hostname', async (t) => {
 })
 
 test('dns.promises.lookup', async (t) => {
-  if (!isOnline) {
-    return t.comment('skipping offline')
-  }
-
   try {
-    const info = await dns.promises.lookup('google.com', 4)
+    const info = await dns.promises.lookup(LOCALHOST, 4)
     t.ok(
       info && typeof info === 'object',
       'returns a non-error object after resolving a hostname'
@@ -134,7 +119,7 @@ test('dns.promises.lookup', async (t) => {
   }
 
   try {
-    const info = await dns.promises.lookup('google.com')
+    const info = await dns.promises.lookup(LOCALHOST)
     t.ok(
       info && typeof info === 'object',
       'returns object when no family provided'
@@ -144,22 +129,20 @@ test('dns.promises.lookup', async (t) => {
     t.fail(err)
   }
 
-  if (os.platform() !== 'win32') {
-    try {
-      const info = await dns.promises.lookup('google.com', 6)
-      t.ok(
-        info && typeof info === 'object',
-        'returns a non-error object after resolving a hostname'
-      )
-      t.equal(info.family, 6, 'is IPv6 family')
-      t.ok(IPV6_REGEX.test(info.address), 'has valid IPv4 address')
-    } catch (err) {
-      t.fail(err)
-    }
+  try {
+    const info = await dns.promises.lookup('::1', 6)
+    t.ok(
+      info && typeof info === 'object',
+      'returns a non-error object after resolving a hostname'
+    )
+    t.equal(info.family, 6, 'is IPv6 family')
+    t.ok(IPV6_REGEX.test(info.address), 'has valid IPv6 address')
+  } catch (err) {
+    t.fail(err)
   }
 
   try {
-    const info = await dns.promises.lookup('google.com', { family: 'IPv4' })
+    const info = await dns.promises.lookup(LOCALHOST, { family: 'IPv4' })
     t.ok(
       info && typeof info === 'object',
       'returns a non-error object after resolving a hostname'
@@ -170,29 +153,16 @@ test('dns.promises.lookup', async (t) => {
     t.fail(err)
   }
 
-  if (os.platform() !== 'win32') {
-    try {
-      const info = await dns.promises.lookup('cloudflare.com', 6)
-      t.ok(
-        info && typeof info === 'object',
-        'returns a non-error object after resolving a hostname'
-      )
-      t.equal(info.family, 6, 'is IPv6 family')
-      t.ok(IPV6_REGEX.test(info.address), 'has valid IPv6 address')
-    } catch (err) {
-      t.fail(err)
-    }
-    try {
-      const info = await dns.promises.lookup('cloudflare.com', { family: 6 })
-      t.ok(
-        info && typeof info === 'object',
-        'returns a non-error object after resolving a hostname'
-      )
-      t.equal(info.family, 6, 'is IPv6 family')
-      t.ok(IPV6_REGEX.test(info.address), 'has valid IPv6 address')
-    } catch (err) {
-      t.fail(err)
-    }
+  try {
+    const info = await dns.promises.lookup('::1', { family: 6 })
+    t.ok(
+      info && typeof info === 'object',
+      'returns a non-error object after resolving a hostname'
+    )
+    t.equal(info.family, 6, 'is IPv6 family')
+    t.ok(IPV6_REGEX.test(info.address), 'has valid IPv6 address')
+  } catch (err) {
+    t.fail(err)
   }
 
   try {
@@ -212,10 +182,6 @@ test('dns.promises.lookup', async (t) => {
 })
 
 test('dns.promises.lookup bad hostname', async (t) => {
-  if (!isOnline) {
-    return t.comment('skipping offline')
-  }
-
   let error = null
   try {
     await dns.promises.lookup(BAD_HOSTNAME)

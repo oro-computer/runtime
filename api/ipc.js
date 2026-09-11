@@ -72,6 +72,7 @@ function initializeXHRIntercept () {
   globalThis.XMLHttpRequest.prototype[patched] = true
 
   const { send, open } = globalThis.XMLHttpRequest.prototype
+  const isAsync = Symbol('isAsync')
 
   const encoder = new TextEncoder()
   Object.assign(globalThis.XMLHttpRequest.prototype, {
@@ -80,13 +81,14 @@ function initializeXHRIntercept () {
         this.readyState = globalThis.XMLHttpRequest.OPENED
       } catch {}
       this.method = method
+      this[isAsync] = args[0] !== false
       this.url = new URL(url, location.origin)
       this.seq = this.url.searchParams.get('seq')
 
       return open.call(this, method, this.url.href, ...args)
     },
 
-    async send (body) {
+    send (body) {
       let { method, seq, url } = this
 
       if (
@@ -105,9 +107,17 @@ function initializeXHRIntercept () {
             }
 
             this.setRequestHeader('runtime-xhr-seq', seq)
-            await postMessage(`ipc://buffer.map?seq=${seq}`, body)
-            if (!globalThis.window && globalThis.self) {
-              await new Promise((resolve) => setTimeout(resolve, 200))
+            // The Android document bridge stores the body before returning.
+            // A synchronous XHR must send it before its caller can close the fd.
+            const mapped = postMessage(`ipc://buffer.map?seq=${seq}`, body)
+            if (this[isAsync]) {
+              return (async () => {
+                await mapped
+                if (!globalThis.window && globalThis.self) {
+                  await new Promise((resolve) => setTimeout(resolve, 200))
+                }
+                return send.call(this, null)
+              })()
             }
             body = null
           }

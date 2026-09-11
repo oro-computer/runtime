@@ -838,6 +838,13 @@ jobs:
         shell: pwsh
         run: .\bin\install.ps1 -yesdeps -debug
 
+      - name: Ensure WebView2 Runtime is installed
+        id: setup-webview2
+        if: ${{ matrix.windows && steps.build-runtime-windows.outcome == 'success' }}
+        timeout-minutes: 5
+        shell: pwsh
+        run: .\test\scripts\bootstrap-webview2.ps1
+
       - name: Validate staged target families
         id: validate-targets-unix
         if: ${{ always() && runner.os != 'Windows' && matrix.compile_only != true && steps.build-runtime-unix.outcome == 'success' }}
@@ -941,7 +948,8 @@ jobs:
         if: >-
           ${{ always() &&
               ((runner.os != 'Windows' && steps.validate-targets-unix.outcome == 'success') ||
-               (runner.os == 'Windows' && steps.validate-targets-windows.outcome == 'success')) }}
+               (runner.os == 'Windows' && steps.validate-targets-windows.outcome == 'success' &&
+                steps.setup-webview2.outcome == 'success')) }}
         run: |
           node -e "const { spawnSync } = require('node:child_process'); const path = require('node:path'); const cli = path.join(process.env.ORO_HOME, 'bin', process.platform === 'win32' ? 'oroc.exe' : 'oroc'); const result = spawnSync(cli, ['--version'], { stdio: 'inherit' }); process.exit(result.status ?? 1)"
           node -e "const { spawnSync } = require('node:child_process'); const path = require('node:path'); const cli = path.join(process.env.ORO_HOME, 'bin', process.platform === 'win32' ? 'oroc.exe' : 'oroc'); const result = spawnSync(cli, ['help'], { stdio: 'inherit' }); process.exit(result.status ?? 1)"

@@ -72,8 +72,9 @@ namespace oro::runtime::sqlite {
     #else
       const String path = crsqliteExtensionPath();
       if (path.empty()) {
-        outResult = SQLITE_ERROR;
-        return false;
+        // Packaged apps can use SQLite without a configured extension directory.
+        outResult = SQLITE_OK;
+        return true;
       }
 
       char* errorMessagePtr = nullptr;

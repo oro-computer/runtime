@@ -807,6 +807,12 @@ namespace oro::runtime::window {
       );
     }
 
+    if (this->window == nullptr) {
+      throw std::runtime_error(string::formatWindowsError(
+        HRESULT_FROM_WIN32(GetLastError()), "CreateWindowExW"
+      ));
+    }
+
     auto webviewEnvironmentOptions = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
     webviewEnvironmentOptions->put_AdditionalBrowserArguments(L"--enable-features=msWebView2EnableDraggableRegions");
 
@@ -891,7 +897,7 @@ namespace oro::runtime::window {
       .webview = webviewEnvironmentOptions
     });
 
-    CreateCoreWebView2EnvironmentWithOptions(
+    const auto environmentResult = CreateCoreWebView2EnvironmentWithOptions(
       edgeRuntimePath.empty() ? nullptr : convertStringToWString(edgeRuntimePath.string()).c_str(),
       convertStringToWString(edgeRuntimeUserDataPath.string()).c_str(),
       webviewEnvironmentOptions.Get(),
@@ -899,7 +905,13 @@ namespace oro::runtime::window {
         HRESULT result,
         ICoreWebView2Environment* env
       ) mutable {
-        return env->CreateCoreWebView2Controller(
+        if (FAILED(result) || env == nullptr) {
+          debug("WebView2 environment failed for window %d: HRESULT=0x%08lx", this->options.index, result);
+          if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
+          return FAILED(result) ? result : E_POINTER;
+        }
+
+        const auto controllerResult = env->CreateCoreWebView2Controller(
           this->window,
           Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([=, this](
             HRESULT result,
@@ -908,10 +920,14 @@ namespace oro::runtime::window {
             const auto bundleIdentifier = userConfig["meta_bundle_identifier"];
 
             if (result != S_OK) {
+              debug("WebView2 controller failed for window %d: HRESULT=0x%08lx", this->options.index, result);
+              if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
               return result;
             }
 
             if (controller == nullptr) {
+              debug("WebView2 controller is null for window %d", this->options.index);
+              if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
               return E_HANDLE;
             }
 
@@ -1590,8 +1606,19 @@ namespace oro::runtime::window {
             return S_OK;
           }).Get()
         );
+        if (FAILED(controllerResult)) {
+          debug("WebView2 controller creation failed: HRESULT=0x%08lx", controllerResult);
+          if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
+        }
+        return controllerResult;
       }).Get()
     );
+
+    if (FAILED(environmentResult)) {
+      const auto message = "Could not initialize WebView2 (install the Microsoft Edge WebView2 Runtime): " +
+        string::formatWindowsError(environmentResult, "CreateCoreWebView2EnvironmentWithOptions");
+      throw std::runtime_error(message);
+    }
   }
 
   Window::~Window () {

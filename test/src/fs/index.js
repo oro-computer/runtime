@@ -34,6 +34,11 @@ test('fs synchronous binary reads preserve every byte and native text transport'
     }
     await fs.promises.writeFile(filename, '')
     t.equal(fs.readFileSync(filename).length, 0, 'empty binary files remain empty')
+    fs.writeFileSync(filename, bytes)
+    t.same(fs.readFileSync(filename), bytes, 'synchronous write completes before the descriptor closes')
+    fs.writeFileSync(filename, 'hello')
+    fs.appendFileSync(filename, ' world')
+    t.equal(fs.readFileSync(filename, 'utf8'), 'hello world', 'synchronous append preserves the previous contents')
   } finally {
     await fs.promises.unlink(filename)
   }

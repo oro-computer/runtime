@@ -10,6 +10,27 @@ import FIXTURES from '../fixtures.js'
 
 const TMPDIR = `${os.tmpdir()}${path.sep}`
 
+if (os.platform() !== 'win32') {
+  test('fs.promises metadata does not require read access or a symlink target', async (t) => {
+    const filename = path.join(FIXTURES, `metadata-${Date.now()}`)
+    const link = `${filename}.link`
+    await fs.writeFile(filename, 'metadata')
+    try {
+      await fs.chmod(filename, 0)
+      t.equal((await fs.stat(filename)).size, 8, 'stat reads metadata of an unreadable file')
+      t.ok((await fs.lstat(filename)).isFile(), 'lstat reads metadata of an unreadable file')
+      await fs.chmod(filename, 0o600)
+      await fs.symlink(`${filename}.missing`, link)
+      t.ok((await fs.lstat(link)).isSymbolicLink(), 'lstat preserves a dangling symlink')
+      await fs.rm(link)
+      t.pass('rm removes a dangling symlink without opening its target')
+    } finally {
+      await fs.chmod(filename, 0o600)
+      await fs.unlink(filename)
+    }
+  })
+}
+
 test('fs.promises.access', async (t) => {
   const { F_OK, R_OK, W_OK, X_OK } = fs.constants
 

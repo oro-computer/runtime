@@ -761,11 +761,15 @@ if (typeof globalThis.XMLHttpRequest === 'function') {
     }
   }
 
-  globalThis.XMLHttpRequest.prototype.send = async function (...args) {
+  globalThis.XMLHttpRequest.prototype.send = function (...args) {
     if (!this[isAsync]) {
-      return await send.call(this, ...args)
+      return send.call(this, ...args)
     }
 
+    return sendAsync(this, args)
+  }
+
+  async function sendAsync (request, args) {
     if (!queue) {
       // eslint-disable-next-line no-use-before-define
       queue = new ConcurrentQueue(
@@ -776,11 +780,11 @@ if (typeof globalThis.XMLHttpRequest === 'function') {
 
     await queue.push(
       new Promise((resolve) => {
-        this.addEventListener('error', resolve)
-        this.addEventListener('readystatechange', () => {
+        request.addEventListener('error', resolve)
+        request.addEventListener('readystatechange', () => {
           if (
-            this.readyState === globalThis.XMLHttpRequest.DONE ||
-            this.readyState === globalThis.XMLHttpRequest.UNSENT
+            request.readyState === globalThis.XMLHttpRequest.DONE ||
+            request.readyState === globalThis.XMLHttpRequest.UNSENT
           ) {
             resolve()
           }
@@ -788,7 +792,7 @@ if (typeof globalThis.XMLHttpRequest === 'function') {
       })
     )
 
-    return await send.call(this, ...args)
+    return await send.call(request, ...args)
   }
 }
 
