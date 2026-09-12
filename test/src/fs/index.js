@@ -953,8 +953,9 @@ test.skip('fs.ftruncate', async (t) => {
 
 test('fs.unlink', async (t) => {
   const buffer = Buffer.from('test 123')
+  const directory = await fs.promises.mkdtemp(path.join(TMPDIR, 'oro-unlink-'))
   await new Promise((resolve) => {
-    const filePatht = path.join(TMPDIR, 'new-file.txt')
+    const filePatht = path.join(directory, 'file.txt')
     fs.writeFile(filePatht, buffer, (err) => {
       if (err) {
         t.fail(err)
@@ -993,6 +994,7 @@ test('fs.unlink', async (t) => {
       })
     })
   })
+  await fs.promises.rm(directory, { recursive: true, force: true })
 })
 
 test('fs.truncate + fs.appendFile + fs.rm/cp', async (t) => {

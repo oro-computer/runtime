@@ -812,6 +812,7 @@ namespace oro::runtime::window {
         HRESULT_FROM_WIN32(GetLastError()), "CreateWindowExW"
       ));
     }
+    debug("WebView2 native window created: index=%d", this->options.index);
 
     auto webviewEnvironmentOptions = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
     webviewEnvironmentOptions->put_AdditionalBrowserArguments(L"--enable-features=msWebView2EnableDraggableRegions");
@@ -910,6 +911,7 @@ namespace oro::runtime::window {
           if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
           return FAILED(result) ? result : E_POINTER;
         }
+        debug("WebView2 environment ready: index=%d", this->options.index);
 
         const auto controllerResult = env->CreateCoreWebView2Controller(
           this->window,
@@ -930,13 +932,19 @@ namespace oro::runtime::window {
               if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
               return E_HANDLE;
             }
+            debug("WebView2 controller ready: index=%d", this->options.index);
 
             // configure the webview controller
             do {
               RECT bounds;
               GetClientRect(this->window, &bounds);
               this->controller = controller;
-              this->controller->get_CoreWebView2(&this->webview);
+              const auto webviewResult = this->controller->get_CoreWebView2(&this->webview);
+              if (FAILED(webviewResult) || this->webview == nullptr) {
+                debug("WebView2 retrieval failed for window %d: HRESULT=0x%08lx", this->options.index, webviewResult);
+                if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
+                return FAILED(webviewResult) ? webviewResult : E_POINTER;
+              }
               this->controller->put_Bounds(bounds);
               this->controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
               this->controller->AddRef();
@@ -945,20 +953,25 @@ namespace oro::runtime::window {
 
             // configure the webview settings
             do {
-              ICoreWebView2Settings* settings = nullptr;
-              ICoreWebView2Settings2* settings2 = nullptr;
-              ICoreWebView2Settings3* settings3 = nullptr;
-              ICoreWebView2Settings6* settings6 = nullptr;
-              ICoreWebView2Settings9* settings9 = nullptr;
+              ComPtr<ICoreWebView2Settings> settings;
+              ComPtr<ICoreWebView2Settings2> settings2;
+              ComPtr<ICoreWebView2Settings3> settings3;
+              ComPtr<ICoreWebView2Settings6> settings6;
+              ComPtr<ICoreWebView2Settings9> settings9;
 
               const auto wantsDebugMode = this->options.debug || config::isDebugEnabled();
 
-              this->webview->get_Settings(&settings);
+              const auto settingsResult = this->webview->get_Settings(&settings);
+              if (FAILED(settingsResult) || !settings) {
+                debug("WebView2 settings failed for window %d: HRESULT=0x%08lx", this->options.index, settingsResult);
+                if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
+                return FAILED(settingsResult) ? settingsResult : E_POINTER;
+              }
 
-              settings2 = reinterpret_cast<ICoreWebView2Settings2*>(settings);
-              settings3 = reinterpret_cast<ICoreWebView2Settings3*>(settings);
-              settings6 = reinterpret_cast<ICoreWebView2Settings6*>(settings);
-              settings9 = reinterpret_cast<ICoreWebView2Settings9*>(settings);
+              settings.As(&settings2);
+              settings.As(&settings3);
+              settings.As(&settings6);
+              settings.As(&settings9);
 
               settings->put_IsScriptEnabled(true);
               settings->put_IsStatusBarEnabled(false);
@@ -998,14 +1011,20 @@ namespace oro::runtime::window {
                 }
               }
 
-              settings3->put_AreBrowserAcceleratorKeysEnabled(wantsDebugMode);
+              if (settings3) {
+                settings3->put_AreBrowserAcceleratorKeysEnabled(wantsDebugMode);
+              }
 
-              settings6->put_IsPinchZoomEnabled(false);
-              settings6->put_IsSwipeNavigationEnabled(
-                this->bridge->userConfig["webview_navigator_enable_navigation_destures"] == "true"
-              );
+              if (settings6) {
+                settings6->put_IsPinchZoomEnabled(false);
+                settings6->put_IsSwipeNavigationEnabled(
+                  this->bridge->userConfig["webview_navigator_enable_navigation_destures"] == "true"
+                );
+              }
 
-              settings9->put_IsNonClientRegionSupportEnabled(true);
+              if (settings9) {
+                settings9->put_IsNonClientRegionSupportEnabled(true);
+              }
             } while (0);
 
             // enumerate all child windows to re-register drag/drop
@@ -1046,10 +1065,11 @@ namespace oro::runtime::window {
 
             // configure webview
             do {
-              ICoreWebView2_22* webview22 = nullptr;
-              ICoreWebView2_3* webview3 = reinterpret_cast<ICoreWebView2_3*>(this->webview);
+              ComPtr<ICoreWebView2_22> webview22;
+              ComPtr<ICoreWebView2_3> webview3;
 
               this->webview->QueryInterface(IID_PPV_ARGS(&webview22));
+              this->webview->QueryInterface(IID_PPV_ARGS(&webview3));
               this->webview->AddWebResourceRequestedFilter(L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
 
               if (webview22 != nullptr) {
@@ -1062,11 +1082,13 @@ namespace oro::runtime::window {
                 );
               }
 
-              webview3->SetVirtualHostNameToFolderMapping(
-                convertStringToWString(bundleIdentifier).c_str(),
-                filesystem::Resource::getResourcesPath().c_str(),
-                COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW
-              );
+              if (webview3) {
+                webview3->SetVirtualHostNameToFolderMapping(
+                  convertStringToWString(bundleIdentifier).c_str(),
+                  filesystem::Resource::getResourcesPath().c_str(),
+                  COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW
+                );
+              }
             } while (0);
 
             // TLS certificate pinning hook for WebView2.
@@ -1597,6 +1619,7 @@ namespace oro::runtime::window {
             } while (0);
 
             this->isReadyForNavigation = true;
+            debug("WebView2 ready for navigation: index=%d", this->options.index);
             if (!this->pendingNavigationLocation.empty() && this->webview != nullptr) {
               const auto url = this->pendingNavigationLocation;
               this->pendingNavigationLocation = "";

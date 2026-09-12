@@ -103,7 +103,7 @@ open class SchemeHandlers (val bridge: Bridge) {
       }
 
       val app = App.getInstance()
-      if (app.hasRuntimePermission("cookies")) {
+      if (getScheme() != "ipc" && app.hasRuntimePermission("cookies")) {
         val hasCookieHeader = request.requestHeaders.keys.any { it.equals("cookie", ignoreCase = true) }
         if (!hasCookieHeader) {
           val cookieValue = CookieManager.getInstance().getCookie(getCookieUrl())

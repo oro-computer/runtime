@@ -748,6 +748,32 @@ namespace oro::runtime::webview {
             const auto hasAuthority = (toLowerCase(scheme) != "node");
             registration->put_HasAuthorityComponent(hasAuthority ? TRUE : FALSE);
 
+            // WebView2 rejects cross-origin requests before invoking our handler
+            // unless the scheme registration also permits their origins.
+            const auto& userConfig = this->bridge.userConfig;
+            Vector<WString> allowedOrigins;
+            if (!userConfig.contains("webview_cors_allow_all") || userConfig.at("webview_cors_allow_all") != "false") {
+              allowedOrigins.emplace_back(L"*");
+            } else if (userConfig.contains("webview_cors_allowed_origins")) {
+              for (const auto& origin : split(trim(userConfig.at("webview_cors_allowed_origins")), ' ')) {
+                if (!origin.empty()) {
+                  allowedOrigins.push_back(convertStringToWString(origin));
+                }
+              }
+            }
+
+            Vector<LPCWSTR> originPointers;
+            for (const auto& origin : allowedOrigins) {
+              originPointers.push_back(origin.c_str());
+            }
+            const auto originsResult = registration->SetAllowedOrigins(
+              static_cast<UINT32>(originPointers.size()),
+              originPointers.empty() ? nullptr : originPointers.data()
+            );
+            if (FAILED(originsResult)) {
+              throw std::runtime_error("Could not configure WebView2 custom scheme origins: " + scheme);
+            }
+
             registrations.emplace_back(registration);
 
             std::vector<ICoreWebView2CustomSchemeRegistration*> raw;
@@ -795,7 +821,9 @@ namespace oro::runtime::webview {
       return false;
     }
 
-    if (request->hostname.size() > 0 && !request->headers.has("cookie")) {
+    // IPC hostnames name native commands, not cookie origins. Looking up their
+    // cookies can block a synchronous worker request on the browser's IO thread.
+    if (request->scheme != "ipc" && request->hostname.size() > 0 && !request->headers.has("cookie")) {
       if (
         this->bridge.userConfig.contains("permissions_allow_cookies") &&
         this->bridge.userConfig.at("permissions_allow_cookies") == "false"

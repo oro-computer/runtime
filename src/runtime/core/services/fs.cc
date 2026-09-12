@@ -808,6 +808,8 @@ namespace oro::runtime::core::services {
               {"err", JSON::Object::Entries {
                 {"id", std::to_string(desc->id)},
                 {"code", req->result},
+                {"path", desc->resource.path.string()},
+                {"syscall", "open"},
                 {"message", String(uv_strerror((int) req->result))}
               }}
             };
@@ -837,6 +839,8 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(desc->id)},
             {"code", err},
+            {"path", desc->resource.path.string()},
+            {"syscall", "open"},
             {"message", String(uv_strerror(err))}
           }}
         };

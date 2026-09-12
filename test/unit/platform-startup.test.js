@@ -10,6 +10,14 @@ const compiler = ['clang++-18', 'clang++', 'c++'].find(command =>
 const options = { skip: !compiler ? 'A C++ compiler is required' : false }
 const read = file => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')
 
+function fragment (file, start, end) {
+  const source = read(file)
+  const first = source.indexOf(start)
+  const last = source.indexOf(end, first)
+  assert.ok(first >= 0 && last > first)
+  return source.slice(first, last)
+}
+
 function runNative (source) {
   const directory = mkdtempSync(path.join(tmpdir(), 'oro-platform-startup-'))
   const filename = path.join(directory, 'regression.cc')
@@ -20,6 +28,281 @@ function runNative (source) {
   const result = spawnSync(executable, [], { encoding: 'utf8', timeout: 10000 })
   assert.equal(result.status, 0, result.stderr)
 }
+
+test('WebView2 settings use queried interface pointers and tolerate unavailable features', options, () => {
+  const configure = fragment('src/runtime/window/win.cc',
+    '            // configure the webview settings',
+    '            // enumerate all child windows')
+  runNative(`
+    #include <cassert>
+    #include <cstdlib>
+    #include <functional>
+    #include <map>
+    #include <string>
+    using String = std::string;
+    using WString = std::wstring;
+    using LPWSTR = wchar_t*;
+    using HRESULT = long;
+    constexpr HRESULT S_OK = 0, E_POINTER = -1;
+    bool FAILED (HRESULT value) { return value < 0; }
+    bool SUCCEEDED (HRESULT value) { return !FAILED(value); }
+    template <typename... Args> void debug (Args...) {}
+    String trim (String value) { return value; }
+    String replace (String value, String, String) { return value; }
+    String convertWStringToString (WString value) { return String(value.begin(), value.end()); }
+    WString convertStringToWString (String value) { return WString(value.begin(), value.end()); }
+    void CoTaskMemFree (void*) {}
+    namespace config { bool isDebugEnabled () { return false; } }
+    namespace oro::runtime::version { const char* VERSION_STRING = "test"; }
+    bool extensionsAvailable = true;
+    int optionalCalls = 0;
+    struct ICoreWebView2Settings {
+      int identity = 1;
+      int baseCalls = 0;
+      void base () { assert(identity == 1); ++baseCalls; }
+      void put_IsScriptEnabled (bool) { base(); }
+      void put_IsStatusBarEnabled (bool) { base(); }
+      void put_IsWebMessageEnabled (bool) { base(); }
+      void put_AreDevToolsEnabled (bool) { base(); }
+      void put_AreHostObjectsAllowed (bool) { base(); }
+      void put_IsZoomControlEnabled (bool) { base(); }
+      void put_IsBuiltInErrorPageEnabled (bool) { base(); }
+      void put_AreDefaultContextMenusEnabled (bool) { base(); }
+      void put_AreDefaultScriptDialogsEnabled (bool) { base(); }
+      template <typename T> HRESULT QueryInterface (T** output) {
+        static T extension;
+        *output = extensionsAvailable ? &extension : nullptr;
+        return extensionsAvailable ? S_OK : E_POINTER;
+      }
+    };
+    struct ICoreWebView2Settings2 {
+      int identity = 2;
+      HRESULT get_UserAgent (LPWSTR* output) { assert(identity == 2); *output = nullptr; return S_OK; }
+      void put_UserAgent (const wchar_t*) { assert(identity == 2); ++optionalCalls; }
+    };
+    struct ICoreWebView2Settings3 {
+      int identity = 3;
+      void put_AreBrowserAcceleratorKeysEnabled (bool) { assert(identity == 3); ++optionalCalls; }
+    };
+    struct ICoreWebView2Settings6 {
+      int identity = 6;
+      void put_IsPinchZoomEnabled (bool) { assert(identity == 6); ++optionalCalls; }
+      void put_IsSwipeNavigationEnabled (bool) { assert(identity == 6); ++optionalCalls; }
+    };
+    struct ICoreWebView2Settings9 {
+      int identity = 9;
+      void put_IsNonClientRegionSupportEnabled (bool) { assert(identity == 9); ++optionalCalls; }
+    };
+    template <typename T> struct ComPtr {
+      T* value = nullptr;
+      T** operator& () { return &value; }
+      T* operator-> () const { assert(value); return value; }
+      explicit operator bool () const { return value != nullptr; }
+      bool operator!= (std::nullptr_t) const { return value != nullptr; }
+      template <typename U> HRESULT As (U** output) { return value->QueryInterface(output); }
+    };
+    struct WebView {
+      ICoreWebView2Settings settings;
+      HRESULT status = S_OK;
+      bool nullSettings = false;
+      HRESULT get_Settings (ICoreWebView2Settings** output) {
+        *output = FAILED(status) || nullSettings ? nullptr : &settings;
+        return status;
+      }
+    };
+    struct App { std::function<void(int)> shutdownHandler; };
+    struct Bridge { std::map<String, String> userConfig; };
+    struct Window {
+      struct { bool debug = false; int index = 0; } options;
+      WebView* webview;
+      Bridge* bridge;
+      HRESULT configure (App* app) {
+        ${configure}
+        return S_OK;
+      }
+    };
+    int main () {
+      WebView view;
+      Bridge bridge;
+      Window window{{}, &view, &bridge};
+      int failures = 0;
+      App app{[&](int code) { assert(code == EXIT_FAILURE); ++failures; }};
+      assert(window.configure(&app) == S_OK);
+      assert(view.settings.baseCalls == 9 && optionalCalls == 5);
+      extensionsAvailable = false;
+      assert(window.configure(&app) == S_OK);
+      assert(view.settings.baseCalls == 18 && optionalCalls == 5);
+      view.status = -20;
+      assert(window.configure(&app) == -20 && failures == 1);
+      view.status = S_OK;
+      view.nullSettings = true;
+      assert(window.configure(&app) == E_POINTER && failures == 2);
+    }
+  `)
+})
+
+test('IPC requests reach native handlers even when the browser cookie store cannot reply', options, () => {
+  const gate = fragment('src/runtime/webview/scheme_handlers.cc',
+    '    // Only intercept schemes we explicitly registered.',
+    '    // CDP Network.* events')
+  runNative(`
+    #include <cassert>
+    #include <atomic>
+    #include <cstdint>
+    #include <functional>
+    #include <map>
+    #include <memory>
+    #include <string>
+    #include <vector>
+    using String = std::string;
+    struct Request {
+      String scheme = "ipc", hostname = "fs.stat";
+      struct Headers {
+        std::map<String, String> values;
+        bool has (String key) { return values.contains(key); }
+        void set (String key, String value) { values[key] = value; }
+      } headers;
+      bool isCancelled () { return false; }
+      String str () { return scheme + "://" + hostname; }
+    };
+    using Callback = std::function<void()>;
+    namespace oro::runtime::bridge { struct Bridge; }
+    struct Handlers {
+      oro::runtime::bridge::Bridge& bridge;
+      bool hasHandlerForScheme (String) { return true; }
+      bool handleRequest (std::shared_ptr<Request>, Callback);
+    };
+    struct Runtime {
+      struct {
+        struct { bool wasFirstDOMContentLoadedEventDispatched = true; } platform;
+        struct {
+          int scheduled = 0;
+          uint64_t setTimeout (int, Callback) { return ++scheduled; }
+          void clearTimeout (uint64_t) {}
+        } timers;
+      } services;
+      struct Window { std::shared_ptr<oro::runtime::bridge::Bridge> bridge; } window;
+      struct Manager {
+        Window* window;
+        Window* getWindowForBridge (void*) { return window; }
+      } windowManager{&window};
+    };
+    namespace app {
+      struct App {
+        Runtime runtime;
+        static App* sharedApplication () { static App value; return &value; }
+      };
+    }
+    namespace oro::runtime::bridge {
+      struct Bridge {
+        std::map<String, String> userConfig;
+        Handlers schemeHandlers{*this};
+        Runtime* getRuntime () { return &app::App::sharedApplication()->runtime; }
+        void dispatch (Callback callback) { callback(); }
+      };
+    }
+    int cookieLookups = 0;
+    namespace cookies {
+      template <typename T> void get (oro::runtime::bridge::Bridge&, String, T) {
+        ++cookieLookups; // Simulate a blocked browser cookie store.
+      }
+    }
+    bool Handlers::handleRequest (std::shared_ptr<Request> request, Callback callback) {
+      ${gate}
+      callback();
+      return true;
+    }
+    int main () {
+      auto bridge = std::make_shared<oro::runtime::bridge::Bridge>();
+      auto& runtime = app::App::sharedApplication()->runtime;
+      runtime.window.bridge = bridge;
+      int completed = 0;
+      auto request = std::make_shared<Request>();
+      bridge->schemeHandlers.handleRequest(request, [&]() { ++completed; });
+      assert(completed == 1 && cookieLookups == 0 && runtime.services.timers.scheduled == 0);
+      request = std::make_shared<Request>();
+      request->scheme = "oro";
+      request->hostname = "app.example";
+      bridge->schemeHandlers.handleRequest(request, [&]() { ++completed; });
+      assert(completed == 1 && cookieLookups == 1 && runtime.services.timers.scheduled == 1);
+      request->headers.set("cookie", "session=value");
+      bridge->schemeHandlers.handleRequest(request, [&]() { ++completed; });
+      assert(completed == 2 && cookieLookups == 1);
+    }
+  `)
+})
+
+test('WebView2 scheme registration admits IPC origins according to the configured CORS policy', options, () => {
+  const configure = fragment('src/runtime/webview/scheme_handlers.cc',
+    '            const auto hasAuthority =',
+    '            registrations.emplace_back(registration);')
+  runNative(`
+    #include <cassert>
+    #include <map>
+    #include <stdexcept>
+    #include <string>
+    #include <sstream>
+    #include <vector>
+    using String = std::string;
+    using WString = std::wstring;
+    using LPCWSTR = const wchar_t*;
+    using UINT32 = unsigned int;
+    template <typename T> using Vector = std::vector<T>;
+    constexpr bool TRUE = true, FALSE = false;
+    bool FAILED (int result) { return result < 0; }
+    String toLowerCase (String value) { return value; }
+    String trim (String value) { return value; }
+    WString convertStringToWString (String value) { return WString(value.begin(), value.end()); }
+    Vector<String> split (String value, char delimiter) {
+      std::istringstream stream(value);
+      Vector<String> result;
+      String entry;
+      while (std::getline(stream, entry, delimiter)) result.push_back(entry);
+      return result;
+    }
+    struct Registration {
+      Vector<WString> origins;
+      bool fail = false;
+      void put_HasAuthorityComponent (bool) {}
+      int SetAllowedOrigins (UINT32 size, LPCWSTR* values) {
+        origins.clear();
+        for (UINT32 i = 0; i < size; ++i) origins.emplace_back(values[i]);
+        return fail ? -1 : 0;
+      }
+      bool permits (WString origin) {
+        for (const auto& entry : origins) if (entry == L"*" || entry == origin) return true;
+        return false;
+      }
+    };
+    struct Handler {
+      struct { std::map<String, String> userConfig; } bridge;
+      void configure (Registration* registration) {
+        String scheme = "ipc";
+        ${configure}
+      }
+    };
+    int main () {
+      Handler handler;
+      Registration registration;
+      handler.configure(&registration);
+      assert(registration.permits(L"oro://app.example"));
+      assert(registration.permits(L"http://localhost:3000"));
+      handler.bridge.userConfig["webview_cors_allow_all"] = "false";
+      handler.configure(&registration);
+      assert(!registration.permits(L"oro://app.example"));
+      handler.bridge.userConfig["webview_cors_allowed_origins"] = "oro://app.example  https://trusted.example";
+      handler.configure(&registration);
+      assert(registration.origins.size() == 2);
+      assert(registration.permits(L"oro://app.example"));
+      assert(registration.permits(L"https://trusted.example"));
+      assert(!registration.permits(L"https://untrusted.example"));
+      registration.fail = true;
+      bool threw = false;
+      try { handler.configure(&registration); } catch (const std::runtime_error&) { threw = true; }
+      assert(threw);
+    }
+  `)
+})
 
 test('Android asset paths normalize dot components and match complete directory names', options, () => {
   const source = read('src/runtime/filesystem/resource.cc')
