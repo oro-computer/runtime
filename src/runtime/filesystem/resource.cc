@@ -1001,9 +1001,9 @@ namespace oro::runtime::filesystem {
       this->cache.size = size.longLongValue;
     }
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
-    LARGE_INTEGER fileSize;
-    auto handle = CreateFile(
-      convertWStringToString(this->path.string()).c_str(),
+    LARGE_INTEGER fileSize = {};
+    auto handle = CreateFileW(
+      this->path.c_str(),
       GENERIC_READ, // access
       FILE_SHARE_READ, // share mode
       nullptr, // security attribues (unused)
@@ -1012,13 +1012,17 @@ namespace oro::runtime::filesystem {
       nullptr // templte file (unused)
     );
 
-    if (handle) {
-      auto result = GetFileSizeEx(handle, &fileSize);
-      CloseHandle(handle);
-      this->cache.size = fileSize.QuadPart;
-    } else {
-      return -2;
+    this->cache.size = 0;
+    if (handle == INVALID_HANDLE_VALUE) {
+      return 0;
     }
+
+    const auto result = GetFileSizeEx(handle, &fileSize);
+    CloseHandle(handle);
+    if (!result || fileSize.QuadPart < 0) {
+      return 0;
+    }
+    this->cache.size = static_cast<size_t>(fileSize.QuadPart);
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     bool success = false;
     if (sharedAndroidAssetManager) {
@@ -1109,8 +1113,10 @@ namespace oro::runtime::filesystem {
     }
     span->end();
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
-    auto handle = CreateFile(
-      convertWStringToString(this->path.string()).c_str(),
+    const auto size = this->size();
+    auto bytes = std::make_unique<unsigned char[]>(size);
+    auto handle = CreateFileW(
+      this->path.c_str(),
       GENERIC_READ, // access
       FILE_SHARE_READ, // share mode
       nullptr, // security attribues (unused)
@@ -1119,25 +1125,33 @@ namespace oro::runtime::filesystem {
       nullptr // templte file (unused)
     );
 
-    if (handle) {
-      const auto size = this->size();
-      auto bytes = new unsigned char[size]{0};
-      auto result = ReadFile(
-        handle, // File handle
-        reinterpret_cast<void*>(bytes),
-        (DWORD) size, // output buffer size
-        nullptr, // bytes read (unused)
-        nullptr // ignored (unused)
+    if (handle == INVALID_HANDLE_VALUE) {
+      return nullptr;
+    }
+
+    size_t offset = 0;
+    while (offset < size) {
+      const auto remaining = std::min<size_t>(size - offset, MAXDWORD);
+      DWORD bytesRead = 0;
+      const auto result = ReadFile(
+        handle,
+        bytes.get() + offset,
+        static_cast<DWORD>(remaining),
+        &bytesRead,
+        nullptr
       );
 
-      if (result) {
-        this->bytes.reset(bytes);
-      } else {
-        delete [] bytes;
+      if (!result || bytesRead == 0) {
+        debug("Resource::read: incomplete read for %s (%zu of %zu bytes)",
+          this->path.string().c_str(), offset, size);
+        CloseHandle(handle);
+        return nullptr;
       }
-
-      CloseHandle(handle);
+      offset += bytesRead;
     }
+
+    CloseHandle(handle);
+    this->bytes.reset(bytes.release());
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     bool success = false;
     if (sharedAndroidAssetManager && !fs::exists(this->path)) {

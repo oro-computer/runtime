@@ -29,6 +29,159 @@ function runNative (source) {
   assert.equal(result.status, 0, result.stderr)
 }
 
+test('Windows resources read complete files and handle invalid or truncated files', options, () => {
+  const size = fragment('src/runtime/filesystem/resource.cc',
+    '  size_t Resource::size (bool cached)', '  const unsigned char* Resource::read () const')
+  const readResource = fragment('src/runtime/filesystem/resource.cc',
+    '  const unsigned char* Resource::read (bool cached)', '  const String Resource::str (bool cached)')
+  runNative(`
+    #include <algorithm>
+    #include <cassert>
+    #include <cstdint>
+    #include <cstring>
+    #include <map>
+    #include <memory>
+    #include <string>
+    #define ORO_RUNTIME_PLATFORM_WINDOWS 1
+    using String = std::string;
+    using DWORD = uint32_t;
+    using HANDLE = int;
+    constexpr HANDLE INVALID_HANDLE_VALUE = -1;
+    constexpr int GENERIC_READ = 1, FILE_SHARE_READ = 2, OPEN_EXISTING = 3;
+    constexpr DWORD MAXDWORD = UINT32_MAX;
+    struct LARGE_INTEGER { int64_t QuadPart; };
+    String payload = "<!doctype html><script src='main.js'></script>";
+    size_t cursor = 0;
+    size_t available = payload.size();
+    bool openFails = false, sizeFails = false, readFails = false;
+    int opens = 0, closes = 0, reads = 0;
+    HANDLE CreateFileW (const wchar_t*, int, int, void*, int, int, void*) {
+      cursor = 0;
+      if (openFails) return INVALID_HANDLE_VALUE;
+      return ++opens;
+    }
+    bool GetFileSizeEx (HANDLE handle, LARGE_INTEGER* size) {
+      assert(handle != INVALID_HANDLE_VALUE);
+      if (sizeFails) return false;
+      size->QuadPart = payload.size();
+      return true;
+    }
+    void CloseHandle (HANDLE handle) { assert(handle != INVALID_HANDLE_VALUE); ++closes; }
+    bool ReadFile (HANDLE handle, void* buffer, DWORD size, DWORD* read, void* overlapped) {
+      assert(handle != INVALID_HANDLE_VALUE && read != nullptr && overlapped == nullptr);
+      ++reads;
+      if (readFails) return false;
+      *read = std::min<size_t>({size, available - cursor, 7});
+      std::memcpy(buffer, payload.data() + cursor, *read);
+      cursor += *read;
+      return true;
+    }
+    template <typename... Args> void debug (Args...) {}
+    struct Resource {
+      struct Path {
+        const wchar_t* c_str () const { return L"index.html"; }
+        String string () const { return "index.html"; }
+      } path;
+      struct Cache { size_t size = 0; std::shared_ptr<unsigned char[]> bytes; } cache;
+      struct { bool cache = true; } options;
+      std::shared_ptr<unsigned char[]> bytes;
+      std::map<String, Cache> caches;
+      bool accessing = true;
+      bool exists () { return true; }
+      size_t size (bool cached = true) noexcept;
+      const unsigned char* read (bool cached = true);
+    };
+    ${size}
+    ${readResource}
+    int main () {
+      Resource resource;
+      auto data = resource.read();
+      assert(data != nullptr && String(reinterpret_cast<const char*>(data), payload.size()) == payload);
+      assert(resource.size() == payload.size() && reads > 1 && opens == closes);
+      const auto count = reads;
+      assert(resource.read() == data && reads == count);
+      openFails = true;
+      Resource missing;
+      assert(missing.size(false) == 0 && missing.read(false) == nullptr && opens == closes);
+      openFails = false;
+      sizeFails = true;
+      Resource unreadable;
+      assert(unreadable.size(false) == 0 && opens == closes);
+      sizeFails = false;
+      available = payload.size() - 1;
+      Resource truncated;
+      assert(truncated.read(false) == nullptr && opens == closes);
+      available = payload.size();
+      readFails = true;
+      Resource failed;
+      assert(failed.read(false) == nullptr && opens == closes);
+    }
+  `)
+})
+
+test('WebView2 waits for preload registration and reports synchronous and asynchronous failures', options, () => {
+  const register = fragment('src/runtime/window/win.cc',
+    '              const auto preloadResult = this->webview->AddScriptToExecuteOnDocumentCreated(',
+    '            } while (0);')
+  runNative(`
+    #include <cassert>
+    #include <cstdlib>
+    #include <functional>
+    #include <string>
+    using HRESULT = long;
+    using PCWSTR = const wchar_t*;
+    using String = std::string;
+    constexpr HRESULT S_OK = 0;
+    bool FAILED (HRESULT status) { return status < 0; }
+    template <typename... Args> void debug (Args...) {}
+    std::wstring convertStringToWString (String s) { return std::wstring(s.begin(), s.end()); }
+    using Completion = std::function<HRESULT(HRESULT, PCWSTR)>;
+    struct ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler {};
+    namespace Microsoft::WRL {
+      struct Handler { Completion callback; Completion Get () { return callback; } };
+      template <typename Interface> Handler Callback (Completion fn) { return {fn}; }
+    }
+    struct WebView {
+      Completion complete;
+      HRESULT status = S_OK;
+      HRESULT AddScriptToExecuteOnDocumentCreated (PCWSTR, Completion fn) { complete = fn; return status; }
+    };
+    struct App { std::function<void(int)> shutdownHandler; };
+    struct Window {
+      WebView* webview;
+      bool isReadyForNavigation = false;
+      String pendingNavigationLocation = "first.html";
+      String navigated;
+      struct { int index = 0; } options;
+      void navigate (String location) { assert(isReadyForNavigation); navigated = location; }
+      HRESULT configure (App* app) {
+        struct { String str () { return "preload"; } } preloadUserScriptSource;
+        ${register}
+        return S_OK;
+      }
+    };
+    int main () {
+      int failures = 0;
+      App app{[&](int code) { assert(code == EXIT_FAILURE); ++failures; }};
+      WebView view;
+      Window window{&view};
+      assert(window.configure(&app) == S_OK);
+      assert(!window.isReadyForNavigation && window.navigated.empty());
+      window.pendingNavigationLocation = "latest.html";
+      assert(view.complete(S_OK, L"script-id") == S_OK);
+      assert(window.isReadyForNavigation && window.navigated == "latest.html");
+      Window asynchronousFailure{&view};
+      assert(asynchronousFailure.configure(&app) == S_OK);
+      assert(view.complete(-10, nullptr) == -10);
+      assert(!asynchronousFailure.isReadyForNavigation && failures == 1);
+      Window synchronousFailure{&view};
+      view.status = -20;
+      assert(synchronousFailure.configure(&app) == -20);
+      assert(!synchronousFailure.isReadyForNavigation && failures == 2);
+    }
+  `)
+})
+
 test('WebView2 settings use queried interface pointers and tolerate unavailable features', options, () => {
   const configure = fragment('src/runtime/window/win.cc',
     '            // configure the webview settings',

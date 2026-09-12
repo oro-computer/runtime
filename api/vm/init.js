@@ -1,5 +1,6 @@
 import application from '../application.js'
 import serialize from '../internal/serialize.js'
+import { postWindowMessage } from '../internal/post-message.js'
 import ipc from '../ipc.js'
 import * as vm from '../vm.js'
 import hooks from '../hooks.js'
@@ -42,7 +43,7 @@ class World extends EventTarget {
 
       const cleanup = () => {
         clearTimeout(timeout)
-        this.frame.removeEventListener('load', onLoad)
+        globalThis.removeEventListener('message', onReady)
         this.frame.removeEventListener('error', onError)
       }
 
@@ -55,15 +56,24 @@ class World extends EventTarget {
         }
       }
 
-      const onLoad = () => finish()
+      const onReady = (event) => {
+        if (
+          event.source === this.frame.contentWindow &&
+          event.origin === globalThis.location.origin &&
+          event.data?.type === 'world.ready'
+        ) {
+          finish()
+        }
+      }
       const onError = (event) => {
         finish(new Error(`Failed to load VM world ${id}`, { cause: event }))
       }
 
-      this.frame.addEventListener('load', onLoad, { once: true })
+      // A frame's load event does not confirm that its message handler is ready.
+      globalThis.addEventListener('message', onReady)
       this.frame.addEventListener('error', onError, { once: true })
       timeout = setTimeout(() => {
-        finish(new Error(`VM world ${id} did not load`))
+        finish(new Error(`VM world ${id} did not initialize`))
       }, 10_000)
     })
 
@@ -75,9 +85,9 @@ class World extends EventTarget {
     target.appendChild(this.frame)
   }
 
-  async postMessage (...args) {
+  async postMessage (message) {
     await this.ready
-    this.frame.contentWindow.postMessage(...args)
+    postWindowMessage(this.frame.contentWindow, message, globalThis.location.origin)
   }
 
   async destroy () {

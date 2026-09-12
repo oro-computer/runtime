@@ -23133,6 +23133,16 @@ declare module "oro:internal/hid-web" {
 }
 
 declare module "oro:internal/post-message" {
+    /**
+     * Sends a window message from the current realm, preserving its source window.
+     * Calling the target's JavaScript wrapper changes the incumbent realm in Chromium.
+     * @ignore
+     * @param {Window} target
+     * @param {any} message
+     * @param {string} targetOrigin
+     * @returns {void}
+     */
+    export function postWindowMessage(target: Window, message: any, targetOrigin: string): void;
     const _default: any;
     export default _default;
 }

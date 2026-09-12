@@ -1331,39 +1331,6 @@ namespace oro::runtime::window {
               );
             } while (0);
 
-            // configure the user script preload
-            do {
-              auto preloadUserScriptSource = webview::Preload::compile({
-                .features = webview::Preload::Options::Features {
-                  .useGlobalCommonJS = false,
-                  .useGlobalNodeJS = false,
-                  .useTestScript = false,
-                  .useHTMLMarkup = false,
-                  .useESM = false,
-                  .useGlobalArgs = true
-                },
-                .client = this->bridge->client,
-                .index = options.index,
-                .argv = options.argv,
-                .userScript = options.userScript,
-                .userConfig = options.userConfig,
-                .conduit = {
-                  {"port", static_cast<runtime::Runtime&>(this->bridge->context).services.conduit.port},
-                  {"hostname", static_cast<runtime::Runtime&>(this->bridge->context).services.conduit.hostname},
-                  {"sharedKey", static_cast<runtime::Runtime&>(this->bridge->context).services.conduit.sharedKey}
-                }
-              });
-
-              this->webview->AddScriptToExecuteOnDocumentCreated(
-                // Note that this may not do anything as preload goes out of scope before event fires
-                // Consider using w->preloadJavascript, but apps work without this
-                convertStringToWString(preloadUserScriptSource.str()).c_str(),
-                Microsoft::WRL::Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>(
-                  [&](HRESULT error, PCWSTR id) -> HRESULT { return S_OK; }
-                ).Get()
-              );
-            } while (0);
-
             // configure webview permission request handler
             do {
               EventRegistrationToken token;
@@ -1618,13 +1585,74 @@ namespace oro::runtime::window {
               );
             } while (0);
 
-            this->isReadyForNavigation = true;
-            debug("WebView2 ready for navigation: index=%d", this->options.index);
-            if (!this->pendingNavigationLocation.empty() && this->webview != nullptr) {
-              const auto url = this->pendingNavigationLocation;
-              this->pendingNavigationLocation = "";
-              this->webview->Navigate(convertStringToWString(url).c_str());
-            }
+            // Observe initial and subsequent navigation failures, including failures
+            // that happen after Navigate has accepted the URL.
+            do {
+              EventRegistrationToken token = {};
+              this->webview->add_NavigationCompleted(
+                Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
+                  [this](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
+                    BOOL success = false;
+                    COREWEBVIEW2_WEB_ERROR_STATUS status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
+                    args->get_IsSuccess(&success);
+                    args->get_WebErrorStatus(&status);
+                    debug("WebView2 navigation completed: index=%d success=%d status=%d", this->options.index, success, status);
+                    return S_OK;
+                  }
+                ).Get(),
+                &token
+              );
+            } while (0);
+
+            // Register the preload after the request handlers. Navigation must wait
+            // for WebView2 to confirm that document-created scripts are installed.
+            do {
+              auto preloadUserScriptSource = webview::Preload::compile({
+                .features = webview::Preload::Options::Features {
+                  .useGlobalCommonJS = false,
+                  .useGlobalNodeJS = false,
+                  .useTestScript = false,
+                  .useHTMLMarkup = false,
+                  .useESM = false,
+                  .useGlobalArgs = true
+                },
+                .client = this->bridge->client,
+                .index = options.index,
+                .argv = options.argv,
+                .userScript = options.userScript,
+                .userConfig = options.userConfig,
+                .conduit = {
+                  {"port", static_cast<runtime::Runtime&>(this->bridge->context).services.conduit.port},
+                  {"hostname", static_cast<runtime::Runtime&>(this->bridge->context).services.conduit.hostname},
+                  {"sharedKey", static_cast<runtime::Runtime&>(this->bridge->context).services.conduit.sharedKey}
+                }
+              });
+
+              const auto preloadResult = this->webview->AddScriptToExecuteOnDocumentCreated(
+                convertStringToWString(preloadUserScriptSource.str()).c_str(),
+                Microsoft::WRL::Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>(
+                  [this, app](HRESULT error, PCWSTR) -> HRESULT {
+                    if (FAILED(error)) {
+                      debug("WebView2 preload registration failed: index=%d HRESULT=0x%08lx", this->options.index, error);
+                      if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
+                      return error;
+                    }
+
+                    this->isReadyForNavigation = true;
+                    debug("WebView2 ready for navigation: index=%d", this->options.index);
+                    if (!this->pendingNavigationLocation.empty()) {
+                      this->navigate(this->pendingNavigationLocation);
+                    }
+                    return S_OK;
+                  }
+                ).Get()
+              );
+              if (FAILED(preloadResult)) {
+                debug("WebView2 preload registration failed: index=%d HRESULT=0x%08lx", this->options.index, preloadResult);
+                if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);
+                return preloadResult;
+              }
+            } while (0);
 
             return S_OK;
           }).Get()
@@ -1879,20 +1907,11 @@ namespace oro::runtime::window {
       }
 
       this->pendingNavigationLocation = "";
-      EventRegistrationToken token;
-      this->webview->add_NavigationCompleted(
-        Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
-          [=, this](ICoreWebView2* sender, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
-            BOOL success;
-            args->get_IsSuccess(&success);
-            webview->remove_NavigationCompleted(token);
-            return S_OK;
-          })
-        .Get(),
-        &token
-      );
-
-      webview->Navigate(convertStringToWString(url).c_str());
+      debug("WebView2 navigating: index=%d url=%s", this->options.index, url.c_str());
+      const auto result = this->webview->Navigate(convertStringToWString(url).c_str());
+      if (FAILED(result)) {
+        debug("WebView2 navigation failed: index=%d HRESULT=0x%08lx", this->options.index, result);
+      }
     });
   }
 

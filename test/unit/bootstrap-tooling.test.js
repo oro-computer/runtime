@@ -959,17 +959,12 @@ test('VM context windows use an explicit startup handshake', () => {
   )
   assert.match(
     vmInit,
-    /frame\.addEventListener\('load'[\s\S]*setTimeout\(\(\) => \{[\s\S]*VM world \$\{id\} did not load[\s\S]*10_000[\s\S]*target\.appendChild\(this\.frame\)/,
-    'VM worlds should install load listeners before attachment and reject stalled loads promptly'
-  )
-  assert.match(
-    vmInit,
     /catch \(error\) \{[\s\S]*this\.worlds\.delete\(id\)[\s\S]*type: 'result',[\s\S]*err: createTransferredError\(error\)/,
     'VM coordinator forwarding errors should be returned to the waiting script call'
   )
   assert.match(
     vmWorld,
-    /function postWorldResult[\s\S]*realm\.postMessage\(serializeWindowMessage\(message\)\)[\s\S]*const eventData = ipc\.inflateIPCMessageTransfers\(event\.data\)/,
+    /function postWorldResult[\s\S]*postWindowMessage\(realm, serializeWindowMessage\(message\), globalThis\.location\.origin\)[\s\S]*const eventData = ipc\.inflateIPCMessageTransfers\(event\.data\)/,
     'VM worlds should inflate coordinator messages and serialize their results'
   )
   assert.match(

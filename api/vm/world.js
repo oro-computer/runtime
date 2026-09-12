@@ -1,6 +1,7 @@
 import * as vm from '../vm.js'
 import gc from '../gc.js'
 import serialize from '../internal/serialize.js'
+import { postWindowMessage } from '../internal/post-message.js'
 import ipc from '../ipc.js'
 
 let realm = null
@@ -84,15 +85,17 @@ function createTransferredError (error) {
 
 function postWorldResult (message) {
   try {
-    return realm.postMessage(serializeWindowMessage(message))
+    return postWindowMessage(realm, serializeWindowMessage(message), globalThis.location.origin)
   } catch (error) {
-    return realm.postMessage(
+    return postWindowMessage(
+      realm,
       serializeWindowMessage({
         type: 'world.result',
         err: createTransferredError(error),
         nonce: message.nonce,
         id: message.id
-      })
+      }),
+      globalThis.location.origin
     )
   }
 }
@@ -105,6 +108,13 @@ Object.defineProperty(globalThis, 'globalObject', {
 })
 
 globalThis.addEventListener('message', async (event) => {
+  if (
+    event.source !== globalThis.parent ||
+    event.origin !== globalThis.location.origin
+  ) {
+    return
+  }
+
   if (!realm) {
     realm = event.source
   }
@@ -199,8 +209,15 @@ globalThis.addEventListener('message', async (event) => {
   if (eventData?.type === 'destroy') {
     const { id } = eventData
     await gc.release()
-    return realm.postMessage({ type: 'world.destroy', id })
+    return postWindowMessage(realm, { type: 'world.destroy', id }, globalThis.location.origin)
   }
 })
+
+// Announce readiness only after installing the handler for the first script.
+postWindowMessage(
+  globalThis.parent,
+  { type: 'world.ready' },
+  globalThis.location.origin
+)
 
 export {}

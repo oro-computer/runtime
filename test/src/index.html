@@ -6,6 +6,7 @@
       http-equiv="Content-Security-Policy"
       content="
         default-src http://* https://* ipc://* file://* oro://* data://*;
+        connect-src http: https: ipc: file: oro: data: ws://127.0.0.1:* ws://localhost:*;
         script-src oro: https: 'unsafe-eval';
         worker-src oro: blob: 'unsafe-inline' 'unsafe-eval';
       "
