@@ -2,11 +2,10 @@
  * Returns true when the runtime is able to open a SQLite database with the
  * cr-sqlite extension loaded and ready for use.
  *
- * This reflects the *current* process configuration. On platforms where the
- * runtime auto-loads cr-sqlite during database open (desktop, Android, and
- * configured iOS builds), any failure to load the extension will cause this
- * predicate to return false. On platforms where cr-sqlite is not auto-loaded
- * or cannot be loaded for the current process, this predicate returns false.
+ * This reflects the *current* process configuration. When ORO_HOME is set,
+ * desktop, Android, and iOS builds load cr-sqlite during database open.
+ * This predicate checks that the extension's SQL functions are available.
+ * It returns false if the extension is unconfigured or cannot be loaded.
  *
  * The result is cached for the lifetime of the process.
  *
