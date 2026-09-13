@@ -1631,7 +1631,7 @@ namespace oro::runtime::window {
               const auto preloadResult = this->webview->AddScriptToExecuteOnDocumentCreated(
                 convertStringToWString(preloadUserScriptSource.str()).c_str(),
                 Microsoft::WRL::Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>(
-                  [this, app](HRESULT error, PCWSTR) -> HRESULT {
+                  [this](HRESULT error, PCWSTR) -> HRESULT {
                     if (FAILED(error)) {
                       debug("WebView2 preload registration failed: index=%d HRESULT=0x%08lx", this->options.index, error);
                       if (app->shutdownHandler) app->shutdownHandler(EXIT_FAILURE);

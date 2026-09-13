@@ -8177,10 +8177,9 @@ static void mapIPCRoutes (Router *router) {
     uint64_t id;
     REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
 
-    router->bridge.getRuntime()->services.fs.watch(
+    router->bridge.getRuntime()->services.fs.stopWatch(
       message.seq,
       id,
-      message.get("path"),
       RESULT_CALLBACK_FROM_CORE_CALLBACK(message, reply)
     );
   });

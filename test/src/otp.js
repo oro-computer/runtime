@@ -1,5 +1,6 @@
 import { test } from 'oro:test'
 import credentials from 'oro:internal/credentials'
+import location from 'oro:location'
 
 test('credentials.get returns OTPCredential with sms transport', async (t) => {
   const calls = []
@@ -36,7 +37,7 @@ test('credentials.get returns OTPCredential with sms transport', async (t) => {
   t.equal(calls[0].command, 'otp.credentials.get', 'command matches')
   t.equal(
     calls[0].payload.origin,
-    globalThis.location.origin,
+    location.origin,
     'origin forwarded'
   )
   t.equal(

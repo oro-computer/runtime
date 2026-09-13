@@ -23,7 +23,7 @@ function runNative (source) {
   const filename = path.join(directory, 'regression.cc')
   const executable = path.join(directory, process.platform === 'win32' ? 'regression.exe' : 'regression')
   writeFileSync(filename, source)
-  const compiled = spawnSync(compiler, ['-std=c++20', filename, '-o', executable], { encoding: 'utf8' })
+  const compiled = spawnSync(compiler, ['-std=c++20', '-Werror', filename, '-o', executable], { encoding: 'utf8' })
   assert.equal(compiled.status, 0, compiled.stderr)
   const result = spawnSync(executable, [], { encoding: 'utf8', timeout: 10000 })
   assert.equal(result.status, 0, result.stderr)
@@ -154,7 +154,8 @@ test('WebView2 waits for preload registration and reports synchronous and asynch
       String navigated;
       struct { int index = 0; } options;
       void navigate (String location) { assert(isReadyForNavigation); navigated = location; }
-      HRESULT configure (App* app) {
+      HRESULT configure (App* application) {
+        static auto app = application;
         struct { String str () { return "preload"; } } preloadUserScriptSource;
         ${register}
         return S_OK;

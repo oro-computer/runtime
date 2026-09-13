@@ -511,7 +511,7 @@ function waitForConduitOpen (client, timeoutMs = 1000) {
 
 function buildRouteOptions (command, value, token, conduitId = null) {
   const params = new IPCSearchParams(value, Date.now())
-  const options = { route: command, token }
+  const options = { route: command }
   options['ipc-token'] = token
   if (conduitId !== null && conduitId !== undefined) {
     options.__conduit_id = String(conduitId)
@@ -561,7 +561,8 @@ async function runtimeRequest (command, value, options = null) {
     return fallback()
   }
 
-  const token = String(rand64())
+  // Conduit decodes numeric option values as numbers; keep correlation tokens textual.
+  const token = `mcp-${rand64()}`
   const conduitId =
     client && typeof client.id !== 'undefined' && client.id !== null
       ? String(client.id)
