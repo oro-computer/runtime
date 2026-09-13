@@ -27,7 +27,7 @@
 - `npm test`: Run desktop tests (installs `test` deps, uses the Oro test runner).
 - `npm run test:android` | `npm run test:ios-simulator`: Run mobile tests.
 - `npm run test:runtime-core`: Headless core tests.
-- `npm run lint`: Authoritative repo-wide validation. Runs Standard for JS/MJS/CJS, regenerates TypeScript declarations, verifies third-party dependency fetch defaults and recursive submodule fetches use CI-safe HTTPS GitHub URLs, checks the distinct `NO_ANDROID`/`NO_IOS` documentation contract, runs oxlint, checks Prettier-managed files, and runs cpplint.
+- `npm run lint`: Authoritative repo-wide validation. Runs Standard for JS/MJS/CJS, checks generated documentation for drift, regenerates TypeScript declarations, verifies third-party dependency fetch defaults and recursive submodule fetches use CI-safe HTTPS GitHub URLs, checks the distinct `NO_ANDROID`/`NO_IOS` documentation contract, runs oxlint, checks Prettier-managed files, and runs cpplint. If `lint:docs` fails, run `npm run gen:docs` and include the generated updates; source line changes can affect man-page links even when API signatures are unchanged.
 - `npm run lint:fix`: Applies supported auto-fixes, regenerates TypeScript declarations, and rewrites Prettier-managed files.
 - `npm run test:lint`: Compatibility alias for `npm run lint`.
 - `npm run test:lint:ci`: Compatibility alias for the CI-safe lint entrypoint with a writable Standard cache path.

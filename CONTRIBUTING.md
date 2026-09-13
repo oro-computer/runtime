@@ -33,7 +33,7 @@ Do not edit `build/`, `tmp/`, or generated declaration files. Public `oro:*` mod
 
 ## Validation Commands
 
-- `npm run lint`: authoritative repo-wide validation. Runs Standard for JavaScript and MJS sources, regenerates TypeScript declarations, verifies third-party dependency fetch defaults and recursive submodule fetches use CI-safe HTTPS GitHub URLs, enforces the distinct `NO_ANDROID`/`NO_IOS` documentation contract, runs oxlint, checks Prettier-managed files, and runs cpplint.
+- `npm run lint`: authoritative repo-wide validation. Runs Standard for JavaScript and MJS sources, checks generated documentation for drift, regenerates TypeScript declarations, verifies third-party dependency fetch defaults and recursive submodule fetches use CI-safe HTTPS GitHub URLs, enforces the distinct `NO_ANDROID`/`NO_IOS` documentation contract, runs oxlint, checks Prettier-managed files, and runs cpplint.
 - `npm run lint:fix`: applies the supported auto-fixes, regenerates TypeScript declarations, and rewrites Prettier-managed files.
 - `npm run test:lint`: compatibility alias for `npm run lint`.
 - `npm run test:lint:ci`: compatibility alias for the CI-safe lint entrypoint with a writable Standard cache path.
@@ -46,12 +46,14 @@ Do not edit `build/`, `tmp/`, or generated declaration files. Public `oro:*` mod
 - `oxlint` adds additional JavaScript diagnostics across the repo.
 - `cpplint` validates the native C and C++ surface in `src/` and `include/`.
 - `lint:cpp` runs `python3 -m cpplint`, so local environments need Python 3 plus the `cpplint` package. CI installs it explicitly.
+- `lint:docs` compares documentation with the generator output without changing files. Missing, stale, or obsolete generated pages fail the check.
 - `lint:deps` rejects SSH-style GitHub URL defaults and recursive submodule fetch paths in installer scripts so public dependency fetches remain usable on hosted CI and downstream machines without SSH credentials.
 - `lint:build-env` rejects public help or documentation that mentions only one of the independent `NO_ANDROID` and `NO_IOS` controls and validates the canonical presence-flag contract.
 
 ## Generated Artifacts
 
 - Run `npm run gen:tsc` after changing public JSDoc that affects shipped declarations.
+- Run `npm run gen:docs` when `lint:docs` reports stale output. Even adding a line to an API implementation can change source links in generated man pages.
 - Do not hand-edit generated declaration artifacts such as `api/index.d.ts` or `api/index.tmp.d.ts`.
 - If `npm run lint` changes generated files, review and keep those updates with the source edits that required them.
 

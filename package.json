@@ -29,6 +29,7 @@
     "lint:standard": "standard .",
     "lint:standard:fix": "standard . --fix",
     "lint:includes": "node ./bin/check-local-includes.js",
+    "lint:docs": "node ./bin/generate-docs.js --check",
     "lint:types": "npm run gen:tsc",
     "lint:deps": "node ./bin/check-dependency-urls.js && node ./bin/update-network-protocol.js --check",
     "lint:build-env": "node ./bin/check-build-environment-docs.js",
@@ -38,7 +39,7 @@
     "lint:oxlint:fix": "oxlint api/ test/ --fix",
     "lint:prettier": "prettier --check .",
     "lint:prettier:fix": "prettier --write .",
-    "lint": "npm run lint:includes && npm run lint:standard && npm run lint:types && npm run lint:deps && npm run lint:build-env && npm run lint:release && npm run lint:oxlint && npm run lint:prettier && npm run lint:cpp",
+    "lint": "npm run lint:includes && npm run lint:standard && npm run lint:docs && npm run lint:types && npm run lint:deps && npm run lint:build-env && npm run lint:release && npm run lint:oxlint && npm run lint:prettier && npm run lint:cpp",
     "lint:ci": "XDG_CACHE_HOME=.cache npm run lint",
     "lint:fix": "npm run lint:standard:fix && npm run lint:types && npm run lint:oxlint:fix && npm run lint:prettier:fix"
   },

@@ -21,24 +21,51 @@ const RUNTIME_NODE_DIR = 'npm/packages/@oro-computer/runtime-node'
 const CLI_MANPAGE_DIR = 'share/man/man1'
 const API_MANPAGE_DIR = 'share/man/man3'
 const GUIDE_MANPAGE_DIR = 'share/man/man7'
+const checkOnly = process.argv.includes('--check')
+const staleFiles = new Set()
 
 async function writeTextFile (destFile, content) {
-  await fs.writeFile(destFile, `${content.trim()}\n`)
+  const output = `${content.trim()}\n`
+  if (checkOnly) {
+    let current = null
+    try {
+      current = await fs.readFile(destFile, 'utf8')
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    if (current !== output) staleFiles.add(destFile)
+    return
+  }
+  await fs.writeFile(destFile, output)
 }
 
-async function removeGeneratedPages (destDir, matcher) {
+async function writeManpages (destDir, manpages, matcher) {
+  if (!checkOnly) await fs.mkdir(destDir, { recursive: true })
+  const expectedNames = new Set(manpages.map(page => page.filename))
   try {
     const entries = await fs.readdir(destDir, { withFileTypes: true })
     await Promise.all(
       entries
-        .filter((entry) => entry.isFile() && matcher(entry.name))
-        .map((entry) => fs.unlink(path.join(destDir, entry.name)))
+        .filter((entry) => entry.isFile() && matcher(entry.name) && !expectedNames.has(entry.name))
+        .map((entry) => {
+          const filename = path.join(destDir, entry.name)
+          if (checkOnly) {
+            staleFiles.add(filename)
+            return null
+          }
+          return fs.unlink(filename)
+        })
     )
   } catch (error) {
     if (error?.code !== 'ENOENT') {
       throw error
     }
   }
+  await Promise.all(
+    manpages.map(({ filename, content }) =>
+      writeTextFile(path.join(destDir, filename), content)
+    )
+  )
 }
 
 function assertUniqueManpageFilenames (manpages, section) {
@@ -235,15 +262,8 @@ const templateDocSource = templateFileSource
   const manpages = generateCliManpages(templateDocSource, {
     cliVersion: RAW_VERSION
   })
-  await fs.mkdir(CLI_MANPAGE_DIR, { recursive: true })
-  await removeGeneratedPages(CLI_MANPAGE_DIR, (name) =>
+  await writeManpages(CLI_MANPAGE_DIR, manpages, (name) =>
     /^oroc.*\.1$/.test(name)
-  )
-
-  await Promise.all(
-    manpages.map(({ filename, content }) =>
-      writeTextFile(path.join(CLI_MANPAGE_DIR, filename), content)
-    )
   )
 }
 
@@ -277,14 +297,7 @@ const templateDocSource = templateFileSource
   const section3Manpages = [...moduleManpages, ...cApiManpages]
   assertUniqueManpageFilenames(section3Manpages, 3)
 
-  await fs.mkdir(API_MANPAGE_DIR, { recursive: true })
-  await removeGeneratedPages(API_MANPAGE_DIR, (name) => /^oro.*\.3$/.test(name))
-
-  await Promise.all(
-    section3Manpages.map(({ filename, content }) =>
-      writeTextFile(path.join(API_MANPAGE_DIR, filename), content)
-    )
-  )
+  await writeManpages(API_MANPAGE_DIR, section3Manpages, (name) => /^oro.*\.3$/.test(name))
 
   const ipcGuides = generateIpcManpages(
     await Promise.all(
@@ -295,14 +308,16 @@ const templateDocSource = templateFileSource
     )
   )
 
-  await fs.mkdir(GUIDE_MANPAGE_DIR, { recursive: true })
-  await removeGeneratedPages(GUIDE_MANPAGE_DIR, (name) =>
+  await writeManpages(GUIDE_MANPAGE_DIR, ipcGuides, (name) =>
     /^oro.*\.7$/.test(name)
   )
+}
 
-  await Promise.all(
-    ipcGuides.map(({ filename, content }) =>
-      writeTextFile(path.join(GUIDE_MANPAGE_DIR, filename), content)
-    )
-  )
+if (staleFiles.size > 0) {
+  console.error('Generated documentation is stale:')
+  for (const filename of [...staleFiles].sort()) console.error(`  ${filename}`)
+  console.error('Run npm run gen:docs and include the generated updates with your source changes.')
+  process.exitCode = 1
+} else if (checkOnly) {
+  console.log('Generated documentation is up to date.')
 }
