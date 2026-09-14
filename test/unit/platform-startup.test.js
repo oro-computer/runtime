@@ -226,7 +226,7 @@ test('WebView2 browser errors are logged before JavaScript console initializatio
     using Event = std::function<HRESULT(ICoreWebView2*, ICoreWebView2DevToolsProtocolEventReceivedEventArgs*)>;
     struct ICoreWebView2DevToolsProtocolEventReceiver {
       Event handler;
-      void add_DevToolsProtocolEventReceived (Event event, EventRegistrationToken*) { handler = event; }
+      HRESULT add_DevToolsProtocolEventReceived (Event event, EventRegistrationToken*) { handler = event; return S_OK; }
     };
     template <typename T> struct ComPtr {
       T* value = nullptr;
@@ -247,9 +247,10 @@ test('WebView2 browser errors are logged before JavaScript console initializatio
         *receiver = &receivers[event];
         return S_OK;
       }
-      void CallDevToolsProtocolMethod (PCWSTR, PCWSTR, std::function<HRESULT(HRESULT, PCWSTR)> complete) {
+      HRESULT CallDevToolsProtocolMethod (PCWSTR, PCWSTR, std::function<HRESULT(HRESULT, PCWSTR)> complete) {
         ++enabled;
         complete(unavailable ? -1 : S_OK, L"{}");
+        return S_OK;
       }
     };
     struct Window {
@@ -261,19 +262,19 @@ test('WebView2 browser errors are logged before JavaScript console initializatio
       WebView view;
       Window window{&view};
       window.configure();
-      assert(view.enabled == 2 && view.receivers.size() == 3 && logs == 0);
+      assert(view.enabled == 2 && view.receivers.size() == 3 && logs == 2);
       ICoreWebView2DevToolsProtocolEventReceivedEventArgs args;
       for (auto& [name, receiver] : view.receivers) receiver.handler(nullptr, &args);
-      assert(logs == 3 && freed == 3);
+      assert(logs == 5 && freed == 3);
       consoleType = R"JSON("log")JSON";
       view.receivers[L"Runtime.consoleAPICalled"].handler(nullptr, &args);
-      assert(logs == 3 && freed == 4);
+      assert(logs == 5 && freed == 4);
       view.unavailable = true;
       window.configure();
-      assert(logs == 8);
+      assert(logs == 10);
       window.options.debug = false;
       window.configure();
-      assert(logs == 8 && view.enabled == 4);
+      assert(logs == 10 && view.enabled == 4);
     }
   `)
 })

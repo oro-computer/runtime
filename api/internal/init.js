@@ -567,17 +567,27 @@ class RuntimeWorker extends GlobalWorker {
                 // eslint-disable-next-line no-use-before-define
                 const transfer = []
                 const message = ipc.Message.from(request.message, request.bytes)
-                const options = { bytes: message.bytes }
-                const params = { ...message.rawParams }
-                // Sequence numbers are local to each worker. Reusing them on
-                // the shared render-process bridge makes concurrent workers
-                // listen for the same response event.
-                delete params.seq
-                const promise = ipc.send(
-                  message.name,
-                  params,
-                  options
-                )
+                let promise
+                if (message.name === 'buffer.map' && globalThis.window) {
+                  // Android reads the mapped body using the worker's XHR header.
+                  // Mapping is synchronous on the document bridge; acknowledge
+                  // it here because buffer.map has no native response event.
+                  try {
+                    ipc.postMessage(request.message, message.bytes)
+                    promise = Promise.resolve(ipc.Result.from({ data: {} }))
+                  } catch (err) {
+                    promise = Promise.resolve(ipc.Result.from(null, err))
+                  }
+                } else {
+                  const options = { bytes: message.bytes }
+                  const params = { ...message.rawParams }
+                  // Sequence numbers are local to each worker. Reusing them on
+                  // the shared render-process bridge makes concurrent workers
+                  // listen for the same response event.
+                  // Body keys are already unique and must survive nested relays.
+                  if (message.name !== 'buffer.map') delete params.seq
+                  promise = ipc.send(message.name, params, options)
+                }
 
                 if (message.get('resolve') === false) {
                   return
@@ -587,7 +597,9 @@ class RuntimeWorker extends GlobalWorker {
 
                 ipc.findMessageTransfers(transfer, result)
 
-                this.postMessage(
+                // Internal replies must also reach modules that are still
+                // evaluating, before the worker announces application readiness.
+                postMessage(
                   {
                     __runtime_worker_ipc_result: {
                       message: message.toJSON(),

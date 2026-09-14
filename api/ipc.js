@@ -106,16 +106,17 @@ function initializeXHRIntercept () {
               seq = 'R' + Math.random().toString().slice(2, 8) + 'X'
             }
 
+            const worker = !globalThis.window && globalThis.self
+            if (worker) seq += '-' + rand64().toString()
             this.setRequestHeader('runtime-xhr-seq', seq)
             // The Android document bridge stores the body before returning.
             // A synchronous XHR must send it before its caller can close the fd.
-            const mapped = postMessage(`ipc://buffer.map?seq=${seq}`, body)
+            const mapped = worker && this[isAsync]
+              ? sendBufferMap(seq, body)
+              : postMessage(`ipc://buffer.map?seq=${seq}`, body)
             if (this[isAsync]) {
               return (async () => {
                 await mapped
-                if (!globalThis.window && globalThis.self) {
-                  await new Promise((resolve) => setTimeout(resolve, 200))
-                }
                 return send.call(this, null)
               })()
             }
@@ -127,6 +128,11 @@ function initializeXHRIntercept () {
       return send.call(this, body)
     }
   })
+}
+
+async function sendBufferMap (seq, bytes) {
+  const result = await send('buffer.map', { seq }, { bytes })
+  if (result.err) throw result.err
 }
 
 function getErrorClass (type, fallback = null) {

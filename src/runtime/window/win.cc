@@ -1597,6 +1597,26 @@ namespace oro::runtime::window {
                     args->get_IsSuccess(&success);
                     args->get_WebErrorStatus(&status);
                     debug("WebView2 navigation completed: index=%d success=%d status=%d", this->options.index, success, status);
+                    if (this->options.debug || config::isDebugEnabled()) {
+                      // A successful navigation can still contain an HTTP error
+                      // or an empty document. Record startup state without relying
+                      // on the runtime's JavaScript modules having initialized.
+                      this->eval(R"JAVASCRIPT(
+                        JSON.stringify({
+                          url: location.href,
+                          origin: globalThis.origin,
+                          readyState: document.readyState,
+                          contentType: document.contentType,
+                          elements: document.getElementsByTagName('*').length,
+                          scripts: document.scripts.length,
+                          preload: !!globalThis.__args,
+                          initialized: !!globalThis.__RUNTIME_INIT_NOW__,
+                          test: globalThis.RUNTIME_TEST_FILENAME || null
+                        })
+                      )JAVASCRIPT", [index = this->options.index](const auto& result) {
+                        debug("WebView2 document state: index=%d %s", index, result.str().c_str());
+                      });
+                    }
                     return S_OK;
                   }
                 ).Get(),
@@ -1615,7 +1635,7 @@ namespace oro::runtime::window {
                 }
 
                 EventRegistrationToken token = {};
-                receiver->add_DevToolsProtocolEventReceived(
+                const auto subscriptionResult = receiver->add_DevToolsProtocolEventReceived(
                   Microsoft::WRL::Callback<ICoreWebView2DevToolsProtocolEventReceivedEventHandler>(
                     [index = this->options.index, consoleEvent = WString(eventName) == L"Runtime.consoleAPICalled"](
                       ICoreWebView2*, ICoreWebView2DevToolsProtocolEventReceivedEventArgs* args
@@ -1639,21 +1659,29 @@ namespace oro::runtime::window {
                   ).Get(),
                   &token
                 );
+                if (FAILED(subscriptionResult)) {
+                  debug("WebView2 diagnostics subscription failed: index=%d HRESULT=0x%08lx", this->options.index, subscriptionResult);
+                }
               }
 
               for (const auto& method : {L"Runtime.enable", L"Log.enable"}) {
-                this->webview->CallDevToolsProtocolMethod(
+                const auto enableResult = this->webview->CallDevToolsProtocolMethod(
                   method,
                   L"{}",
                   Microsoft::WRL::Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>(
                     [index = this->options.index](HRESULT error, PCWSTR) -> HRESULT {
                       if (FAILED(error)) {
                         debug("WebView2 diagnostics enable failed: index=%d HRESULT=0x%08lx", index, error);
+                      } else {
+                        debug("WebView2 diagnostics enabled: index=%d", index);
                       }
                       return S_OK;
                     }
                   ).Get()
                 );
+                if (FAILED(enableResult)) {
+                  debug("WebView2 diagnostics call failed: index=%d HRESULT=0x%08lx", this->options.index, enableResult);
+                }
               }
             }
 

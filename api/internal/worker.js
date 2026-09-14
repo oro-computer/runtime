@@ -188,7 +188,6 @@ Object.defineProperties(WorkerGlobalScopePrototype, {
 
 export async function onWorkerMessage (event) {
   const { data } = event
-  await promise
 
   if (typeof data?.__runtime_worker_ipc_result === 'object') {
     const resultData = data?.__runtime_worker_ipc_result || {}
@@ -206,7 +205,12 @@ export async function onWorkerMessage (event) {
 
     event.stopImmediatePropagation()
     return false
-  } else if (typeof data?.__runtime_worker_event === 'object') {
+  }
+
+  // Module evaluation can itself be waiting for an IPC reply.
+  await promise
+
+  if (typeof data?.__runtime_worker_event === 'object') {
     const { type, detail } = data?.__runtime_worker_event || {}
     if (type === 'applicationurl') {
       globalThis.dispatchEvent(new ApplicationURLEvent(type, detail))

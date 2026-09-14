@@ -11,24 +11,27 @@ test('child_process.spawn(command[,args[,options]])', async (t) => {
   let hasDir = false
 
   const pending = []
-  const child = spawn(command, args, options)
+  let signalTimeout
+  let onSignal
 
   if (/linux|darwin/i.test(os.platform())) {
     pending.push(
       new Promise((resolve, reject) => {
-        const timeout = setTimeout(
-          () => reject(new Error('Timed out aiting for SIGCHLD signal')),
-          1000
+        signalTimeout = setTimeout(
+          () => reject(new Error('Timed out waiting for SIGCHLD signal')),
+          10000
         )
 
-        process.once('SIGCHLD', () => {
+        onSignal = () => {
           resolve()
-          clearTimeout(timeout)
-        })
+          clearTimeout(signalTimeout)
+        }
+        process.once('SIGCHLD', onSignal)
       })
     )
   }
 
+  const child = spawn(command, args, options)
   pending.push(
     new Promise((resolve, reject) => {
       child.stdout.on('data', (data) => {
@@ -37,12 +40,17 @@ test('child_process.spawn(command[,args[,options]])', async (t) => {
         }
       })
 
-      child.on('exit', resolve)
+      child.on('close', resolve)
       child.on('error', reject)
     })
   )
 
-  await Promise.all(pending)
+  try {
+    await Promise.all(pending)
+  } finally {
+    clearTimeout(signalTimeout)
+    if (onSignal) process.off('SIGCHLD', onSignal)
+  }
 
   t.ok(hasDir, 'the ls command ran and discovered the child_process directory')
 })

@@ -5,8 +5,6 @@ import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { parse } from 'acorn'
-import { simple } from 'acorn-walk'
 
 const compiler = ['clang++-18', 'clang++', 'c++'].find(command =>
   spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0)
@@ -127,11 +125,15 @@ for (const windows of [true, false]) {
         : [...preload.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1])
       const specifiers = new Set()
       for (const script of scripts) {
-        const ast = parse(script, { ecmaVersion: 'latest', sourceType: 'module' })
-        simple(ast, {
-          ImportDeclaration: node => specifiers.add(node.source.value),
-          ImportExpression: node => { if (node.source.type === 'Literal') specifiers.add(node.source.value) }
+        const checked = spawnSync(process.execPath, ['--check', '--input-type=module'], {
+          input: script,
+          encoding: 'utf8'
         })
+        assert.equal(checked.status, 0, checked.stderr)
+        // The generator emits literal specifiers in static and dynamic imports.
+        for (const match of script.matchAll(/\b(?:from\s*|import\s*\(\s*|import\s*)['"]([^'"]+)['"]/g)) {
+          specifiers.add(match[1])
+        }
       }
       for (const name of ['internal/init', 'internal/globals', 'ipc', 'path', 'process']) {
         const expected = windows ? `oro://app.example/oro/${name}.js` : `oro:${name}`

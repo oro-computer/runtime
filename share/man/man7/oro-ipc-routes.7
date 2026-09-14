@@ -21,7 +21,7 @@ This catalog is generated from JavaScript calls to ipc.request(), ipc.send(), ip
 .PP
 1 IPC call sites still use route expressions that could not be reduced to static strings. Review those locations before treating this catalog as complete for private dynamic dispatch.
 .IP \(bu 2
-send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L576)
+send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L589)
 .PP
 Domains: ai, application, asn1, bluetooth, cdp, child_process, cookies, dbus, diagnostics, dns, extension, fs, geolocation, hci, hid, internal, ipfs, iroh, mcp, mime, notification, os, otp, permissions, platform, process, protocol, queuedResponse, secureStorage, semver, serviceWorker, sqlite, stderr, stdout, tar, tcp, timers, tls, udp, usb, window, xpc, zlib
 .SS ai
@@ -724,7 +724,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1081)
+Exposed by: oro:internal/init (api/internal/init.js#L1093)
 .TP
 \fBfs.copyFile\fR
 Transports: request, send, sendSync
@@ -1597,7 +1597,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1082)
+Exposed by: oro:internal/init (api/internal/init.js#L1094)
 .TP
 \fBos.cpus\fR
 Transports: sendSync
@@ -1677,7 +1677,7 @@ Transports: send, sendSync
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L844); oro:internal/init (api/internal/init.js#L1211)
+Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L856); oro:internal/init (api/internal/init.js#L1223)
 .TP
 \fBplatform.openExternal\fR
 Transports: request
@@ -1744,7 +1744,7 @@ Binary semantics: binary response body
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L921); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L922)
+Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L933); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L934)
 .SS secureStorage
 .TP
 \fBsecureStorage.clear\fR
