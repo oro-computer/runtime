@@ -192,8 +192,19 @@ open class SchemeHandlers (val bridge: Bridge) {
       }
 
       if (name.lowercase() == "content-type") {
-        this.mimeType = value
-        this.response.setMimeType(value)
+        // WebResourceResponse expects the media type and charset separately.
+        val parts = value.split(';')
+        val charset = parts.drop(1).firstNotNullOfOrNull { parameter ->
+          val pair = parameter.split('=', limit = 2)
+          if (pair.size == 2 && pair[0].trim().equals("charset", ignoreCase = true)) {
+            pair[1].trim().trim('"').takeIf { it.isNotEmpty() }
+          } else {
+            null
+          }
+        }
+        this.mimeType = parts[0].trim().lowercase()
+        this.response.setMimeType(this.mimeType)
+        this.response.setEncoding(charset)
       } else if (name.lowercase() != "content-length") {
         this.headers.remove(name)
 

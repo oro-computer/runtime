@@ -183,6 +183,101 @@ test('WebView2 waits for preload registration and reports synchronous and asynch
   `)
 })
 
+test('WebView2 browser errors are logged before JavaScript console initialization', options, () => {
+  const diagnostics = fragment('src/runtime/window/win.cc',
+    '            // Capture browser errors before the runtime console module loads.',
+    '            // Register the preload after the request handlers.')
+  runNative(`
+    #include <cassert>
+    #include <functional>
+    #include <map>
+    #include <string>
+    using HRESULT = long;
+    using LPWSTR = wchar_t*;
+    using PCWSTR = const wchar_t*;
+    using WString = std::wstring;
+    constexpr HRESULT S_OK = 0;
+    bool FAILED (HRESULT value) { return value < 0; }
+    bool SUCCEEDED (HRESULT value) { return !FAILED(value); }
+    struct EventRegistrationToken {};
+    struct ICoreWebView2 {};
+    struct ICoreWebView2DevToolsProtocolEventReceivedEventHandler {};
+    struct ICoreWebView2CallDevToolsProtocolMethodCompletedHandler {};
+    int logs = 0, freed = 0;
+    std::string consoleType = R"JSON("error")JSON";
+    namespace JSON {
+      struct Value {
+        Value operator[] (const char*) { return {}; }
+        std::string str () { return consoleType; }
+      };
+      Value parse (std::string) { return {}; }
+    }
+    template <typename... Args> void debug (Args...) { ++logs; }
+    std::string convertWStringToString (PCWSTR value) { assert(value); return "browser error"; }
+    void CoTaskMemFree (void* value) { if (value) ++freed; }
+    namespace config { bool isDebugEnabled () { return false; } }
+    struct ICoreWebView2DevToolsProtocolEventReceivedEventArgs {
+      HRESULT get_ParameterObjectAsJson (LPWSTR* value) {
+        static wchar_t json[] = L"{\\"exceptionDetails\\":{\\"text\\":\\"SyntaxError\\"}}";
+        *value = json;
+        return S_OK;
+      }
+    };
+    using Event = std::function<HRESULT(ICoreWebView2*, ICoreWebView2DevToolsProtocolEventReceivedEventArgs*)>;
+    struct ICoreWebView2DevToolsProtocolEventReceiver {
+      Event handler;
+      void add_DevToolsProtocolEventReceived (Event event, EventRegistrationToken*) { handler = event; }
+    };
+    template <typename T> struct ComPtr {
+      T* value = nullptr;
+      T** operator& () { return &value; }
+      T* operator-> () { return value; }
+      explicit operator bool () { return value != nullptr; }
+    };
+    namespace Microsoft::WRL {
+      template <typename T> struct Handler { T function; T Get () { return function; } };
+      template <typename Interface, typename T> Handler<T> Callback (T function) { return {function}; }
+    }
+    struct WebView {
+      bool unavailable = false;
+      int enabled = 0;
+      std::map<std::wstring, ICoreWebView2DevToolsProtocolEventReceiver> receivers;
+      HRESULT GetDevToolsProtocolEventReceiver (PCWSTR event, ICoreWebView2DevToolsProtocolEventReceiver** receiver) {
+        if (unavailable) return -1;
+        *receiver = &receivers[event];
+        return S_OK;
+      }
+      void CallDevToolsProtocolMethod (PCWSTR, PCWSTR, std::function<HRESULT(HRESULT, PCWSTR)> complete) {
+        ++enabled;
+        complete(unavailable ? -1 : S_OK, L"{}");
+      }
+    };
+    struct Window {
+      WebView* webview;
+      struct { bool debug = true; int index = 0; } options;
+      void configure () { ${diagnostics} }
+    };
+    int main () {
+      WebView view;
+      Window window{&view};
+      window.configure();
+      assert(view.enabled == 2 && view.receivers.size() == 3 && logs == 0);
+      ICoreWebView2DevToolsProtocolEventReceivedEventArgs args;
+      for (auto& [name, receiver] : view.receivers) receiver.handler(nullptr, &args);
+      assert(logs == 3 && freed == 3);
+      consoleType = R"JSON("log")JSON";
+      view.receivers[L"Runtime.consoleAPICalled"].handler(nullptr, &args);
+      assert(logs == 3 && freed == 4);
+      view.unavailable = true;
+      window.configure();
+      assert(logs == 8);
+      window.options.debug = false;
+      window.configure();
+      assert(logs == 8 && view.enabled == 4);
+    }
+  `)
+})
+
 test('WebView2 settings use queried interface pointers and tolerate unavailable features', options, () => {
   const configure = fragment('src/runtime/window/win.cc',
     '            // configure the webview settings',

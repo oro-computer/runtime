@@ -121,6 +121,17 @@ namespace oro::runtime::webview {
 
   const String& Preload::compile () {
     Vector<String> buffers;
+    auto moduleSpecifier = [&] (const String& name) {
+    #if ORO_RUNTIME_PLATFORM_WINDOWS
+      // WebView2 can resolve hostless custom-scheme URLs against the document.
+      // Bootstrap from canonical bundle URLs so module loading is unambiguous.
+      const auto entry = this->options.userConfig.find("meta_bundle_identifier");
+      if (entry != this->options.userConfig.end() && !entry->second.empty()) {
+        return JSON::String("oro://" + entry->second + "/oro/" + name + ".js").str();
+      }
+    #endif
+      return JSON::String("oro:" + name).str();
+    };
 
     auto args = JSON::Object {
       JSON::Object::Entries {
@@ -526,7 +537,7 @@ namespace oro::runtime::webview {
       }
 
       // 10. compile listeners for `globalThis`
-      buffers.push_back(R"JAVASCRIPT(
+      buffers.push_back(tmpl(R"JAVASCRIPT(
         if (
           globalThis.document &&
           !globalThis.RUNTIME_APPLICATION_URL_EVENT_BACKLOG &&
@@ -542,7 +553,7 @@ namespace oro::runtime::webview {
           })
 
           globalThis.document.addEventListener('readystatechange', async (e) => {
-            const ipc = await import('oro:ipc')
+            const ipc = await import({{ipc_specifier}})
             ipc.send('platform.event', {
               value: 'readystatechange',
               state: globalThis.document.readyState
@@ -577,7 +588,7 @@ namespace oro::runtime::webview {
             })
           }
         }
-      )JAVASCRIPT");
+      )JAVASCRIPT", Map<String, String> {{"ipc_specifier", moduleSpecifier("ipc")}}));
 
       // 11. freeze `globalThis.__args` values
       buffers.push_back(R"JAVASCRIPT(
@@ -605,10 +616,13 @@ namespace oro::runtime::webview {
       if (this->options.features.useHTMLMarkup && this->options.features.useESM) {
         buffers.push_back(tmpl(
           R"JAVASCRIPT(
-            import 'oro:internal/init'
+            import {{init_specifier}}
             {{userScript}}
           )JAVASCRIPT",
-          Map<String, String> {{"userScript", this->options.userScript}}
+          Map<String, String> {
+            {"init_specifier", moduleSpecifier("internal/init")},
+            {"userScript", this->options.userScript}
+          }
         ));
       } else {
         buffers.push_back(";(() => {");
@@ -624,19 +638,22 @@ namespace oro::runtime::webview {
               if (globalThis.document && globalThis.document.readyState !== 'complete') {
                 globalThis.document.addEventListener('readystatechange', () => {
                   if(/interactive|complete/.test(globalThis.document.readyState)) {
-                    import('oro:internal/init')
+                    import({{init_specifier}})
                       .then(userScriptCallback)
                       .catch(console.error)
                   }
                 })
               } else {
-                import('oro:internal/init')
+                import({{init_specifier}})
                   .then(userScriptCallback)
                   .catch(console.error)
               }
             }
           )JAVASCRIPT",
-          Map<String, String> {{"userScript", this->options.userScript}}
+          Map<String, String> {
+            {"init_specifier", moduleSpecifier("internal/init")},
+            {"userScript", this->options.userScript}
+          }
         ));
         buffers.push_back("})();");
       }
@@ -656,21 +673,21 @@ namespace oro::runtime::webview {
           buffers.push_back(RUNTIME_PRELOAD_JAVASCRIPT_BEGIN_TAG);
         }
 
-        buffers.push_back(R"JAVASCRIPT(
+        buffers.push_back(tmpl(R"JAVASCRIPT(
           if (
             globalThis.document &&
             !globalThis.module &&
             globalThis.__ORO_RUNTIME_ORIGIN_MATCHES__(globalThis.origin)
           ) {
             ;(async function GlobalCommonJSScope () {
-              const globals = await import('oro:internal/globals')
+              const globals = await import({{globals_specifier}})
               await globals.get('RuntimeReadyPromise')
 
               const href = encodeURIComponent(globalThis.location.href)
-              const source = `oro:module?ref=${href}`
+              const source = {{module_specifier}} + '?ref=' + href
 
               const { Module } = await import(source)
-              const path = await import('oro:path')
+              const path = await import({{path_specifier}})
               const require = Module.createRequire(globalThis.location.href)
               const __filename = Module.main.filename
               const __dirname = path.dirname(__filename)
@@ -706,7 +723,11 @@ namespace oro::runtime::webview {
               globalThis.addEventListener('popstate', GlobalCommonJSScope)
             })();
           }
-        )JAVASCRIPT");
+        )JAVASCRIPT", Map<String, String> {
+          {"globals_specifier", moduleSpecifier("internal/globals")},
+          {"module_specifier", moduleSpecifier("module")},
+          {"path_specifier", moduleSpecifier("path")}
+        }));
         if (this->options.features.useHTMLMarkup) {
           buffers.push_back(RUNTIME_PRELOAD_JAVASCRIPT_END_TAG);
         }
@@ -717,14 +738,14 @@ namespace oro::runtime::webview {
         if (this->options.features.useHTMLMarkup) {
           buffers.push_back(RUNTIME_PRELOAD_JAVASCRIPT_BEGIN_TAG);
         }
-        buffers.push_back(R"JAVASCRIPT(
+        buffers.push_back(tmpl(R"JAVASCRIPT(
           if (
             globalThis.document &&
             !globalThis.process &&
             globalThis.__ORO_RUNTIME_ORIGIN_MATCHES__(globalThis.origin)
           ) {
             ;(async function GlobalNodeJSScope () {
-              const process = await import('oro:process')
+              const process = await import({{process_specifier}})
               Object.defineProperties(globalThis, {
                 process: {
                   configurable: false,
@@ -742,7 +763,7 @@ namespace oro::runtime::webview {
               })
             })();
           }
-        )JAVASCRIPT");
+        )JAVASCRIPT", Map<String, String> {{"process_specifier", moduleSpecifier("process")}}));
         if (this->options.features.useHTMLMarkup) {
           buffers.push_back(RUNTIME_PRELOAD_JAVASCRIPT_END_TAG);
         }

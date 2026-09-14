@@ -1604,6 +1604,59 @@ namespace oro::runtime::window {
               );
             } while (0);
 
+            // Capture browser errors before the runtime console module loads.
+            if (this->options.debug || config::isDebugEnabled()) {
+              for (const auto& eventName : {L"Runtime.exceptionThrown", L"Runtime.consoleAPICalled", L"Log.entryAdded"}) {
+                ComPtr<ICoreWebView2DevToolsProtocolEventReceiver> receiver;
+                const auto receiverResult = this->webview->GetDevToolsProtocolEventReceiver(eventName, &receiver);
+                if (FAILED(receiverResult) || !receiver) {
+                  debug("WebView2 diagnostics unavailable: index=%d HRESULT=0x%08lx", this->options.index, receiverResult);
+                  continue;
+                }
+
+                EventRegistrationToken token = {};
+                receiver->add_DevToolsProtocolEventReceived(
+                  Microsoft::WRL::Callback<ICoreWebView2DevToolsProtocolEventReceivedEventHandler>(
+                    [index = this->options.index, consoleEvent = WString(eventName) == L"Runtime.consoleAPICalled"](
+                      ICoreWebView2*, ICoreWebView2DevToolsProtocolEventReceivedEventArgs* args
+                    ) -> HRESULT {
+                      LPWSTR parameters = nullptr;
+                      if (SUCCEEDED(args->get_ParameterObjectAsJson(&parameters)) && parameters != nullptr) {
+                        const auto message = convertWStringToString(parameters);
+                        CoTaskMemFree(parameters);
+                        parameters = nullptr;
+                        if (consoleEvent) {
+                          try {
+                            const auto type = JSON::parse(message)["type"].str();
+                            if (type != "\"error\"" && type != "\"assert\"") return S_OK;
+                          } catch (...) {}
+                        }
+                        debug("WebView2 browser diagnostic: index=%d %s", index, message.c_str());
+                      }
+                      CoTaskMemFree(parameters);
+                      return S_OK;
+                    }
+                  ).Get(),
+                  &token
+                );
+              }
+
+              for (const auto& method : {L"Runtime.enable", L"Log.enable"}) {
+                this->webview->CallDevToolsProtocolMethod(
+                  method,
+                  L"{}",
+                  Microsoft::WRL::Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>(
+                    [index = this->options.index](HRESULT error, PCWSTR) -> HRESULT {
+                      if (FAILED(error)) {
+                        debug("WebView2 diagnostics enable failed: index=%d HRESULT=0x%08lx", index, error);
+                      }
+                      return S_OK;
+                    }
+                  ).Get()
+                );
+              }
+            }
+
             // Register the preload after the request handlers. Navigation must wait
             // for WebView2 to confirm that document-created scripts are installed.
             do {

@@ -340,48 +340,67 @@ test('udp createSocket AbortSignal', async (t) => {
 test('client ~> server (~512 messages)', async (t) => {
   if (process.env.ORO_ANDROID_CI) return
 
-  const TIMEOUT = 1024
+  const TIMEOUT = 30000
   const address = '127.0.0.1'
   const buffers = Array.from(Array(512), () => crypto.randomBytes(1024))
   const server = dgram.createSocket('udp4')
   const client = dgram.createSocket('udp4')
 
-  await new Promise((resolve) => {
-    let timeout = setTimeout(ontimeout, TIMEOUT)
-    let i = 0
+  let finished = false
+  let sent = 0
+  let received = 0
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        finish(new Error(`UDP transfer timed out (${sent} sent, ${received} received)`))
+      }, TIMEOUT)
 
-    function ontimeout () {
-      t.fail(`Not all messagess received (${buffers.length - i} missing)`)
-      resolve()
-    }
-
-    server.bind(0, address, () => {
-      server.on('message', () => {
+      function finish (error) {
+        if (finished) return
+        finished = true
         clearTimeout(timeout)
-        timeout = setTimeout(ontimeout, TIMEOUT)
+        if (error) reject(error)
+        else resolve()
+      }
 
-        if (++i === buffers.length) {
-          clearTimeout(timeout)
-          t.ok(true, `all ${buffers.length} messages received`)
-          resolve()
+      // Wait for both delivery and the send callback before sending the next
+      // packet. This bounds queued data even when the simulator's IPC is slow.
+      function advance () {
+        if (finished || sent !== received) return
+        if (received === buffers.length) return finish()
+        client.send(buffers[sent], (error) => {
+          if (error) return finish(error)
+          sent++
+          advance()
+        })
+      }
+
+      server.on('error', finish)
+      client.on('error', finish)
+      server.on('message', (message) => {
+        if (finished) return
+        if (!buffers[received] || Buffer.compare(message, buffers[received]) !== 0) {
+          return finish(new Error(`Unexpected UDP payload at message ${received}`))
         }
+        received++
+        advance()
       })
 
-      client.connect(server.address().port, address, async (err) => {
-        if (err) return t.ifError(err)
-        for (const buffer of buffers) {
-          await new Promise((resolve) => {
-            setTimeout(() => client.send(buffer, resolve))
-          })
-        }
+      server.bind(0, address, () => {
+        if (finished) return
+        client.connect(server.address().port, address, (error) => {
+          if (error) return finish(error)
+          advance()
+        })
       })
     })
-  })
-
-  await Promise.all([
-    util.promisify(server.close.bind(server))(),
-    util.promisify(client.close.bind(client))()
-  ])
+    t.ok(true, `all ${buffers.length} messages received`)
+  } finally {
+    await Promise.all([
+      util.promisify(server.close.bind(server))(),
+      util.promisify(client.close.bind(client))()
+    ])
+  }
 })
 
 test('connect + disconnect', async (t) => {
