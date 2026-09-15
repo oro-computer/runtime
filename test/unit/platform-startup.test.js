@@ -29,6 +29,50 @@ function runNative (source) {
   assert.equal(result.status, 0, result.stderr)
 }
 
+test('Windows window titles round-trip Unicode without embedded nulls', options, () => {
+  const titles = fragment('src/runtime/window/win.cc',
+    '  const String Window::getTitle () const', '  Window::Size Window::getSize ()')
+  runNative(`
+    #include <algorithm>
+    #include <cassert>
+    #include <codecvt>
+    #include <locale>
+    #include <string>
+    using String = std::string;
+    using WString = std::wstring;
+    WString title;
+    WString convertStringToWString (const String& value) {
+      return std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(value);
+    }
+    String convertWStringToString (const WString& value) {
+      return std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(value);
+    }
+    int GetWindowTextLengthW (void*) { return title.size(); }
+    int GetWindowTextW (void*, wchar_t* text, int size) {
+      assert(size > title.size());
+      std::copy(title.begin(), title.end(), text);
+      text[title.size()] = 0;
+      return title.size();
+    }
+    void SetWindowTextW (void*, const wchar_t* text) { title = text; }
+    struct Window {
+      void* window = this;
+      const String getTitle () const;
+      void setTitle (const String& value);
+    };
+    ${titles}
+    int main () {
+      Window window;
+      for (const String value : {"idkfa", "Oro — 日本語", ""}) {
+        window.setTitle(value);
+        assert(window.getTitle() == value);
+      }
+      window.window = nullptr;
+      assert(window.getTitle().empty());
+    }
+  `)
+})
+
 test('Windows resources read complete files and handle invalid or truncated files', options, () => {
   const size = fragment('src/runtime/filesystem/resource.cc',
     '  size_t Resource::size (bool cached)', '  const unsigned char* Resource::read () const')

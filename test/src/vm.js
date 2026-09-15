@@ -97,7 +97,8 @@ test('vm.runInContext(source, context) - transferables', async (t) => {
       `,
         { context }
       ),
-      10_000,
+      // Allow the frame's startup deadline plus time to evaluate the script.
+      65_000,
       'VM transferable context setup timed out'
     )
 

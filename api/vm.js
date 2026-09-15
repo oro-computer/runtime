@@ -1402,10 +1402,11 @@ async function initializeContextWindow () {
   if (!contextWindow.ready) {
     const index = contextWindow.index
     contextWindow.ready = new Promise((resolve, reject) => {
+      // Includes loading the hidden window and starting its shared worker.
       const timeout = setTimeout(() => {
         channel.removeEventListener('message', onMessage)
         reject(new Error(`VM context window ${index} did not become ready`))
-      }, 10_000)
+      }, 60_000)
 
       function onMessage (event) {
         if (event.data?.ready === index) {

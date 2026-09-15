@@ -72,9 +72,11 @@ class World extends EventTarget {
       // A frame's load event does not confirm that its message handler is ready.
       globalThis.addEventListener('message', onReady)
       this.frame.addEventListener('error', onError, { once: true })
+      // Hidden WebKit frames can take several seconds to load their module graph
+      // under simulator load. Keep a finite deadline for failed initialization.
       timeout = setTimeout(() => {
         finish(new Error(`VM world ${id} did not initialize`))
-      }, 10_000)
+      }, 60_000)
     })
 
     const target =

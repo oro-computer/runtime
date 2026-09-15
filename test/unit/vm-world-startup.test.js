@@ -10,7 +10,7 @@ function createWorld () {
   const events = new EventTarget()
   const frame = new EventTarget()
   const sent = []
-  const timers = new Set()
+  const timers = new Map()
   frame.contentWindow = { postMessage: (...args) => sent.push(args) }
   const origin = 'https://computer.oro.runtime.tests'
   const context = vm.createContext({
@@ -21,7 +21,7 @@ function createWorld () {
     document: { head: { appendChild () {} } },
     addEventListener: events.addEventListener.bind(events),
     removeEventListener: events.removeEventListener.bind(events),
-    setTimeout: callback => { timers.add(callback); return callback },
+    setTimeout: (callback, delay) => { timers.set(callback, delay); return callback },
     clearTimeout: callback => timers.delete(callback)
   })
   const instance = vm.runInContext(`${world}; new World({}, 'test-world')`, context)
@@ -30,7 +30,13 @@ function createWorld () {
     Object.assign(event, { source, origin: eventOrigin, data: { type: 'world.ready' } })
     events.dispatchEvent(event)
   }
-  return { instance, frame, ready, sent, timers, origin }
+  function advance (elapsed) {
+    for (const [callback, delay] of timers) {
+      if (delay <= elapsed) callback()
+      else timers.set(callback, delay - elapsed)
+    }
+  }
+  return { instance, frame, ready, sent, timers, origin, advance }
 }
 
 test('VM evaluation waits for its own iframe handler even when load fires first', async () => {
@@ -72,15 +78,65 @@ test('VM window messages use the sender native function without entering the tar
 
 test('VM iframe startup rejects when JavaScript never becomes ready or loading fails', async () => {
   for (const fail of ['timeout', 'error']) {
-    const { instance, frame, timers } = createWorld()
+    const { instance, frame, timers, advance } = createWorld()
     const rejected = assert.rejects(instance.ready, /VM world test-world/)
     if (fail === 'timeout') {
       frame.dispatchEvent(new Event('load'))
-      for (const callback of timers) callback()
+      advance(60_000)
     } else {
       frame.dispatchEvent(new Event('error'))
     }
     await rejected
     assert.equal(timers.size, 0)
+  }
+})
+
+test('VM frames can finish loading after ten seconds under simulator load', async () => {
+  const { instance, ready, sent, advance, timers } = createWorld()
+  const message = { type: 'script', source: '42' }
+  const pending = instance.postMessage(message)
+  advance(15_000)
+  ready()
+  await pending
+  assert.equal(sent.length, 1)
+  assert.equal(timers.size, 0)
+})
+
+test('VM context windows allow delayed readiness and still reject a missing acknowledgement', async () => {
+  const source = readFileSync(new URL('../../api/vm.js', import.meta.url), 'utf8')
+  const start = source.indexOf('async function initializeContextWindow ()')
+  const end = source.indexOf('\n/**', start)
+  for (const ready of [true, false]) {
+    const timers = new Map()
+    const channel = new EventTarget()
+    channel.postMessage = () => {}
+    const window = { index: 84, hide: async () => {} }
+    const context = vm.createContext({
+      contextWindow: null,
+      URL,
+      VM_WINDOW_PATH: '/oro/vm/index.html',
+      VM_WINDOW_TITLE: 'VM',
+      location: { origin: 'https://computer.oro.runtime.tests' },
+      __args: { config: {} },
+      process: { env: {} },
+      channel,
+      application: { getWindows: async () => [], createWindow: async () => window },
+      setTimeout: (callback, delay) => { timers.set(callback, delay); return callback },
+      clearTimeout: callback => timers.delete(callback)
+    })
+    await vm.runInContext(`${source.slice(start, end)}; initializeContextWindow()`, context)
+    const pending = ready ? window.ready : assert.rejects(window.ready, /window 84 did not become ready/)
+    assert.equal(timers.size, 1)
+    for (const [callback, delay] of timers) {
+      assert.ok(delay > 15_000 && delay <= 60_000)
+      if (!ready) callback()
+    }
+    if (ready) {
+      const event = new Event('message')
+      event.data = { ready: 84 }
+      channel.dispatchEvent(event)
+      assert.equal(timers.size, 0)
+    }
+    await pending
   }
 })

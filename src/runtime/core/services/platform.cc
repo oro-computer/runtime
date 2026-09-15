@@ -180,10 +180,20 @@ namespace oro::runtime::core::services {
 
     callback(seq, json, QueuedResponse{});
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
-    auto uri = value.c_str();
-    ShellExecute(nullptr, "Open", uri, nullptr, nullptr, SW_SHOWNORMAL);
-    // TODO how to detect success here. do we care?
-    callback(seq, JSON::Object{}, QueuedResponse{});
+    const auto uri = string::convertStringToWString(value);
+    const auto result = reinterpret_cast<intptr_t>(ShellExecuteW(
+      nullptr, L"open", uri.c_str(), nullptr, nullptr, SW_SHOWNORMAL
+    ));
+    JSON::Object json = JSON::Object::Entries {{"source", "platform.openExternal"}};
+    if (result > 32) {
+      json["data"] = JSON::Object::Entries {{"url", value}};
+    } else {
+      json["err"] = JSON::Object::Entries {
+        {"code", static_cast<int>(result)},
+        {"message", "Failed to open external URL"}
+      };
+    }
+    callback(seq, json, QueuedResponse{});
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     JSON::Object json;
     const auto attachment = android::JNIEnvironmentAttachment(this->getRuntimeContext()->android.jvm);

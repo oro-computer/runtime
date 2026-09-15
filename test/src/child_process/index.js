@@ -3,9 +3,12 @@ import process from 'oro:process'
 import test from 'oro:test'
 import os from 'oro:os'
 
+const isWindows = os.platform() === 'win32'
+const listDirectory = isWindows ? 'dir /b' : 'ls -la'
+
 test('child_process.spawn(command[,args[,options]])', async (t) => {
-  const command = 'ls'
-  const args = ['-la']
+  const command = isWindows ? 'cmd.exe' : 'ls'
+  const args = isWindows ? ['/d', '/c', 'dir', '/b'] : ['-la']
   const options = {}
 
   let hasDir = false
@@ -52,7 +55,7 @@ test('child_process.spawn(command[,args[,options]])', async (t) => {
     if (onSignal) process.off('SIGCHLD', onSignal)
   }
 
-  t.ok(hasDir, 'the ls command ran and discovered the child_process directory')
+  t.ok(hasDir, 'the directory listing includes the child_process directory')
 })
 
 test('child_process.exec(command[,options],callback)', async (t) => {
@@ -60,7 +63,7 @@ test('child_process.exec(command[,options],callback)', async (t) => {
 
   pending.push(
     new Promise((resolve, reject) => {
-      exec('ls -la', (err, stdout) => {
+      exec(listDirectory, (err, stdout) => {
         if (err) {
           return reject(err)
         }
@@ -73,7 +76,10 @@ test('child_process.exec(command[,options],callback)', async (t) => {
 
   pending.push(
     new Promise((resolve, reject) => {
-      exec('ls /not/a/directory', (err, stdout, stderr) => {
+      const command = isWindows
+        ? 'echo intentional-error 1>&2 & exit /b 1'
+        : 'ls /not/a/directory'
+      exec(command, (err, stdout, stderr) => {
         if (err) {
           return reject(err)
         }
@@ -89,7 +95,7 @@ test('child_process.exec(command[,options],callback)', async (t) => {
 })
 
 test('await child_process.exec(command)', async (t) => {
-  const { stdout } = await exec('ls -la')
+  const { stdout } = await exec(listDirectory)
   t.ok(stdout && stdout.length, 'stdout from await exec() has output')
 })
 
@@ -289,12 +295,9 @@ test('child_process.spawn Windows quoting: trailing backslash in arg', async (t)
   const { spawn } = await import('oro:child_process')
   const arg = 'C:\\Program Files\\Foo\\'
   let output = ''
-  // Use PowerShell to print the argument exactly via -Args
-  const child = spawn('powershell.exe', [
-    '-NoLogo',
-    '-Command',
-    'Param([String]$Arg) Write-Output $Arg',
-    '-Args',
+  const child = spawn('node', [
+    '-e',
+    'process.stdout.write(process.argv[1])',
     arg
   ])
   await new Promise((resolve, reject) => {
@@ -308,6 +311,6 @@ test('child_process.spawn Windows quoting: trailing backslash in arg', async (t)
   t.equal(
     output,
     arg,
-    'powershell received the exact argument with trailing backslash'
+    'node received the exact argument with trailing backslash'
   )
 })

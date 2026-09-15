@@ -16,20 +16,6 @@ namespace oro::runtime::filesystem {
   static Mutex mutex;
   static Resource::WellKnownPaths defaultWellKnownPaths;
 
-  #if ORO_RUNTIME_PLATFORM_WINDOWS
-  static const String escapeWindowsPath (const Path& path) {
-    const auto dirname = Path(path).remove_filename();
-    auto value = dirname.string();
-    size_t offset = 0;
-    // escape
-    while ((offset = value.find('\\', offset)) != String::npos) {
-      value.replace(offset, 1, "\\\\");
-      offset += 2;
-    }
-    return value;
-  }
-  #endif
-
 #if ORO_RUNTIME_PLATFORM_ANDROID
   static android::AssetManager* sharedAndroidAssetManager = nullptr;
   static Path externalAndroidStorageDirectory;
@@ -397,7 +383,7 @@ namespace oro::runtime::filesystem {
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
     static wchar_t filename[MAX_PATH];
     GetModuleFileNameW(NULL, filename, MAX_PATH);
-    value = escapeWindowsPath(Path(filename));
+    value = Path(filename).parent_path().string();
   #else
     value = getcwd_state_value();
   #endif
@@ -575,15 +561,15 @@ namespace oro::runtime::filesystem {
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
     static const auto HOME = runtime::env::get("HOMEPATH", runtime::env::get("HOME"));
     static const auto USERPROFILE = runtime::env::get("USERPROFILE", HOME);
-    this->downloads = escapeWindowsPath(Path(USERPROFILE) / "Downloads");
-    this->documents = escapeWindowsPath(Path(USERPROFILE) / "Documents");
-    this->pictures = escapeWindowsPath(Path(USERPROFILE) / "Pictures");
-    this->desktop = escapeWindowsPath(Path(USERPROFILE) / "Desktop");
-    this->videos = escapeWindowsPath(Path(USERPROFILE) / "Videos");
-    this->music = escapeWindowsPath(Path(USERPROFILE) / "Music");
-    this->config = escapeWindowsPath(Path(runtime::env::get("APPDATA")) / bundleIdentifier);
-    this->home = escapeWindowsPath(Path(USERPROFILE));
-    this->data = escapeWindowsPath(Path(runtime::env::get("APPDATA")) / bundleIdentifier);
+    this->downloads = (Path(USERPROFILE) / "Downloads").string();
+    this->documents = (Path(USERPROFILE) / "Documents").string();
+    this->pictures = (Path(USERPROFILE) / "Pictures").string();
+    this->desktop = (Path(USERPROFILE) / "Desktop").string();
+    this->videos = (Path(USERPROFILE) / "Videos").string();
+    this->music = (Path(USERPROFILE) / "Music").string();
+    this->config = (Path(runtime::env::get("APPDATA")) / bundleIdentifier).string();
+    this->home = Path(USERPROFILE).string();
+    this->data = (Path(runtime::env::get("APPDATA")) / bundleIdentifier).string();
     this->log = this->config;
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     this->resources = "oro://" + bundleIdentifier;

@@ -266,7 +266,9 @@ export class JavaScriptModuleLoader extends ModuleLoader {
     const response = module.loader.load(module.id, options)
     const compiled = Module.compile(response.text, { url: response.id })
     const __filename = module.id
-    const __dirname = path.dirname(__filename)
+    const __dirname = /^[a-z][a-z\d+.-]*:\/\//i.test(__filename)
+      ? new URL('.', __filename).href.replace(/\/$/, '')
+      : path.dirname(__filename)
 
     // eslint-disable-next-line no-useless-call
     const result = compiled.call(

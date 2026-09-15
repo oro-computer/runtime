@@ -275,8 +275,12 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   const String applicationName = shell.size() > 0
     ? shell
     : process_command;
-  const auto wideApplicationName = string::convertStringToWString(applicationName);
-  if (!applicationName.empty() && wideApplicationName.empty()) {
+  // A null application name lets Windows search PATH for bare executable names.
+  const bool searchPath = applicationName.find_first_of("/\\") == String::npos;
+  const auto wideApplicationName = searchPath
+    ? WString()
+    : string::convertStringToWString(applicationName);
+  if (!searchPath && !applicationName.empty() && wideApplicationName.empty()) {
     return 0;
   }
 
@@ -332,13 +336,9 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   );
 
   if (!bSuccess) {
-    auto msg = String("Unable to execute: " + process_command);
-    MessageBoxW(
-      nullptr,
-      string::convertStringToWString(msg).c_str(),
-      L"Alert",
-      MB_OK | MB_ICONSTOP
-    );
+    const auto error = GetLastError();
+    errno = mapWinErrorToErrno(error);
+    std::cerr << string::formatWindowsError(error, "Process::open() CreateProcessW") << std::endl;
     return 0;
   } else {
     CloseHandle(process_info.hThread);

@@ -118,6 +118,10 @@ function create (Super, Adapter) {
   )
 }
 
+function isURL (filename) {
+  return !/^[a-z]:[\\/]/i.test(filename) && URL.canParse(filename)
+}
+
 /**
  * Creates a new `File` instance from `filename`.
  * @param {string} filename
@@ -131,7 +135,7 @@ export async function createFile (filename, options = null) {
 
   const stats = options?.fd ? await options.fd.stat() : await fs.stat(filename)
   const types = await mime.lookup(
-    URL.canParse(filename) ? filename : path.extname(filename).slice(1)
+    isURL(filename) ? filename : path.extname(filename).slice(1)
   )
   const type = types[0]?.mime ?? ''
 
@@ -150,7 +154,7 @@ export async function createFile (filename, options = null) {
   let blobBuffer = null
   let bytesBuffer = null
 
-  const name = URL.canParse(filename) ? filename : path.basename(filename)
+  const name = isURL(filename) ? filename : path.basename(filename)
 
   return create(
     File,
@@ -508,7 +512,7 @@ export async function createFileSystemFileHandle (file, options = null) {
       }
 
       async move (nameOrDestinationHandle, name = null) {
-        if (writable === false || URL.canParse(file?.name ?? file)) {
+        if (writable === false || isURL(file?.name ?? file)) {
           throw new NotAllowedError(
             "FileSystemFileHandle is in 'readonly' mode"
           )
@@ -540,7 +544,7 @@ export async function createFileSystemFileHandle (file, options = null) {
       }
 
       async createWritable (options = null) {
-        if (writable === false || URL.canParse(file?.name ?? file)) {
+        if (writable === false || isURL(file?.name ?? file)) {
           throw new NotAllowedError(
             "FileSystemFileHandle is in 'readonly' mode"
           )

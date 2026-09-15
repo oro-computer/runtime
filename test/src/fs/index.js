@@ -1045,7 +1045,7 @@ test('fs.truncate + fs.appendFile + fs.rm/cp', async (t) => {
       {
         recursive: true,
         preserveTimestamps: true,
-        filter: (s) => !s.endsWith('/b.txt')
+        filter: (s) => path.basename(s) !== 'b.txt'
       },
       (err) => {
         if (err) t.fail(err)

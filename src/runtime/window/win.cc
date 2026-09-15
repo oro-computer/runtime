@@ -713,6 +713,7 @@ namespace oro::runtime::window {
       bridge(bridge),
       hotkey(this),
       dialog(this) {
+    this->index = options.index;
     // this may be an "empty" path if not available
     static const auto edgeRuntimePath = filesystem::Resource::getMicrosoftEdgeRuntimePath();
     static auto app = App::sharedApplication();
@@ -1991,21 +1992,18 @@ namespace oro::runtime::window {
 
   const String Window::getTitle () const {
     if (window != nullptr) {
-      const auto size = GetWindowTextLength(window) + 1;
-      LPTSTR text = new TCHAR[size]{0};
-      if (text != nullptr) {
-        GetWindowText(window, text, size);
-        const auto title = convertWStringToString(text);
-        delete [] text;
-        return title;
-      }
+      const auto size = GetWindowTextLengthW(window) + 1;
+      WString text(size, L'\0');
+      const auto length = GetWindowTextW(window, text.data(), size);
+      text.resize(length);
+      return convertWStringToString(text);
     }
 
     return "";
   }
 
   void Window::setTitle (const String& title) {
-    SetWindowText(window, title.c_str());
+    SetWindowTextW(window, convertStringToWString(title).c_str());
   }
 
   Window::Size Window::getSize () {

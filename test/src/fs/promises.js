@@ -133,7 +133,7 @@ test('fs.promises.truncate/appendFile/rm/cp', async (t) => {
   await fs.cp(srcDir, dstDir, {
     recursive: true,
     preserveTimestamps: true,
-    filter: (s) => !s.endsWith('/b.txt')
+    filter: (s) => path.basename(s) !== 'b.txt'
   })
   t.equal(
     (await fs.readFile(dstDir + '/a.txt')).toString(),

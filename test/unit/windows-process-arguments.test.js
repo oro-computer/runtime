@@ -9,7 +9,7 @@ const compiler = ['clang++-18', 'clang++', 'c++'].find(command =>
   spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0)
 const source = readFileSync(new URL('../../src/runtime/process/win.cc', import.meta.url), 'utf8')
 const start = source.indexOf('  auto process_command = command;')
-const end = source.indexOf('  const auto wideApplicationName =', start)
+const end = source.indexOf('  // CreateProcess may modify the command line buffer', start)
 assert.ok(start >= 0 && end > start)
 
 test('Windows launches preserve CLI flags, direct arguments and COMSPEC commands', {
@@ -25,12 +25,14 @@ test('Windows launches preserve CLI flags, direct arguments and COMSPEC commands
     #include <string>
     #include <vector>
     using String = std::string;
+    using WString = std::wstring;
     template <typename T> using Vector = std::vector<T>;
     namespace env {
       String comspec;
       String get (const char*) { return comspec; }
     }
     namespace oro::runtime::string {
+      WString convertStringToWString (const String& value) { return WString(value.begin(), value.end()); }
       Vector<String> splitc (const String& value, char delimiter) {
         Vector<String> result;
         size_t start = 0;
@@ -44,12 +46,15 @@ test('Windows launches preserve CLI flags, direct arguments and COMSPEC commands
         return result;
       }
     }
+    namespace string = oro::runtime::string;
     struct Process {
       String command, argv, shell, application, commandLine;
+      WString nativeApplication;
       struct { bool useDirectArguments = false; size_t argumentCount = 0; } config;
       bool build () {
         ${source.slice(start, end)}
         application = applicationName;
+        nativeApplication = wideApplicationName;
         commandLine = cmdline;
         return true;
       }
@@ -60,6 +65,7 @@ test('Windows launches preserve CLI flags, direct arguments and COMSPEC commands
       app.argv = " --test=./index.js --headless --platform=win32 --from-oroc";
       assert(app.build());
       assert(app.application == app.command);
+      assert(app.nativeApplication == string::convertStringToWString(app.command));
       assert(app.commandLine == R"("C:\Program Files\Oro\tests.exe"  --test=./index.js --headless --platform=win32 --from-oroc)");
       app.argv = R"(--test="./test entry.js" --headless)";
       assert(app.build());
@@ -83,6 +89,16 @@ test('Windows launches preserve CLI flags, direct arguments and COMSPEC commands
       app.config.argumentCount = 2;
       assert(!app.build());
 
+      Process bare;
+      bare.command = "node";
+      bare.argv = "-e 1";
+      assert(bare.build());
+      assert(bare.nativeApplication.empty());
+      assert(bare.commandLine == "node -e 1");
+      bare.command = R"(.\node.exe)";
+      assert(bare.build());
+      assert(bare.nativeApplication == LR"(.\node.exe)");
+
       Process shell;
       shell.shell = "cmd.exe";
       shell.command = R"CMD("C:\Program Files\Node\node.exe" -e "console.log('hello')")CMD";
@@ -92,6 +108,7 @@ test('Windows launches preserve CLI flags, direct arguments and COMSPEC commands
         assert(shell.build());
         const auto program = comspec.empty() ? "cmd.exe" : comspec;
         assert(shell.application == program);
+        assert(shell.nativeApplication.empty() == comspec.empty());
         const auto quoted = program.find(' ') == String::npos ? program : "\"" + program + "\"";
         assert(shell.commandLine == quoted + R"CMD( /d /s /c ""C:\Program Files\Node\node.exe" -e "console.log('hello')" --flag")CMD");
       }
