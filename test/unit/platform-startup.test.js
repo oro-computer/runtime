@@ -699,3 +699,73 @@ test('Windows UI callbacks survive a nested pump that only dispatches window mes
     }
   `)
 })
+
+test('WebView2 bundle documents reach the runtime HTML bootstrap handler', options, () => {
+  const configure = fragment('src/runtime/window/win.cc',
+    '            do {\n              ComPtr<ICoreWebView2_22> webview22;',
+    '            // TLS certificate pinning hook')
+  runNative(`
+    #include <cassert>
+    #include <functional>
+    #include <map>
+    #include <string>
+    #define IID_PPV_ARGS(value) value
+    constexpr int COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL = 1;
+    constexpr int COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL = 2;
+    constexpr int COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW = 3;
+    struct ICoreWebView2_22 {
+      bool workerFilter = false;
+      void AddWebResourceRequestedFilterWithRequestSourceKinds (const wchar_t*, int, int) { workerFilter = true; }
+    };
+    struct ICoreWebView2_3 {
+      bool mapped = false;
+      void SetVirtualHostNameToFolderMapping (const wchar_t*, const wchar_t*, int) { mapped = true; }
+    };
+    template <typename T> struct ComPtr {
+      T* value = nullptr;
+      T** operator& () { return &value; }
+      T* operator-> () const { return value; }
+      explicit operator bool () const { return value != nullptr; }
+      bool operator!= (std::nullptr_t) const { return value != nullptr; }
+    };
+    std::wstring convertStringToWString (const std::string& value) { return std::wstring(value.begin(), value.end()); }
+    namespace filesystem { struct Resource { static std::wstring getResourcesPath () { return L"C:/app"; } }; }
+    struct WebView {
+      ICoreWebView2_22 extended;
+      ICoreWebView2_3 virtualHost;
+      bool extendedAvailable = true, filter = false;
+      void QueryInterface (ICoreWebView2_22** out) { *out = extendedAvailable ? &extended : nullptr; }
+      void QueryInterface (ICoreWebView2_3** out) { *out = &virtualHost; }
+      void AddWebResourceRequestedFilter (const wchar_t*, int) { filter = true; }
+      std::string navigate (const std::function<std::string()>& handler) {
+        // WebView2 virtual host mappings bypass WebResourceRequested.
+        if (virtualHost.mapped || !filter) return "<head></head>";
+        return handler();
+      }
+    };
+    struct Bridge { std::map<std::string, std::string> userConfig; };
+    struct Window {
+      WebView* webview;
+      Bridge* bridge;
+      std::string bundleIdentifier = "computer.oro.runtime.tests";
+      void configure () { ${configure} }
+    };
+    int main () {
+      for (bool available : {true, false}) {
+        WebView view;
+        view.extendedAvailable = available;
+        Bridge bridge;
+        Window window{&view, &bridge};
+        window.configure();
+        int requests = 0;
+        const auto document = view.navigate([&] {
+          ++requests;
+          return "<head><script src='oro/internal/init.js'></script></head>";
+        });
+        assert(requests == 1);
+        assert(document.find("<script") != std::string::npos);
+        assert(view.extended.workerFilter == available);
+      }
+    }
+  `)
+})

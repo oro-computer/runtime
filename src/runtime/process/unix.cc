@@ -110,7 +110,6 @@ namespace oro::runtime::process {
       config(config) {
     #if !ORO_RUNTIME_PLATFORM_IOS
       open(function);
-      read();
     #endif
   }
 
@@ -191,36 +190,6 @@ namespace oro::runtime::process {
       setpgid(pid, getpgid(0));
     #endif
 
-      auto thread = Thread([this] {
-        int code = 0;
-        PID waited = -1;
-        do {
-          waited = waitpid(this->id, &code, 0);
-        } while (waited < 0 && errno == EINTR);
-
-        if (waited < 0) {
-          this->status = -1;
-        } else if (WIFEXITED(code)) {
-          this->status = WEXITSTATUS(code);
-        } else if (WIFSIGNALED(code)) {
-          this->status = 128 + WTERMSIG(code);
-        } else {
-          this->status = -1;
-        }
-
-        this->closeFDs();
-        this->closed = true;
-
-        if (this->onExit != nullptr) {
-          try {
-            this->onExit(std::to_string(status));
-          } catch (const std::exception& exception) {
-            std::cerr << "Process exit callback exception: " << exception.what() << std::endl;
-          }
-        }
-      });
-
-      thread.detach();
     } else if (pid == 0) {
       if (stdinFD) {
         dup2(stdin_p[0], 0);
@@ -291,6 +260,39 @@ namespace oro::runtime::process {
     }
 
     data.id = pid;
+    // Start readers before the exit waiter can close their file descriptors.
+    read();
+
+    auto thread = Thread([this] {
+      int code = 0;
+      PID waited = -1;
+      do {
+        waited = waitpid(this->id, &code, 0);
+      } while (waited < 0 && errno == EINTR);
+
+      if (waited < 0) {
+        this->status = -1;
+      } else if (WIFEXITED(code)) {
+        this->status = WEXITSTATUS(code);
+      } else if (WIFSIGNALED(code)) {
+        this->status = 128 + WTERMSIG(code);
+      } else {
+        this->status = -1;
+      }
+
+      this->closeFDs();
+      this->closed = true;
+
+      if (this->onExit != nullptr) {
+        try {
+          this->onExit(std::to_string(status));
+        } catch (const std::exception& exception) {
+          std::cerr << "Process exit callback exception: " << exception.what() << std::endl;
+        }
+      }
+    });
+
+    thread.detach();
     return pid;
   #endif
   }
@@ -579,6 +581,10 @@ namespace oro::runtime::process {
       closed = false;
       id = pid;
       data.id = pid;
+
+      // A child can exit before open() returns. Publish its reader thread
+      // before starting the waiter that joins it and closes the pipes.
+      read();
 
       // posix_spawnp avoids pthread_atfork handlers that can deadlock after
       // GTK and WebKit have started worker threads.

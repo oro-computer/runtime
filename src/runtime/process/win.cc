@@ -364,6 +364,9 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
   data.id = process_info.dwProcessId;
   data.handle = process_info.hProcess;
 
+  // Initialize both readers before the waiter can close their handles.
+  read();
+
   processThread = Thread([this](HANDLE _processHandle) {
     DWORD exitCode = 0;
     try {

@@ -1,12 +1,11 @@
 // vim: set sw=2:
 package oro.runtime.webview
 
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
-import java.lang.Thread
+import java.io.ByteArrayInputStream
+import java.io.InputStream
+import java.io.SequenceInputStream
+import java.util.Collections
 import java.util.concurrent.Semaphore
-
-import kotlin.concurrent.thread
 
 import android.os.Build
 import android.webkit.CookieManager
@@ -18,6 +17,50 @@ import oro.runtime.app.AppActivity
 import oro.runtime.bridge.Bridge
 import oro.runtime.debug.console
 import oro.runtime.ipc.Message
+
+// WebView derives Content-Length from available(). All response chunks are
+// buffered before finish(), so report the entire body rather than a pipe's
+// current capacity. Keep chunks separate to avoid copying the complete body.
+internal class BufferedResponseInputStream (buffers: List<ByteArray>) : InputStream() {
+  private val stream = SequenceInputStream(Collections.enumeration(
+    buffers.map { ByteArrayInputStream(it) }
+  ))
+  private var remaining = buffers.sumOf { it.size.toLong() }
+
+  @Synchronized
+  override fun available (): Int = remaining.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+
+  @Synchronized
+  override fun read (): Int {
+    val value = stream.read()
+    if (value >= 0) remaining--
+    return value
+  }
+
+  @Synchronized
+  override fun read (buffer: ByteArray, offset: Int, length: Int): Int {
+    if (offset < 0 || length < 0 || offset > buffer.size - length) {
+      throw IndexOutOfBoundsException()
+    }
+    if (length == 0) return 0
+    val count = stream.read(buffer, offset, length)
+    if (count > 0) remaining -= count
+    return count
+  }
+
+  @Synchronized
+  override fun skip (count: Long): Long {
+    val skipped = stream.skip(count)
+    remaining -= skipped
+    return skipped
+  }
+
+  @Synchronized
+  override fun close () {
+    stream.close()
+    remaining = 0
+  }
+}
 
 open class SchemeHandlers (val bridge: Bridge) {
   open class Request (val bridge: Bridge, val request: WebResourceRequest) {
@@ -151,12 +194,11 @@ open class SchemeHandlers (val bridge: Bridge) {
   }
 
   open class Response (val request: Request) {
-    val stream = PipedOutputStream()
     var mimeType = "application/octet-stream"
     val response = WebResourceResponse(
       mimeType,
       null,
-      PipedInputStream(this.stream)
+      null
     )
 
     val headers = mutableMapOf<String, String>()
@@ -227,6 +269,7 @@ open class SchemeHandlers (val bridge: Bridge) {
 
     fun finish () {
       if (!this.finished) {
+        this.response.setData(BufferedResponseInputStream(this.buffers))
         this.finished = true
         this.semaphore.release()
       }
@@ -235,25 +278,6 @@ open class SchemeHandlers (val bridge: Bridge) {
     fun waitForFinish () {
       this.semaphore.acquireUninterruptibly()
       this.semaphore.release()
-      if (this.finished) {
-        val stream = this.stream
-        val buffers = this.buffers
-        thread {
-          try {
-            for (bytes in buffers) {
-              stream.write(bytes)
-            }
-          } catch (_: Exception) {}
-
-          try {
-            stream.flush()
-          } catch (_: Exception) {}
-
-          try {
-            stream.close()
-          } catch (_: Exception) {}
-        }
-      }
     }
   }
 

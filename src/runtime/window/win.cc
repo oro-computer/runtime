@@ -1063,13 +1063,12 @@ namespace oro::runtime::window {
               reinterpret_cast<LPARAM>(this->window)
             );
 
-            // configure webview
+            // Bundle requests must reach the runtime scheme handlers. Virtual
+            // host mappings bypass WebResourceRequested and its HTML preload.
             do {
               ComPtr<ICoreWebView2_22> webview22;
-              ComPtr<ICoreWebView2_3> webview3;
 
               this->webview->QueryInterface(IID_PPV_ARGS(&webview22));
-              this->webview->QueryInterface(IID_PPV_ARGS(&webview3));
               this->webview->AddWebResourceRequestedFilter(L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
 
               if (webview22 != nullptr) {
@@ -1079,14 +1078,6 @@ namespace oro::runtime::window {
                   L"*",
                   COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
                   COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL
-                );
-              }
-
-              if (webview3) {
-                webview3->SetVirtualHostNameToFolderMapping(
-                  convertStringToWString(bundleIdentifier).c_str(),
-                  filesystem::Resource::getResourcesPath().c_str(),
-                  COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW
                 );
               }
             } while (0);

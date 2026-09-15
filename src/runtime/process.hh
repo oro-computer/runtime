@@ -250,9 +250,7 @@ namespace oro::runtime::process {
     void closeStdin () noexcept;
     PID open () noexcept {
       if (this->command.size() == 0) return 0;
-      auto pid = open(this->command, this->path);
-      read();
-      return pid;
+      return open(this->command, this->path);
     }
 
     void kill (PID id) noexcept;
