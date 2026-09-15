@@ -1678,12 +1678,14 @@ namespace oro::runtime::window {
 
             // Register the preload after the request handlers. Navigation must wait
             // for WebView2 to confirm that document-created scripts are installed.
+            // Set the test entry and configured globals before internal/init can
+            // run, including documents that have no HTML preload markup.
             do {
               auto preloadUserScriptSource = webview::Preload::compile({
                 .features = webview::Preload::Options::Features {
-                  .useGlobalCommonJS = false,
-                  .useGlobalNodeJS = false,
-                  .useTestScript = false,
+                  .useGlobalCommonJS = options.features.useGlobalCommonJS,
+                  .useGlobalNodeJS = options.features.useGlobalNodeJS,
+                  .useTestScript = options.features.useTestScript,
                   .useHTMLMarkup = false,
                   .useESM = false,
                   .useGlobalArgs = true

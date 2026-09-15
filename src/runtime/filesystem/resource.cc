@@ -468,7 +468,9 @@ namespace oro::runtime::filesystem {
     this->tmp = defaultWellKnownPaths.tmp;
 
     this->resources = Resource::getResourcesPath();
+  #if !ORO_RUNTIME_PLATFORM_ANDROID
     this->tmp = fs::temp_directory_path();
+  #endif
   #if ORO_RUNTIME_PLATFORM_APPLE
     static const auto uid = getuid();
     static const auto pwuid = getpwuid(uid);
@@ -584,10 +586,9 @@ namespace oro::runtime::filesystem {
     this->data = escapeWindowsPath(Path(runtime::env::get("APPDATA")) / bundleIdentifier);
     this->log = this->config;
   #elif ORO_RUNTIME_PLATFORM_ANDROID
-    const auto storage = Resource::getExternalAndroidStorageDirectory();
-    const auto cache = Resource::getExternalAndroidCacheDirectory();
     this->resources = "oro://" + bundleIdentifier;
-    this->tmp = !cache.empty() ? cache : storage / "tmp";
+    // AppActivity supplies its private cache path through setWellKnownDirectories.
+    // Preserve it: external Android storage does not support symbolic links.
   #endif
 
     if (!prefix.empty()) {

@@ -486,7 +486,9 @@ open class AppActivity : WindowManagerActivity() {
     }
     val externalMediaDirectory = this.externalMediaDirs?.firstOrNull()?.absolutePath
       ?: File(scopedExternalFilesDirectory, "media").absolutePath
-    val tmpDirectory = File(scopedExternalCacheDirectory, "__BUNDLE_IDENTIFIER__").absolutePath
+    // External storage uses FUSE and cannot preserve symbolic links. Temporary
+    // files belong in the app's private cache for file and archive operations.
+    val tmpDirectory = File(this.applicationContext.cacheDir, "__BUNDLE_IDENTIFIER__").absolutePath
     File(externalMediaDirectory).mkdirs()
     File(tmpDirectory).mkdirs()
     val rootDirectory = this.getRootDirectory()

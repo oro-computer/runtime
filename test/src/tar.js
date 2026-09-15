@@ -1235,7 +1235,22 @@ test('tar: symlink and hardlink entries (read + extractAll preserveLinks)', asyn
     TMPDIR,
     `oro-tar-links-${Math.random().toString(16).slice(2)}`
   )
-  await archive.extractAll(destDir, { preserveLinks: true })
+  const canPreserveHardlinks = os.platform() !== 'android'
+  if (canPreserveHardlinks) {
+    await archive.extractAll(destDir, { preserveLinks: true })
+  } else {
+    // Android's SELinux app policy forbids hard links, including in private data.
+    // Extraction must report that restriction instead of silently copying files.
+    await t.rejects(
+      archive.extractAll(destDir, { preserveLinks: true }),
+      /EACCES|EPERM|permission denied/i,
+      'hardlink extraction reports the Android app sandbox restriction'
+    )
+    await archive.extractAll(destDir, {
+      preserveLinks: true,
+      filter: entry => entry.kind !== 'hardlink'
+    })
+  }
 
   const targetPath = path.join(destDir, 'target.txt')
   const symPath = path.join(destDir, 'sym.txt')
@@ -1247,13 +1262,21 @@ test('tar: symlink and hardlink entries (read + extractAll preserveLinks)', asyn
   const symTarget = await fs.promises.readlink(symPath)
   t.equal(symTarget, 'target.txt', 'symlink extracted')
 
-  const hardContent = await fs.promises.readFile(hardPath, 'utf8')
-  t.equal(hardContent, 'hello', 'hardlink extracted (content matches)')
+  if (canPreserveHardlinks) {
+    const hardContent = await fs.promises.readFile(hardPath, 'utf8')
+    t.equal(hardContent, 'hello', 'hardlink extracted (content matches)')
 
-  const statTarget = await fs.promises.stat(targetPath)
-  const statHard = await fs.promises.stat(hardPath)
-  if (typeof statTarget.ino === 'number' && typeof statHard.ino === 'number') {
-    t.equal(statTarget.ino, statHard.ino, 'hardlink shares inode with target')
+    const statTarget = await fs.promises.stat(targetPath)
+    const statHard = await fs.promises.stat(hardPath)
+    if (typeof statTarget.ino === 'number' && typeof statHard.ino === 'number') {
+      t.equal(statTarget.ino, statHard.ino, 'hardlink shares inode with target')
+    }
+  } else {
+    await t.rejects(
+      fs.promises.stat(hardPath),
+      /ENOENT|no such file/i,
+      'unsupported hardlink is not replaced by a regular file'
+    )
   }
 
   await archive.close()

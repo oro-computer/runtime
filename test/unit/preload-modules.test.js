@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import vm from 'node:vm'
 
 const compiler = ['clang++-18', 'clang++', 'c++'].find(command =>
   spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0)
@@ -13,11 +14,13 @@ const source = read('src/runtime/webview/preload.cc')
 const constants = source.slice(source.indexOf('  static constexpr'), source.indexOf('  const Preload Preload::compile'))
 const compile = source.slice(source.indexOf('  const String& Preload::compile ()'), source.indexOf('  const String& Preload::str ()'))
 const declaration = read('src/runtime/webview/preload.hh').replace(/^#include[^\n]*$/gm, '')
+const windowSource = read('src/runtime/window/win.cc')
+const windowFeatures = windowSource.match(/auto preloadUserScriptSource = webview::Preload::compile\(\{\s*\.features = (webview::Preload::Options::Features \{[\s\S]*?\n\s*\}),/)[1]
 
 for (const windows of [true, false]) {
   test(`Generated ${windows ? 'Windows' : 'WebKit'} preloads import the runtime from the expected URLs`, {
     skip: !compiler ? 'A C++ compiler is required' : false
-  }, () => {
+  }, async () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'oro-preload-modules-'))
     const filename = path.join(directory, 'preload.cc')
     const executable = path.join(directory, process.platform === 'win32' ? 'preload.exe' : 'preload')
@@ -101,13 +104,18 @@ for (const windows of [true, false]) {
       }
       int main () {
         nlohmann::json result = nlohmann::json::array();
-        for (int mode = 0; mode < 3; ++mode) {
+        for (int mode = 0; mode < ${windows ? 4 : 3}; ++mode) {
           oro::runtime::webview::Preload preload;
           preload.options.userConfig["meta_bundle_identifier"] = "app.example";
           preload.options.features.useHTMLMarkup = mode > 0;
           preload.options.features.useESM = mode == 2;
           preload.options.features.useTestScript = true;
           preload.options.argv = {"--test=./index.js"};
+          if (mode == 3) {
+            using namespace oro::runtime;
+            const auto options = preload.options;
+            preload.options.features = ${windowFeatures};
+          }
           result.push_back(preload.compile());
         }
         std::cout << result.dump();
@@ -120,7 +128,7 @@ for (const windows of [true, false]) {
     assert.equal(result.status, 0, result.stderr)
     const preloads = JSON.parse(result.stdout)
     for (const [mode, preload] of preloads.entries()) {
-      const scripts = mode === 0
+      const scripts = mode === 0 || mode === 3
         ? [preload]
         : [...preload.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1])
       const specifiers = new Set()
@@ -141,6 +149,38 @@ for (const windows of [true, false]) {
       }
       assert.ok(preload.includes('RUNTIME_TEST_FILENAME'))
       assert.equal(preload.includes('{{'), false, 'all generated placeholders are expanded')
+      if (mode === 3) {
+        let initialized = 0
+        const context = vm.createContext({
+          URL,
+          console,
+          origin: 'oro://app.example',
+          location: { href: 'oro://app.example/index.html' },
+          document: { readyState: 'complete', addEventListener () {} },
+          addEventListener () {},
+          async importModule (specifier) {
+            if (specifier.endsWith('/internal/init.js')) {
+              assert.equal(context.RUNTIME_TEST_FILENAME, 'oro://app.example/index.js',
+                'the test entry must exist when internal/init starts without HTML injection')
+              initialized++
+            }
+            if (specifier.endsWith('/internal/globals.js')) return { get: () => Promise.resolve() }
+            if (specifier.includes('/module.js')) {
+              return { Module: { main: { filename: '/app/index.html', scope: {} }, createRequire: () => () => {} } }
+            }
+            if (specifier.endsWith('/path.js')) return { dirname: () => '/app' }
+            return { default: {} }
+          }
+        })
+        // Execute the generated native script with module loading supplied by the
+        // harness. No HTML preload runs, matching the failed WebView2 document.
+        vm.runInContext(preload.replace(/\bimport\(/g, 'importModule('), context)
+        await new Promise(resolve => setImmediate(resolve))
+        assert.equal(initialized, 1)
+        assert.equal(typeof context.require, 'function')
+        assert.equal(context.__dirname, '/app')
+        assert.equal(typeof context.process, 'object')
+      }
     }
   })
 }

@@ -769,3 +769,41 @@ test('WebView2 bundle documents reach the runtime HTML bootstrap handler', optio
     }
   `)
 })
+
+test('Android well-known temporary paths preserve the private app cache directory', options, () => {
+  const constructor = fragment('src/runtime/filesystem/resource.cc',
+    '  Resource::WellKnownPaths::WellKnownPaths (const Path& prefix)',
+    '  JSON::Object Resource::WellKnownPaths::json () const')
+  runNative(`
+    #include <cassert>
+    #include <filesystem>
+    #include <map>
+    #include <string>
+    #define ORO_RUNTIME_PLATFORM_ANDROID 1
+    namespace fs = std::filesystem;
+    using Path = fs::path;
+    using String = std::string;
+    std::map<String, String> getUserConfig () { return {{"meta_bundle_identifier", "app.example"}}; }
+    struct Resource {
+      struct WellKnownPaths {
+        Path resources, downloads, documents, pictures, desktop, videos, music;
+        Path config, home, data, log, tmp, media;
+        WellKnownPaths () = default;
+        explicit WellKnownPaths (const Path& prefix);
+      };
+      static Path getResourcesPath () { return "/assets"; }
+      static Path getExternalAndroidStorageDirectory () { return "/storage/emulated/0"; }
+      static Path getExternalAndroidCacheDirectory () { return "/storage/emulated/0/Android/data/app.example/cache"; }
+    };
+    Resource::WellKnownPaths defaultWellKnownPaths;
+    ${constructor}
+    int main () {
+      const Path cache = "/data/user/0/app.example/cache/app.example";
+      defaultWellKnownPaths.tmp = cache;
+      Resource::WellKnownPaths paths(Path{});
+      assert(paths.tmp == cache);
+      Resource::WellKnownPaths scoped(Path{"archives"});
+      assert(scoped.tmp == cache / "archives");
+    }
+  `)
+})
