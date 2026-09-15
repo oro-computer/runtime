@@ -7515,6 +7515,9 @@ export class Extension extends EventTarget {
         throw new Error('Failed to load extensions', { cause: result.err })
       }
 
+      // APK libraries may be absent from the resource filesystem used by type().
+      // A successful native load establishes the type required for unloading.
+      options.type = 'shared'
       info = result.data
     }
 

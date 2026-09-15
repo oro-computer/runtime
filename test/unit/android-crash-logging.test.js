@@ -50,6 +50,8 @@ for (const [command, status, filter] of [
 for (const [mode, status, expected] of [
   ['success', 0, /# ok/],
   ['failure', 1, /# fail 1/],
+  ['chromium-success', 0, /# ok/],
+  ['chromium-failure', 1, /# fail 1/],
   ['exit', 7, /got process pid: 1234/],
   ['startup-timeout', 124, /No TAP output after 1s/],
   ['test-timeout', 124, /Timeout exceeded/]
@@ -66,6 +68,14 @@ case "$*" in
     case "$ORO_MOCK_ADB_MODE" in
       success) printf 'I Console : TAP version 13\\nI Console : # ok\\n' ;;
       failure) printf 'I Console : TAP version 13\\nI Console : # fail 1\\n' ;;
+      chromium-success|chromium-failure)
+        echo '09-15 20:17:13.335 5483 5483 I chromium: [INFO:CONSOLE:423] "TAP version 13", source: https://app.example/oro/console.js (423)'
+        if [[ "$ORO_MOCK_ADB_MODE" == chromium-success ]]; then
+          echo '09-15 20:17:13.335 5483 5483 I chromium: [INFO:CONSOLE:423] "# ok", source: https://app.example/oro/console.js (423)'
+        else
+          echo '09-15 20:17:13.335 5483 5483 I chromium: [INFO:CONSOLE:423] "# fail 1", source: https://app.example/oro/console.js (423)'
+        fi
+        ;;
       exit) echo 'I Console : __EXIT_SIGNAL__=7' ;;
       test-timeout) echo 'I Console : TAP version 13' ;;
     esac

@@ -12,11 +12,14 @@ test('extension.load(name) - feature policies', async (t) => {
     return t.ifError(err)
   }
 
+  t.equal(simple.type, 'shared', 'native load resolves the extension type')
   result = await ipc.request('simple.ping', { value: 'hello world' })
   if (result.err) return t.ifError(result.err)
   t.equal(result.data, 'hello world', 'ipc default')
 
   await simple.unload()
+  result = await ipc.request('simple.ping', { value: 'hello world' })
+  t.ok(/not found/i.test(result.err?.message), 'unload removes the native route')
 
   try {
     simple = await extension.load('simple-ipc-ping', { allow: ['none'] })

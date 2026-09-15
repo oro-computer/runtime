@@ -240,8 +240,12 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
 
   // Build command line safely without the shell when possible
   String cmdline;
-  if (shell == "cmd.exe") {
-    cmdline = String("/d /s /c ") + (process_command.empty() ? String("") : process_command);
+  if (this->shell == "cmd.exe") {
+    cmdline = quote_arg(shell) + " /d /s /c \"" + process_command;
+    if (!this->argv.empty()) {
+      cmdline += " " + this->argv;
+    }
+    cmdline += "\"";
   } else if (this->config.useDirectArguments) {
     Vector<String> args {process_command};
     if (this->config.argumentCount > 0) {
@@ -259,21 +263,15 @@ Process::PID Process::open (const String &command, const String &path) noexcept 
       cmdline += quote_arg(args[i]);
     }
   } else {
-    // Command-string invocation mode.
-    Vector<String> args;
-    if (this->argv.size() > 0) {
-      for (const auto& token : oro::runtime::string::splitc(this->argv, (char) 0x01)) {
-        if (!token.empty()) args.push_back(token);
-      }
-    }
-    // Quote each argument as needed
-    for (size_t i = 0; i < args.size(); ++i) {
-      if (i > 0) cmdline.push_back(' ');
-      cmdline += quote_arg(args[i]);
+    // The CLI supplies an already formatted argument string. Include argv[0]
+    // and preserve its argument boundaries and quoting for the child's CRT.
+    cmdline = quote_arg(process_command);
+    if (!this->argv.empty()) {
+      cmdline += " " + this->argv;
     }
   }
 
-  // If not using shell, set application name to program path and pass only args
+  // CreateProcessW still requires argv[0] in cmdline when applicationName is set.
   const String applicationName = shell.size() > 0
     ? shell
     : process_command;

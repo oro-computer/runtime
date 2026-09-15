@@ -106,30 +106,34 @@ while read -r line; do
     dump_pid "$pid"
   fi
 
-  if grep 'Console :' < <(echo "$line") >/dev/null; then
-    line="$(echo "$line" | sed 's/.*[D|E|I|W] Console :\s*//g')"
+  if [[ "$line" =~ [DEIW][[:space:]]Console[[:space:]]*: ]]; then
+    line="$(echo "$line" | sed 's/.*[DEIW] Console *: *//')"
+  elif [[ "$line" =~ chromium:.*\[INFO:CONSOLE:[0-9]+\] ]]; then
+    line="$(echo "$line" | sed 's/.*\[INFO:CONSOLE:[0-9]*\] "//; s/", source: .*//')"
+  else
+    continue
+  fi
 
-    if [[ "$line" =~ __EXIT_SIGNAL__ ]]; then
-      exit_signal="${line/__EXIT_SIGNAL__=/}"
-      watchdog_file_update "$exit_signal"
-      exit "$exit_signal"
-    fi
+  if [[ "$line" =~ __EXIT_SIGNAL__ ]]; then
+    exit_signal="${line/__EXIT_SIGNAL__=/}"
+    watchdog_file_update "$exit_signal"
+    exit "$exit_signal"
+  fi
 
-    echo "$line"
+  echo "$line"
 
-    if [[ "$line" == "TAP version 13" ]]; then
-      watchdog_file_update running
-    fi
+  if [[ "$line" == "TAP version 13" ]]; then
+    watchdog_file_update running
+  fi
 
-    if [[ "$line" == "# ok" ]]; then
-      watchdog_file_update 0
-      exit
-    fi
+  if [[ "$line" == "# ok" ]]; then
+    watchdog_file_update 0
+    exit
+  fi
 
-    if [[ "$line" == "# fail" || "$line" == "# fail "* ]]; then
-      watchdog_file_update 1
-      exit 1
-    fi
+  if [[ "$line" == "# fail" || "$line" == "# fail "* ]]; then
+    watchdog_file_update 1
+    exit 1
   fi
 done < <($adb logcat --pid="$pid") & logcat_pid=$!
 
