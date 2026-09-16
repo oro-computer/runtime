@@ -32,15 +32,33 @@ function runNative (source) {
 test('Windows window titles round-trip Unicode without embedded nulls', options, () => {
   const titles = fragment('src/runtime/window/win.cc',
     '  const String Window::getTitle () const', '  Window::Size Window::getSize ()')
+  const windowProcedure = fragment('src/runtime/app/win.cc',
+    '      default:\n        return DefWindowProc', '\n    }\n\n    return 0;')
   runNative(`
     #include <algorithm>
     #include <cassert>
     #include <codecvt>
+    #include <cstdint>
     #include <locale>
     #include <string>
     using String = std::string;
     using WString = std::wstring;
     WString title;
+    constexpr int WM_SETTEXT = 12;
+    intptr_t DefWindowProcW (void*, int message, uintptr_t, intptr_t text) {
+      if (message == WM_SETTEXT) title = reinterpret_cast<const wchar_t*>(text);
+      return 1;
+    }
+    intptr_t DefWindowProc (void*, int message, uintptr_t, intptr_t text) {
+      if (message == WM_SETTEXT) {
+        const auto bytes = reinterpret_cast<const char*>(text);
+        title = WString(bytes, bytes + std::char_traits<char>::length(bytes));
+      }
+      return 1;
+    }
+    intptr_t onWindowProcMessage (void* hWnd, int message, uintptr_t wParam, intptr_t lParam) {
+      switch (message) { ${windowProcedure} }
+    }
     WString convertStringToWString (const String& value) {
       return std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(value);
     }
@@ -54,7 +72,9 @@ test('Windows window titles round-trip Unicode without embedded nulls', options,
       text[title.size()] = 0;
       return title.size();
     }
-    void SetWindowTextW (void*, const wchar_t* text) { title = text; }
+    void SetWindowTextW (void* window, const wchar_t* text) {
+      onWindowProcMessage(window, WM_SETTEXT, 0, reinterpret_cast<intptr_t>(text));
+    }
     struct Window {
       void* window = this;
       const String getTitle () const;
@@ -85,9 +105,12 @@ test('Windows resources read complete files and handle invalid or truncated file
     #include <cstring>
     #include <map>
     #include <memory>
+    #include <mutex>
     #include <string>
     #define ORO_RUNTIME_PLATFORM_WINDOWS 1
     using String = std::string;
+    using Lock = std::lock_guard<std::recursive_mutex>;
+    std::recursive_mutex mutex;
     using DWORD = uint32_t;
     using HANDLE = int;
     constexpr HANDLE INVALID_HANDLE_VALUE = -1;

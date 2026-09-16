@@ -762,8 +762,12 @@ namespace oro::runtime::filesystem {
       return true;
     }
 
-    if (caches.contains(this->path.string())) {
-      this->cache = caches.at(this->path.string());
+    {
+      Lock lock(mutex);
+      const auto entry = caches.find(this->path.string());
+      if (entry != caches.end()) {
+        this->cache = entry->second;
+      }
     }
 
   #if ORO_RUNTIME_PLATFORM_APPLE
@@ -1189,6 +1193,7 @@ namespace oro::runtime::filesystem {
 
     this->cache.bytes = this->bytes;
     if (this->options.cache) {
+      Lock lock(mutex);
       caches.insert_or_assign(this->path.string(), this->cache);
     }
     return this->cache.bytes.get();

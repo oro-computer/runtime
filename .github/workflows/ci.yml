@@ -324,7 +324,7 @@ jobs:
 
       - name: Build Oro Runtime CLI
         id: build-runtime
-        timeout-minutes: 20
+        timeout-minutes: 45
         shell: bash
         run: ./bin/install.sh --yes-deps
 

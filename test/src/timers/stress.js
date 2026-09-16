@@ -21,10 +21,11 @@ test('timers: interval counts and clears', async (t) => {
   let count = 0
   let id
   await new Promise((resolve, reject) => {
+    // Hidden WebView2 windows can deliver interval callbacks only once per second.
     const timeout = setTimeout(() => {
       clearInterval(id)
-      reject(new Error('interval did not fire three times within one second'))
-    }, 1000)
+      reject(new Error('interval did not fire three times within ten seconds'))
+    }, 10000)
     id = setInterval(() => {
       count++
       if (count === 3) {

@@ -38,6 +38,7 @@ namespace oro::runtime::sqlite {
 
     private:
       sqlite3* database = nullptr;
+      bool crsqliteLoaded = false;
       mutable int lastResultCode = SQLITE_OK;
   };
 

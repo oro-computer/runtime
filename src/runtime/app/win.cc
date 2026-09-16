@@ -328,7 +328,7 @@ namespace oro::runtime::app {
       //case WM_WINDOWPOSCHANGING: { break; }
 
       default:
-        return DefWindowProc(hWnd, message, wParam, lParam);
+        return DefWindowProcW(hWnd, message, wParam, lParam);
     }
 
     return 0;

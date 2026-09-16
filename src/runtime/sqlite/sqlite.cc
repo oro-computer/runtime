@@ -65,7 +65,8 @@ namespace oro::runtime::sqlite {
       return path;
     }
 
-    bool loadCrsqliteExtension (sqlite3* handle, int& outResult) {
+    bool loadCrsqliteExtension (sqlite3* handle, int& outResult, bool& loaded) {
+      loaded = false;
     #if !ORO_RUNTIME_PLATFORM_DESKTOP && !ORO_RUNTIME_PLATFORM_ANDROID && !ORO_RUNTIME_PLATFORM_IOS
       outResult = SQLITE_OK;
       return true;
@@ -84,6 +85,7 @@ namespace oro::runtime::sqlite {
       }
 
       outResult = rc;
+      loaded = rc == SQLITE_OK;
       return rc == SQLITE_OK;
     #endif
     }
@@ -104,8 +106,10 @@ namespace oro::runtime::sqlite {
 
   Database::Database (Database&& other) noexcept {
     this->database = other.database;
+    this->crsqliteLoaded = other.crsqliteLoaded;
     this->lastResultCode = other.lastResultCode;
     other.database = nullptr;
+    other.crsqliteLoaded = false;
     other.lastResultCode = SQLITE_OK;
   }
 
@@ -114,10 +118,14 @@ namespace oro::runtime::sqlite {
       return *this;
     }
 
-    this->close();
+    if (!this->close()) {
+      return *this;
+    }
     this->database = other.database;
+    this->crsqliteLoaded = other.crsqliteLoaded;
     this->lastResultCode = other.lastResultCode;
     other.database = nullptr;
+    other.crsqliteLoaded = false;
     other.lastResultCode = SQLITE_OK;
     return *this;
   }
@@ -127,7 +135,9 @@ namespace oro::runtime::sqlite {
   }
 
   bool Database::open (const String& path, int flags) {
-    this->close();
+    if (!this->close()) {
+      return false;
+    }
 
     sqlite3* handle = nullptr;
     const int result = sqlite3_open_v2(path.c_str(), &handle, flags, nullptr);
@@ -153,7 +163,7 @@ namespace oro::runtime::sqlite {
     }
 
     int extensionResult = SQLITE_OK;
-    if (!loadCrsqliteExtension(handle, extensionResult)) {
+    if (!loadCrsqliteExtension(handle, extensionResult, this->crsqliteLoaded)) {
       sqlite3_close(handle);
       this->lastResultCode = extensionResult;
       return false;
@@ -168,6 +178,16 @@ namespace oro::runtime::sqlite {
     if (this->database == nullptr) {
       this->lastResultCode = SQLITE_OK;
       return true;
+    }
+
+    if (this->crsqliteLoaded) {
+      // CR-SQLite caches statements that otherwise keep close_v2 from releasing the connection.
+      const int result = sqlite3_exec(this->database, "SELECT crsql_finalize()", nullptr, nullptr, nullptr);
+      this->lastResultCode = result;
+      if (result != SQLITE_OK) {
+        return false;
+      }
+      this->crsqliteLoaded = false;
     }
 
     const int result = sqlite3_close_v2(this->database);

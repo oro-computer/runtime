@@ -34,7 +34,6 @@ import globals from './internal/globals.js'
 import process from './process.js'
 import console from './console.js'
 import crypto from './crypto.js'
-import os from './os.js'
 import gc from './gc.js'
 
 const AsyncFunction = (async () => {}).constructor
@@ -1437,31 +1436,11 @@ export async function getContextWorker () {
     return await awaitContextWorkerReady(contextWorker)
   }
 
-  if (os.platform() === 'win32' && !process.env.COREWEBVIEW2_22_AVAILABLE) {
-    if (globalThis.window && globalThis.top === globalThis.window) {
-      // inside global top window
-      contextWorker = new ContextWorkerInterface()
-      contextWorker[kWorkerContextReady] = Promise.resolve(contextWorker)
-      globals.register('vm.contextWorker', contextWorker)
-    } else if (
-      globalThis.window &&
-      globalThis.top !== globalThis.window &&
-      globalThis.location.pathname === new URL(VM_WINDOW_PATH).pathname
-    ) {
-      // inside realm frame
-      // @ts-ignore
-      contextWorker = new ContextWorkerInterfaceProxy(globalThis.top.__globals)
-      contextWorker[kWorkerContextReady] = Promise.resolve(contextWorker)
-    } else {
-      throw new TypeError('Unable to determine VM context worker')
-    }
-  } else {
-    contextWorker = new SharedWorker(`${globalThis.origin}/oro/vm/worker.js`, {
-      type: 'module'
-    })
+  contextWorker = new SharedWorker(`${globalThis.origin}/oro/vm/worker.js`, {
+    type: 'module'
+  })
 
-    contextWorker[kWorkerContextReady] = waitForContextWorkerReady(contextWorker)
-  }
+  contextWorker[kWorkerContextReady] = waitForContextWorkerReady(contextWorker)
 
   const worker = contextWorker
   worker.port.addEventListener('message', (event) => {
