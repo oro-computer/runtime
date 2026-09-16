@@ -2519,8 +2519,8 @@ test('CI caches dependencies and runs focused platform coverage', () => {
   }
   assert.match(
     workflow,
-    /Build Oro Runtime CLI\n\s+id: build-runtime\n\s+timeout-minutes: 20[\s\S]*Build Oro Runtime CLI \(Unix\)\n\s+id: build-runtime-unix[\s\S]*timeout-minutes: 45[\s\S]*Build Oro Runtime CLI \(Windows\)\n\s+id: build-runtime-windows[\s\S]*timeout-minutes: 20/,
-    'CI should allow the combined Apple build to finish while retaining bounded native build times'
+    /Build Oro Runtime CLI\n\s+id: build-runtime\n\s+timeout-minutes: 45[\s\S]*Build Oro Runtime CLI \(Unix\)\n\s+id: build-runtime-unix[\s\S]*timeout-minutes: 45[\s\S]*Build Oro Runtime CLI \(Windows\)\n\s+id: build-runtime-windows[\s\S]*timeout-minutes: 20/,
+    'CI should allow Linux dependency rebuilds and the combined Apple build to finish while retaining bounded native build times'
   )
   for (const nativeWorkflow of [workflow, releaseWorkflow, publishWorkflow]) {
     assert.match(
