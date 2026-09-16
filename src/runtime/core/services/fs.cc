@@ -331,6 +331,7 @@ namespace oro::runtime::core::services {
               {"source", "fs.access"},
               {"err", JSON::Object::Entries {
                 {"code", req->result},
+                {"name", String(uv_err_name((int) req->result))},
                 {"message", String(uv_strerror((int) req->result))}
               }}
             };
@@ -353,6 +354,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.access"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -383,6 +385,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.chmod"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -404,6 +407,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.chmod"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -432,6 +436,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.chown"},
             {"err", JSON::Object::Entries {
               {"code", uv_fs_get_result(req)},
+              {"name", String(uv_err_name(uv_fs_get_result(req)))},
               {"message", String(uv_strerror(uv_fs_get_result(req)))}
             }}
           };
@@ -453,6 +458,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.chown"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -480,6 +486,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.lchown"},
             {"err", JSON::Object::Entries {
               {"code", uv_fs_get_result(req)},
+              {"name", String(uv_err_name(uv_fs_get_result(req)))},
               {"message", String(uv_strerror(uv_fs_get_result(req)))}
             }}
           };
@@ -501,6 +508,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.lchown"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -646,6 +654,7 @@ namespace oro::runtime::core::services {
             {"err", JSON::Object::Entries {
               {"id", std::to_string(desc->id)},
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -671,6 +680,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(desc->id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -810,6 +820,7 @@ namespace oro::runtime::core::services {
                 {"code", req->result},
                 {"path", desc->resource.path.string()},
                 {"syscall", "open"},
+                {"name", String(uv_err_name((int) req->result))},
                 {"message", String(uv_strerror((int) req->result))}
               }}
             };
@@ -841,6 +852,7 @@ namespace oro::runtime::core::services {
             {"code", err},
             {"path", desc->resource.path.string()},
             {"syscall", "open"},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -1012,6 +1024,7 @@ namespace oro::runtime::core::services {
               {"err", JSON::Object::Entries {
                 {"id", std::to_string(desc->id)},
                 {"code", req->result},
+                {"name", String(uv_err_name((int) req->result))},
                 {"message", String(uv_strerror((int) req->result))}
               }}
             };
@@ -1040,6 +1053,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(desc->id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -1178,6 +1192,7 @@ namespace oro::runtime::core::services {
             {"err", JSON::Object::Entries {
               {"id", std::to_string(desc->id)},
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -1209,6 +1224,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(desc->id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -1298,6 +1314,7 @@ namespace oro::runtime::core::services {
             {"err", JSON::Object::Entries {
               {"id", std::to_string(desc->id)},
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -1323,6 +1340,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(desc->id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -1507,6 +1525,7 @@ namespace oro::runtime::core::services {
             {"err", JSON::Object::Entries {
               {"id", std::to_string(desc->id)},
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -1532,6 +1551,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(desc->id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -1684,6 +1704,7 @@ namespace oro::runtime::core::services {
             {"err", JSON::Object::Entries {
               {"id", std::to_string(desc->id)},
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -1707,6 +1728,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(desc->id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -1776,6 +1798,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.stat"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -1792,6 +1815,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.stat"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -1879,6 +1903,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.fsync"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -1901,6 +1926,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -1946,6 +1972,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.ftruncate"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -1968,6 +1995,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2012,6 +2040,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.fdatasync"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -2034,6 +2063,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2094,6 +2124,7 @@ namespace oro::runtime::core::services {
             {"err", JSON::Object::Entries {
               {"id", std::to_string(desc->id)},
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -2111,6 +2142,7 @@ namespace oro::runtime::core::services {
           {"err", JSON::Object::Entries {
             {"id", std::to_string(id)},
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2179,9 +2211,10 @@ namespace oro::runtime::core::services {
 
         if (uv_fs_get_result(req) < 0) {
           json = JSON::Object::Entries {
-            {"source", "fs.stat"},
+            {"source", "fs.lstat"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -2195,9 +2228,10 @@ namespace oro::runtime::core::services {
 
       if (err < 0) {
         auto json = JSON::Object::Entries {
-          {"source", "fs.stat"},
+          {"source", "fs.lstat"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2267,6 +2301,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.link"},
             {"err", JSON::Object::Entries {
               {"code", uv_fs_get_result(req)},
+              {"name", String(uv_err_name(uv_fs_get_result(req)))},
               {"message", String(uv_strerror(uv_fs_get_result(req)))}
             }}
           };
@@ -2288,6 +2323,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.link"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2329,6 +2365,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.utimes"},
             {"err", JSON::Object::Entries {
               {"code", uv_fs_get_result(req)},
+              {"name", String(uv_err_name(uv_fs_get_result(req)))},
               {"message", String(uv_strerror(uv_fs_get_result(req)))}
             }}
           };
@@ -2348,6 +2385,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.utimes"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2403,6 +2441,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.futimes"},
             {"err", JSON::Object::Entries {
               {"code", uv_fs_get_result(req)},
+              {"name", String(uv_err_name(uv_fs_get_result(req)))},
               {"message", String(uv_strerror(uv_fs_get_result(req)))}
             }}
           };
@@ -2422,6 +2461,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.futimes"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2484,6 +2524,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.symlink"},
             {"err", JSON::Object::Entries {
               {"code", uv_fs_get_result(req)},
+              {"name", String(uv_err_name(uv_fs_get_result(req)))},
               {"message", String(uv_strerror(uv_fs_get_result(req)))}
             }}
           };
@@ -2505,6 +2546,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.symlink"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2671,6 +2713,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.unlink"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -2692,6 +2735,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.unlink"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2733,6 +2777,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.readlink"},
             {"err", JSON::Object::Entries {
               {"code", uv_fs_get_result(req)},
+              {"name", String(uv_err_name(uv_fs_get_result(req)))},
               {"message", String(uv_strerror(uv_fs_get_result(req)))}
             }}
           };
@@ -2754,6 +2799,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.readlink"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2814,6 +2860,7 @@ namespace oro::runtime::core::services {
               {"source", "fs.realpath"},
               {"err", JSON::Object::Entries {
                 {"code", uv_fs_get_result(req)},
+                {"name", String(uv_err_name(uv_fs_get_result(req)))},
                 {"message", String(uv_strerror(uv_fs_get_result(req)))}
               }}
             };
@@ -2836,6 +2883,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.realpath"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2882,6 +2930,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.rename"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -2903,6 +2952,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.rename"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -2978,6 +3028,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.copyFile"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -2999,6 +3050,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.copyFile"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -3043,6 +3095,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.rmdir"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -3064,6 +3117,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.rmdir"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -3115,6 +3169,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.mkdir"},
             {"err", JSON::Object::Entries {
               {"code", req->result},
+              {"name", String(uv_err_name((int) req->result))},
               {"message", String(uv_strerror((int) req->result))}
             }}
           };
@@ -3165,6 +3220,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.mkdir"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
@@ -3192,6 +3248,7 @@ namespace oro::runtime::core::services {
             {"source", "fs.mkdtemp"},
             {"err", JSON::Object::Entries {
               {"code", uv_fs_get_result(req)},
+              {"name", String(uv_err_name(uv_fs_get_result(req)))},
               {"message", String(uv_strerror(uv_fs_get_result(req)))}
             }}
           };
@@ -3212,6 +3269,7 @@ namespace oro::runtime::core::services {
           {"source", "fs.mkdtemp"},
           {"err", JSON::Object::Entries {
             {"code", err},
+            {"name", String(uv_err_name(err))},
             {"message", String(uv_strerror(err))}
           }}
         };
