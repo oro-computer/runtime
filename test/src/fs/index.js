@@ -1198,6 +1198,9 @@ test('fs.mkdtemp', async (t) => {
 })
 
 if (os.platform() !== 'android') {
+  // Hidden webviews can batch polling timers into one-second ticks.
+  const watchFileTimeout = 10000
+
   test('fs.watchFile/unwatchFile', async (t) => {
     const file = path.join(
       TMPDIR,
@@ -1206,24 +1209,22 @@ if (os.platform() !== 'android') {
     fs.writeFileSync(file, '0')
     await new Promise((resolve) => {
       let fired = false
+      let safetyTimer = null
       const listener = (curr, prev) => {
         try {
           t.ok(curr.mtimeMs >= prev.mtimeMs, 'mtime increased')
           fired = true
         } finally {
+          clearTimeout(safetyTimer)
           fs.unwatchFile(file, listener)
           fs.rmSync(file, { force: true })
           resolve()
         }
       }
       fs.watchFile(file, { interval: 50 }, listener)
-      setTimeout(() => {
-        try {
-          fs.appendFileSync(file, '1')
-        } catch {}
-      }, 100)
+      fs.appendFileSync(file, '1')
       // safety timeout in case no event
-      setTimeout(() => {
+      safetyTimer = setTimeout(() => {
         if (!fired) {
           fs.unwatchFile(file, listener)
           try {
@@ -1232,7 +1233,7 @@ if (os.platform() !== 'android') {
           t.fail('watchFile did not fire')
           resolve()
         }
-      }, 1000)
+      }, watchFileTimeout)
     })
   })
 
@@ -1266,11 +1267,7 @@ if (os.platform() !== 'android') {
         if (phase === 0) {
           phase = 1
           fs.unwatchFile(file, listener1)
-          setTimeout(() => {
-            try {
-              fs.appendFileSync(file, 'C')
-            } catch {}
-          }, 100)
+          fs.appendFileSync(file, 'C')
         } else if (phase === 1) {
           phase = 2
           t.ok(l1 >= 1, 'listener1 fired at least once')
@@ -1281,15 +1278,11 @@ if (os.platform() !== 'android') {
       }
       fs.watchFile(file, { interval: 40 }, listener1)
       fs.watchFile(file, { interval: 40 }, listener2)
-      setTimeout(() => {
-        try {
-          fs.appendFileSync(file, 'B')
-        } catch {}
-      }, 80)
+      fs.appendFileSync(file, 'B')
       safetyTimer = setTimeout(() => {
         t.fail(`watchFile listeners stalled in phase ${phase}`)
         finish()
-      }, 2000)
+      }, watchFileTimeout)
     })
   })
 
@@ -1301,12 +1294,14 @@ if (os.platform() !== 'android') {
     fs.writeFileSync(file, 'X')
     await new Promise((resolve) => {
       let fired = false
+      let safetyTimer = null
       const listener = (curr, prev) => {
         try {
           fired = true
           t.equal(typeof curr.size, 'bigint', 'curr.size is bigint')
           t.equal(typeof prev.size, 'bigint', 'prev.size is bigint')
         } finally {
+          clearTimeout(safetyTimer)
           fs.unwatchFile(file, listener)
           try {
             fs.rmSync(file, { force: true })
@@ -1315,12 +1310,8 @@ if (os.platform() !== 'android') {
         }
       }
       fs.watchFile(file, { interval: 40, bigint: true }, listener)
-      setTimeout(() => {
-        try {
-          fs.appendFileSync(file, 'Y')
-        } catch {}
-      }, 80)
-      setTimeout(() => {
+      fs.appendFileSync(file, 'Y')
+      safetyTimer = setTimeout(() => {
         if (!fired) {
           fs.unwatchFile(file, listener)
           try {
@@ -1329,7 +1320,7 @@ if (os.platform() !== 'android') {
           t.fail('bigint watchFile did not fire')
           resolve()
         }
-      }, 1000)
+      }, watchFileTimeout)
     })
   })
 
