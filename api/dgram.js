@@ -182,6 +182,9 @@ async function startReading (socket, callback = undefined) {
   }
 
   try {
+    // Native UDP delivery can switch to IPC whenever Conduit disconnects.
+    // Keep this listener until close, including while Conduit is active.
+    socket.enableDataEventFallback()
     let usedConduit = false
     if (socket?.conduit?.isActive) {
       const opts = { route: 'udp.readStart' }
@@ -196,9 +199,6 @@ async function startReading (socket, callback = undefined) {
     }
 
     if (!usedConduit) {
-      if (typeof socket.enableDataEventFallback === 'function') {
-        socket.enableDataEventFallback()
-      }
       if (socket?.conduit?.reconnect) {
         socket.conduit.reconnect().catch(() => {})
       }
@@ -963,7 +963,6 @@ export class Socket extends EventEmitter {
         const onopen = () => {
           clearTimeout(startTimer)
           this.conduit.removeEventListener('open', onopen)
-          this.disableDataEventFallback()
           startReading(this, (err) => {
             this.#resource.runInAsyncScope(() => {
               if (err) {
@@ -977,7 +976,6 @@ export class Socket extends EventEmitter {
         }
 
         this.conduit.addEventListener('reopen', () => {
-          this.disableDataEventFallback()
           startReading(this, (err) => {
             if (err) this.emit('error', err)
           })
