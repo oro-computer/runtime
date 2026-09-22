@@ -77,14 +77,18 @@ export const firstTimeExperienceSetup = async () => {
     platform = 'android'
   }
 
+  if (!platform && (isBuildCall || isRunCall)) {
+    platform = os.platform() === 'win32' ? 'windows' : os.platform()
+  }
+
   const startInfo = {
-    env: { ...process.env },
+    env: { ...env, ...process.env },
     cwd: installPath,
     stdio: [process.stdin, process.stdout, process.stderr]
   }
 
   const spawnArgs = []
-  if (argv.length > 0) {
+  if (isSetupCall || isBuildCall || isRunCall) {
     if (os.platform() === 'win32') {
       spawnArgs.push(
         // @ts-ignore

@@ -273,7 +273,7 @@ jobs:
             go-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install Linux build dependencies
-        if: ${{ !inputs.reuse_release_artifacts && runner.os == 'Linux' }}
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update
@@ -294,7 +294,7 @@ jobs:
             pkg-config
 
       - name: Install macOS build dependencies
-        if: ${{ !inputs.reuse_release_artifacts && runner.os == 'macOS' }}
+        if: runner.os == 'macOS'
         shell: bash
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -436,28 +436,12 @@ jobs:
           node_archive="$RUNNER_TEMP/npm-smoke-packs/oro-computer-runtime-node-$RELEASE_VERSION.tgz"
           meta_archive="$RUNNER_TEMP/npm-smoke-packs/oro-computer-runtime-$RELEASE_VERSION.tgz"
 
-          for archive in "$platform_archive" "$node_archive" "$meta_archive"; do
-            if [[ ! -f "$archive" ]]; then
-              echo >&2 "Missing exact package tarball for smoke install: $archive"
-              exit 1
-            fi
-          done
-
-          smoke_root="$RUNNER_TEMP/npm-smoke-install"
-          npm install \
-            --prefix "$smoke_root" \
-            --no-package-lock \
-            --no-save \
-            --no-audit \
-            --no-fund \
+          npm run release:verify-npm -- \
+            "$RELEASE_VERSION" \
+            "${{ needs.validate-tag.outputs.commit_sha }}" \
             "$platform_archive" \
             "$node_archive" \
             "$meta_archive"
-
-          node "$smoke_root/node_modules/@oro-computer/runtime/bin/oroc.js" --version
-          node "$smoke_root/node_modules/@oro-computer/runtime/bin/oroc.js" --help
-          node -e 'require(process.argv[1]); process.exit(0)' \
-            "$smoke_root/node_modules/@oro-computer/runtime-node/index.cjs"
 
       - name: Upload platform package tarball
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

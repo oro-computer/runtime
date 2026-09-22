@@ -93,7 +93,10 @@ uncommitted working tree.
 - [ ] Confirm the complete exact archive/checksum/SPDX set passed verification before the protected
       npm publication job started.
 - [ ] Confirm every native runner installed its exact platform, Node-adapter, and meta-package
-      tarballs and passed packaged CLI smoke tests; then confirm the publication job verified all
+      tarballs locally and globally in paths containing spaces, resolved the installed command
+      shim and prefix, checked the exact CLI version/commit, loaded both Node adapter formats,
+      and compiled a production desktop app with the packaged libraries and API resources.
+      Then confirm the publication job verified all
       seven manifests, published platform packages before dependent packages, and attached npm
       provenance.
 - [ ] Download and independently verify the archives, checksums, SBOMs, attestations, and

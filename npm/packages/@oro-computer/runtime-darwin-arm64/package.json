@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "test": ":",
-    "install": "bin/verify-platform.js darwin arm64"
+    "install": "node bin/verify-platform.js darwin arm64"
   },
   "repository": {
     "type": "git",

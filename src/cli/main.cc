@@ -7989,6 +7989,10 @@ int main (int argc, char* argv[]) {
     Path pathResources;
     Path pathToArchive;
 
+    auto quoteBuildPath = [&](const Path& value) -> String {
+      return platform.win ? "\"" + value.string() + "\"" : shellQuote(value.string());
+    };
+
     auto appendTLSFlags = [&](String& targetFlags) {
       const auto enableTLS = trim(env::get("ORO_ENABLE_TLS"));
       const auto enableMbedTLS = trim(env::get("ORO_ENABLE_MBEDTLS"));
@@ -7997,7 +8001,7 @@ int main (int argc, char* argv[]) {
       const String extraCFlags = env::get("ORO_TLS_CFLAGS");
       const String extraLDFlags = env::get("ORO_TLS_LDFLAGS");
 
-      const auto bundledLibDir = Path(prefixFile("lib/" + platform.arch + "-desktop"));
+      const auto bundledLibDir = prefixPath("lib/" + platform.arch + "-desktop");
       const bool hasBundledMbedTLS = (
         fs::exists(bundledLibDir / "libmbedtls.a") &&
         fs::exists(bundledLibDir / "libmbedx509.a") &&
@@ -8225,8 +8229,8 @@ int main (int argc, char* argv[]) {
         sipsCommand
           << "sips"
           << " -z " << scaled << " " << scaled
-          << " " << src
-          << " --out " << destFilePath;
+          << " " << quoteBuildPath(src)
+          << " --out " << quoteBuildPath(destFilePath);
 
         if (env::get("DEBUG") == "1" || env::get("VERBOSE") == "1") {
           logVerbose(sipsCommand.str());
@@ -8315,12 +8319,12 @@ int main (int argc, char* argv[]) {
         flags += " -DORO_RUNTIME_PLATFORM_SANDBOXED=0";
       }
       flags += " -I\"" + Path(paths.platformSpecificOutputPath / "include").string() + "\"";
-      flags += " -I" + prefixFile();
-      flags += " -I" + prefixFile("include");
-      flags += " -L" + prefixFile("lib/" + platform.arch + "-desktop");
+      flags += " -I" + quoteBuildPath(prefixPath());
+      flags += " -I" + quoteBuildPath(prefixPath("include"));
+      flags += " -L" + quoteBuildPath(prefixPath("lib/" + platform.arch + "-desktop"));
       if (flagCodeSign) {
         flags += " -Wl,-rpath,@executable_path";
-        flags += " -L" + prefixFile("lib/" + platform.arch + "-desktop/codesign");
+        flags += " -L" + quoteBuildPath(prefixPath("lib/" + platform.arch + "-desktop/codesign"));
       }
       flags += " -fPIC";
       flags += " " + runtimeLinkFlag();
@@ -8351,8 +8355,8 @@ int main (int argc, char* argv[]) {
       flags += " -lresolv";
 #endif
       appendTLSFlags(flags);
-      files += prefixFile("objects/" + platform.arch + "-desktop/desktop/main.o");
-      files += prefixFile("src/init.cc");
+      files += quoteBuildPath(prefixPath("objects/" + platform.arch + "-desktop/desktop/main.o")) + " ";
+      files += quoteBuildPath(prefixPath("src/init.cc")) + " ";
       flags += " " + getCxxFlags();
 
       Path pathBase = "Contents";
@@ -10311,16 +10315,15 @@ int main (int argc, char* argv[]) {
       logInfo("preparing build for linux");
       flags = " -std=c++2a `pkg-config --cflags --libs dbus-1 gtk+-3.0 webkit2gtk-4.1`";
       flags += " -ldl " + getCxxFlags();
-      flags += " -I" + Path(paths.platformSpecificOutputPath / "include").string();
-      flags += " -I" + prefixFile();
-      flags += " -I" + prefixFile("include");
-      flags += " -I" + prefixFile("include");
-      flags += " -L" + prefixFile("lib/" + platform.arch + "-desktop");
+      flags += " -I" + quoteBuildPath(paths.platformSpecificOutputPath / "include");
+      flags += " -I" + quoteBuildPath(prefixPath());
+      flags += " -I" + quoteBuildPath(prefixPath("include"));
+      flags += " -L" + quoteBuildPath(prefixPath("lib/" + platform.arch + "-desktop"));
 
       appendTLSFlags(flags);
 
-      files += prefixFile("objects/" + platform.arch + "-desktop/desktop/main.o");
-      files += prefixFile("src/init.cc");
+      files += quoteBuildPath(prefixPath("objects/" + platform.arch + "-desktop/desktop/main.o")) + " ";
+      files += quoteBuildPath(prefixPath("src/init.cc")) + " ";
 
       auto resolveIrohLib = [&](const String& baseDir) -> Path {
         return prefixPath(baseDir + "/liboro_iroh.a");
@@ -10371,11 +10374,11 @@ int main (int argc, char* argv[]) {
 
       files += String(" -Wl,--start-group ");
       for (const auto& lib : linuxCoreLibs) {
-        files += lib.string();
+        files += quoteBuildPath(lib);
         files += " ";
       }
       for (const auto& lib : linuxBundledLibs) {
-        files += lib.string();
+        files += quoteBuildPath(lib);
         files += " ";
       }
       files += String("-Wl,--end-group ");
@@ -10430,21 +10433,21 @@ int main (int argc, char* argv[]) {
             << " -rdynamic"
             << " -fPIC"
             << " " << flags
-            << " -o " << runtimeExtensionOutput.string()
-            << " " << prefixFile("objects/" + platform.arch + "-desktop/extensions/linux.o")
-            << " " << runtimeArchive.string()
-            << " " << resolveIrohLib(libDir).string()
-            << " " << prefixFile(libDir + "/libuv.a")
-            << " " << prefixFile(libDir + "/libusb-1.0.a")
-            << " " << prefixFile(libDir + "/libsodium.a")
-            << " " << prefixFile(libDir + "/libwhisper.a")
-            << " " << prefixFile(libDir + "/libllama.a")
-            << " " << prefixFile(libDir + "/libggml.a")
-            << " " << prefixFile(libDir + "/libggml-base.a")
-            << " " << prefixFile(libDir + "/libggml-cpu.a");
+            << " -o " << quoteBuildPath(runtimeExtensionOutput)
+            << " " << quoteBuildPath(prefixPath("objects/" + platform.arch + "-desktop/extensions/linux.o"))
+            << " " << quoteBuildPath(runtimeArchive)
+            << " " << quoteBuildPath(resolveIrohLib(libDir))
+            << " " << quoteBuildPath(prefixPath(libDir + "/libuv.a"))
+            << " " << quoteBuildPath(prefixPath(libDir + "/libusb-1.0.a"))
+            << " " << quoteBuildPath(prefixPath(libDir + "/libsodium.a"))
+            << " " << quoteBuildPath(prefixPath(libDir + "/libwhisper.a"))
+            << " " << quoteBuildPath(prefixPath(libDir + "/libllama.a"))
+            << " " << quoteBuildPath(prefixPath(libDir + "/libggml.a"))
+            << " " << quoteBuildPath(prefixPath(libDir + "/libggml-base.a"))
+            << " " << quoteBuildPath(prefixPath(libDir + "/libggml-cpu.a"));
 
           for (const auto& lib : linuxBundledLibs) {
-            command << " " << lib.string();
+            command << " " << quoteBuildPath(lib);
           }
 
           logVerbose(command.str());
@@ -10556,48 +10559,48 @@ int main (int argc, char* argv[]) {
 
       auto d = String(debugBuild ? "d" : "" );
 
-      flags += " -I" + prefixFile("include");
-      flags += " -L" + prefixFile("lib" + d + "/" + platform.arch + "-desktop");
+      flags += " -I" + quoteBuildPath(prefixPath("include"));
+      flags += " -L" + quoteBuildPath(prefixPath("lib" + d + "/" + platform.arch + "-desktop"));
       appendTLSFlags(flags);
       const String cliName(gCliDisplayName);
-      auto main_o = prefixFile("objects/" + platform.arch + "-desktop/desktop/main" + d + ".o");
+      auto main_o = prefixPath("objects/" + platform.arch + "-desktop/desktop/main" + d + ".o").string();
       if (!fs::exists(main_o)) {
         logWarn("Can't find main obj, unable to build: " + main_o + ". Ensure dev runtime objects are installed under ORO_HOME. Run '" + cliName + " setup --platform=windows'.");
         missing_assets = true;
       } else {
-        files += main_o;
+        files += quoteBuildPath(main_o) + " ";
       }
-      files += prefixFile("src/init.cc");
+      files += quoteBuildPath(prefixPath("src/init.cc")) + " ";
       auto static_runtime_path = resolveRuntimeStaticArchive("lib" + d + "/" + platform.arch + "-desktop", d + ".a");
       if (!fs::exists(static_runtime_path)) {
         logError("Can't find static runtime, unable to build: " + static_runtime_path.string() + ". Ensure dev runtime libs are installed under ORO_HOME. Run '" + cliName + " setup --platform=windows'.");
         missing_assets = true;
       } else {
-        files += static_runtime_path.string() + " ";
+        files += quoteBuildPath(static_runtime_path) + " ";
       }
 
 #if ORO_RUNTIME_HAVE_LIBIPFS
-      auto static_libipfs_lib = prefixFile("lib" + d + "/" + platform.arch + "-desktop/libipfs" + d + ".lib");
-      auto static_libipfs_a = prefixFile("lib" + d + "/" + platform.arch + "-desktop/libipfs" + d + ".a");
+      auto static_libipfs_lib = prefixPath("lib" + d + "/" + platform.arch + "-desktop/libipfs" + d + ".lib").string();
+      auto static_libipfs_a = prefixPath("lib" + d + "/" + platform.arch + "-desktop/libipfs" + d + ".a").string();
       if (fs::exists(static_libipfs_lib)) {
-        files += static_libipfs_lib;
+        files += quoteBuildPath(static_libipfs_lib) + " ";
       } else if (fs::exists(static_libipfs_a)) {
-        files += static_libipfs_a;
+        files += quoteBuildPath(static_libipfs_a) + " ";
       } else {
         logWarn("Can't find libipfs static lib, IPFS features unavailable: " + static_libipfs_lib);
       }
 #endif
 
-      auto static_libusb = prefixFile("lib" + d + "/" + platform.arch + "-desktop/libusb-1.0.lib");
+      auto static_libusb = prefixPath("lib" + d + "/" + platform.arch + "-desktop/libusb-1.0.lib").string();
       if (fs::exists(static_libusb)) {
-        files += static_libusb;
+        files += quoteBuildPath(static_libusb) + " ";
       } else {
         logWarn("Can't find libusb static lib, USB features unavailable: " + static_libusb);
       }
 
-      auto static_libsodium = prefixFile("lib" + d + "/" + platform.arch + "-desktop/libsodium.lib");
+      auto static_libsodium = prefixPath("lib" + d + "/" + platform.arch + "-desktop/libsodium.lib").string();
       if (fs::exists(static_libsodium)) {
-        files += static_libsodium;
+        files += quoteBuildPath(static_libsodium) + " ";
       } else {
         logWarn("Can't find libsodium static lib, crypto features unavailable: " + static_libsodium);
       }

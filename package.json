@@ -24,6 +24,7 @@
     "update-network-protocol": "./bin/update-network-protocol.sh",
     "relink": "./bin/publish-npm-modules.sh --link",
     "release:bootstrap-npm": "node ./bin/bootstrap-npm-packages.js",
+    "release:verify-npm": "node ./bin/verify-npm-install.js",
     "docs:diagrams": "node ./bin/render-diagrams.mjs",
     "docs:diagrams:png": "node ./bin/render-diagrams.mjs --format=png",
     "lint:standard": "standard .",

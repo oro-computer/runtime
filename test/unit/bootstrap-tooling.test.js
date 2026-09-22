@@ -442,8 +442,8 @@ test('npm publish workflow uses exact tarballs, OIDC, and the signed source', ()
   )
   assert.match(
     workflow,
-    /platform_archive=.*PACKAGE_ID.*RELEASE_VERSION[\s\S]*node_archive=.*runtime-node.*RELEASE_VERSION[\s\S]*meta_archive=.*runtime-\$RELEASE_VERSION[\s\S]*npm install[\s\S]*oroc\.js" --version[\s\S]*oroc\.js" --help[\s\S]*runtime-node\/index\.cjs/,
-    'native smoke tests should install all three exact tarballs and exercise the packaged CLI and Node adapter'
+    /platform_archive=.*PACKAGE_ID.*RELEASE_VERSION[\s\S]*node_archive=.*runtime-node.*RELEASE_VERSION[\s\S]*meta_archive=.*runtime-\$RELEASE_VERSION[\s\S]*npm run release:verify-npm --[\s\S]*needs\.validate-tag\.outputs\.commit_sha[\s\S]*"\$platform_archive"[\s\S]*"\$node_archive"[\s\S]*"\$meta_archive"/,
+    'native smoke tests should verify all three exact tarballs against the signed source commit'
   )
   assert.match(
     workflow,

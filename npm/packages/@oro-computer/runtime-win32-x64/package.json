@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "test": ":",
-    "install": "bin/verify-platform.js win32 x64"
+    "install": "node bin/verify-platform.js win32 x64"
   },
   "repository": {
     "type": "git",

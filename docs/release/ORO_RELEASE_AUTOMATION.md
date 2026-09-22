@@ -61,9 +61,18 @@ workflow. Manual dispatch checks a signed tag, builds every package, and retains
 without publishing. A signed-tag `Release Artifacts` run calls the same workflow with publication
 enabled.
 
-Each platform package is built and packed on its native hosted runner. Before upload, that runner
-installs its exact platform tarball together with the exact Node adapter and meta-package tarballs,
-runs the packaged `oroc --version` and `oroc --help`, and loads the packed CommonJS Node adapter. A
+Each platform package is packed on its native hosted runner. Signed-tag releases reuse the verified
+runtime archives; standalone manual runs build the runtime first. Before upload,
+`npm run release:verify-npm` installs the exact platform, Node adapter, and meta-package tarballs
+both locally and globally into temporary paths containing spaces, outside the source checkout.
+It clears inherited runtime paths, checks package versions and advertised target libraries, invokes
+the npm-created `oroc` command shim, checks the signed commit's exact CLI version and installation
+prefix, and loads both CommonJS and ESM Node adapters. Each installation must also compile a minimal
+production desktop app and include its executable and the installed JavaScript API resources.
+Linux and macOS consumer build dependencies are installed even when runtime archives are reused.
+These checks cover the five native host/architecture combinations in the package matrix; they do
+not replace application launch tests, mobile simulator tests, or fresh-machine dependency setup
+validation. Smoke directories are retained on the runner for inspection. A
 single Ubuntu publication job then downloads those same tarballs, requires all seven expected
 files, and verifies each embedded package name and version. It enters the `npm-publish` GitHub
 environment and publishes in dependency order:
@@ -104,6 +113,10 @@ repository code. Complete these account-level steps before pushing `v0.1.0`:
    `v*.*.*` release-tag pattern used by this repository. Add required reviewers only if releases
    should pause for approval; with no reviewer rule, a valid signed tag proceeds without human
    input.
+   In **Settings → Environments → npm-publish → Deployment branches and tags**, choose
+   **Selected branches and tags**, then add a **Tag** rule for `v*.*.*` with no branch rule.
+   No environment secrets or variables are required for npm publication. In particular, do not
+   add `NPM_TOKEN` or `NODE_AUTH_TOKEN`; the workflow already requests `id-token: write`.
 3. Add a repository ruleset for `v*.*.*` that restricts release-tag creation and deletion to the
    release maintainers. The workflow also rejects lightweight, unsigned, unverified, indirect, or
    version-mismatched tags.
