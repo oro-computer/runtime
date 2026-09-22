@@ -91,6 +91,7 @@
 #endif
 
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "dbghelp.lib")
 #pragma comment(lib, "Dwmapi.lib")
 #pragma comment(lib, "Gdi32.lib")
@@ -102,6 +103,7 @@
 #pragma comment(lib, "ggml-cpu.lib")
 #pragma comment(lib, "ggml-base.lib")
 #pragma comment(lib, "z.lib")
+#pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
