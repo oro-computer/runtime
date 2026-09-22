@@ -1,114 +1,151 @@
 # Oro Runtime
 
-Oro Runtime is the cross-platform runtime and CLI toolchain for Oro applications. A built distribution gives you the `oroc` CLI, the public `oro:*` JavaScript modules, generated API/config/CLI references, and installed manpages for downstream application development.
+**Build desktop and mobile apps with the web technologies you know.**
 
-These docs assume you are using an installed runtime from an app workspace. They do not assume you are inside the runtime source repository.
+[![CI](https://github.com/oro-computer/runtime/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/oro-computer/runtime/actions/workflows/ci.yml)
+[![Release builds](https://github.com/oro-computer/runtime/actions/workflows/release-artifacts.yml/badge.svg)](https://github.com/oro-computer/runtime/actions/workflows/release-artifacts.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE.txt)
 
-This repository is the active Oro Runtime source tree.
+Oro brings HTML, CSS, and JavaScript to native applications on **Linux, macOS, Windows,
+Android, and iOS**. Your interface runs in the platform's WebView, backed by a C++ runtime
+that exposes native capabilities through JavaScript modules. The `oroc` CLI takes you from
+your first window to building, packaging, and updating your app.
 
-## Install
+[Website](https://oro.computer/runtime) · [API reference](api/README.md) · [Examples](examples) · [Contributing](CONTRIBUTING.md)
 
-Oro Runtime release packages are published under the `@oro-computer` npm
-scope. After `v0.1.0` is published, install the CLI with:
+## Why Oro?
+
+- **Web interfaces, native capabilities.** Work with windows, files, networking, secure
+  storage, and workers through `oro:*` imports. Extend the runtime with native code when
+  your application needs more.
+- **Data and compute on the device.** Build with SQLite, peer-to-peer connections through
+  Iroh, and local model inference. Keep application logic close to the user's data.
+- **A shared toolchain across platforms.** Create projects, inspect configuration, build
+  apps, and prepare releases with one CLI and an explicit `oro.toml` configuration.
+- **Discoverable by people and agents.** Generated TypeScript declarations, searchable
+  CLI help, installed manuals, and an MCP server make the runtime accessible from your
+  editor, terminal, and automation tools.
+
+## Get started
+
+> **Release status:** the first runtime release is in preparation. The npm packages currently
+> contain bootstrap reservations, not installable runtime binaries. Use a [source build](#build-from-source)
+> until `v0.1.0` is available.
+
+Once `v0.1.0` is published, install the CLI with **Node.js 22 or newer**:
 
 ```sh
-npm install --global @oro-computer/runtime
+npm install --global @oro-computer/runtime@0.1.0
 oroc --version
 ```
 
-Node.js 22 or newer is required by the npm launcher. Platform packages are
-selected automatically for Linux, macOS, and Windows on supported CPU
-architectures.
+With `oroc` installed, create and launch your first app:
 
-## Build From Source
+```sh
+oroc init my-app
+cd my-app
+oroc build --run .
+```
 
-Source builds require Node.js 22 or newer, pnpm 11, Python 3, a C++20
-toolchain, and the platform SDKs for the targets being built.
+Edit your app's HTML, CSS, and JavaScript, and configure its build in `oro.toml`.
+Use `oroc help <query>` to find your next step—for example, `oroc help updates` or
+`oroc help ios signing`. Native builds require the toolchain and SDKs for the target platform.
+
+## Native APIs, ordinary JavaScript
+
+Inside an Oro app, import native functionality as ES modules. For example, query a SQLite
+database directly from JavaScript:
+
+```js
+import { open } from 'oro:sqlite'
+
+const db = open(':memory:')
+db.exec('CREATE TABLE notes (body TEXT)')
+db.exec('INSERT INTO notes (body) VALUES (?)', {
+  params: ['Hello from Oro'],
+})
+
+const { rows } = db.exec('SELECT body FROM notes')
+console.log(rows[0].body)
+db.close()
+```
+
+Explore [`oro:application`](api/application.js), [`oro:fs/promises`](api/fs/promises.js),
+[`oro:secure-storage`](api/secure-storage.js), and the [full API reference](api/README.md).
+The runtime ships TypeScript declarations for editor completion and type checking.
+
+## Platforms
+
+The npm launcher selects the package for your development machine automatically.
+
+| Development host | Architectures | Additional SDK artifacts |
+| ---------------- | ------------- | ------------------------ |
+| Linux            | x64, arm64    | Android on x64           |
+| macOS            | x64, arm64    | iOS device and Simulator |
+| Windows          | x64           | Desktop only             |
+
+Target mobile builds with `oroc build --platform=android .` or
+`oroc build --platform=ios .` using the appropriate host and SDKs. Platform APIs and device
+support vary; see [current capabilities and limitations](docs/LIMITATIONS.md).
+
+## Automation and agents
+
+Connect an MCP client to your app workspace to search runtime documentation, inspect
+configuration, and invoke build and run tools:
+
+```sh
+oroc mcp --stdio
+```
+
+The CLI also supports structured JSON output on applicable subcommands and separate log
+files for automation. See the [MCP guide](docs/MCP.md) for client setup, HTTP transport,
+and embedded application servers.
+
+## Build from source
+
+Source development requires Node.js 22+, pnpm 11, Python 3, a C++20 compiler, and the native
+SDKs for your targets. From the repository root, install the JavaScript dependencies:
 
 ```sh
 corepack enable
 pnpm install --frozen-lockfile
-NO_ANDROID=1 NO_IOS=1 ./bin/install.sh
-build/*-desktop/bin/oroc --version
 ```
 
-`NO_ANDROID` and `NO_IOS` are deliberately separate, presence-based source-build controls:
+For a desktop-only runtime, use Bash on Linux or macOS:
 
-- `NO_ANDROID=<non-empty>` disables only Android setup, ABI libraries, and staged Android
-  artifacts. It does not disable iOS or any desktop target.
-- `NO_IOS=<non-empty>` disables only iOS and iOS Simulator dependency, library, prebuild, and
-  staging work on macOS. It does not disable Android or macOS desktop.
+```sh
+NO_ANDROID=1 NO_IOS=1 ./bin/install.sh
+```
 
-Values such as `0` and `false` are non-empty and therefore still disable the named target. Leave a
-variable unset or empty to enable that target. These variables control runtime source bootstrap;
-they do not replace `oroc build --platform=<platform>` for application builds. See the complete
-[source-build environment contract](docs/BUILD_ENVIRONMENT.md).
+Or PowerShell on Windows:
 
-Use `VERBOSE=1 DEBUG=1 NO_ANDROID=1 NO_IOS=1 npm run relink` for an explicitly desktop-only local
-debug build linked into your development environment. See [Contributing](CONTRIBUTING.md) for
-validation and platform prerequisites.
+```powershell
+$env:NO_ANDROID = "1"
+$env:NO_IOS = "1"
+.\bin\install.ps1 -yesdeps
+```
 
-When Android is enabled, source bootstrap installs the SDK, NDK, and build tools
-needed to compile both supported Android ABIs. It does not download an emulator
-or system image. Emulator workflows provision one image matching the host
-architecture on demand; see the
-[source-build environment contract](docs/BUILD_ENVIRONMENT.md#android-build-and-emulator-packages).
+`NO_ANDROID` and `NO_IOS` are independent presence switches: any non-empty value—including
+`0` or `false`—disables only the named mobile target family. Leave a variable unset to include
+that target. Read the [source-build guide](docs/BUILD_ENVIRONMENT.md) for platform details and
+[Contributing](CONTRIBUTING.md) for local linking, debug builds, and validation.
 
-## Canonical Links
+## Explore further
 
-- Source repository: https://github.com/oro-computer/runtime
-- Project website: https://oro.computer/runtime
-- Top-level JavaScript module docs live under `https://oro.computer/runtime/docs/?p=javascript%2F<module>` (for example, `oro:application` maps to `https://oro.computer/runtime/docs/?p=javascript%2Fapplication`).
-- CLI command docs live under `https://oro.computer/runtime/docs/?p=cli%2F<path>` where `oroc` maps to `cli/oroc`, `oroc run` maps to `cli/run`, and nested commands map by path segments such as `oroc update init` -> `cli/update/init`.
-- Nested JavaScript namespace modules do not have their own website URLs; use the installed/generated docs and manpages for those entries.
+| Resource                                     | What you will find                                            |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| [JavaScript APIs](api/README.md)             | Modules, methods, examples, and types                         |
+| [CLI reference](api/CLI.md)                  | Build, run, package, update, and inspection commands          |
+| [Configuration](api/CONFIG.md)               | `oro.toml` settings and their behavior                        |
+| [Examples](examples)                         | Applications and focused integrations                         |
+| [Architecture](docs/RUNTIME_ARCHITECTURE.md) | How the WebView, IPC bridge, and native services fit together |
+| [Changelog](CHANGELOG.md)                    | Release notes and compatibility changes                       |
 
-## Installed Surface
-
-- `oroc`: project setup, build, packaging, update, device, config, and inspection workflows.
-- `api/README.md`: generated JavaScript API reference for public `oro:*` modules.
-- `api/index.d.ts`: generated TypeScript declarations for the shipped public API.
-- `api/CLI.md`: generated CLI reference.
-- `api/CONFIG.md`: generated configuration reference for `oro.toml`, the `oro.ini` fallback, and `.ororc`.
-- `share/man/man1`: `oroc` command manuals.
-- `share/man/man3`: JavaScript and C API manuals.
-- `share/man/man7`: concepts, IPC, route catalogs, and workflow guides.
-- `share/doc/oroc/{README.md,MCP.md,llms.txt,LIMITATIONS.md}` and
-  `share/doc/oroc/docs/BUILD_ENVIRONMENT.md`: installed high-level reference docs.
-
-## Start Here
-
-1. Run `oroc help <query>` for task-oriented discovery such as `oroc help ios signing`, `oroc help json logs`, or `oroc help updates`.
-2. Create a project with `oroc init my-app`.
-3. Inspect the generated `oro.toml`.
-4. Run the app with `oroc run my-app` or build it with `oroc build my-app`.
-5. Use `oroc config --describe <key>` and `oroc env` to inspect effective configuration and environment inputs.
-6. Use `man 3 <module>`, `man 7 <guide>`, `api/README.md`, and `api/index.d.ts` when you need deeper API detail.
-
-## API Discovery
-
-- Prefer public high-level modules such as `oro:application`, `oro:window`, `oro:fs/promises`, and `oro:secure-storage` before dropping to `oro:ipc`.
-- Use section 3 manpages and `api/index.d.ts` for exact contracts.
-- Use section 7 manpages for concepts, transport guidance, and route catalogs.
-- Treat configuration as part of the API contract. `oro.toml`, the `oro.ini` fallback, and `.ororc` often explain runtime behavior that would otherwise look surprising.
-- Platform support varies. Check the installed docs for capability limits before assuming desktop, mobile, and browser-like surfaces are equivalent.
-
-## Automation And Agents
-
-- Use subcommand-local `--json` when a command supports structured stdout.
-- Use `--log-file=<path>` when you need logs without polluting structured stdout.
-- Use `oroc mcp --stdio` or `oroc mcp --http` when you want stable tool-oriented access instead of shell parsing.
-- In MCP clients, prefer `runtime-doc:/...` resources for runtime reference and `workspace:/...` resources for app-local docs and config when present.
-- Prefer specialized MCP tools such as `search_docs`, config helpers, build helpers, and version helpers before falling back to generic CLI execution.
-
-## Need To Know
-
-- `oro.toml` is the primary config format. `oro.ini` is used as a fallback when `oro.toml` is absent.
-- Do not assume a default service-worker mode. Respect the project config and the installed runtime docs.
-- Autoindex is opt-in.
-- The runtime does not guarantee `SharedArrayBuffer` or `Atomics.wait`; code that depends on shared memory needs a safe fallback.
-- For current platform gaps and compatibility caveats, see [Runtime Limitations](docs/LIMITATIONS.md).
+Questions or a reproducible bug? Start with [Support](SUPPORT.md).
+Contributions are welcome; see [Contributing](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities through [Security](SECURITY.md).
 
 ## License
 
-Apache-2.0. See [LICENSE.txt](LICENSE.txt), [NOTICE](NOTICE), and
-[third-party notices](THIRD_PARTY_NOTICES.md).
+Oro Runtime is licensed under [Apache 2.0](LICENSE.txt).
+See [NOTICE](NOTICE) and [third-party notices](THIRD_PARTY_NOTICES.md) for attribution.
