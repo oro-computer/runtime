@@ -57,6 +57,16 @@ Do not edit `build/`, `tmp/`, or generated declaration files. Public `oro:*` mod
 - Do not hand-edit generated declaration artifacts such as `api/index.d.ts` or `api/index.tmp.d.ts`.
 - If `npm run lint` changes generated files, review and keep those updates with the source edits that required them.
 
+## Commit and release signing
+
+Contributors should follow the target branch's active signature requirements; this guide does not
+require every contribution commit to be signed. Release maintainers must sign annotated release
+tags, and GitHub must verify those signatures before publication can proceed.
+
+The [signing guide](docs/release/SIGNING.md) covers SSH and GPG setup, GitHub key registration,
+local allowed-signers configuration, checks without creating a tag, and release-tag verification.
+It also explains optional commit signing and how to troubleshoot verification failures.
+
 ## Before Sending Changes
 
 1. Run `npm run lint`.

@@ -6,6 +6,10 @@ tarballs are built on their native runners, npm publication uses short-lived Git
 GitHub release becomes public only after the complete package family is available. The workflows
 also support non-publishing manual package and artifact smoke builds.
 
+Before cutting a tag, complete the [signing guide](SIGNING.md). It covers SSH and GPG keys,
+GitHub registration, local verification, the exact tag commands, and troubleshooting. Contributor
+commit signing and maintainer release-tag signing have separate requirements.
+
 ## Version synchronization
 
 `VERSION.txt` is the human-readable release version. The same version is also stored in
@@ -136,6 +140,7 @@ repository code. Complete these account-level steps before pushing `v0.1.0`:
    The first command is read-only and lists missing names. The second performs the irreversible
    package reservations using the maintainer identity already authenticated by the local npm CLI.
    This script is not called from GitHub Actions and is safe to rerun after a partial reservation.
+
 6. In the settings for each package below, add the same GitHub Actions trusted publisher:
    - GitHub organization or user: `oro-computer`
    - repository: `runtime`
@@ -162,8 +167,10 @@ for the account-side fields and current registry requirements.
 
 ## Release and recovery behavior
 
-Once activation is complete, pushing one annotated, verified signed `v<version>` tag is the only
-release trigger. A CI or build failure publishes nothing. A failure before the npm job publishes
+Once activation is complete, pushing one annotated, verified signed `v<version>` tag starts the
+release chain. For a nonpublishing artifact preflight, dispatch on a branch such as `master`;
+dispatching on a release tag can also enter publication because the guards check the tag ref.
+A CI or build failure publishes nothing. A failure before the npm job publishes
 nothing. A partial npm failure is recoverable by rerunning the same workflow because published
 tarballs are integrity-checked. The GitHub release remains absent until CI validation, every exact
 release-platform build, all npm packages, and all release assets pass. Published npm versions and

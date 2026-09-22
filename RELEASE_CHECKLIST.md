@@ -34,6 +34,9 @@ uncommitted working tree.
 
 ## Security and provenance
 
+- [ ] Complete the [signing setup](docs/release/SIGNING.md): register the public signing key on
+      GitHub, configure Git, and verify a temporary signature locally. For SSH, configure
+      `gpg.ssh.allowedSignersFile` before running `git tag -v`.
 - [ ] Run `gitleaks git --redact --no-banner .` from the repository root. Review every finding and
       every exact fingerprint in `.gitleaksignore`; the command must finish with no new or
       unreviewed findings. Never replace exact fingerprints with broad file or rule exemptions.
@@ -77,7 +80,7 @@ uncommitted working tree.
       complete matrix.
 - [ ] Create an annotated, signed `v<version>` tag on that exact commit. Run
       `git tag -v v<version>` locally and confirm the signature, tagger identity, and target commit
-      before pushing only the tag.
+      before pushing only the tag. Follow the [tag creation and verification steps](docs/release/SIGNING.md#create-a-release-tag-only-after-the-release-gates-pass).
 - [ ] After pushing the tag, confirm GitHub marks its signature **Verified** and starts the
       `Release Artifacts` workflow for the intended commit and version.
 - [ ] Let `Release Artifacts` build all supported targets and package tarballs. If the

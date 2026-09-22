@@ -4,10 +4,12 @@ Notable changes to Oro Runtime are documented here. During the `0.x` series,
 incompatible public API changes require a minor release; compatible fixes use
 a patch release.
 
-## [0.1.0] - Unreleased
+## [Unreleased]
 
-The first public preview is in preparation. npm package names are reserved,
-but the bootstrap packages do not contain an installable runtime.
+## [0.1.0] - 2026-09-22
+
+The first public preview of Oro Runtime brings native desktop and mobile
+application development to HTML, CSS, and JavaScript.
 
 ### Runtime and API
 
