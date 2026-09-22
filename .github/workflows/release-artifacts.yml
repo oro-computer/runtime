@@ -224,6 +224,7 @@ jobs:
     needs: validate-release
     permissions:
       contents: read
+      pull-requests: read
     uses: ./.github/workflows/ci.yml
     with:
       run_cross_platform: false
