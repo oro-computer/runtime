@@ -3185,6 +3185,10 @@ function _compile_libusb {
 
   echo "# building libusb for $platform ($target) on $host..."
   local STAGING_DIR="$BUILD_DIR/$target-$platform/libusb"
+  if [[ "$platform" == "desktop" && "$host" != "Win32" ]]; then
+    # Keep PIC objects separate from earlier static-only libusb builds.
+    STAGING_DIR="$BUILD_DIR/$target-$platform/libusb-pic"
+  fi
 
   if [ ! -d "$STAGING_DIR" ]; then
     mkdir -p "$STAGING_DIR"
@@ -3223,7 +3227,7 @@ function _compile_libusb {
       if (( use_autotools )); then
         local libusb_archive="$BUILD_DIR/$target-$platform/lib/libusb-1.0.a"
         if _autotools_configure_needed "$STAGING_DIR" "$BUILD_DIR/$target-$platform" || ! test -f "$libusb_archive"; then
-          quiet ./configure --disable-shared --enable-shared=no --disable-udev --prefix="$BUILD_DIR/$target-$platform"
+          quiet ./configure --with-pic --disable-shared --enable-shared=no --disable-udev --prefix="$BUILD_DIR/$target-$platform"
           die $? "not ok - libusb desktop configure"
 
           quiet make "-j$CPU_CORES"
@@ -3245,6 +3249,7 @@ function _compile_libusb {
         quiet cmake -S . -B "$cmake_build_dir" \
           -DLIBUSB_BUILD_SHARED_LIBS=OFF \
           -DBUILD_SHARED_LIBS=OFF \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
           -DLIBUSB_BUILD_TESTING=OFF \
           -DLIBUSB_BUILD_EXAMPLES=OFF \
           -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/$target-$platform"

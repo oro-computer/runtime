@@ -71,7 +71,7 @@ fs.writeFileSync(cargoManifest, cargoUpdated)
 
 const cargoLock = path.join(root, 'rust/oro-iroh/Cargo.lock')
 const cargoLockSource = fs.readFileSync(cargoLock, 'utf8')
-const cargoLockVersionPattern = /(\[\[package\]\]\nname = "oro-iroh"\nversion = ")[^"]+"/
+const cargoLockVersionPattern = /(\[\[package\]\]\r?\nname = "oro-iroh"\r?\nversion = ")[^"]+"/
 if (!cargoLockVersionPattern.test(cargoLockSource)) {
   throw new Error('Unable to find the oro-iroh package in Cargo.lock')
 }

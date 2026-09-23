@@ -93,7 +93,7 @@ for (const globalInstall of [false, true]) {
   fs.mkdirSync(project, { recursive: true })
   const scripts = {
     cli: 'oroc',
-    build: 'oroc build --prod',
+    build: 'oroc build --prod -V',
     resources: 'oroc print-build-dir --prod'
   }
   fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ private: true, scripts }))
@@ -165,7 +165,8 @@ bundle_identifier = "computer.oro.npmsmoke"
   fs.writeFileSync(path.join(project, 'index.html'), '<!doctype html><title>npm smoke</title><script type="module">import process from "oro:process"; console.log(process.platform)</script>')
   npm(['run', '--silent', 'build'], project, env)
   const resources = npm(['run', '--silent', 'resources'], project, env)
-  assert(isWithin(path.join(project, 'dist'), resources), `Build output escapes consumer project: ${resources}`)
+  assert(isWithin(fs.realpathSync(path.join(project, 'dist')), fs.realpathSync(resources)),
+    `Build output escapes consumer project: ${resources}`)
   requireFile(path.join(resources, 'index.html'))
   assert.deepEqual(fs.readFileSync(path.join(resources, 'oro/process.js')), fs.readFileSync(path.join(metaRoot, 'process.js')))
   const executable = process.platform === 'darwin'

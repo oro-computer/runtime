@@ -13,13 +13,13 @@ if stat --help 2>&1 | grep "usage: stat" >/dev/null; then
   stat_format_arg="-f"
   stat_mtime_spec="%m"
   stat_size_spec="%z"
-  _sha512sum="shasum -a512"
+  _sha512sum=(shasum -a512)
 else
   # GNU_STAT
   stat_format_arg="-c"
   stat_mtime_spec="%Y"
   stat_size_spec="%s"
-  _sha512sum="sha512sum"
+  _sha512sum=(sha512sum)
 fi
 
 function stat_mtime () {
@@ -65,8 +65,9 @@ function stat_size () {
 }
 
 function sha512sum() {
-  # Can't figure out a better way of escaping $_sha512sum for use in a call than using sh -c
-  sh -c "$_sha512sum $1|cut -d' ' -f1"
+  local checksum
+  checksum="$(command "${_sha512sum[@]}" "$1")" || return $?
+  printf '%s\n' "${checksum%% *}"
 }
 
 function escape_path() {

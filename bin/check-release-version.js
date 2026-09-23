@@ -129,7 +129,7 @@ const cargoLock = fs.readFileSync(
   'utf8'
 )
 const cargoLockVersion = cargoLock.match(
-  /\[\[package\]\]\nname = "oro-iroh"\nversion = "([^"]+)"/
+  /\[\[package\]\]\r?\nname = "oro-iroh"\r?\nversion = "([^"]+)"/
 )?.[1]
 check('rust/oro-iroh/Cargo.lock', cargoLockVersion)
 
