@@ -1,6 +1,6 @@
 {
   "name": "@oro-computer/runtime-win32-x64",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Oro Runtime binaries for Windows x64 (desktop).",
   "type": "module",
   "main": "src/index.js",

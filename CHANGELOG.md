@@ -6,6 +6,18 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-23
+
+### Development and CI
+
+- Honor `run_cross_platform: false` when release workflows call reusable CI,
+  avoiding duplicate platform builds during release validation while retaining
+  the full platform matrix for push and pull request CI.
+- Give the connected UDP send test a ten-second budget for socket setup and
+  packet delivery so iOS Simulator IPC setup does not exhaust a one-second
+  deadline before sending. Report the stage on timeout, handle socket errors,
+  and close both sockets after success or failure.
+
 ## [0.1.1] - 2026-09-23
 
 ### Installation and packaging

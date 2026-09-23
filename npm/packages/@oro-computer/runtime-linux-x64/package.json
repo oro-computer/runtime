@@ -1,6 +1,6 @@
 {
   "name": "@oro-computer/runtime-linux-x64",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Oro Runtime binaries for Linux x64 plus Android toolchain artifacts.",
   "type": "module",
   "main": "src/index.js",
