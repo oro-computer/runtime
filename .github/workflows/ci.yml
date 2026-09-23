@@ -387,9 +387,11 @@ jobs:
   test-platform:
     name: Build and test ${{ matrix.name }}
     needs: [changes, lint]
+    # Called workflows inherit the caller's event. Only an explicit false input
+    # disables this matrix; push/PR events have no run_cross_platform input.
     if: >-
       needs.changes.outputs.runtime_changed == 'true' &&
-      (github.event_name != 'workflow_call' || inputs.run_cross_platform)
+      toJSON(inputs.run_cross_platform) != 'false'
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 120
     strategy:

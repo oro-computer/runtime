@@ -278,25 +278,48 @@ test('udp connected send without specifying port/address', async (t) => {
   const client = dgram.createSocket('udp4')
   const address = '127.0.0.1'
   const payload = 'ping-connect'
+  let timer
+  let finished = false
+  let stage = 'bind'
 
-  const got = new Promise((resolve, reject) => {
-    const to = setTimeout(() => reject(new Error('timeout')), 1000)
-    server.on('message', (msg) => {
-      clearTimeout(to)
-      resolve(String(msg))
+  try {
+    const msg = await new Promise((resolve, reject) => {
+      // Include simulator IPC setup in the budget, not just packet delivery.
+      timer = setTimeout(() => {
+        finish(new Error(`Connected UDP send timed out during ${stage}`))
+      }, 10000)
+
+      function finish (error, message) {
+        if (finished) return
+        finished = true
+        clearTimeout(timer)
+        if (error) reject(error)
+        else resolve(message)
+      }
+
+      server.on('error', finish)
+      client.on('error', finish)
+      server.once('message', message => finish(null, String(message)))
+      server.bind(0, address, (error) => {
+        if (finished) return
+        if (error) return finish(error)
+        stage = 'connect'
+        client.connect(server.address().port, address, (error) => {
+          if (finished) return
+          if (error) return finish(error)
+          stage = 'send/receive'
+          client.send(payload, (error) => {
+            if (error) finish(error)
+          })
+        })
+      })
     })
-  })
-
-  await new Promise((resolve) => server.bind(0, address, resolve))
-  const port = server.address().port
-  await new Promise((resolve, reject) =>
-    client.connect(port, address, (err) => (err ? reject(err) : resolve()))
-  )
-  client.send(payload)
-  const msg = await got
-  t.equal(msg, payload, 'connected send without port/address works')
-  server.close()
-  client.close()
+    t.equal(msg, payload, 'connected send without port/address works')
+  } finally {
+    finished = true
+    clearTimeout(timer)
+    await Promise.all([server, client].map(socket => new Promise(resolve => socket.close(resolve))))
+  }
 })
 
 test('udp send callback', async (t) => {
