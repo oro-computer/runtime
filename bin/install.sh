@@ -1157,12 +1157,31 @@ function _prepare {
       return 1
     fi
 
-    if ! git clone --depth=1 --branch "$ref" "$url" "$destination" > /dev/null 2>&1; then
-      return 1
-    fi
+    local attempt clone_output clone_status
+    for attempt in 1 2 3; do
+      echo "# cloning $name at $ref (attempt $attempt/3)"
+      if clone_output="$(GIT_TERMINAL_PROMPT=0 git clone --depth=1 --branch "$ref" "$url" "$destination" 2>&1)"; then
+        break
+      else
+        clone_status=$?
+      fi
+
+      printf '%s\n' "$clone_output" >&2
+      echo >&2 "not ok - $name clone attempt $attempt/3 failed (exit $clone_status)"
+      # Git normally removes its destination after a transport failure. A failed
+      # checkout can leave files behind; do not retry over that partial tree.
+      if [[ -e "$destination" || -L "$destination" ]]; then
+        echo >&2 "not ok - $name clone left '$destination'; inspect the Git error above before retrying"
+        return "$clone_status"
+      fi
+      if (( attempt == 3 )); then
+        return "$clone_status"
+      fi
+      sleep "$((attempt * 2))"
+    done
 
     local observed_revision
-    observed_revision="$(git -C "$destination" rev-parse HEAD 2>/dev/null)"
+    observed_revision="$(git -C "$destination" rev-parse HEAD)" || return $?
     if [[ "$observed_revision" != "$expected_revision" ]]; then
       echo >&2 "not ok - $name revision mismatch: expected $expected_revision, found ${observed_revision:-unknown}"
       rm -rf "$destination"
