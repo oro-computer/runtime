@@ -6,6 +6,25 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-23
+
+### Installation and packaging
+
+- Build desktop libusb with position-independent code on Linux and macOS so it
+  can link into native shared extensions. Use separate staging output to avoid
+  reusing older objects built without PIC.
+- Handle paths containing spaces and shell punctuation in setup checksum
+  commands, and propagate checksum failures.
+
+### Release validation
+
+- Accept Windows CRLF line endings when checking and updating the runtime
+  version in `Cargo.lock`, preserving its line endings during updates.
+- Resolve macOS temporary-directory symlinks before checking npm smoke-build
+  output paths, while continuing to reject output outside the consumer project.
+- Include verbose compiler diagnostics in npm package smoke builds to make
+  native compilation and linker failures visible in CI logs.
+
 ## [0.1.0] - 2026-09-22
 
 The first public preview of Oro Runtime brings native desktop and mobile

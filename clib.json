@@ -1,7 +1,7 @@
 {
   "name": "oro-runtime",
   "repo": "oro-computer/runtime",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Oro Runtime — build and package lean, fast, native desktop and mobile applications using the web technologies you already know.",
   "license": "Apache-2.0",
   "install": "install.sh"
