@@ -233,7 +233,8 @@ jobs:
     name: Build ${{ matrix.name }}
     needs: [validate-release, verify-release]
     runs-on: ${{ matrix.runs_on }}
-    timeout-minutes: 120
+    # A cold Apple SDK build includes the host, device, and simulator runtimes.
+    timeout-minutes: ${{ matrix.release_support == 'ios' && 240 || 120 }}
     permissions:
       attestations: write
       contents: read
@@ -292,6 +293,21 @@ jobs:
         with:
           version: v0.17.0
 
+      - name: Setup Unix Rust compiler cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Configure Unix Rust compiler cache
+        if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          {
+            echo 'SCCACHE_GHA_ENABLED=true'
+            echo 'RUSTC_WRAPPER=sccache'
+          } >> "$GITHUB_ENV"
+
       - name: Configure Windows native compiler cache
         if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os == 'Windows'
         shell: bash
@@ -338,7 +354,7 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-${{ needs.validate-release.outputs.commit_sha }}-${{ github.run_attempt }}
+          key: release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-${{ needs.validate-release.outputs.commit_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-${{ needs.validate-release.outputs.commit_sha }}-
             release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.artifact_id }}-
@@ -410,11 +426,18 @@ jobs:
           echo 'CMAKE_C_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           echo 'CMAKE_CXX_COMPILER_LAUNCHER=ccache' >> "$GITHUB_ENV"
           mkdir -p "$CCACHE_TEMPDIR"
-          ccache --max-size 1536M
+          if [[ "$RUNNER_OS" == 'macOS' ]]; then
+            ccache --max-size 3G
+          else
+            ccache --max-size 1536M
+          fi
+          ccache --show-config
           ccache --zero-stats
 
       - name: Build staged runtime distribution (Unix)
         if: env.RUN_SELECTED_ARTIFACT == 'true' && runner.os != 'Windows'
+        # Leave time to preserve compiler results and validate/package the SDK.
+        timeout-minutes: ${{ matrix.release_support == 'ios' && 210 || 90 }}
         shell: bash
         env:
           ORO_HOME: ${{ runner.temp }}/oro-runtime-${{ env.RELEASE_VERSION }}-${{ matrix.artifact_id }}
@@ -452,6 +475,41 @@ jobs:
           $env:NO_IOS = "1"
           $env:NO_ANDROID = "1"
           .\bin\install.ps1 -yesdeps -verbose
+
+      - name: Quiesce native compiler cache
+        if: >-
+          always() &&
+          env.RUN_SELECTED_ARTIFACT == 'true' &&
+          runner.os != 'Windows' &&
+          steps.native-cache.outcome == 'success' &&
+          steps.native-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          native_compiler_pids() {
+            ps -Ao pid=,command= | awk -v workspace="$GITHUB_WORKSPACE" '
+              index($0, workspace) &&
+              $0 ~ /(^|[\/ ])(ccache|clang|clang\+\+)( |$)/ { print $1 }
+            '
+          }
+
+          for native_signal in TERM KILL; do
+            native_pids="$(native_compiler_pids)"
+            if [[ -z "$native_pids" ]]; then
+              break
+            fi
+
+            while IFS= read -r native_pid; do
+              if [[ -n "$native_pid" ]]; then
+                kill -"$native_signal" "$native_pid" 2>/dev/null || true
+              fi
+            done <<< "$native_pids"
+
+            if [[ "$native_signal" == "TERM" ]]; then
+              sleep 2
+            fi
+          done
+
+          ccache --cleanup
 
       - name: Save native compiler cache
         if: >-

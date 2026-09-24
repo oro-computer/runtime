@@ -113,7 +113,11 @@ metadata that is unsafe to move between hosted runners.
 - Test lanes restore npm's download cache using `test/package-lock.json`; `npm ci` still creates a
   clean dependency tree on every runner.
 - `actions/setup-python` restores the pip cache for the pinned cpplint requirement.
-- Unix native lanes restore a 1 GB ccache partition scoped by OS, architecture, and target family.
+- Unix native lanes restore ccache partitions scoped by OS, architecture, and target family:
+  up to 1536 MB on Linux and 3 GB on macOS. Android and Apple mobile runtime compilation invoke
+  ccache explicitly because their SDK compiler paths bypass the compiler wrappers on `PATH`.
+- Unix CI and release builds use sccache for Rust compiler outputs, in addition to caching Cargo
+  downloads. Windows builds use sccache for Rust and supported native compiler invocations.
 - Android restores Gradle and Cargo dependency caches from their pinned build inputs. It also
   restores a shared build-SDK cache containing the pinned command-line tools, Platform-Tools,
   Platform 37.0, Build Tools 36.0.0, and NDK r29. The emulator test has a separate cache for its
@@ -126,6 +130,19 @@ content. They restore the newest compatible prior key and publish a commit-speci
 changed sources can reuse unchanged objects without sharing objects across incompatible targets. A
 cache miss changes performance only; all installs and builds remain complete and independently
 validated.
+
+Release cache snapshots include the source commit, workflow run ID, and attempt number. A fresh
+manual preflight on the same commit can therefore save newly compiled objects instead of treating
+an older partial snapshot as an immutable exact hit. The build stops compiler writers before saving
+partial output after a failure or timeout. Cache hits still require matching compiler, flags, source,
+and included headers; device, simulator, debug, and release objects remain distinct.
+
+When runtime target families outnumber the detected CPUs, the installer builds those families
+sequentially and gives each family the full object-compilation budget. Apple SDK release jobs allow
+up to 210 minutes for a cold native build within a 240-minute job budget, leaving time for cache
+preservation and artifact validation. Other Unix release builds allow 90 minutes within 120-minute
+jobs. Release builds retain their production optimization settings and every advertised SDK target;
+these limits are ceilings, not expected warm-cache build times.
 
 The workflow's changed-file classifier skips native jobs only when every changed path is Markdown,
 a license file, or a generated man page. Workflow dispatches, release calls, new branches, and any

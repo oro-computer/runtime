@@ -765,8 +765,12 @@ function _build_runtime_library() {
 
   local runtime_target_count=${#runtime_arches[@]}
 
-  if [[ "${ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS:-0}" = "1" ]] &&
-     (( runtime_target_count > 1 )); then
+  # Do not launch more target compilers than the host's CPU budget. Serializing
+  # target families also avoids optimizing several copies of routes.cc at once
+  # on small runners; each family can still compile objects in parallel.
+  if (( runtime_target_count > 1 )) &&
+     { [[ "${ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS:-0}" = "1" ]] ||
+       (( runtime_target_count > CPU_CORES )); }; then
     local runtime_index=0
     echo "# building mobile runtimes before the host runtime with $CPU_CORES compile jobs"
 

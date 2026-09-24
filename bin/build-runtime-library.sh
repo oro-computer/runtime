@@ -252,9 +252,9 @@ elif [[ "$host" = "Darwin" ]]; then
   sources+=("$root/src/runtime/window/apple.mm")
 
   if (( TARGET_OS_IPHONE)); then
-    clang="xcrun -sdk iphoneos "$clang""
+    clang="$(xcrun --sdk iphoneos --find "$clang")" || exit 1
   elif (( TARGET_IPHONE_SIMULATOR )); then
-    clang="xcrun -sdk iphonesimulator "$clang""
+    clang="$(xcrun --sdk iphonesimulator --find "$clang")" || exit 1
   else
     sources+=("$root/src/runtime/process/unix.cc")
   fi
@@ -386,10 +386,10 @@ if (( ! syntax_only )) && [[ "$host" = "Win32" ]] && command -v sccache >/dev/nu
   # The Windows installer selects clang++ by absolute path, bypassing CMake's
   # compiler launcher. Invoke sccache directly for runtime object compilation.
   runtime_compiler_launcher="sccache"
-elif [[ "$platform" = "android" ]] && command -v ccache >/dev/null 2>&1; then
-  # Android selects the NDK compiler by absolute path, bypassing the compiler
-  # wrapper directories used by hosted CI. Invoke ccache explicitly so the
-  # restored native cache also covers the runtime objects for each Android ABI.
+elif [[ "$platform" = "android" || "$platform" = "iPhoneOS" || "$platform" = "iPhoneSimulator" ]] &&
+     command -v ccache >/dev/null 2>&1; then
+  # NDK and Apple SDK compilers bypass the PATH wrappers used by hosted CI.
+  # Pass the resolved compiler directly to ccache for per-object reuse.
   runtime_compiler_launcher="ccache"
 fi
 

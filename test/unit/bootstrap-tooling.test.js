@@ -2158,7 +2158,7 @@ test('mobile CI gives each target the full CPU budget', () => {
   )
   assert.match(
     readFile('bin/install.sh'),
-    /ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS[\s\S]*runtime_target_count > 1[\s\S]*building mobile runtimes before the host runtime[\s\S]*runtime_index = 1[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$CPU_CORES"[\s\S]*runtime_arches\[0\]/,
+    /runtime_target_count > 1[\s\S]*ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS[\s\S]*runtime_target_count > CPU_CORES[\s\S]*building mobile runtimes before the host runtime[\s\S]*runtime_index = 1[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$CPU_CORES"[\s\S]*runtime_arches\[0\]/,
     'mobile CI should give each runtime build the full CPU budget without oversubscription'
   )
   assert.doesNotMatch(
@@ -2543,6 +2543,16 @@ test('CI caches dependencies and runs focused platform coverage', () => {
     releaseWorkflow,
     /release-ccache-v1-[^\n]*needs\.validate-release\.outputs\.commit_sha[\s\S]*release-ccache-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-\s/,
     'release caches should bind to the validated commit and share matching production objects'
+  )
+  assert.match(
+    releaseWorkflow,
+    /key: release-ccache-v1-[^\n]*github\.run_id[^\n]*github\.run_attempt/,
+    'separate preflights on the same commit should save independent cache snapshots'
+  )
+  assert.match(
+    releaseWorkflow,
+    /Quiesce native compiler cache[\s\S]*ccache --cleanup[\s\S]*Save native compiler cache/,
+    'release builds should stop compiler cache writers before saving partial output'
   )
   assert.match(
     publishWorkflow,
