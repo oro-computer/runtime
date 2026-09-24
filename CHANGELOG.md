@@ -6,6 +6,17 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-23
+
+### Development and CI
+
+- Show Git diagnostics and exit codes when native dependency clones fail,
+  making source-download failures visible in CI logs.
+- Retry failed dependency clones up to three times with short delays and
+  disable interactive Git credential prompts. Stop if a failed checkout leaves
+  a partial directory, and continue to require the pinned commit before using
+  downloaded sources.
+
 ## [0.1.2] - 2026-09-23
 
 ### Development and CI
