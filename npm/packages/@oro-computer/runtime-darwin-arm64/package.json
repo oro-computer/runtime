@@ -1,6 +1,6 @@
 {
   "name": "@oro-computer/runtime-darwin-arm64",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Oro Runtime binaries for macOS arm64 (Apple Silicon) plus iOS device and simulator toolchain artifacts.",
   "type": "module",
   "main": "src/index.js",

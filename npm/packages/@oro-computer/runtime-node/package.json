@@ -1,6 +1,6 @@
 {
   "name": "@oro-computer/runtime-node",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Oro Runtime Node adapter",
   "main": "index.js",
   "exports": {

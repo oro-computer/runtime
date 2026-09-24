@@ -6,6 +6,23 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-24
+
+### Development and CI
+
+- Cache individual Apple device and Simulator runtime objects through explicit
+  ccache invocation, preserving compiler arguments and paths containing spaces.
+- Build runtime target families sequentially when they outnumber host CPUs,
+  while allowing parallel object compilation within each target.
+- Enable Rust compiler caching for Unix release jobs and increase the macOS
+  release compiler-cache limit to 3 GB.
+- Save distinct release cache snapshots for each workflow run and attempt so
+  repeated preflights can retain newly compiled objects. Stop compiler writers
+  before saving partial caches after failures or timeouts.
+- Allow up to 210 minutes for cold Apple SDK builds within a 240-minute job
+  budget, leaving time for cache preservation and artifact validation. Retain
+  production optimization and every advertised SDK target.
+
 ## [0.1.3] - 2026-09-23
 
 ### Development and CI
