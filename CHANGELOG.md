@@ -6,6 +6,8 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-28
+
 ### Fixed
 
 - Link the packaged Iroh static library when building Windows desktop apps,
