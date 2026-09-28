@@ -6,6 +6,16 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-28
+
+### Installation and packaging
+
+- Normalize npm staging paths to forward slashes so Windows package builds
+  accept valid staging directories. Preserve directory containment and symlink
+  checks, and stop packaging if path resolution fails.
+- Accept CRLF line endings when comparing the release version file with CLI
+  output. Continue to reject version mismatches and propagate CLI failures.
+
 ## [0.1.4] - 2026-09-24
 
 ### Development and CI
