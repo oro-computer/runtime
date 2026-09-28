@@ -168,6 +168,13 @@ function resolve_global_prefix() {
   printf '%s' "/usr/local"
 }
 
+function resolve_absolute_path() {
+  node -e '
+    const path = require("node:path")
+    process.stdout.write(path.resolve(process.argv[1]).split(path.sep).join("/"))
+  ' "$1"
+}
+
 function resolve_removal_path() {
   node -e '
     const fs = require("node:fs")
@@ -181,7 +188,8 @@ function resolve_removal_path() {
       current = parent
     }
     const canonical = fs.realpathSync.native(current)
-    process.stdout.write(path.resolve(canonical, ...suffix))
+    // Bash containment checks and child paths use forward slashes on every host.
+    process.stdout.write(path.resolve(canonical, ...suffix).split(path.sep).join("/"))
   ' "$1"
 }
 
@@ -440,16 +448,18 @@ ORO_HOME="${ORO_NPM_STAGING_HOME:-$root/build/npm/$platform}"
 declare global_prefix
 global_prefix="$(resolve_global_prefix)"
 declare expected_npm_staging_root
-expected_npm_staging_root="$(node -e 'process.stdout.write(require("node:path").resolve(process.argv[1]))' "$root/build/npm")"
+expected_npm_staging_root="$(resolve_absolute_path "$root/build/npm")" || exit 1
+declare repository_root
+repository_root="$(resolve_removal_path "$root")" || exit 1
 declare npm_staging_root
-npm_staging_root="$(resolve_removal_path "$root/build/npm")"
+npm_staging_root="$(resolve_removal_path "$root/build/npm")" || exit 1
 declare temporary_root
-temporary_root="$(resolve_removal_path "${TMPDIR:-/tmp}")"
+temporary_root="$(resolve_removal_path "${TMPDIR:-/tmp}")" || exit 1
 declare home_root=""
 if [[ -n "${HOME:-}" ]]; then
-  home_root="$(resolve_removal_path "$HOME")"
+  home_root="$(resolve_removal_path "$HOME")" || exit 1
 fi
-ORO_HOME="$(resolve_removal_path "$ORO_HOME")"
+ORO_HOME="$(resolve_removal_path "$ORO_HOME")" || exit 1
 declare PREFIX="$ORO_HOME"
 declare temporary_staging_home=0
 
@@ -460,7 +470,7 @@ fi
 
 if
   [[ "$temporary_root" != "/" ]] &&
-  [[ "$temporary_root" != "$root" ]] &&
+  [[ "$temporary_root" != "$repository_root" ]] &&
   [[ -z "$home_root" || "$temporary_root" != "$home_root" ]] &&
   [[ "$ORO_HOME" == "$temporary_root/"* ]]
 then
@@ -557,7 +567,7 @@ declare ABORT_ERRORS=0
 # Confirm that build CLI matches current commit
 
 if (( ! only_top_level )); then
-  REPO_VERSION="$(cat "$root/VERSION.txt") ($(git rev-parse --short=8 HEAD))"
+  REPO_VERSION="$(tr -d '\r' < "$root/VERSION.txt") ($(git rev-parse --short=8 HEAD))"
   declare built_cli="$ORO_HOME/bin/oroc"
   if [[ "$platform" == "win32" ]]; then
     built_cli="$ORO_HOME/bin/oroc.exe"
@@ -566,7 +576,8 @@ if (( ! only_top_level )); then
     echo "Repo $REPO_VERSION and $built_cli does not exist or is not executable."
     ABORT_ERRORS=1
   else
-    BUILD_VERSION=$("$built_cli" --version)
+    BUILD_VERSION=$("$built_cli" --version) || exit $?
+    BUILD_VERSION="${BUILD_VERSION%$'\r'}"
 
     if [[ "$REPO_VERSION" != "$BUILD_VERSION" ]]; then
       echo "Repo $REPO_VERSION and $built_cli $BUILD_VERSION don't match."
