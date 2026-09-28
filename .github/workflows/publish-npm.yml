@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       ref:
-        description: Signed release tag to package or publish
+        description: Signed release tag, or full commit SHA for nonpublishing preflight
         required: true
         type: string
       version:
@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Signed release tag to package for inspection
+        description: Signed release tag or full commit SHA to package without publishing
         required: true
         default: v0.1.0
         type: string
@@ -47,28 +47,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validate-tag:
-    name: Validate signed release tag
+  validate-source:
+    name: Validate package source
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      commit_sha: ${{ steps.verify-tag.outputs.commit_sha }}
+      commit_sha: ${{ steps.source.outputs.commit_sha }}
     steps:
-      - name: Require matching version tag
-        shell: bash
-        run: |
-          expected_ref="v$RELEASE_VERSION"
-          if [[ "$RELEASE_REF" != "$expected_ref" ]]; then
-            echo >&2 "ref must be $expected_ref for version $RELEASE_VERSION"
-            exit 1
-          fi
-
-      - name: Verify annotated tag signature
-        id: verify-tag
+      - name: Resolve immutable source and enforce publication signature
+        id: source
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ inputs.publish || false }}
         run: |
+          if [[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            if [[ "$PUBLISH" == 'true' ]]; then
+              echo >&2 'Publishing requires a verified signed version tag, not a commit SHA'
+              exit 1
+            fi
+            echo "commit_sha=$RELEASE_REF" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          expected_ref="v$RELEASE_VERSION"
+          if [[ "$RELEASE_REF" != "$expected_ref" ]]; then
+            echo >&2 "ref must be $expected_ref or a full commit SHA for nonpublishing preflight"
+            exit 1
+          fi
+          if [[ "$PUBLISH" == 'true' && "$GITHUB_REF" != "refs/tags/$RELEASE_REF" ]]; then
+            echo >&2 'Publishing must run from the matching signed release tag'
+            exit 1
+          fi
+
           ref_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_REF")"
           object_type="$(jq -r '.object.type' <<< "$ref_json")"
           if [[ "$object_type" != "tag" ]]; then
@@ -97,10 +108,10 @@ jobs:
           fi
           echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout signed release tag
+      - name: Checkout validated package source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ steps.verify-tag.outputs.commit_sha }}
+          ref: ${{ steps.source.outputs.commit_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -112,7 +123,7 @@ jobs:
 
   platform-packages:
     name: Pack ${{ matrix.package }}
-    needs: [validate-tag, top-level-packages]
+    needs: [validate-source, top-level-packages]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
@@ -170,10 +181,10 @@ jobs:
       RUNTIME_ARCHIVE_EXT: ${{ matrix.runtime_archive_ext }}
       RUNTIME_ARTIFACT_ID: ${{ matrix.runtime_artifact_id }}
     steps:
-      - name: Checkout signed release tag
+      - name: Checkout validated package source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          ref: ${{ needs.validate-source.outputs.commit_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -240,9 +251,9 @@ jobs:
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ needs.validate-tag.outputs.commit_sha }}-${{ github.run_attempt }}
+          key: npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ needs.validate-source.outputs.commit_sha }}-${{ github.run_attempt }}
           restore-keys: |
-            npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ needs.validate-tag.outputs.commit_sha }}-
+            npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-${{ needs.validate-source.outputs.commit_sha }}-
             npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}-
             npm-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
             release-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.runtime_artifact_id }}-
@@ -438,7 +449,7 @@ jobs:
 
           npm run release:verify-npm -- \
             "$RELEASE_VERSION" \
-            "${{ needs.validate-tag.outputs.commit_sha }}" \
+            "${{ needs.validate-source.outputs.commit_sha }}" \
             "$platform_archive" \
             "$node_archive" \
             "$meta_archive"
@@ -454,14 +465,14 @@ jobs:
 
   top-level-packages:
     name: Pack Node adapter and meta-package
-    needs: validate-tag
+    needs: validate-source
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Checkout signed release tag
+      - name: Checkout validated package source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          ref: ${{ needs.validate-source.outputs.commit_sha }}
 
       - name: Setup pnpm
         uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
@@ -498,25 +509,16 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-  publish:
-    name: Publish verified tarballs to npm
-    if: inputs.publish
-    needs: [validate-tag, platform-packages, top-level-packages]
-    environment: npm-publish
+  verify-packages:
+    name: Verify complete npm package family
+    needs: [platform-packages, top-level-packages]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      id-token: write
+    timeout-minutes: 10
     steps:
-      - name: Setup Node.js with npm trusted publishing support
+      - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.x
-          registry-url: https://registry.npmjs.org
-
-      - name: Install npm trusted publishing client
-        run: npm install --global npm@11.19.1
 
       - name: Download exact package tarballs
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -563,6 +565,33 @@ jobs:
               exit 1
             fi
           done
+
+  publish:
+    name: Publish verified tarballs to npm
+    if: inputs.publish
+    needs: [validate-source, verify-packages]
+    environment: npm-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Setup Node.js with npm trusted publishing support
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+
+      - name: Install npm trusted publishing client
+        run: npm install --global npm@11.19.1
+
+      - name: Download exact package tarballs
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: npm-pack-${{ inputs.version }}-*
+          path: ${{ runner.temp }}/npm-packs
+          merge-multiple: true
 
       - name: Publish packages in dependency order
         shell: bash

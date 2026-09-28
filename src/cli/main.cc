@@ -10579,6 +10579,16 @@ int main (int argc, char* argv[]) {
         files += quoteBuildPath(static_runtime_path) + " ";
       }
 
+#if ORO_RUNTIME_HAS_IROH_FFI
+      const auto staticIroh = prefixPath("lib" + d + "/" + platform.arch + "-desktop/oro_iroh.lib");
+      if (!fs::exists(staticIroh)) {
+        logError("Can't find Iroh static library, unable to build: " + staticIroh.string());
+        missing_assets = true;
+      } else {
+        files += quoteBuildPath(staticIroh) + " ";
+      }
+#endif
+
 #if ORO_RUNTIME_HAVE_LIBIPFS
       auto static_libipfs_lib = prefixPath("lib" + d + "/" + platform.arch + "-desktop/libipfs" + d + ".lib").string();
       auto static_libipfs_a = prefixPath("lib" + d + "/" + platform.arch + "-desktop/libipfs" + d + ".a").string();

@@ -188,10 +188,12 @@ The release workflow pins the Android JDK to the exact version expected by
 `bin/android-functions.sh`, so the hosted runner does not drift to a patch level
 that the Android bootstrap rejects.
 
-For a signed `v<version>` tag, release automation also builds the five platform npm tarballs,
-the Node adapter, and the runtime meta-package. Every native runner installs its exact three-package
-set and exercises the packaged CLI before upload. Publication then verifies the complete tarball set
-and embedded package names and versions, uses npm trusted publishing, and publishes the GitHub
+For both all-target branch preflights and signed `v<version>` tags, release automation reuses
+those archives to build the five platform npm tarballs, the Node adapter, and the runtime
+meta-package. Every native runner installs its exact three-package set locally and globally into
+paths containing spaces, exercises the installed CLI, and compiles a production desktop app before
+upload. A separate gate verifies all seven tarballs and their embedded package names and versions.
+Branch preflights stop there. Signed-tag runs use npm trusted publishing and publish the GitHub
 release only after all exact archive checksums and SPDX documents validate and npm succeeds. See
 [Oro Runtime release automation](release/ORO_RELEASE_AUTOMATION.md).
 

@@ -78,6 +78,11 @@ uncommitted working tree.
       exact commit: lint, Node compatibility, Linux x64 integration, Linux arm64, Android, Intel
       macOS/iOS, Apple Silicon macOS/iOS, and Windows. The signed-tag workflow does not rerun this
       complete matrix.
+- [ ] Run `Release Artifacts` on that exact branch commit with `artifact_id=all` before tagging.
+      Require all eight archives, all five native npm local/global installation and production
+      application-build checks, and the complete seven-package manifest verification to pass.
+      This preflight reuses the runtime archives and cannot publish from a branch. A green archive
+      build alone or a single-artifact run does not satisfy this gate.
 - [ ] Create an annotated, signed `v<version>` tag on that exact commit. Run
       `git tag -v v<version>` locally and confirm the signature, tagger identity, and target commit
       before pushing only the tag. Follow the [tag creation and verification steps](docs/release/SIGNING.md#create-a-release-tag-only-after-the-release-gates-pass).
@@ -99,8 +104,8 @@ uncommitted working tree.
       tarballs locally and globally in paths containing spaces, resolved the installed command
       shim and prefix, checked the exact CLI version/commit, loaded both Node adapter formats,
       and compiled a production desktop app with the packaged libraries and API resources.
-      Then confirm the publication job verified all
-      seven manifests, published platform packages before dependent packages, and attached npm
+      Then confirm the separate package-family gate verified all
+      seven manifests and publication published platform packages before dependent packages, and attached npm
       provenance.
 - [ ] Download and independently verify the archives, checksums, SBOMs, attestations, and
       smoke-test logs.

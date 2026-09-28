@@ -81,6 +81,8 @@ function verifyTargetLibraries (installationRoot) {
   for (const target of targets) {
     requireFile(path.join(installationRoot, 'lib', target, 'liboro-runtime.a'))
   }
+  requireFile(path.join(installationRoot, 'lib', `${nativeArch}-desktop`,
+    process.platform === 'win32' ? 'oro_iroh.lib' : 'liboro_iroh.a'))
   requireFile(path.join(installationRoot, 'objects', `${nativeArch}-desktop`, 'desktop', 'main.o'))
   requireFile(path.join(installationRoot, 'src', 'init.cc'))
   requireFile(path.join(installationRoot, 'include', 'oro', 'platform.h'))

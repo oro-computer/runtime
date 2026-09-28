@@ -195,16 +195,19 @@ Complete the [release checklist](../../RELEASE_CHECKLIST.md), including account 
 the full CI matrix on the exact final commit, and review of the release artifacts. A green
 documentation-only run with native jobs skipped does not satisfy the full CI gate.
 
-Run the nonpublishing artifact preflight on the release branch, using `0.1.0` as an example:
+Run the complete nonpublishing release preflight on the release branch, using `0.1.0` as an example:
 
 ```sh
 gh workflow run release-artifacts.yml --repo oro-computer/runtime --ref master \
   -f version=0.1.0 -f artifact_id=all
 ```
 
-Confirm its source SHA matches the final CI-tested commit and all eight distributions pass.
-Branch preflights do not generate tag attestations or run the npm packaging workflow. The tagged
-run performs those steps before publication. Do not dispatch this preflight on a release tag:
+Confirm its source SHA matches the final CI-tested commit, all eight distributions pass, all five
+native npm jobs pass local/global installation and production application builds, and the complete
+seven-package verification passes. Branch preflights reuse the archives and run the same npm
+packaging checks as a tagged release, with publication disabled. They skip tag attestations and
+never enter the `npm-publish` environment. A single-artifact smoke run is not a complete preflight.
+Do not dispatch this preflight on a release tag:
 the workflow's publication conditions use the tag ref, including for manually dispatched runs.
 
 From the clean, reviewed checkout, check the version and capture the final commit:

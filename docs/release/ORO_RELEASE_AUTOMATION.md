@@ -61,25 +61,29 @@ are still non-empty and still disable the named target. See
 ## npm workflow
 
 `.github/workflows/publish-npm.yml` is a reusable release workflow and a manual package-inspection
-workflow. Manual dispatch checks a signed tag, builds every package, and retains the tarballs
-without publishing. A signed-tag `Release Artifacts` run calls the same workflow with publication
-enabled.
+workflow. Manual dispatch accepts a verified signed tag or full commit SHA, builds every package,
+and retains the tarballs without publishing. An all-target branch `Release Artifacts` preflight
+calls this same workflow with its validated source SHA and `publish: false`; a signed-tag release
+calls it with publication enabled. Branch preflight therefore exercises the complete npm packaging
+and consumer-build path before a tag is created. Publication still requires a verified signed
+version tag matching the workflow's tag ref; a commit SHA cannot authorize publication.
 
-Each platform package is packed on its native hosted runner. Signed-tag releases reuse the verified
-runtime archives; standalone manual runs build the runtime first. Before upload,
+Each platform package is packed on its native hosted runner. Full branch preflights and signed-tag
+releases reuse the verified runtime archives; standalone manual npm runs build the runtime first. Before upload,
 `npm run release:verify-npm` installs the exact platform, Node adapter, and meta-package tarballs
 both locally and globally into temporary paths containing spaces, outside the source checkout.
 It clears inherited runtime paths, checks package versions and advertised target libraries, invokes
-the npm-created `oroc` command shim, checks the signed commit's exact CLI version and installation
+the npm-created `oroc` command shim, checks the validated commit's exact CLI version and installation
 prefix, and loads both CommonJS and ESM Node adapters. Each installation must also compile a minimal
 production desktop app and include its executable and the installed JavaScript API resources.
 Linux and macOS consumer build dependencies are installed even when runtime archives are reused.
 These checks cover the five native host/architecture combinations in the package matrix; they do
 not replace application launch tests, mobile simulator tests, or fresh-machine dependency setup
 validation. Smoke directories are retained on the runner for inspection. A
-single Ubuntu publication job then downloads those same tarballs, requires all seven expected
-files, and verifies each embedded package name and version. It enters the `npm-publish` GitHub
-environment and publishes in dependency order:
+separate verification job then downloads those same tarballs, requires all seven expected files,
+and verifies each embedded package name and version. This gate also runs during branch preflight.
+Only after it passes does a tagged release enter the `npm-publish` GitHub environment and publish
+those tarballs in dependency order:
 
 1. the five platform packages;
 2. `@oro-computer/runtime-node`;
@@ -168,7 +172,18 @@ for the account-side fields and current registry requirements.
 ## Release and recovery behavior
 
 Once activation is complete, pushing one annotated, verified signed `v<version>` tag starts the
-release chain. For a nonpublishing artifact preflight, dispatch on a branch such as `master`;
+release chain. Before tagging, run the complete nonpublishing preflight on the final release commit:
+
+```sh
+gh workflow run release-artifacts.yml --repo oro-computer/runtime --ref master \
+  -f artifact_id=all
+```
+
+The version defaults to `VERSION.txt`; an explicit `-f version=<version>` must match the checked-out
+metadata. Require all eight archives, all five native npm installation/application-build jobs,
+and the complete seven-package verification to pass on the same SHA as full CI. Single-artifact
+manual runs remain useful for diagnosis but skip the complete npm gate and do not qualify a release.
+Branch runs skip publication and tag attestations. Dispatch on a branch such as `master`;
 dispatching on a release tag can also enter publication because the guards check the tag ref.
 A CI or build failure publishes nothing. A failure before the npm job publishes
 nothing. A partial npm failure is recoverable by rerunning the same workflow because published

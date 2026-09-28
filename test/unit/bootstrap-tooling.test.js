@@ -375,7 +375,7 @@ test('npm publish workflow uses exact tarballs, OIDC, and the signed source', ()
     'package build jobs should not enter the protected publishing environment'
   )
   assert.equal(
-    workflow.match(/ref: \$\{\{ needs\.validate-tag\.outputs\.commit_sha \}\}/g)
+    workflow.match(/ref: \$\{\{ needs\.validate-source\.outputs\.commit_sha \}\}/g)
       ?.length,
     2,
     'publishing jobs should checkout the commit contained in the verified tag'
@@ -437,18 +437,18 @@ test('npm publish workflow uses exact tarballs, OIDC, and the signed source', ()
   )
   assert.match(
     workflow,
-    /platform-packages:[\s\S]*needs: \[validate-tag, top-level-packages\][\s\S]*Download exact top-level tarballs for native smoke test[\s\S]*Smoke install exact package family on native runner/,
+    /platform-packages:[\s\S]*needs: \[validate-source, top-level-packages\][\s\S]*Download exact top-level tarballs for native smoke test[\s\S]*Smoke install exact package family on native runner/,
     'every native platform package job should wait for and smoke-install the exact top-level tarballs'
   )
   assert.match(
     workflow,
-    /platform_archive=.*PACKAGE_ID.*RELEASE_VERSION[\s\S]*node_archive=.*runtime-node.*RELEASE_VERSION[\s\S]*meta_archive=.*runtime-\$RELEASE_VERSION[\s\S]*npm run release:verify-npm --[\s\S]*needs\.validate-tag\.outputs\.commit_sha[\s\S]*"\$platform_archive"[\s\S]*"\$node_archive"[\s\S]*"\$meta_archive"/,
+    /platform_archive=.*PACKAGE_ID.*RELEASE_VERSION[\s\S]*node_archive=.*runtime-node.*RELEASE_VERSION[\s\S]*meta_archive=.*runtime-\$RELEASE_VERSION[\s\S]*npm run release:verify-npm --[\s\S]*needs\.validate-source\.outputs\.commit_sha[\s\S]*"\$platform_archive"[\s\S]*"\$node_archive"[\s\S]*"\$meta_archive"/,
     'native smoke tests should verify all three exact tarballs against the signed source commit'
   )
   assert.match(
     workflow,
     /Verify complete npm package set[\s\S]*manifest_name[\s\S]*manifest_version/,
-    'the publication job should verify every downloaded tarball manifest'
+    'preflight and publication should both require every downloaded tarball manifest'
   )
   const platformIndex = workflow.indexOf(
     '"@oro-computer/runtime-win32-x64|oro-computer-runtime-win32-x64-$RELEASE_VERSION.tgz"',
@@ -557,6 +557,26 @@ test('npm package-name bootstrap is explicit, prerelease-only, and local', () =>
   }
 })
 
+test('full branch preflight runs native npm consumers without authorizing publication', () => {
+  const release = readFile('.github/workflows/release-artifacts.yml')
+  const npm = readFile('.github/workflows/publish-npm.yml')
+  const caller = release.split('\n  publish-npm:\n')[1].split('\n  publish-github-release:')[0]
+  assert.match(caller, /if: github\.event_name != 'workflow_dispatch' \|\| github\.event\.inputs\.artifact_id == 'all'/)
+  assert.match(caller, /needs: \[validate-release, verify-release-assets\]/)
+  assert.match(caller, /ref: \$\{\{ startsWith\(github\.ref, 'refs\/tags\/'\) && github\.ref_name \|\| needs\.validate-release\.outputs\.commit_sha \}\}/)
+  assert.match(caller, /publish: \$\{\{ startsWith\(github\.ref, 'refs\/tags\/'\) \}\}/)
+  assert.match(caller, /reuse_release_artifacts: true/)
+  const verification = npm.split('\n  verify-packages:\n')[1].split('\n  publish:')[0]
+  assert.match(verification, /needs: \[platform-packages, top-level-packages\]/)
+  assert.doesNotMatch(verification, /if:|environment:|id-token:/)
+  assert.match(verification, /Verify complete npm package set/)
+  const publication = npm.split('\n  publish:\n')[1]
+  assert.match(publication, /if: inputs\.publish/)
+  assert.match(publication, /needs: \[validate-source, verify-packages\]/)
+  assert.match(publication, /environment: npm-publish/)
+  assert.match(release, /RELEASE_LABEL="\$\(tr -d '\\r\\n' < VERSION\.txt\)"/)
+})
+
 test('release workflow binds builds to the validated source commit', () => {
   const workflow = readFile('.github/workflows/release-artifacts.yml')
   assert.match(
@@ -596,7 +616,7 @@ test('release workflow binds builds to the validated source commit', () => {
   )
   assert.match(
     workflow,
-    /uses: \.\/\.github\/workflows\/publish-npm\.yml[\s\S]*publish: true[\s\S]*reuse_release_artifacts: true/,
+    /uses: \.\/\.github\/workflows\/publish-npm\.yml[\s\S]*publish: \$\{\{ startsWith\(github\.ref, 'refs\/tags\/'\) \}\}[\s\S]*reuse_release_artifacts: true/,
     'a signed release tag should publish npm packages from the verified runtime artifacts'
   )
   assert.match(

@@ -6,6 +6,18 @@ a patch release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Link the packaged Iroh static library when building Windows desktop apps,
+  and report a missing library before invoking the linker.
+
+### Development and CI
+
+- Run npm packaging, local/global installation, and production consumer builds
+  on all five native hosts during the full branch release preflight. Verify all
+  seven package manifests before tagging or publishing, reusing the built
+  runtime archives. Registry publication still requires a verified signed tag.
+
 ## [0.1.5] - 2026-09-28
 
 ### Installation and packaging
