@@ -833,12 +833,24 @@ namespace oro::runtime::window {
     // Mirror DOM focus for desktop parity
     this->evalDomFocusThrottled();
   #elif ORO_RUNTIME_PLATFORM_IOS
+    if (this->options.headless && this->index != 0) {
+      // Internal VM and SharedWorker windows must stay attached without taking
+      // focus or hiding the windows that exchange messages with them.
+      this->window.windowLevel = UIWindowLevelNormal - 1;
+      this->window.userInteractionEnabled = NO;
+      this->window.hidden = NO;
+      return;
+    }
+
     [this->webview becomeFirstResponder];
     [this->window makeKeyAndVisible];
     this->window.hidden = NO;
     const auto app = App::sharedApplication();
     for (auto window : app->runtime.windowManager.windows) {
       if (window != nullptr && reinterpret_cast<Window*>(window.get()) != this) {
+        if (window->options.headless && window->index != 0) {
+          continue;
+        }
         window->hide();
       }
     }
@@ -942,7 +954,15 @@ namespace oro::runtime::window {
     this->evalDomBlurThrottled();
   #elif ORO_RUNTIME_PLATFORM_IOS
     if (this->window) {
-      this->window.hidden = YES;
+      // Headless auxiliary windows render behind the app; hiding their backing
+      // UIWindow can suspend WebKit while clients are waiting for a reply.
+      if (this->options.headless && this->index != 0) {
+        this->window.windowLevel = UIWindowLevelNormal - 1;
+        this->window.userInteractionEnabled = NO;
+        this->window.hidden = NO;
+      } else {
+        this->window.hidden = YES;
+      }
     }
   #endif
     JSON::Object json = JSON::Object::Entries {

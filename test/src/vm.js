@@ -1,5 +1,7 @@
 import test from 'oro:test'
 import vm from 'oro:vm'
+import application from 'oro:application'
+import process from 'oro:process'
 
 function withTimeout (promise, milliseconds, message) {
   let timer = null
@@ -17,6 +19,37 @@ test('vm.runInContext(source) - simple', async (t) => {
     { number: 123 },
     'vm.runInContext("{ number: 123 }")'
   )
+})
+
+test('vm: iOS auxiliary windows preserve foreground execution', async (t) => {
+  if (process.platform !== 'ios') {
+    t.skip('iOS window lifecycle regression')
+    return
+  }
+
+  t.equal(document.visibilityState, 'visible', 'VM startup keeps the caller visible')
+  const auxiliary = await application.createWindow({
+    index: -1,
+    reserved: true,
+    headless: true,
+    path: 'frontend/index_no_js.html',
+    // Exercise native show/hide even when the test app is built headless.
+    config: { ...application.config, build_headless: false }
+  })
+
+  try {
+    for (const action of ['hide', 'show']) {
+      await auxiliary[action]()
+      t.equal(
+        await withTimeout(vm.runInContext('6 * 7'), 10000, `VM stopped after auxiliary ${action}`),
+        42,
+        `auxiliary ${action} keeps the VM and SharedWorker responsive`
+      )
+      t.equal(document.visibilityState, 'visible', `auxiliary ${action} keeps the caller visible`)
+    }
+  } finally {
+    await auxiliary.close()
+  }
 })
 
 test('vm.runInContext(source) - script refererences', async (t) => {

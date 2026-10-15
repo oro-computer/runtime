@@ -1,10 +1,10 @@
 import { test } from 'oro:test'
 import process from 'oro:process'
 import fs from 'oro:fs/promises'
+import path from 'oro:path'
 import { Buffer } from 'oro:buffer'
 import { connect, createServer, getTlsProvider } from 'oro:tls'
-
-const fixtures = new URL('../../fixtures/tls/', import.meta.url)
+import FIXTURES from '../fixtures.js'
 
 test('tls: SDK application registers its static provider', async (t) => {
   if (process.platform !== 'linux') {
@@ -19,7 +19,7 @@ test('tls: SDK application registers its static provider', async (t) => {
 
   const [cert, key, ca] = await Promise.all(
     ['server-cert.pem', 'server-key.pem', 'ca-cert.pem'].map((name) =>
-      fs.readFile(new URL(name, fixtures), 'utf8')
+      fs.readFile(path.join(FIXTURES, 'tls', name), 'utf8')
     )
   )
 
