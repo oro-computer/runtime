@@ -32,7 +32,7 @@ namespace oro::runtime::tls {
         bool isDynamic = false;
       };
 
-      ProviderRegistry() = default;
+      ProviderRegistry ();
       ProviderRegistry(const ProviderRegistry&) = delete;
       ProviderRegistry& operator=(const ProviderRegistry&) = delete;
 
