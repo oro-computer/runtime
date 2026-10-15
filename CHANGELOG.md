@@ -6,6 +6,20 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-14
+
+### Fixed
+
+- Retain static TLS provider registration during application linking and register
+  built-in providers once before lookup. This fixes native `oro:tls` connections
+  on Linux requiring an application-level registration shim
+  ([#1](https://github.com/oro-computer/runtime/issues/1)).
+
+### Development and CI
+
+- Add a Linux SDK application regression test covering certificate-verified TLS
+  connections and encrypted loopback traffic without a registration shim.
+
 ## [0.1.6] - 2026-09-28
 
 ### Fixed
