@@ -3224,7 +3224,13 @@ function _compile_libusb {
     if [[ "$host" != "Win32" ]]; then
       local use_autotools=1
 
-      if [ ! -f "$STAGING_DIR/configure" ]; then
+      if [[ ! -f "$STAGING_DIR/configure" || ! -f "$STAGING_DIR/Makefile.in" ]]; then
+        # Automake requires this input even when libusb tests are disabled.
+        if [[ ! -f "$STAGING_DIR/tests/Makefile.am" ]]; then
+          mkdir -p "$STAGING_DIR/tests"
+          printf 'EXTRA_DIST =\n' > "$STAGING_DIR/tests/Makefile.am"
+        fi
+
         local bootstrap_script=""
         if [ -x "$STAGING_DIR/bootstrap.sh" ]; then
           bootstrap_script="$STAGING_DIR/bootstrap.sh"
@@ -3233,7 +3239,10 @@ function _compile_libusb {
         fi
 
         if [[ -n "$bootstrap_script" ]]; then
-          if ! quiet sh "$bootstrap_script"; then
+          if ! quiet env NOCONFIGURE=1 sh "$bootstrap_script"; then
+            if [[ ! -f "$STAGING_DIR/CMakeLists.txt" ]]; then
+              die 1 "not ok - libusb bootstrap failed; inspect the autotools errors above"
+            fi
             echo "warn - libusb bootstrap failed, falling back to cmake"
             use_autotools=0
           fi
@@ -3242,9 +3251,13 @@ function _compile_libusb {
         fi
       fi
 
-      if (( use_autotools )) && [ ! -f "$STAGING_DIR/configure" ]; then
+      if (( use_autotools )) && [[ ! -f "$STAGING_DIR/configure" || ! -f "$STAGING_DIR/Makefile.in" ]]; then
         use_autotools=0
-        echo "warn - libusb configure script missing, falling back to cmake"
+        echo "warn - libusb autotools files missing, falling back to cmake"
+      fi
+
+      if (( ! use_autotools )) && [[ ! -f "$STAGING_DIR/CMakeLists.txt" ]]; then
+        die 1 "not ok - libusb requires configure and Makefile.in or a CMakeLists.txt"
       fi
 
       if (( use_autotools )); then
