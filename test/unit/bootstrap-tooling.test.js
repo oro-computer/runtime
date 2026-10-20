@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -2004,19 +2005,50 @@ test('disabled Iroh builds compile service stubs without FFI symbols', () => {
   )
 })
 
-test('CMake cache invalidation tracks build inputs without forcing legacy caches cold', () => {
+test('CMake cache invalidation tracks build inputs and refreshes legacy caches', () => {
   const installer = readFile('bin/install.sh')
   assert.match(
     installer,
-    /function _cmake_configuration_signature[\s\S]*schema=oro-cmake-v1[\s\S]*CFLAGS=%q[\s\S]*arg=%q/,
+    /function _cmake_configuration_signature[\s\S]*schema=oro-cmake-v2[\s\S]*CFLAGS=%q[\s\S]*arg=%q/,
     'CMake fingerprints should include the source, toolchain flags, and configure arguments'
   )
   assert.match(
     installer,
-    /-f "\$cache_file"[\s\S]*-f "\$configuration_file"[\s\S]*!= "\$configuration"[\s\S]*refresh=1/,
-    'only previously fingerprinted caches should be refreshed after a configuration change'
+    /-f "\$cache_file"[\s\S]*! -f "\$configuration_file"[\s\S]*!= "\$configuration"[\s\S]*refresh=1/,
+    'legacy caches and changed configurations should be refreshed before configuring'
   )
 })
+
+for (const llamaStatus of [0, 42]) {
+  test(`mobile whisper builds wait for llama installation (llama status ${llamaStatus})`, () => {
+    const installer = readFile('bin/install.sh')
+    const compiler = installer.match(
+      /function _compile_llama_and_whisper \{[\s\S]*?\n\}/
+    )?.[0]
+    assert.ok(compiler, 'the paired mobile dependency builder should exist')
+
+    const result = spawnSync('bash', ['-s'], {
+      encoding: 'utf8',
+      input: `
+        _compile_llama() {
+          printf 'llama:%s:%s\\n' "$1" "$2"
+          return ${llamaStatus}
+        }
+        _compile_whisper() { printf 'whisper:%s:%s\\n' "$1" "$2"; }
+        ${compiler}
+        _compile_llama_and_whisper arm64-v8a android
+      `
+    })
+
+    assert.equal(result.status, llamaStatus, result.stderr)
+    assert.equal(
+      result.stdout,
+      llamaStatus === 0
+        ? 'llama:arm64-v8a:android\nwhisper:arm64-v8a:android\n'
+        : 'llama:arm64-v8a:android\n'
+    )
+  })
+}
 
 test('fresh Android libuv builds do not fail after successful compilation', () => {
   const installer = readFile('bin/install.sh')
@@ -2270,7 +2302,7 @@ test('CI shards Apple-mobile builds without changing installer defaults', () => 
   )
   assert.match(
     installer,
-    /for apple_target in "\$\{apple_mobile_targets\[@\]\}"; do[\s\S]*_queue_target_dependency "llama \(\$apple_target\)"/,
+    /for apple_target in "\$\{apple_mobile_targets\[@\]\}"; do[\s\S]*_queue_target_dependency "llama and whisper \(\$apple_target\)"/,
     'Apple dependency builds should use the same selected target shard'
   )
   assert.match(
@@ -2366,12 +2398,12 @@ test('mobile dependency builders share the detected CPU budget', () => {
   )
   assert.match(
     installer,
-    /_queue_target_dependency "libwhisper desktop[\s\S]*_queue_target_dependency "llama \(\$apple_target\)"[\s\S]*_wait_for_target_dependencies "not ok - desktop or iOS dependency build failed"/,
+    /_queue_target_dependency "libwhisper desktop[\s\S]*_queue_target_dependency "llama and whisper \(\$apple_target\)"[\s\S]*_wait_for_target_dependencies "not ok - desktop or iOS dependency build failed"/,
     'Apple-mobile dependencies should run through the bounded scheduler'
   )
   assert.match(
     installer,
-    /_queue_target_dependency "llama android \(\$abi\)"[\s\S]*_wait_for_target_dependencies "not ok - Android dependency build failed \(\$abi\)"/,
+    /_queue_target_dependency "llama and whisper android \(\$abi\)"[\s\S]*_wait_for_target_dependencies "not ok - Android dependency build failed \(\$abi\)"/,
     'each Android ABI should complete its bounded dependency batch before the next ABI'
   )
 })

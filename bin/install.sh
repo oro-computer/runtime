@@ -282,7 +282,8 @@ function _cmake_configuration_signature () {
   source_path="$(cd "$source_dir" 2>/dev/null && pwd -P)"
   build_path="$(mkdir -p "$build_dir" && cd "$build_dir" 2>/dev/null && pwd -P)"
 
-  printf 'schema=oro-cmake-v1\n'
+  # v1 fingerprints could describe new inputs while retaining an old toolchain.
+  printf 'schema=oro-cmake-v2\n'
   printf 'source=%q\n' "$source_path"
   printf 'build=%q\n' "$build_path"
   printf 'CC=%q\n' "${CC:-}"
@@ -310,12 +311,15 @@ function _cmake_configure () {
   local configuration=""
   configuration="$(_cmake_configuration_signature "$source_dir" "$build_dir" "$@")"
 
+  # Untracked caches can retain a different toolchain. Changing compilers in
+  # place makes CMake restart configuration without our library-only options.
   if (( force )); then
     refresh=1
   elif _cmake_build_dir_needs_refresh "$source_dir" "$build_dir"; then
     refresh=1
-  elif [[ -f "$cache_file" ]] && [[ -f "$configuration_file" ]] && \
-       [[ "$(cat "$configuration_file")" != "$configuration" ]]; then
+  elif [[ -f "$cache_file" ]] && \
+       { [[ ! -f "$configuration_file" ]] || \
+         [[ "$(cat "$configuration_file")" != "$configuration" ]]; }; then
     refresh=1
   fi
 
@@ -2623,6 +2627,11 @@ function _compile_libuv {
   echo "ok - built libuv for $target"
 }
 
+function _compile_llama_and_whisper {
+  # Whisper imports the GGML headers, libraries, and CMake package from llama.
+  _compile_llama "$@" && _compile_whisper "$@"
+}
+
 function _compile_whisper {
   local target=$1
   local platform=$2
@@ -4252,8 +4261,7 @@ if [[ "$(uname -s)" == "Darwin" ]] && [[ -z "$NO_IOS" ]]; then
     _queue_target_dependency "libusb ($apple_target)" _compile_libusb "$target_arch" "$target_platform"
     _queue_target_dependency "libsodium ($apple_target)" _compile_libsodium "$target_arch" "$target_platform"
     _queue_target_dependency "zlib ($apple_target)" _compile_zlib "$target_arch" "$target_platform"
-    _queue_target_dependency "llama ($apple_target)" _compile_llama "$target_arch" "$target_platform"
-    _queue_target_dependency "whisper ($apple_target)" _compile_whisper "$target_arch" "$target_platform"
+    _queue_target_dependency "llama and whisper ($apple_target)" _compile_llama_and_whisper "$target_arch" "$target_platform"
   done
 
   _wait_for_target_dependencies "not ok - desktop or iOS dependency build failed"
@@ -4279,8 +4287,7 @@ if [[ -n "$BUILD_ANDROID" ]]; then
     _queue_target_dependency "libusb android ($abi)" _compile_libusb_android "$abi"
     _queue_target_dependency "libsodium android ($abi)" _compile_libsodium_android "$abi"
     _queue_target_dependency "zlib android ($abi)" _compile_zlib "$abi" android
-    _queue_target_dependency "llama android ($abi)" _compile_llama "$abi" android
-    _queue_target_dependency "whisper android ($abi)" _compile_whisper "$abi" android
+    _queue_target_dependency "llama and whisper android ($abi)" _compile_llama_and_whisper "$abi" android
     _queue_target_dependency "cr-sqlite android ($abi)" _compile_crsqlite_loadable android "$abi"
     _wait_for_target_dependencies "not ok - Android dependency build failed ($abi)"
   done
