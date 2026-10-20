@@ -2838,8 +2838,8 @@ test('Android bootstrap separates build packages from emulator packages', () => 
   )
   assert.match(
     cli,
-    /"init "[\s\S]*"--use-defaults "[\s\S]*"--overwrite"/,
-    'Gradle initialization should be non-interactive and replace files in the prepared Android project directory'
+    /gradleWrapperCommand[\s\S]*"--project-dir "[\s\S]*quoteGradleArgument\(gradleBootstrap\.string\(\)\)[\s\S]*<< "wrapper"/,
+    'Android bootstrap should generate the wrapper in an isolated Gradle project'
   )
   assert.match(
     emulatorBootstrap,
@@ -2965,8 +2965,8 @@ test('Android application scaffolding is compatible with current Gradle', () => 
 
   assert.match(
     cli,
-    /"init "[\s\S]*"--dsl groovy "[\s\S]*"--use-defaults "[\s\S]*"--overwrite"/,
-    'Gradle initialization should generate the Groovy scripts that the CLI replaces'
+    /writeFile\(app \/ "build\.gradle", trim\(tmpl\(gGradleBuildForSource, settings\)\)\);[\s\S]*writeFile\(output \/ "settings\.gradle", trim\(tmpl\(gGradleSettings, settings\)\)\);[\s\S]*writeFile\(output \/ "build\.gradle", trim\(tmpl\(gGradleBuild, settings\)\)\);/,
+    'Android scaffolding should generate Groovy build scripts directly from the CLI templates'
   )
   assert.equal(
     templates.match(/proguard-android-optimize\.txt/g)?.length,
