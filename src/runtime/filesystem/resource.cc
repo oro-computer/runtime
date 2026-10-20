@@ -6,6 +6,7 @@
 
 #if ORO_RUNTIME_PLATFORM_ANDROID
 #include <fstream>
+#include <limits>
 #endif
 
 using namespace oro::runtime::string;
@@ -842,7 +843,8 @@ namespace oro::runtime::filesystem {
     }
   #endif
 
-    return fs::exists(this->path);
+    std::error_code error;
+    return fs::exists(this->path, error);
   }
 
   int Resource::access (int mode) const noexcept {
@@ -1026,14 +1028,12 @@ namespace oro::runtime::filesystem {
         );
 
         if (asset) {
-          this->cache.size = AAsset_getLength(asset);
+          const auto length = AAsset_getLength64(asset);
           AAsset_close(asset);
-        }
-      }
-
-      if (!success) {
-        if (fs::exists(this->path)) {
-          this->cache.size = fs::file_size(this->path);
+          this->cache.size = length < 0 || static_cast<uintmax_t>(length) > std::numeric_limits<size_t>::max()
+            ? 0
+            : static_cast<size_t>(length);
+          success = true;
         }
       }
     } else if (this->url.scheme == "content" || this->url.scheme == "android.resource") {
@@ -1049,6 +1049,12 @@ namespace oro::runtime::filesystem {
         this->options.contentResolver->closeFileDescriptor(fileDescriptor);
         return length;
       }
+    }
+
+    if (!success) {
+      std::error_code error;
+      const auto size = fs::file_size(this->path, error);
+      this->cache.size = error ? 0 : size;
     }
   #else
     if (fs::exists(this->path)) {
@@ -1145,48 +1151,70 @@ namespace oro::runtime::filesystem {
     this->bytes.reset(bytes.release());
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     bool success = false;
-    if (sharedAndroidAssetManager && !fs::exists(this->path)) {
+    std::error_code error;
+    const auto localFileExists = fs::exists(this->path, error);
+    if (error) {
+      return nullptr;
+    }
+
+    if (sharedAndroidAssetManager && !localFileExists) {
       const auto assetPath = getRelativeAndroidAssetManagerPath(this->path);
-      const auto asset = AAssetManager_open(
-        sharedAndroidAssetManager,
-        assetPath.c_str(),
-        AASSET_MODE_BUFFER
+      const auto asset = std::unique_ptr<AAsset, decltype(&AAsset_close)>(
+        AAssetManager_open(sharedAndroidAssetManager, assetPath.c_str(), AASSET_MODE_STREAMING),
+        AAsset_close
       );
 
       if (asset) {
-        auto size = AAsset_getLength(asset);
-        if (size) {
-          const auto buffer = AAsset_getBuffer(asset);
-          if (buffer) {
-            auto bytes = new unsigned char[size]{0};
-            memcpy(bytes, buffer, size);
-            this->bytes.reset(bytes);
-            this->cache.size = size;
-            success = true;
-          }
+        const auto length = AAsset_getLength64(asset.get());
+        if (length < 0 || static_cast<uintmax_t>(length) > std::numeric_limits<size_t>::max()) {
+          return nullptr;
         }
 
-        AAsset_close(asset);
+        const auto size = static_cast<size_t>(length);
+        auto bytes = std::make_unique<unsigned char[]>(size);
+        size_t offset = 0;
+        while (offset < size) {
+          const auto remaining = std::min<size_t>(size - offset, 64 * 1024);
+          const auto bytesRead = AAsset_read(asset.get(), bytes.get() + offset, remaining);
+          if (bytesRead <= 0) {
+            return nullptr;
+          }
+          offset += bytesRead;
+        }
+
+        this->bytes.reset(bytes.release());
+        this->cache.size = size;
+        success = true;
       }
     }
 
     if (!success) {
-      auto stream = std::ifstream(this->path);
-      auto buffer = std::istreambuf_iterator<char>(stream);
-      auto size = fs::file_size(this->path);
-      auto end = std::istreambuf_iterator<char>();
-      if (size == 0) {
-        this->bytes = nullptr;
-      } else {
-        auto bytes = new unsigned char[size]{0};
-        String content;
-
-        content.assign(buffer, end);
-        memcpy(bytes, content.data(), size);
-
-        this->bytes.reset(bytes);
+      if (!fs::is_regular_file(this->path, error) || error) {
+        return nullptr;
+      }
+      auto stream = std::ifstream(this->path, std::ios::binary | std::ios::ate);
+      if (!stream) {
+        return nullptr;
       }
 
+      const auto length = stream.tellg();
+      if (length < 0 || static_cast<uintmax_t>(length) > std::numeric_limits<size_t>::max()) {
+        return nullptr;
+      }
+
+      const auto size = static_cast<size_t>(length);
+      auto bytes = std::make_unique<unsigned char[]>(size);
+      stream.seekg(0);
+      size_t offset = 0;
+      while (offset < size) {
+        const auto remaining = std::min<size_t>(size - offset, 64 * 1024);
+        if (!stream.read(reinterpret_cast<char*>(bytes.get() + offset), remaining)) {
+          return nullptr;
+        }
+        offset += remaining;
+      }
+
+      this->bytes.reset(bytes.release());
       this->cache.size = size;
     }
   #endif
@@ -1493,7 +1521,9 @@ namespace oro::runtime::filesystem {
 
 #if ORO_RUNTIME_PLATFORM_ANDROID
   bool Resource::isAndroidLocalAsset () const noexcept {
-    if (sharedAndroidAssetManager && !fs::exists(this->path)) {
+    std::error_code error;
+    const auto localFileExists = fs::exists(this->path, error);
+    if (sharedAndroidAssetManager && !localFileExists && !error) {
       const auto assetPath = getRelativeAndroidAssetManagerPath(this->path);
       const auto asset = AAssetManager_open(
         sharedAndroidAssetManager,

@@ -2298,8 +2298,12 @@ namespace oro::runtime::webview {
     }
 
     if (contentLength > 0) {
+      const auto bytes = responseResource.read();
+      if (bytes == nullptr) {
+        return false;
+      }
       this->writeHead();
-      return this->write(contentLength, responseResource.read());
+      return this->write(contentLength, bytes);
     }
 
     return false;
