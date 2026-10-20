@@ -3847,7 +3847,9 @@ function _compile_libusb_android {
   fi
 
   local platform="android"
-  local STAGING_DIR="$BUILD_DIR/$target-$platform/libusb"
+  # Compiler and API changes require new objects, even when the install prefix
+  # and configure output are unchanged.
+  local STAGING_DIR="$BUILD_DIR/$target-$platform/libusb-ndk-$NDK_VERSION-api-$ANDROID_PLATFORM"
 
   if [ ! -d "$STAGING_DIR" ]; then
     mkdir -p "$STAGING_DIR"

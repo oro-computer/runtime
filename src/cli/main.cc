@@ -2195,7 +2195,7 @@ inline bool isExecAllowed (const Map<>& settings) {
 
 inline bool ensureExecAllowed (const Map<>& settings, const String& subcommand) {
   if (isExecAllowed(settings)) return true;
-  logError("external command execution is disabled. Set ORO_ALLOW_EXEC=1 or [build] allow_exec=true." + helpHint(subcommand));
+  logError("native extension commands are disabled. Use --allow-exec, ORO_ALLOW_EXEC=1, or [build] allow_exec=true." + helpHint(subcommand));
   return false;
 }
 
@@ -8590,12 +8590,6 @@ int main (int argc, char* argv[]) {
         }
       }
 
-      // Create default output to advise user in case gradle init fails
-
-      // TODO(mribbons): Check if we need this in CI - Upload licenses folder from workstation
-      // https://developer.android.com/studio/intro/update#download-with-gradle
-
-
       // quote entire command and "yes" for windows, this is the only to get around "c:\Program" not a command error
       // note that we don't want to use this quote on non windows, therefore make an extra variable
       auto cmdQuote = platform.win ? "\"" : "";
@@ -8618,34 +8612,50 @@ int main (int argc, char* argv[]) {
       // TODO: internal, no need to save to settings
       settings["android_sdk_manager_path"] = sdkmanager.str();
 
-      String gradlePath = env::get("GRADLE_HOME").size() > 0 ? env::get("GRADLE_HOME") + slash + "bin" + slash : "";
+      // Generate the wrapper without evaluating a previous Android build's
+      // plugins. The Android build files are regenerated below.
+      const auto gradleBootstrap = output / "build" / "gradle-wrapper";
+      fs::create_directories(gradleBootstrap);
+      writeFile(gradleBootstrap / "settings.gradle", "rootProject.name = 'oro-wrapper'\n");
+      writeFile(gradleBootstrap / "build.gradle", "");
 
-      StringStream gradleInitCommand;
-      gradleInitCommand
-        << gradlePath
-        << "gradle "
+      const auto gradleExecutable = env::get("GRADLE_HOME").size() > 0
+        ? (Path(env::get("GRADLE_HOME")) / "bin" / (platform.win ? "gradle.bat" : "gradle")).string()
+        : String("gradle");
+      const auto quoteGradleArgument = [&](const String& value) {
+        return platform.win ? "\"" + value + "\"" : shellQuote(value);
+      };
+
+      StringStream gradleWrapperCommand;
+      gradleWrapperCommand
+        << quoteGradleArgument(gradleExecutable) << " "
+        << "--project-dir " << quoteGradleArgument(gradleBootstrap.string()) << " "
         << "--no-configuration-cache "
         << "--no-build-cache "
         << "--no-scan "
-        << "--offline "
         << "--quiet "
-        << "init "
-        << "--dsl groovy "
-        << "--use-defaults "
-        << "--overwrite";
+        << "wrapper";
 
-      if (debugEnv || verboseEnv) logVerbose(gradleInitCommand.str());
-      if (std::system(gradleInitCommand.str().c_str()) != 0) {
-        logError("failed to invoke `gradle init` command. Ensure Gradle and JDK are installed, and accept Android SDK licenses. See README (Troubleshooting)");
-        // In case user didn't accept licenses above
-        logWarn(
-          String("Check licenses and run again: \n") +
-          (platform.win ? "set" : "export") +
-          (" JAVA_HOME=\"" + env::get("JAVA_HOME") + "\" && ") +
-          licenseAccept +
-          "\n"
-         );
+      if (debugEnv || verboseEnv) logVerbose(gradleWrapperCommand.str());
+      const auto gradleCommand = platform.win
+        ? "\"" + gradleWrapperCommand.str() + "\""
+        : gradleWrapperCommand.str();
+      if (std::system(gradleCommand.c_str()) != 0) {
+        logError(
+          "failed to generate the Android Gradle wrapper. Check the Gradle output above "
+          "and ensure Gradle and a compatible JDK are installed." + gradleJdkHint()
+        );
         exit(1);
+      }
+
+      fs::create_directories(output / "gradle" / "wrapper");
+      for (const auto& file : {
+        Path("gradlew"),
+        Path("gradlew.bat"),
+        Path("gradle") / "wrapper" / "gradle-wrapper.jar",
+        Path("gradle") / "wrapper" / "gradle-wrapper.properties"
+      }) {
+        fs::copy_file(gradleBootstrap / file, output / file, fs::copy_options::overwrite_existing);
       }
 
       fs::copy(prefixPath("src/init.cc"), jni, fs::copy_options::overwrite_existing);
@@ -8742,6 +8752,10 @@ int main (int argc, char* argv[]) {
       Map<> manifestContext;
 
       manifestContext["android_manifest_xml_permissions"] = "\n";
+
+      if (settings["permissions_allow_local_network"] != "false") {
+        manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.ACCESS_LOCAL_NETWORK\" />\n";
+      }
 
       if (settings["permissions_allow_notifications"] != "false") {
         manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />\n";
@@ -11078,13 +11092,10 @@ int main (int argc, char* argv[]) {
             << " APP_PLATFORM=" << androidNativePlatform
             << " NDK_LIBS_OUT=" << jniLibs;
 
-          if (!(debugEnv || verboseEnv)) ndkBuildArgs << " >" << (!platform.win ? "/dev/null" : "NUL") << " 2>&1";
-
           if (debugEnv || verboseEnv) logVerbose(ndkBuildArgs.str());
-          if (!ensureExecAllowed(settings, "build")) exit(1);
           if (std::system(ndkBuildArgs.str().c_str()) != 0) {
-            logDebug(ndkBuildArgs.str());
-            logError("ndk build failed. Ensure NDK is installed and allowed (use --allow-exec or ORO_ALLOW_EXEC=1). See README (Troubleshooting)");
+            logError("Android NDK build failed. See the compiler or linker error above.");
+            logError("command: " + ndkBuildArgs.str());
             exit(1);
           }
         }
@@ -11095,14 +11106,13 @@ int main (int argc, char* argv[]) {
         StringStream gradlew;
         gradlew << localDirPrefix << "gradlew build";
 
-        if (!ensureExecAllowed(settings, "build")) exit(1);
-      if (runSystemOrFail(
+        if (runSystemOrFail(
             gradlew.str(),
             String("ERROR: failed to invoke `gradlew build` command. Ensure Gradle and JDK are installed; accept Android SDK licenses.") + gradleJdkHint() + String(" See README (Troubleshooting)"),
             "build"
           ) != 0) {
-        exit(1);
-      }
+          exit(1);
+        }
 
         exit(0);
       }
@@ -11123,7 +11133,6 @@ int main (int argc, char* argv[]) {
       }
 
       if (debugEnv || verboseEnv) logVerbose(bundle);
-      if (!ensureExecAllowed(settings, "build")) exit(1);
       if (runSystemOrFail(
             bundle,
             String("ERROR: failed to invoke ") + bundle + String(" command. Ensure Gradle and JDK are installed.") + gradleJdkHint() + String(" See README (Troubleshooting)"),

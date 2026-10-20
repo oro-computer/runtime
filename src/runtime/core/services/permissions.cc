@@ -11,6 +11,56 @@ namespace oro::runtime::core::services {
     return this->context.getRuntime()->hasPermission(permission);
   }
 
+  String Permissions::getLocalNetworkPermissionState () const {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto& androidContext = this->context.getRuntime()->android;
+    if (!androidContext.jvm || !androidContext.activity) {
+      return "";
+    }
+
+    const auto attachment = android::JNIEnvironmentAttachment(androidContext.jvm);
+    const auto env = attachment.env;
+    if (env->PushLocalFrame(4) < 0) {
+      env->ExceptionClear();
+      return "";
+    }
+
+    String state;
+    const auto activityClass = env->GetObjectClass(androidContext.activity);
+    const auto method = activityClass
+      ? env->GetMethodID(activityClass, "getLocalNetworkPermissionState", "()Ljava/lang/String;")
+      : nullptr;
+    if (method && !env->ExceptionCheck()) {
+      const auto result = static_cast<jstring>(env->CallObjectMethod(androidContext.activity, method));
+      if (result && !env->ExceptionCheck()) {
+        state = android::StringWrap(env, result).str();
+      }
+    }
+
+    if (env->ExceptionCheck()) {
+      env->ExceptionDescribe();
+      env->ExceptionClear();
+    }
+    env->PopLocalFrame(nullptr);
+    return state;
+  #else
+    return "";
+  #endif
+  }
+
+  void Permissions::onLocalNetworkPermissionChange (const String& state) const {
+    this->loop.dispatch([=, this]() {
+      auto requests = std::move(this->localNetworkPermissionRequests);
+      this->localNetworkPermissionRequests.clear();
+      const auto granted = state == "granted" && this->hasRuntimePermission("local-network");
+      for (const auto& request : requests) {
+        request.callback(request.seq, JSON::Object::Entries {
+          {"data", JSON::Object::Entries {{"state", granted ? "granted" : "denied"}}}
+        }, QueuedResponse{});
+      }
+    });
+  }
+
   void Permissions::query (
     const String& seq,
     const String& name,
@@ -25,6 +75,22 @@ namespace oro::runtime::core::services {
           }}
         };
         callback(seq, json, QueuedResponse{});
+        return;
+      }
+
+      if (name == "local-network") {
+        const auto state = this->getLocalNetworkPermissionState();
+        if (state.empty()) {
+          callback(seq, JSON::Object::Entries {
+            {"err", JSON::Object::Entries {
+              {"message", "Local network permission is unavailable on this platform"}
+            }}
+          }, QueuedResponse{});
+        } else {
+          callback(seq, JSON::Object::Entries {
+            {"data", JSON::Object::Entries {{"state", state}}}
+          }, QueuedResponse{});
+        }
         return;
       }
 
@@ -308,6 +374,64 @@ namespace oro::runtime::core::services {
           }
         };
         callback(seq, json, QueuedResponse{});
+        return;
+      }
+
+      if (name == "local-network") {
+        const auto state = this->getLocalNetworkPermissionState();
+        if (state.empty()) {
+          callback(seq, JSON::Object::Entries {
+            {"err", JSON::Object::Entries {
+              {"message", "Local network permission is unavailable on this platform"}
+            }}
+          }, QueuedResponse{});
+          return;
+        }
+
+        if (state == "granted") {
+          callback(seq, JSON::Object::Entries {
+            {"data", JSON::Object::Entries {{"state", "granted"}}}
+          }, QueuedResponse{});
+          return;
+        }
+
+        // Concurrent callers share one Android dialog and each receive its result.
+        if (this->localNetworkPermissionRequests.size() >= 128) {
+          callback(seq, JSON::Object::Entries {
+            {"err", JSON::Object::Entries {
+              {"message", "Too many pending local network permission requests"}
+            }}
+          }, QueuedResponse{});
+          return;
+        }
+        this->localNetworkPermissionRequests.push_back({seq, callback});
+        if (this->localNetworkPermissionRequests.size() > 1) {
+          return;
+        }
+
+      #if ORO_RUNTIME_PLATFORM_ANDROID
+        const auto& androidContext = this->context.getRuntime()->android;
+        const auto attachment = android::JNIEnvironmentAttachment(androidContext.jvm);
+        const auto env = attachment.env;
+        if (env->PushLocalFrame(2) < 0) {
+          env->ExceptionClear();
+          this->onLocalNetworkPermissionChange("denied");
+          return;
+        }
+        const auto activityClass = env->GetObjectClass(androidContext.activity);
+        const auto method = activityClass
+          ? env->GetMethodID(activityClass, "requestLocalNetworkPermission", "()V")
+          : nullptr;
+        if (method && !env->ExceptionCheck()) {
+          env->CallVoidMethod(androidContext.activity, method);
+        }
+        if (!method || env->ExceptionCheck()) {
+          env->ExceptionDescribe();
+          env->ExceptionClear();
+          this->onLocalNetworkPermissionChange("denied");
+        }
+        env->PopLocalFrame(nullptr);
+      #endif
         return;
       }
 

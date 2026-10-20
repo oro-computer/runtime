@@ -32,7 +32,7 @@ The current state of the permission status.
 Level 0 event target 'change' event listener accessor
 .TP
 \fBquery(descriptor, options)\fR
-Query for a permission status.
+Query for a permission status. The Android\-only `local\-network` permission reports access to LAN hosts. On Android versions or app targets below API 37 it is already granted.
 \fBParameters:\fR
 .br
 \fIdescriptor\fR (PermissionDescriptor; required)
@@ -45,7 +45,7 @@ Query for a permission status.
 \fIPromise<PermissionStatus>\fR
 .TP
 \fBrequest(descriptor, options)\fR
-Request a permission to be granted.
+Request a permission to be granted. Request Android's `local\-network` permission before connecting to LAN hosts. This requires Android 17 with target SDK 37 or newer, and the generated ACCESS_LOCAL_NETWORK manifest permission. Older versions need no prompt.
 \fBParameters:\fR
 .br
 \fIdescriptor\fR (PermissionDescriptor; required)

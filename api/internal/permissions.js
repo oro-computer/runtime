@@ -54,6 +54,7 @@ const platform = {
  * - 'persistent-storage'
  * - 'midi'
  * - 'storage-access'
+ * - 'local-network' (Android)
  * @type {Enumeration}
  * @ignore
  */
@@ -65,7 +66,8 @@ export const types = Enumeration.from([
   'midi',
   'storage-access',
   'camera',
-  'microphone'
+  'microphone',
+  'local-network'
 ])
 
 /**
@@ -197,6 +199,8 @@ class PermissionStatus extends EventTarget {
 
 /**
  * Query for a permission status.
+ * The Android-only `local-network` permission reports access to LAN hosts.
+ * On Android versions or app targets below API 37 it is already granted.
  * @param {PermissionDescriptor} descriptor
  * @param {object=} [options]
  * @param {?AbortSignal} [options.signal = null]
@@ -233,6 +237,10 @@ export async function query (descriptor, options) {
         "Failed to read the 'name' property from 'PermissionDescriptor': " +
         `The provided value '${name}' is not a valid enum value of type PermissionName.`
     )
+  }
+
+  if (name === 'local-network' && !isAndroid) {
+    throw new TypeError('Local network permission is only supported on Android')
   }
 
   if (name === 'camera' || name === 'microphone') {
@@ -276,7 +284,7 @@ export async function query (descriptor, options) {
   if (
     name === 'notifications' ||
     name === 'geolocation' ||
-    (isAndroid && (name === 'camera' || name === 'microphone'))
+    (isAndroid && (name === 'camera' || name === 'microphone' || name === 'local-network'))
   ) {
     const result = await ipc.request('permissions.query', { name }, { signal })
 
@@ -296,6 +304,9 @@ export async function query (descriptor, options) {
 
 /**
  * Request a permission to be granted.
+ * Request Android's `local-network` permission before connecting to LAN hosts.
+ * This requires Android 17 with target SDK 37 or newer, and the generated
+ * ACCESS_LOCAL_NETWORK manifest permission. Older versions need no prompt.
  * @param {PermissionDescriptor} descriptor
  * @param {object=} [options]
  * @param {?AbortSignal} [options.signal = null]
@@ -332,6 +343,10 @@ export async function request (descriptor, options) {
         "Failed to read the 'name' property from 'PermissionDescriptor': " +
         `The provided value '${name}' is not a valid enum value of type PermissionName.`
     )
+  }
+
+  if (name === 'local-network' && !isAndroid) {
+    throw new TypeError('Local network permission is only supported on Android')
   }
 
   if (name === 'camera' || name === 'microphone') {

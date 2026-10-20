@@ -14,6 +14,11 @@ namespace oro::runtime::core::services {
       void query (const ipc::Message::Seq&, const String&, const Callback) const;
       void request (const ipc::Message::Seq&, const String&, const Map<String, String>&, const Callback) const;
       bool hasRuntimePermission (const String& permission) const;
+      void onLocalNetworkPermissionChange (const String& state) const;
+
+    private:
+      String getLocalNetworkPermissionState () const;
+      mutable Vector<RequestContext> localNetworkPermissionRequests;
   };
 }
 #endif

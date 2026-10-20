@@ -438,6 +438,10 @@ extern "C" {
     const auto name = android::StringWrap(env, nameString).str();
     const auto state = android::StringWrap(env, stateString).str();
 
+    if (name == "local-network") {
+      app->runtime.services.permissions.onLocalNetworkPermissionChange(state);
+    }
+
     if (name == "geolocation") {
       app->runtime.services.geolocation.permissionChangeObservers.dispatch(JSON::Object::Entries {
         {"name", name},

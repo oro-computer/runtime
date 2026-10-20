@@ -978,7 +978,7 @@ namespace oro::runtime::config {
       {
         "allow_exec",
         "build.allow_exec",
-        "Allow the CLI and build system to execute external tools (NDK, Gradle, git, scripts).",
+        "Allow native extension commands (git downloads and build scripts). Standard build tools run automatically.",
         "false",
         ConfigValueType::Bool,
         false
@@ -1809,6 +1809,14 @@ namespace oro::runtime::config {
       },
 
       // Permissions (default allow unless explicitly set to false)
+      {
+        "permissions_allow_local_network",
+        "permissions.allow_local_network",
+        "Allow local network permission requests on Android 17 and newer.",
+        "true",
+        ConfigValueType::Bool,
+        false
+      },
       {
         "permissions_allow_notifications",
         "permissions.allow_notifications",

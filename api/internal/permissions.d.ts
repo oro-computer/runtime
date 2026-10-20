@@ -1,5 +1,7 @@
 /**
  * Query for a permission status.
+ * The Android-only `local-network` permission reports access to LAN hosts.
+ * On Android versions or app targets below API 37 it is already granted.
  * @param {PermissionDescriptor} descriptor
  * @param {object=} [options]
  * @param {?AbortSignal} [options.signal = null]
@@ -8,6 +10,9 @@
 export function query(descriptor: PermissionDescriptor, options?: object | undefined, ...args: any[]): Promise<PermissionStatus>;
 /**
  * Request a permission to be granted.
+ * Request Android's `local-network` permission before connecting to LAN hosts.
+ * This requires Android 17 with target SDK 37 or newer, and the generated
+ * ACCESS_LOCAL_NETWORK manifest permission. Older versions need no prompt.
  * @param {PermissionDescriptor} descriptor
  * @param {object=} [options]
  * @param {?AbortSignal} [options.signal = null]
@@ -22,6 +27,7 @@ export function request(descriptor: PermissionDescriptor, options?: object | und
  * - 'persistent-storage'
  * - 'midi'
  * - 'storage-access'
+ * - 'local-network' (Android)
  * @type {Enumeration}
  * @ignore
  */

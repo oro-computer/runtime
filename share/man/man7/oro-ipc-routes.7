@@ -1588,7 +1588,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram getRecvBufferSize() (api/dgram.js#L256); oro:dgram getSendBufferSize() (api/dgram.js#L283); oro:dgram Socket.setRecvBufferSize() (api/dgram.js#L1368); oro:dgram Socket.setSendBufferSize() (api/dgram.js#L1389)
+Exposed by: oro:dgram getRecvBufferSize() (api/dgram.js#L256); oro:dgram getSendBufferSize() (api/dgram.js#L283); oro:dgram Socket.setRecvBufferSize() (api/dgram.js#L1372); oro:dgram Socket.setSendBufferSize() (api/dgram.js#L1393)
 .br
 Notes: Sets the SO_RCVBUF socket option. Sets the maximum socket receive buffer in bytes. Sets the SO_SNDBUF socket option. Sets the maximum socket send buffer in bytes.
 .TP
@@ -1662,14 +1662,14 @@ Transports: request
 .br
 Modules: oro:internal/permissions
 .br
-Exposed by: oro:internal/permissions query() (api/internal/permissions.js#L281)
+Exposed by: oro:internal/permissions query() (api/internal/permissions.js#L289)
 .TP
 \fBpermissions.request\fR
 Transports: request, sendSync
 .br
 Modules: oro:internal/geolocation, oro:internal/permissions
 .br
-Exposed by: oro:internal/geolocation getCurrentPosition() (api/internal/geolocation.js#L165); oro:internal/geolocation watchPosition() (api/internal/geolocation.js#L251); oro:internal/permissions request() (api/internal/permissions.js#L402)
+Exposed by: oro:internal/geolocation getCurrentPosition() (api/internal/geolocation.js#L165); oro:internal/geolocation watchPosition() (api/internal/geolocation.js#L251); oro:internal/permissions request() (api/internal/permissions.js#L417)
 .SS platform
 .TP
 \fBplatform.event\fR
@@ -2370,7 +2370,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.addMembership() (api/dgram.js#L1480)
+Exposed by: oro:dgram Socket.addMembership() (api/dgram.js#L1484)
 .br
 Notes: Join a multicast group.
 .TP
@@ -2379,7 +2379,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.addSourceSpecificMembership() (api/dgram.js#L1509)
+Exposed by: oro:dgram Socket.addSourceSpecificMembership() (api/dgram.js#L1513)
 .br
 Notes: Add source\-specific multicast membership (if supported).
 .TP
@@ -2388,42 +2388,42 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram bind() (api/dgram.js#L330)
+Exposed by: oro:dgram bind() (api/dgram.js#L331)
 .TP
 \fBudp.capabilities\fR
 Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram getCapabilities() (api/dgram.js#L1556)
+Exposed by: oro:dgram getCapabilities() (api/dgram.js#L1560)
 .TP
 \fBudp.close\fR
 Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram (api/dgram.js#L870); oro:dgram close() (api/dgram.js#L674)
+Exposed by: oro:dgram (api/dgram.js#L874); oro:dgram close() (api/dgram.js#L678)
 .TP
 \fBudp.connect\fR
 Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram connect() (api/dgram.js#L423)
+Exposed by: oro:dgram connect() (api/dgram.js#L425)
 .TP
 \fBudp.disconnect\fR
 Transports: sendSync
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram disconnect() (api/dgram.js#L480)
+Exposed by: oro:dgram disconnect() (api/dgram.js#L482)
 .TP
 \fBudp.dropMembership\fR
 Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.dropMembership() (api/dgram.js#L1494)
+Exposed by: oro:dgram Socket.dropMembership() (api/dgram.js#L1498)
 .br
 Notes: Leave a multicast group.
 .TP
@@ -2432,7 +2432,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.dropSourceSpecificMembership() (api/dgram.js#L1525)
+Exposed by: oro:dgram Socket.dropSourceSpecificMembership() (api/dgram.js#L1529)
 .br
 Notes: Drop source\-specific multicast membership (if supported).
 .TP
@@ -2441,14 +2441,14 @@ Transports: sendSync
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram getPeerName() (api/dgram.js#L700)
+Exposed by: oro:dgram getPeerName() (api/dgram.js#L704)
 .TP
 \fBudp.getSockName\fR
 Transports: sendSync
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram getSockName() (api/dgram.js#L721)
+Exposed by: oro:dgram getSockName() (api/dgram.js#L725)
 .TP
 \fBudp.getState\fR
 Transports: sendSync
@@ -2478,14 +2478,14 @@ Binary semantics: binary request body
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram send() (api/dgram.js#L624)
+Exposed by: oro:dgram send() (api/dgram.js#L628)
 .TP
 \fBudp.setBroadcast\fR
 Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.setBroadcast() (api/dgram.js#L1428)
+Exposed by: oro:dgram Socket.setBroadcast() (api/dgram.js#L1432)
 .br
 Notes: Enable or disable SO_BROADCAST on the socket.
 .TP
@@ -2494,7 +2494,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.setIPv6Only() (api/dgram.js#L1539)
+Exposed by: oro:dgram Socket.setIPv6Only() (api/dgram.js#L1543)
 .br
 Notes: Configure the socket as IPv6\-only.
 .TP
@@ -2503,7 +2503,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.setMulticastInterface() (api/dgram.js#L1467)
+Exposed by: oro:dgram Socket.setMulticastInterface() (api/dgram.js#L1471)
 .br
 Notes: Set the default network interface for multicast.
 .TP
@@ -2512,7 +2512,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.setMulticastLoopback() (api/dgram.js#L1455)
+Exposed by: oro:dgram Socket.setMulticastLoopback() (api/dgram.js#L1459)
 .br
 Notes: Enable or disable multicast loopback.
 .TP
@@ -2521,7 +2521,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.setMulticastTTL() (api/dgram.js#L1446)
+Exposed by: oro:dgram Socket.setMulticastTTL() (api/dgram.js#L1450)
 .br
 Notes: Set multicast TTL for outgoing multicast packets.
 .TP
@@ -2530,7 +2530,7 @@ Transports: request
 .br
 Modules: oro:dgram
 .br
-Exposed by: oro:dgram Socket.setTTL() (api/dgram.js#L1437)
+Exposed by: oro:dgram Socket.setTTL() (api/dgram.js#L1441)
 .br
 Notes: Set unicast TTL for outgoing packets.
 .SS usb

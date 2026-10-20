@@ -317,7 +317,8 @@ async function bind (socket, options = undefined, callback = undefined) {
     if (!isLiteralIP) {
       try {
         const family = socket.type === 'udp6' ? 6 : 4
-        options.address = await dns.lookup(options.address, family)
+        const resolved = await dns.lookup(options.address, { family })
+        options.address = resolved.address
       } catch (err) {
         socket.state.bindState = BIND_STATE_UNBOUND
         callback(err)
@@ -402,7 +403,8 @@ async function connect (socket, options = undefined, callback = undefined) {
     if (!isLiteralIP) {
       try {
         const family = socket.type === 'udp6' ? 6 : 4
-        options.address = await dns.lookup(options.address, family)
+        const resolved = await dns.lookup(options.address, { family })
+        options.address = resolved.address
       } catch (err) {
         socket.state.connectState = CONNECT_STATE_DISCONNECTED
         callback(err)
@@ -553,11 +555,13 @@ async function send (socket, options, callback) {
   if (
     !isIPv4(options.address) &&
     typeof options.address === 'string' &&
+    !options.address.includes(':') &&
     socket.state.connectState !== CONNECT_STATE_CONNECTED
   ) {
     try {
-      // @ts-ignore
-      options.address = await dns.lookup(options.address, 4)
+      const family = socket.type === 'udp6' ? 6 : 4
+      const resolved = await dns.lookup(options.address, { family })
+      options.address = resolved.address
     } catch (err) {
       callback(err)
       return { err }
@@ -889,7 +893,7 @@ export class Socket extends EventEmitter {
    * @see {@link https://nodejs.org/api/dgram.html#socketbindport-address-callback}
    */
   bind (arg1, arg2, arg3) {
-    const options = { port: 0, address: '0.0.0.0' }
+    const options = { port: 0, address: getDefaultAddress(this) }
     const cb = isFunction(arg2)
       ? arg2
       : isFunction(arg3)

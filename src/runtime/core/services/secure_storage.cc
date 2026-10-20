@@ -11,6 +11,69 @@
 #include "secure_storage.hh"
 #include "../services.hh"
 
+#if ORO_RUNTIME_PLATFORM_ANDROID
+  namespace {
+    // Native worker threads have no application class-loader frame for FindClass.
+    jclass loadSecureStorageClass (JNIEnv* env, jobject context) {
+      if (env == nullptr || context == nullptr) {
+        return nullptr;
+      }
+
+      if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        return nullptr;
+      }
+
+      if (env->PushLocalFrame(8) < 0) {
+        env->ExceptionClear();
+        return nullptr;
+      }
+
+      const auto finish = [&](jobject result) -> jclass {
+        if (env->ExceptionCheck()) {
+          env->ExceptionDescribe();
+          env->ExceptionClear();
+          result = nullptr;
+        }
+        return static_cast<jclass>(env->PopLocalFrame(result));
+      };
+
+      const auto contextClass = env->GetObjectClass(context);
+      if (contextClass == nullptr || env->ExceptionCheck()) {
+        return finish(nullptr);
+      }
+
+      const auto getClassLoader = env->GetMethodID(contextClass, "getClassLoader", "()Ljava/lang/ClassLoader;");
+      if (getClassLoader == nullptr || env->ExceptionCheck()) {
+        return finish(nullptr);
+      }
+
+      const auto loader = env->CallObjectMethod(context, getClassLoader);
+      if (loader == nullptr || env->ExceptionCheck()) {
+        return finish(nullptr);
+      }
+
+      const auto loaderClass = env->GetObjectClass(loader);
+      if (loaderClass == nullptr || env->ExceptionCheck()) {
+        return finish(nullptr);
+      }
+
+      const auto loadClass = env->GetMethodID(loaderClass, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+      if (loadClass == nullptr || env->ExceptionCheck()) {
+        return finish(nullptr);
+      }
+
+      const auto name = env->NewStringUTF("oro.runtime.securestorage.SecureStorageManager");
+      if (name == nullptr || env->ExceptionCheck()) {
+        return finish(nullptr);
+      }
+
+      return finish(env->CallObjectMethod(loader, loadClass, name));
+    }
+  }
+#endif
+
 #if ORO_RUNTIME_PLATFORM_APPLE
 #  include <Security/Security.h>
 #  include <CoreFoundation/CoreFoundation.h>
@@ -955,7 +1018,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = attachment.env->FindClass("oro/runtime/securestorage/SecureStorageManager");
+    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -970,6 +1033,7 @@ namespace oro::runtime::core::services {
 
     if (method == nullptr) {
       attachment.printException();
+      attachment.env->ExceptionClear();
       attachment.env->DeleteLocalRef(cls);
       error = "SecureStorageManager.set not available";
       return false;
@@ -1191,7 +1255,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = attachment.env->FindClass("oro/runtime/securestorage/SecureStorageManager");
+    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1206,6 +1270,7 @@ namespace oro::runtime::core::services {
 
     if (method == nullptr) {
       attachment.printException();
+      attachment.env->ExceptionClear();
       attachment.env->DeleteLocalRef(cls);
       error = "SecureStorageManager.get not available";
       return false;
@@ -1382,7 +1447,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = attachment.env->FindClass("oro/runtime/securestorage/SecureStorageManager");
+    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1397,6 +1462,7 @@ namespace oro::runtime::core::services {
 
     if (method == nullptr) {
       attachment.printException();
+      attachment.env->ExceptionClear();
       attachment.env->DeleteLocalRef(cls);
       error = "SecureStorageManager.remove not available";
       return false;
@@ -1568,7 +1634,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = attachment.env->FindClass("oro/runtime/securestorage/SecureStorageManager");
+    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1583,6 +1649,7 @@ namespace oro::runtime::core::services {
 
     if (method == nullptr) {
       attachment.printException();
+      attachment.env->ExceptionClear();
       attachment.env->DeleteLocalRef(cls);
       error = "SecureStorageManager.clear not available";
       return false;
@@ -1786,7 +1853,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = attachment.env->FindClass("oro/runtime/securestorage/SecureStorageManager");
+    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1801,6 +1868,7 @@ namespace oro::runtime::core::services {
 
     if (method == nullptr) {
       attachment.printException();
+      attachment.env->ExceptionClear();
       attachment.env->DeleteLocalRef(cls);
       error = "SecureStorageManager.keys not available";
       return false;

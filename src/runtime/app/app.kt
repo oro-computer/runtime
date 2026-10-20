@@ -46,8 +46,6 @@ import org.json.JSONObject
 import oro.runtime.debug.console
 import oro.runtime.window.WindowManagerActivity
 
-import __BUNDLE_IDENTIFIER__.R
-
 private const val PRIMARY_RUNTIME_SCHEME = "oro"
 
 open class AppPermissionRequest (callback: (Boolean) -> Unit) {
@@ -262,6 +260,46 @@ open class AppActivity : WindowManagerActivity() {
     return status == PackageManager.PERMISSION_GRANTED
   }
 
+  fun getLocalNetworkPermissionState (): String {
+    if (Build.VERSION.SDK_INT < 37 || this.applicationInfo.targetSdkVersion < 37) {
+      return "granted"
+    }
+
+    val permission = "android.permission.ACCESS_LOCAL_NETWORK"
+    if (this.checkPermission(permission)) {
+      return "granted"
+    }
+
+    val requested = this.getPreferences(Context.MODE_PRIVATE)
+      .getBoolean("oro.localNetworkPermissionRequested", false)
+    if (requested && !ActivityCompat.shouldShowRequestPermissionRationale(this, permission)) {
+      return "denied"
+    }
+
+    return "prompt"
+  }
+
+  fun requestLocalNetworkPermission () {
+    this.runOnUiThread {
+      if (this.getLocalNetworkPermissionState() == "granted") {
+        App.getInstance().onPermissionChange("local-network", "granted")
+        return@runOnUiThread
+      }
+
+      this.getPreferences(Context.MODE_PRIVATE).edit()
+        .putBoolean("oro.localNetworkPermissionRequested", true).apply()
+      try {
+        this.requestPermissions(arrayOf("android.permission.ACCESS_LOCAL_NETWORK")) { granted ->
+          val state = if (granted) "granted" else "denied"
+          App.getInstance().onPermissionChange("local-network", state)
+        }
+      } catch (err: RuntimeException) {
+        console.error("Unable to request local network permission: $err")
+        App.getInstance().onPermissionChange("local-network", "denied")
+      }
+    }
+  }
+
   fun requestPermissions (permissions: Array<String>) {
     return this.requestPermissions(permissions, fun (_: Boolean) {})
   }
@@ -269,11 +307,16 @@ open class AppActivity : WindowManagerActivity() {
   fun requestPermissions (permissions: Array<String>, callback: (Boolean) -> Unit) {
     val request = AppPermissionRequest(callback)
     this.permissionRequests.add(request)
-    ActivityCompat.requestPermissions(
-      this,
-      permissions,
-      request.id
-    )
+    try {
+      ActivityCompat.requestPermissions(
+        this,
+        permissions,
+        request.id
+      )
+    } catch (err: RuntimeException) {
+      this.permissionRequests.remove(request)
+      throw err
+    }
   }
 
   fun openExternal (value: String) {
@@ -393,24 +436,15 @@ open class AppActivity : WindowManagerActivity() {
       val icon = IconCompat.createWithContentUri(iconURL)
       builder.setSmallIcon(icon)
     } else {
-      val icon = IconCompat.createWithResource(
-        this,
-        R.mipmap.ic_launcher_round
+      val applicationIcon = applicationInfo.icon
+      builder.setSmallIcon(
+        if (applicationIcon != 0) applicationIcon else android.R.drawable.ic_dialog_info
       )
-
-      builder.setSmallIcon(icon)
     }
 
     if (imageURL.isNotEmpty()) {
       val icon = Icon.createWithContentUri(imageURL)
       builder.setLargeIcon(icon)
-    } else {
-      val icon = IconCompat.createWithResource(
-        this,
-        R.mipmap.ic_launcher
-      )
-
-      builder.setSmallIcon(icon)
     }
 
     if (category.isNotEmpty()) {
@@ -664,7 +698,7 @@ open class AppActivity : WindowManagerActivity() {
     val seen = mutableSetOf<String>()
     for (permission in permissions) {
       val granted = (
-        grantResults[i++] == PackageManager.PERMISSION_GRANTED
+        grantResults.getOrNull(i++) == PackageManager.PERMISSION_GRANTED
       )
 
       var name = ""
@@ -709,7 +743,7 @@ open class AppActivity : WindowManagerActivity() {
     for (request in this.permissionRequests) {
       if (request.id == requestCode) {
         this.permissionRequests.remove(request)
-        request.callback(grantResults.all { r ->
+        request.callback(grantResults.isNotEmpty() && grantResults.all { r ->
           r == PackageManager.PERMISSION_GRANTED
         })
         return

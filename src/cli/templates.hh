@@ -31,7 +31,7 @@ environment:
   ORO_LOG_NO_COLOR                     disable colored log output
   ORO_LOG_JSON                         enable structured JSON logs on stdout
   ORO_LOG_FILE                         mirror logs to a JSON file
-  ORO_ALLOW_EXEC                       allow external exec during builds
+  ORO_ALLOW_EXEC                       allow native extension commands during builds
   ORO_ENABLE_SANITIZERS                enable ASan/UBSan on desktop builds
   NO_ANDROID                           source bootstrap: disable only Android work when non-empty
   NO_IOS                               source bootstrap: disable only iOS/iOS Simulator work when non-empty
@@ -476,13 +476,13 @@ options:
   -r, --run                            run after building
   -V, --verbose                        enable verbose output
   -w, --watch                          watch for changes to rerun build step
-  --allow-exec                         allow external command execution (gates ndk-build/gradle/git/build scripts)
+  --allow-exec                         allow native extension commands (git/build scripts)
   --sanitizers                         enable developer sanitizers (ASan/UBSan) for desktop core builds
   --tls-keylog=<path>                  write NSS TLS key log lines to <path> (OpenSSL provider)
   --log-file=<path>                    mirror logs to a JSON file
 
 environment:
-  ORO_ALLOW_EXEC                       allow external exec during builds
+  ORO_ALLOW_EXEC                       allow native extension commands during builds
   ORO_ENABLE_SANITIZERS                enable ASan/UBSan on desktop builds
 
 notes:
@@ -497,7 +497,7 @@ notes:
 common errors:
   Android builds: run `{{cli_name}} setup --platform=android` and accept SDK licenses.
   macOS/iOS signing: set `[ios] provisioning_profile`/specifier or `[mac.productbuild] identity` in your config file.
-  If you see "external command execution is disabled", pass `--allow-exec` or set `ORO_ALLOW_EXEC=1`.
+  Standard Android builds run NDK and Gradle automatically. Native extension commands may require `--allow-exec` or `ORO_ALLOW_EXEC=1`.
 
 Linux options:
   -f, --package-format=<format>        package a Linux application in a specified format for distribution:
@@ -570,7 +570,7 @@ options:
   -q, --quiet                          hint for less log output
   -E, --env                            add environment variables
   -V, --verbose                        enable verbose output
-  --allow-exec                         allow external command execution (gates ndk-build/gradle/git/build scripts)
+  --allow-exec                         allow native extension commands (git/build scripts)
   --tls-keylog=<path>                  write NSS TLS key log lines to <path> (OpenSSL provider)
   --log-file=<path>                    mirror logs to a JSON file
 
