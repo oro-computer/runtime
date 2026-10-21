@@ -13,7 +13,7 @@ native SDKs for the platforms you build. Install `cpplint` for the complete vali
 ```sh
 corepack enable
 pnpm install --frozen-lockfile
-python3 -m pip install cpplint
+pipx install cpplint==2.0.2
 ```
 
 For a desktop-only local debug build, use:
@@ -45,7 +45,7 @@ Do not edit `build/`, `tmp/`, or generated declaration files. Public `oro:*` mod
 - Generated API declarations under `api/**/*.d.ts` are validated by `npm run gen:tsc`, not hand-formatted.
 - `oxlint` adds additional JavaScript diagnostics across the repo.
 - `cpplint` validates the native C and C++ surface in `src/` and `include/`.
-- `lint:cpp` runs `python3 -m cpplint`, so local environments need Python 3 plus the `cpplint` package. CI installs it explicitly.
+- `lint:cpp` runs the `cpplint` executable from `PATH`, supporting pipx and activated Python virtual environments. Ensure the installation's executable directory is on `PATH`. CI installs it explicitly.
 - `lint:docs` compares documentation with the generator output without changing files. Missing, stale, or obsolete generated pages fail the check.
 - `lint:deps` rejects SSH-style GitHub URL defaults and recursive submodule fetch paths in installer scripts so public dependency fetches remain usable on hosted CI and downstream machines without SSH credentials.
 - `lint:build-env` rejects public help or documentation that mentions only one of the independent `NO_ANDROID` and `NO_IOS` controls and validates the canonical presence-flag contract.

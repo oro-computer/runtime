@@ -6,6 +6,46 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-10-20
+
+### Fixed
+
+- Prevent Android asset-read crashes by reading packaged assets directly,
+  handling missing or incomplete files safely, and rejecting null WebView
+  response buffers.
+- Correct UDP hostname resolution and address-family selection for bind,
+  connect, and send, and use the IPv6 wildcard address for `udp6` bindings.
+- Resolve Android secure-storage classes through the application class loader
+  and handle JNI lookup failures without leaving pending exceptions.
+- Use the application icon for Android notifications when generated mipmap
+  resources are absent.
+
+### Android local network access
+
+- Add `local-network` permission query and request support for apps targeting
+  Android 17 (API 37), including manifest generation and the
+  `[permissions] allow_local_network` configuration gate. Handle denied or
+  dismissed prompts and share a single prompt across concurrent requests.
+- Document platform gating and the need to rebuild and reinstall existing apps
+  to include the permission declaration and native request flow. See
+  [Android local network access](docs/ANDROID_LOCAL_NETWORK.md).
+
+### Build and development
+
+- Recover incomplete libusb bootstrap files, validate CMake fallback inputs,
+  refresh stale CMake toolchain caches, and isolate Android libusb build caches
+  by NDK version and API level.
+- Build llama before whisper on Android and iOS so required GGML headers and
+  libraries are available.
+- Generate Android Gradle wrappers in an isolated project without evaluating
+  application plugins or forcing offline mode, and generate Groovy build
+  scripts directly from CLI templates.
+- Run standard Android build tools without requiring `--allow-exec` and expose
+  native compiler and linker failures.
+- Add regression coverage for dependency bootstrap, Android build generation,
+  secure-storage class loading, local-network permissions, UDP hostnames, and
+  resource reads; update API declarations and CLI documentation.
+
 ## [0.1.7] - 2026-10-14
 
 ### Fixed

@@ -1,6 +1,6 @@
 {
   "name": "oro-runtime-workspace",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -35,7 +35,7 @@
     "lint:deps": "node ./bin/check-dependency-urls.js && node ./bin/update-network-protocol.js --check",
     "lint:build-env": "node ./bin/check-build-environment-docs.js",
     "lint:release": "node ./bin/check-release-version.js",
-    "lint:cpp": "python3 -m cpplint --recursive src include/oro include/iroh",
+    "lint:cpp": "cpplint --recursive src include/oro include/iroh",
     "lint:oxlint": "oxlint .",
     "lint:oxlint:fix": "oxlint api/ test/ --fix",
     "lint:prettier": "prettier --check .",
