@@ -45,6 +45,7 @@ NO_IOS                               source bootstrap: disable only iOS/iOS Simu
 | --- | --- |
 | -h, --help | print help message |
 | --prefix | print install path |
+| --android-runtime-contract | validate Android distribution and print its compiled contract |
 | -v, --version | print program version |
 | -q, --quiet | hint for less log output |
 | -V, --verbose | enable verbose output (can be global) |

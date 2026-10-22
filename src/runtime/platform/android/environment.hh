@@ -30,6 +30,7 @@
 ) ({                                                                           \
   auto Class = GetObjectClassFromAndroidEnvironment(env, self);                \
   auto id = env->GetFieldID(Class, field, sig);                                \
+  env->DeleteLocalRef(Class);                                                \
   env->Get##Type##Field(self, id);                                             \
 })
 
@@ -58,6 +59,7 @@
 ) ({                                                                           \
   auto Class = env->GetObjectClass(object);                                    \
   auto ID = env->GetMethodID(Class, method, sig);                              \
+  env->DeleteLocalRef(Class);                                                \
   env->CallObjectMethod(object, ID, ##__VA_ARGS__);                            \
 })
 
@@ -79,6 +81,7 @@
 ) ({                                                                           \
   auto Class = env->GetObjectClass(object);                                    \
   auto ID = env->GetMethodID(Class, method, sig);                              \
+  env->DeleteLocalRef(Class);                                                \
   env->Call##Type##Method(object, ID, ##__VA_ARGS__);                          \
 })
 /**
@@ -97,6 +100,7 @@
 ) ({                                                                           \
   auto Class = env->GetObjectClass(object);                                    \
   auto ID = env->GetMethodID(Class, method, sig);                              \
+  env->DeleteLocalRef(Class);                                                \
   env->CallVoidMethod(object, ID, ##__VA_ARGS__);                              \
 })
 

@@ -7,7 +7,47 @@ import * as module from 'oro:background'
 .fi
 .SH DESCRIPTION
 .PP
-oro:background is a JavaScript API module exposed by the Oro Runtime.
+Explicit native durable tasks. Android supports expired share\-cache cleanup; arbitrary JavaScript, deferred sync and unattended push are not implemented.
 .SH REFERENCE
-.PP
-This module primarily re\-exports symbols from sibling modules. Refer to the generated type declarations and related section 3 pages for the exported surface.
+.TP
+\fBregister(taskKind)\fR
+Checks the supported native task kind. This does not register a JS handler or authorize future application work. Other platforms reject with ENOSYS.
+\fBParameters:\fR
+.br
+\fItaskKind\fR (\&'share\-prune'; required)
+\fBReturns:\fR
+.br
+\fIPromise<BackgroundTaskSupport>\fR
+.TP
+\fBschedule(options)\fR
+Schedules one unique, persisted Android share\-prune job. Scheduling replaces the previous cleanup of that kind. Android decides timing and boot recovery; force\-stop prevents execution until relaunch. The task removes only expired runtime\-owned share files; it never executes JS, contacts servers, or retries application mutations. Failed native cleanup has at most three attempts with Android exponential backoff starting at 30 seconds. Requires background.enabled.
+\fBParameters:\fR
+.br
+\fIoptions\fR (BackgroundScheduleOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<BackgroundTaskState>\fR
+.TP
+\fBcancel(taskKind)\fR
+Cancels the unique native cleanup. A running deletion may finish its current file before observing cancellation. Already removed expired files stay removed.
+\fBParameters:\fR
+.br
+\fItaskKind\fR (\&'share\-prune'; optional; default 'share\-prune')
+\fBReturns:\fR
+.br
+\fIPromise<BackgroundTaskState>\fR
+.TP
+\fBstatus(taskKind)\fR
+Reads actual native scheduling availability and durable state. An interrupted record with no retained OS job is explicit; it is not silently re\-enqueued. Other platforms reject with ENOSYS.
+\fBParameters:\fR
+.br
+\fItaskKind\fR (\&'share\-prune'; optional; default 'share\-prune')
+\fBReturns:\fR
+.br
+\fIPromise<BackgroundTaskStatus>\fR
+.TP
+\fBavailable\fR
+Whether this document requested the native Android cleanup capability. Read status() for actual manifest and scheduler availability.
+.TP
+\fBbackground\fR
+Documented variable exposed by this module.

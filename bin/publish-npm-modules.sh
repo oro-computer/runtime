@@ -379,6 +379,10 @@ function package_platform_variant () {
   validate_platform_target_selection "$dest" "$arch"
   _stage_platform_oroc_binary "$dest" "$arch"
 
+  if compgen -G "$dest/lib/*-android" > /dev/null; then
+    node "$root/bin/check-android-distribution.js" "$dest" "$root/api" "$root" "$dest/android-distribution.json" || exit $?
+  fi
+
   if [ "$platform" = "win32" ]; then
     cp -rap "$ORO_HOME/bin"/.vs* "$dest/bin"
   fi

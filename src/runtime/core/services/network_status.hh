@@ -18,6 +18,13 @@ namespace oro::runtime::core::services {
     #endif
 
       Observers observers;
+    #if ORO_RUNTIME_PLATFORM_ANDROID
+      Mutex statusMutex;
+      JSON::Object latestStatus;
+      bool updatePending = false;
+      Atomic<bool> monitoring = false;
+      void report (const JSON::Object&);
+    #endif
 
       NetworkStatus (const Options&);
       ~NetworkStatus ();

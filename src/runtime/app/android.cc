@@ -5,6 +5,8 @@
 #include "../cwd.hh"
 
 #include "../app.hh"
+#include "../version.hh"
+#include <oro/runtime_init.h>
 
 using namespace oro::runtime::app;
 using namespace oro::runtime;
@@ -17,6 +19,51 @@ using oro::runtime::string::split;
 using oro::runtime::string::trim;
 
 extern "C" {
+  jstring ANDROID_EXTERNAL(app, App, getNativeBuildIdentity)(JNIEnv* env, jobject self) {
+    const auto data = JSON::Object::Entries {
+      {"nativeVersion", version::VERSION_STRING},
+      {"nativeRevision", version::VERSION_HASH_STRING},
+      {"cliVersion", oro_runtime_init_get_cli_version()},
+      {"assetManifestSha256", oro_runtime_init_get_asset_manifest_sha256()},
+      {"androidBridgeProtocol", 5},
+      {"abi", platform.arch},
+      {"debug", isDebugEnabled()}
+    };
+    return android::StringWrap(env, JSON::Object(data).str()).j_str();
+  }
+
+  jstring ANDROID_EXTERNAL(app, App, getDevelopmentOrigin)(JNIEnv* env, jobject self) {
+    if (!isDebugEnabled() || getDevHost().empty() || getDevPort() <= 0) {
+      return env->NewStringUTF("");
+    }
+    auto host = getDevHost();
+    if (host.find("://") == String::npos) {
+      host = "http://" + host;
+    }
+    return android::StringWrap(env, (host + ":" + std::to_string(getDevPort()))).j_str();
+  }
+
+  void ANDROID_EXTERNAL(app, App, onNetworkStatus)(JNIEnv* env, jobject self, jstring statusString) {
+    const auto app = App::sharedApplication();
+    if (!app || !app->runtime.services.networkStatus.enabled) {
+      return;
+    }
+    const auto text = android::StringWrap(env, statusString).str();
+    if (text.size() > 4096) {
+      return;
+    }
+    try {
+      const auto parsed = JSON::parse(text);
+      if (parsed.type != JSON::Type::Object) {
+        return;
+      }
+      const auto status = parsed.as<JSON::Object>();
+      app->runtime.services.networkStatus.report(status);
+    } catch (const JSON::Error&) {
+      return;
+    }
+  }
+
   jlong ANDROID_EXTERNAL(app, App, alloc)(JNIEnv *env, jobject self) {
     if (App::sharedApplication() == nullptr) {
       const auto app = new App({
@@ -207,11 +254,9 @@ extern "C" {
   ) {
     const auto app = App::sharedApplication();
     const auto key = android::StringWrap(env, keyString).str();
-    const auto value = env->NewStringUTF(
-      app->runtime.userConfig.contains(key)
-        ? app->runtime.userConfig.at(key).c_str()
-        : ""
-    );
+    const auto value = android::StringWrap(env,
+      app->runtime.userConfig.contains(key) ? app->runtime.userConfig.at(key) : String()
+    ).j_str();
 
     return value;
   }
@@ -365,7 +410,10 @@ extern "C" {
       ANDROID_THROW(env, "Missing 'App' in environment");
     }
 
-    if (app->runtime.android.activity) {
+    if (
+      app->runtime.android.activity &&
+      env->IsSameObject(app->runtime.android.activity, activity)
+    ) {
       env->DeleteGlobalRef(app->runtime.android.activity);
       app->runtime.android.activity = nullptr;
     }
@@ -378,6 +426,8 @@ extern "C" {
       ANDROID_THROW(env, "Missing 'App' in environment");
     }
 
+    app->runtime.android.contentResolver.application = nullptr;
+    app->runtime.android.contentResolver.jvm = nullptr;
     if (app->runtime.android.self) {
       env->DeleteGlobalRef(app->runtime.android.self);
     }
@@ -449,9 +499,9 @@ extern "C" {
       });
     }
 
-    if (name == "notification") {
+    if (name == "notifications" || name == "notification") {
       app->runtime.services.notifications.permissionChangeObservers.dispatch(JSON::Object::Entries {
-        {"name", name},
+        {"name", "notifications"},
         {"state", state}
       });
     }

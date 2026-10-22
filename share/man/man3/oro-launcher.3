@@ -1,0 +1,50 @@
+.TH ORO-LAUNCHER 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:launcher \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:launcher'
+.fi
+.SH DESCRIPTION
+.PP
+Android named destinations. Requires `[launcher] enabled = true`. A shortcut produces routing receipts, never authorization or resource mutation. Restore sign\-in and resolve the exact current account/target before opening it.
+.SH REFERENCE
+.TP
+\fBgetStatus()\fR
+Reads native launcher support without publishing destinations.
+\fBReturns:\fR
+.br
+\fIPromise<LauncherStatus>\fR
+.TP
+\fBreplace(destinations)\fR
+Replaces this runtime's dynamic destinations, preserving unrelated app shortcuts. Removed targets are disabled, including pinned copies. At most 16 entries and Android's per\-activity quota. Must run from a visible window.
+\fBParameters:\fR
+.br
+\fIdestinations\fR (LauncherDestination[]; required)
+\fBReturns:\fR
+.br
+\fIPromise<LauncherPublicationResult>\fR
+.TP
+\fBpin(id)\fR
+Requests Android's user\-controlled pin flow for an existing destination. Submission is not confirmation that the user pinned the shortcut.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<LauncherPinResult>\fR
+.TP
+\fBgetResponses()\fR
+Reads pending cold/warm launch identities after restoring authorization. Reads do not consume receipts. Validate current IAM and handle removed accounts/targets; opening a shortcut must not replay a mutation.
+\fBReturns:\fR
+.br
+\fIPromise<LauncherReceipt[]>\fR
+.TP
+\fBacknowledgeResponse(receiptId)\fR
+Acknowledges a reconciled or rejected routing receipt. Repeat acknowledgements are allowed. Call only after authenticated target resolution has completed.
+\fBParameters:\fR
+.br
+\fIreceiptId\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR

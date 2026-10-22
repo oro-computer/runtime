@@ -1,0 +1,29 @@
+.TH ORO-WINDOW-APPEARANCE 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:window/appearance \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:window/appearance'
+.fi
+.SH DESCRIPTION
+.PP
+Android inset and predictive Back observations for the current window.
+.SH REFERENCE
+.TP
+\fBonInsetsChange(callback)\fR
+Observes changes after `ApplicationWindow.setSystemAppearance()` selects an inset owner. An `end` event also covers interrupted platform IME animations; use the reported inset values as the current state, not the target fraction.
+\fBParameters:\fR
+.br
+\fIcallback\fR ((insets: WindowInsets) => void; required)
+\fBReturns:\fR
+.br
+\fI() => void\fR Unsubscribe.
+.TP
+\fBonBackGesture(callback)\fR
+Observes the runtime activity's Back callback. Progress requires Android 14+. Start/progress/cancel never navigate; commit follows native history/activity handling. This observation does not intercept Back or replace an application's modal/drawer dismissal priority. Custom native callbacks must forward events.
+\fBParameters:\fR
+.br
+\fIcallback\fR ((gesture: BackGesture) => void; required)
+\fBReturns:\fR
+.br
+\fI() => void\fR Unsubscribe.

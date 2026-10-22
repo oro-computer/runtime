@@ -119,7 +119,11 @@ export function removeTlsPinsForHost(host: string, pins?: string | string[]): Pr
  *
  * This updates the process-wide `webview_tls_pins` configuration and refreshes
  * all active window/bridge configs so platform WebViews immediately see the
- * new pins. Pins use the same format as the static `webview_tls_pins` config:
+ * new pins. On Android, approval is authenticated in backup-excluded storage and
+ * shared with compiled `NativeHttps` executors across cold starts. Changes close
+ * active native requests. Clearing pins restores platform trust; explicit native
+ * authority revocation rejects all certificates for that authority.
+ * Pins use the same format as the static `webview_tls_pins` config:
  *
  *   <host> sha256/<base64>
  *

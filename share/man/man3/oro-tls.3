@@ -162,7 +162,7 @@ Remove one or more runtime TLS pins for a single host. When `pins` is omitted, r
 \fBsetWebViewTlsPins(pins, options)\fR
 Configure WebView TLS certificate pins at runtime.
 .br
-This updates the process\-wide `webview_tls_pins` configuration and refreshes all active window/bridge configs so platform WebViews immediately see the new pins. Pins use the same format as the static `webview_tls_pins` config:
+This updates the process\-wide `webview_tls_pins` configuration and refreshes all active window/bridge configs so platform WebViews immediately see the new pins. On Android, approval is authenticated in backup\-excluded storage and shared with compiled `NativeHttps` executors across cold starts. Changes close active native requests. Clearing pins restores platform trust; explicit native authority revocation rejects all certificates for that authority. Pins use the same format as the static `webview_tls_pins` config:
 .br
 <host> sha256/<base64>
 .br

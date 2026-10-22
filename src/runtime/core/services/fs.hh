@@ -18,7 +18,8 @@ namespace oro::runtime::core::services {
         filesystem::Resource resource;
         Mutex mutex;
         uv_dir_t *dir = nullptr;
-        uv_file fd = 0;
+        uv_file fd = -1;
+        int openFlags = 0;
         FS* fs = nullptr;
 
       #if ORO_RUNTIME_PLATFORM_ANDROID

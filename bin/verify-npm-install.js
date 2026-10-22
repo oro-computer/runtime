@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -36,9 +37,52 @@ for (const key of Object.keys(environment)) {
   }
 }
 environment.ORO_SKIP_PATH_PROMPT = '1'
+environment.npm_config_cache = path.join(smokeRoot, 'npm-cache')
 
 function requireFile (filename) {
   assert(fs.statSync(filename).isFile() && fs.statSync(filename).size > 0, `Missing or empty file: ${filename}`)
+}
+
+function fileDigest (filename) {
+  const hash = createHash('sha256')
+  const descriptor = fs.openSync(filename, 'r')
+  const buffer = Buffer.alloc(65536)
+  try {
+    let count
+    while ((count = fs.readSync(descriptor, buffer, 0, buffer.length, null)) > 0) hash.update(buffer.subarray(0, count))
+  } finally {
+    fs.closeSync(descriptor)
+  }
+  return hash.digest('hex')
+}
+
+function verifyAndroidDistribution (installationRoot, apiRoot) {
+  const filename = path.join(installationRoot, 'android-distribution.json')
+  requireFile(filename)
+  const report = JSON.parse(fs.readFileSync(filename, 'utf8'))
+  assert.equal(report.schema, 1)
+  assert.equal(report.androidBridgeProtocol, 5)
+  assert.equal(report.cliVersion, expectedVersion)
+  for (const entry of [...report.sources, ...report.apis.map(entry => ({ ...entry, api: true }))]) {
+    const directory = entry.api ? apiRoot : installationRoot
+    const target = path.resolve(directory, entry.path)
+    assert(isWithin(directory, target), 'Android distribution input escapes its package')
+    assert.equal(fileDigest(target), entry.sha256, `Installed Android input differs: ${entry.path}`)
+  }
+  for (const [name, digest] of Object.entries(report.files)) {
+    const isApi = name.startsWith('api/')
+    const directory = isApi ? apiRoot : installationRoot
+    const target = path.resolve(directory, isApi ? name.slice(4) : name)
+    assert(isWithin(directory, target), 'Android distribution artifact escapes its package')
+    assert.equal(fileDigest(target), digest, `Installed Android artifact differs: ${name}`)
+  }
+  const executable = path.join(installationRoot, 'bin', process.platform === 'win32' ? 'oroc.exe' : 'oroc')
+  const compiled = JSON.parse(run(executable, ['--android-runtime-contract'], installationRoot, {
+    ...environment, ORO_HOME: installationRoot, ORO_HOME_API: apiRoot
+  }))
+  for (const key of ['schema', 'androidBridgeProtocol', 'cliVersion', 'cliSourceFingerprint', 'sources', 'apis', 'gradleTemplateSha256', 'manifestTemplateSha256']) {
+    assert.deepEqual(compiled[key], report[key], `Installed compiled Android contract differs: ${key}`)
+  }
 }
 
 const tarballs = archives.map(filename => path.resolve(filename))
@@ -84,6 +128,9 @@ function verifyTargetLibraries (installationRoot) {
   requireFile(path.join(installationRoot, 'lib', `${nativeArch}-desktop`,
     process.platform === 'win32' ? 'oro_iroh.lib' : 'liboro_iroh.a'))
   requireFile(path.join(installationRoot, 'objects', `${nativeArch}-desktop`, 'desktop', 'main.o'))
+  if (process.platform === 'linux') {
+    requireFile(path.join(installationRoot, 'objects', `${nativeArch}-desktop`, 'extensions', 'linux.o'))
+  }
   requireFile(path.join(installationRoot, 'src', 'init.cc'))
   requireFile(path.join(installationRoot, 'include', 'oro', 'platform.h'))
 }
@@ -122,6 +169,9 @@ for (const globalInstall of [false, true]) {
     assert(isWithin(fs.realpathSync(installationRoot), fs.realpathSync(filename)), `Binary escapes installation: ${filename}`)
   }
   verifyTargetLibraries(installationRoot)
+  if (fs.readdirSync(path.join(installationRoot, 'lib')).some(name => name.endsWith('-android'))) {
+    verifyAndroidDistribution(installationRoot, metaRoot)
+  }
   requireFile(path.join(metaRoot, 'process.js'))
   requireFile(path.join(metaRoot, 'index.d.ts'))
 

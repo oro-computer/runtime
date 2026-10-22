@@ -19,7 +19,7 @@ namespace oro::runtime::core::services {
 
       // queued responses diagnostics
       do {
-        Lock lock(this->services.mutex);
+        Lock lock(this->context.mutex);
         query.queuedResponses.handles.count = this->context.queuedResponses.size();
         for (const auto& entry : this->context.queuedResponses) {
           query.queuedResponses.handles.ids.push_back(entry.first);

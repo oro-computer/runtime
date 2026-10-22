@@ -1468,7 +1468,7 @@ export function readFileSync (path, options = null) {
       size: stats.size,
       offset: 0
     },
-    { responseType: 'arraybuffer' }
+    { ...options, responseType: 'arraybuffer' }
   )
 
   if (result.err) {
@@ -2074,7 +2074,7 @@ export function writeFileSync (path, data, options) {
   }
 
   const offset = (flags & constants.O_APPEND) === constants.O_APPEND ? -1 : 0
-  result = ipc.sendSync('fs.write', { id, offset }, null, data)
+  result = ipc.sendSync('fs.write', { id, offset }, options, data)
 
   if (result.err) {
     throw result.err

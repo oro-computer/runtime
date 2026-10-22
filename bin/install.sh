@@ -614,6 +614,21 @@ function _build_cli {
   read -r -a ldflags <<< "$("$root/bin/ldflags.sh" --arch "$arch" --platform "$platform" "${libs[@]}")"
   local cflags=($("$root/bin/cflags.sh"))
 
+  local cli_source_fingerprint
+  cli_source_fingerprint="$(bash "$root/bin/cli-source-fingerprint.sh" "$root")"
+  die $? "not ok - unable to fingerprint CLI sources"
+  local cli_fingerprint_file="$output_directory/bin/cli-source-fingerprint${DEBUG:+-debug}.txt"
+  local cli_sources_changed=1
+  if [[ -f "$cli_fingerprint_file" ]] && [[ "$(cat "$cli_fingerprint_file")" == "$cli_source_fingerprint" ]]; then
+    cli_sources_changed=0
+  fi
+  # quiet re-parses Unix commands with eval; preserve the C++ string quotes.
+  if [[ "$(host_os)" == "Win32" ]]; then
+    cflags+=("-DORO_CLI_SOURCE_FINGERPRINT=\"$cli_source_fingerprint\"")
+  else
+    cflags+=("-DORO_CLI_SOURCE_FINGERPRINT='\"$cli_source_fingerprint\"'")
+  fi
+
   local test_headers=()
   if [[ -z "$ignore_header_mtimes" ]]; then
     while IFS= read -r header; do
@@ -638,7 +653,7 @@ function _build_cli {
     # For some reason cli causes issues when debug and release are in the same folder
     output="${output/.cc/$d.o}"
     output="${output/cli/cli$d}"
-    if (( force )) || ! test -f "$output" || (( newest_mtime > $(stat_mtime "$output") )) || (( newest_mtime > $(stat_mtime "$output") )) || (( $(stat_mtime "$source") > $(stat_mtime "$output") )); then
+    if (( force || cli_sources_changed )) || ! test -f "$output" || (( newest_mtime > $(stat_mtime "$output") )) || (( newest_mtime > $(stat_mtime "$output") )) || (( $(stat_mtime "$source") > $(stat_mtime "$output") )); then
       sources+=("$source")
       outputs+=("$output")
       build_cli=1
@@ -742,6 +757,7 @@ function _build_cli {
 
     die $? "not ok - unable to build. See trouble shooting guide in the README.md file:\n$CXX ${cflags[*]} ${ldflags[*]} -o \"$BUILD_DIR/$arch-$platform/bin/oroc\""
     echo "ok - built the cli for desktop"
+    printf '%s\n' "$cli_source_fingerprint" > "$cli_fingerprint_file"
   fi
 }
 

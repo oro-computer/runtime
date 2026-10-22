@@ -3,6 +3,7 @@
 
 #include "queued_response.hh"
 #include "loop.hh"
+#include <optional>
 #include <queue>
 
 namespace oro::runtime {
@@ -66,6 +67,8 @@ namespace oro::runtime::context {
     Mutex mutex;
 
     RuntimeContext () = default;
+    explicit RuntimeContext (const loop::Loop::Options& options)
+      : loop(options) {}
     RuntimeContext (const RuntimeContext&) = delete;
     RuntimeContext (RuntimeContext&&) = delete;
 
@@ -81,6 +84,13 @@ namespace oro::runtime::context {
       const String& params,
       QueuedResponse queuedResponse
     );
+    String createQueuedResponse (
+      const String& seq,
+      const String& params,
+      QueuedResponse queuedResponse,
+      bool useExtensionIPC
+    );
+    std::optional<QueuedResponse> takeQueuedResponse (QueuedResponse::ID);
   };
 
   struct DispatchContext : public Context {

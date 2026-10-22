@@ -1,8 +1,14 @@
+/**
+ * @typedef {object} RequestAnimationFrameMetricOptions
+ * @property {number} [sampleSize=60] Rolling sample capacity, from 1 to 3600.
+ */
+/** Measures distinct animation frame timestamps using a bounded rolling buffer. */
 export class RequestAnimationFrameMetric extends Metric {
-    constructor(options: any);
+    /** @param {RequestAnimationFrameMetricOptions} [options] */
+    constructor(options?: RequestAnimationFrameMetricOptions);
     originalRequestAnimationFrame: typeof requestAnimationFrame;
     requestAnimationFrame(callback: any): any;
-    sampleSize: any;
+    sampleSize: number;
     sampleTick: number;
     channel: import("./channels.js").Channel;
     value: {
@@ -10,14 +16,17 @@ export class RequestAnimationFrameMetric extends Metric {
         samples: number;
     };
     now: number;
-    samples: Uint8Array<any>;
+    samples: Float64Array<ArrayBuffer>;
+    /** @param {number} timestamp Animation frame timestamp in milliseconds. */
+    update(timestamp: number): void;
     toJSON(): {
-        sampleSize: any;
+        sampleSize: number;
         sampleTick: number;
         samples: number[];
         rate: number;
         now: number;
     };
+    #private;
 }
 export class FetchMetric extends Metric {
     constructor(_options: any);
@@ -64,4 +73,10 @@ declare namespace _default {
     export { metrics };
 }
 export default _default;
+export type RequestAnimationFrameMetricOptions = {
+    /**
+     * Rolling sample capacity, from 1 to 3600.
+     */
+    sampleSize?: number;
+};
 import { Metric } from './metric.js';

@@ -2983,7 +2983,7 @@ Mark the current test as skipped.
 | Argument | Type | Default | Optional | Description |
 | :---     | :--- | :---:   | :---:    | :---        |
 | fn | Function |  | false |  |
-| expected | RegExp \\| any |  | true |  |
+| expected | RegExp \\| ErrorConstructor |  | true |  |
 | message | string |  | true |  |
 
 ### `rejects(input, expected, message)`
@@ -3620,6 +3620,18 @@ Opens the Web Inspector for the window (desktop only).
 | :---         | :--- | :---        |
 | Not specified | Promise<object> |  |
 
+### `markReady()`
+
+
+Acknowledges that this window has a usable application screen. Call after
+mounting the UI and loading required styles. Android apps configured with
+`[webview] require_ready = true` retain native startup recovery until this
+acknowledgement. Only the current window can acknowledge its own readiness.
+This does not replay operations or establish application authorization.
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<void> |  |
+
 ### `setBackgroundColor(opts)`
 
 
@@ -3716,13 +3728,72 @@ Shows a native directory dialog.
 
 
 Opens the platform share sheet for the current window.
+New Android file opens expire after 24 hours. Recipients can retain copies.
+Resolution means a share target was selected, not that delivery completed.
 | Argument | Type | Default | Optional | Description |
 | :---     | :--- | :---:   | :---:    | :---        |
-| options | { title?: string, text?: string, url?: string } |  | true |  |
+| options | ShareOptions |  | true |  |
 
 | Return Value | Type | Description |
 | :---         | :--- | :---        |
 | Not specified | Promise<void> |  |
+
+### `setSystemAppearance(options)`
+
+
+Sets Android 11+ system surfaces for this window. The foreground window owns
+appearance; `system` follows configuration changes. Insets/IME updates arrive
+as `windowinsetschange` CustomEvents. Earlier Android versions and other
+platforms reject with `ENOSYS`.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| options | SystemAppearanceOptions |  | false |  |
+
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<void> |  |
+
+### `setFullscreen(enabled)`
+
+
+Enters or exits Android 11+ native fullscreen for the current foreground
+window. First select explicit inset ownership with setSystemAppearance.
+A native Exit fullscreen control, Back, suspension, hiding, and renderer
+destruction exit presentation. Entry never captures a pointer or hides IME.
+Observe windowfullscreenchange for native exits. Browser DOM fullscreen is
+a separate capability. Other platforms reject with ENOSYS.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| enabled | boolean |  | false |  |
+
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<FullscreenState> |  |
+
+### `getFullscreenState()`
+
+
+Reads Android native fullscreen state for the current foreground window.
+Other platforms reject with ENOSYS.
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<FullscreenState> |  |
+
+### `setContentProtection(enabled)`
+
+
+Requests Android FLAG_SECURE while this window is visible. The whole native
+activity is protected, including recents previews and ordinary screenshots.
+This does not protect clipboard, shared files, external displays, or secrets
+already exported by the application. Custom native flag owners must coordinate
+with this runtime API. Other platforms reject with ENOSYS.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| enabled | boolean |  | false |  |
+
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<ContentProtectionState> |  |
 
 ### `send(options)`
 

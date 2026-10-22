@@ -148,6 +148,15 @@ using oro::runtime::app::App;
 #endif
 
 namespace oro::runtime::window {
+#if ORO_RUNTIME_PLATFORM_ANDROID
+  namespace {
+    Mutex dialogCallbacksMutex;
+    Atomic<long> nextDialogToken = 1;
+    Map<long, Dialog::ShareCallback> shareCallbacks;
+    Map<long, Dialog::ShowCallback> pickerCallbacks;
+  }
+#endif
+
   Dialog::Dialog (Window* window)
     : window(window) {
   #if ORO_RUNTIME_PLATFORM_IOS
@@ -157,6 +166,23 @@ namespace oro::runtime::window {
   }
 
   Dialog::~Dialog () {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    ShareCallback pendingShare;
+    ShowCallback pendingPicker;
+    {
+      Lock lock(dialogCallbacksMutex);
+      if (const auto entry = shareCallbacks.find(this->shareToken); entry != shareCallbacks.end()) {
+        pendingShare = entry->second;
+        shareCallbacks.erase(entry);
+      }
+      if (const auto entry = pickerCallbacks.find(this->pickerToken); entry != pickerCallbacks.end()) {
+        pendingPicker = entry->second;
+        pickerCallbacks.erase(entry);
+      }
+    }
+    if (pendingShare) pendingShare(false, "Window closed during sharing");
+    if (pendingPicker) pendingPicker({});
+  #endif
   #if ORO_RUNTIME_PLATFORM_IOS
     #if !__has_feature(objc_arc)
     [this->uiPickerDelegate release];
@@ -238,7 +264,9 @@ namespace oro::runtime::window {
 
     Vector<String> paths;
 
+  #if !ORO_RUNTIME_PLATFORM_ANDROID
     this->callback = callback;
+  #endif
 
   #if ORO_RUNTIME_PLATFORM_APPLE
     // state
@@ -891,6 +919,11 @@ namespace oro::runtime::window {
     });
     return true;
   #elif ORO_RUNTIME_PLATFORM_ANDROID
+    if (!app || !app->runtime.android.activity || !this->window) return false;
+    const auto managed = app->runtime.windowManager.getWindow(this->window->index);
+    if (!managed || managed.get() != this->window) return false;
+    Lock windowLock(managed->mutex);
+    if (!this->window->self) return false;
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
     const auto dialog = CallObjectClassMethodFromAndroidEnvironment(
       attachment.env,
@@ -915,19 +948,38 @@ namespace oro::runtime::window {
       }
     }
 
-    // we'll set the pointer from this instance in this call so
-    // the `onResults` can reinterpret the `jlong` back into a `Dialog*`
+    if (!dialog) return false;
+    {
+      Lock lock(dialogCallbacksMutex);
+      if (pickerCallbacks.contains(this->pickerToken) || pickerCallbacks.size() >= 64) return false;
+      this->pickerToken = nextDialogToken++;
+      pickerCallbacks[this->pickerToken] = callback;
+    }
+    const auto packedMimeTypes = android::StringWrap(attachment.env, mimeTypes).j_str();
+    const auto suggestedName = android::StringWrap(attachment.env, defaultName).j_str();
     CallVoidClassMethodFromAndroidEnvironment(
       attachment.env,
       dialog,
       "showFileSystemPicker",
-      "(Ljava/lang/String;ZZZJ)V",
-      attachment.env->NewStringUTF(mimeTypes.c_str()),
+      "(Ljava/lang/String;ZZZLoro/runtime/window/Window;ZLjava/lang/String;J)V",
+      packedMimeTypes,
       allowDirectories,
       allowMultiple,
       allowFiles,
-      reinterpret_cast<jlong>(this)
+      this->window->self,
+      isSavePicker,
+      suggestedName,
+      static_cast<jlong>(this->pickerToken)
     );
+    attachment.env->DeleteLocalRef(packedMimeTypes);
+    attachment.env->DeleteLocalRef(suggestedName);
+    attachment.env->DeleteLocalRef(dialog);
+    if (attachment.env->ExceptionCheck()) {
+      attachment.env->ExceptionClear();
+      Lock lock(dialogCallbacksMutex);
+      pickerCallbacks.erase(this->pickerToken);
+      return false;
+    }
 
     return true;
   #endif
@@ -1096,46 +1148,50 @@ namespace oro::runtime::window {
   #endif
 
   #elif ORO_RUNTIME_PLATFORM_ANDROID
-    this->shareCallback = cb;
     const auto app = App::sharedApplication();
-
-    if (app == nullptr) {
-      this->shareCallback = nullptr;
-      return false;
-    }
-
+    if (!app || !app->runtime.android.activity) return false;
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto env = attachment.env;
     const auto dialog = CallObjectClassMethodFromAndroidEnvironment(
-      attachment.env,
-      app->runtime.android.activity,
-      "getDialog",
-      "()Loro/runtime/window/Dialog;"
+      env, app->runtime.android.activity, "getDialog", "()Loro/runtime/window/Dialog;"
     );
-
-    if (dialog == nullptr) {
-      this->shareCallback = nullptr;
+    if (!dialog) return false;
+    {
+      Lock lock(dialogCallbacksMutex);
+      if (shareCallbacks.contains(this->shareToken) || shareCallbacks.size() >= 64) return false;
+      this->shareToken = nextDialogToken++;
+      shareCallbacks[this->shareToken] = cb;
+    }
+    const auto title = android::StringWrap(env, options.title).j_str();
+    const auto text = android::StringWrap(env, options.text).j_str();
+    const auto url = android::StringWrap(env, options.url).j_str();
+    const auto files = android::StringWrap(env, options.files).j_str();
+    const auto bytes = env->NewByteArray(options.data.size());
+    if (bytes && options.data.size()) {
+      env->SetByteArrayRegion(bytes, 0, options.data.size(), reinterpret_cast<const jbyte*>(options.data.data()));
+    }
+    if (env->ExceptionCheck() || !bytes) {
+      env->ExceptionClear();
+      Lock lock(dialogCallbacksMutex);
+      shareCallbacks.erase(this->shareToken);
       return false;
     }
-
-    jstring title = options.title.size() > 0 ? attachment.env->NewStringUTF(options.title.c_str()) : nullptr;
-    jstring text = options.text.size() > 0 ? attachment.env->NewStringUTF(options.text.c_str()) : nullptr;
-    jstring url = options.url.size() > 0 ? attachment.env->NewStringUTF(options.url.c_str()) : nullptr;
-
     CallVoidClassMethodFromAndroidEnvironment(
-      attachment.env,
-      dialog,
-      "share",
-      "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V",
-      title,
-      text,
-      url,
-      reinterpret_cast<jlong>(this)
+      env, dialog, "share", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[BJ)V",
+      title, text, url, files, bytes, static_cast<jlong>(this->shareToken)
     );
-
-    if (title) attachment.env->DeleteLocalRef(title);
-    if (text) attachment.env->DeleteLocalRef(text);
-    if (url) attachment.env->DeleteLocalRef(url);
-
+    env->DeleteLocalRef(title);
+    env->DeleteLocalRef(text);
+    env->DeleteLocalRef(url);
+    env->DeleteLocalRef(files);
+    env->DeleteLocalRef(bytes);
+    env->DeleteLocalRef(dialog);
+    if (env->ExceptionCheck()) {
+      env->ExceptionClear();
+      Lock lock(dialogCallbacksMutex);
+      shareCallbacks.erase(this->shareToken);
+      return false;
+    }
     return true;
   #else
     (void) options;
@@ -1155,44 +1211,27 @@ extern "C" {
   ) {
     using namespace oro::runtime;
 
-    const auto dialog = reinterpret_cast<window::Dialog*>(pointer);
-
-    if (!dialog) {
-      return ANDROID_THROW(
-        env,
-        "Missing 'Dialog' in results callback from 'showFileSystemPicker'"
-      );
+    window::Dialog::ShowCallback callback;
+    {
+      Lock lock(window::dialogCallbacksMutex);
+      const auto entry = window::pickerCallbacks.find(pointer);
+      if (entry == window::pickerCallbacks.end()) return;
+      callback = entry->second;
+      window::pickerCallbacks.erase(entry);
     }
-
-    if (dialog->callback == nullptr) {
-      return ANDROID_THROW(
-        env,
-        "Missing 'Dialog' callback in results callback from 'showFileSystemPicker'"
-      );
-    }
-
-    const auto attachment = android::JNIEnvironmentAttachment(dialog->window->bridge->context.android.jvm);
-    const auto length = attachment.env->GetArrayLength(results);
-
     Vector<String> paths;
-
+    const auto length = env->GetArrayLength(results);
     for (int i = 0; i < length; ++i) {
-      const auto uri = (jstring) attachment.env->GetObjectArrayElement(results, i);
-      if (uri) {
-        const auto string = android::StringWrap(attachment.env, CallObjectClassMethodFromAndroidEnvironment(
-          attachment.env,
-          uri,
-          "toString",
-          "()Ljava/lang/String;"
-        )).str();
-
-        paths.push_back(string);
-      }
+      const auto uri = env->GetObjectArrayElement(results, i);
+      if (!uri) continue;
+      const auto string = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+        env, uri, "toString", "()Ljava/lang/String;"
+      ));
+      paths.push_back(android::StringWrap(env, string).str());
+      env->DeleteLocalRef(string);
+      env->DeleteLocalRef(uri);
     }
-
-    const auto callback = dialog->callback;
-    dialog->callback = nullptr;
-    callback(paths);
+    if (callback) callback(paths);
   }
 
   void ANDROID_EXTERNAL(window, Dialog, onShareResult) (
@@ -1204,25 +1243,16 @@ extern "C" {
   ) {
     using namespace oro::runtime;
 
-    const auto dialog = reinterpret_cast<window::Dialog*>(pointer);
-
-    if (dialog == nullptr) {
-      return ANDROID_THROW(env, "Missing 'Dialog' in share callback from 'share()'");
+    window::Dialog::ShareCallback callback;
+    {
+      Lock lock(window::dialogCallbacksMutex);
+      const auto entry = window::shareCallbacks.find(pointer);
+      if (entry == window::shareCallbacks.end()) return;
+      callback = entry->second;
+      window::shareCallbacks.erase(entry);
     }
-
-    if (dialog->shareCallback == nullptr) {
-      return;
-    }
-
-    oro::runtime::String message;
-
-    if (errorMessage != nullptr) {
-      message = android::StringWrap(env, errorMessage).str();
-    }
-
-    const auto callback = dialog->shareCallback;
-    dialog->shareCallback = nullptr;
-    callback(success == JNI_TRUE, message);
+    const auto message = errorMessage ? android::StringWrap(env, errorMessage).str() : String();
+    if (callback) callback(success == JNI_TRUE, message);
   }
 }
 #endif

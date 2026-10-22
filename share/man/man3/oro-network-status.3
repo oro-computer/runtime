@@ -1,0 +1,26 @@
+.TH ORO-NETWORK-STATUS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:network\-status \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:network\-status'
+.fi
+.SH DESCRIPTION
+.PP
+Android network path state. Connectivity never establishes server health, account authorization, or permission to retry an uncertain operation.
+.SH REFERENCE
+.TP
+\fBgetStatus()\fR
+Reads Android's current default path without making a network request. Other platforms and disabled monitoring reject with `ENOSYS`.
+\fBReturns:\fR
+.br
+\fIPromise<NetworkStatus>\fR
+.TP
+\fBonChange(callback)\fR
+Observes native network path changes. Subscribe before reading `getStatus()` to obtain an initial snapshot without missing later changes. This function does not start polling or probe any application server.
+\fBParameters:\fR
+.br
+\fIcallback\fR ((status: NetworkStatus) => void; required)
+\fBReturns:\fR
+.br
+\fI() => void\fR Removes the listener.

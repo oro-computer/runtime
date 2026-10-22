@@ -15,7 +15,7 @@ namespace oro::runtime::android {
 
   String MimeTypeMap::getMimeTypeFromExtension (const String& extension) const {
     const auto attachment = JNIEnvironmentAttachment(this->jvm);
-    const auto extensionString = attachment.env->NewStringUTF(extension.c_str());
+    const auto extensionString = android::StringWrap(attachment.env, extension).j_str();
     const auto mimeTypeString = (jstring) CallObjectClassMethodFromAndroidEnvironment(
       attachment.env,
       this->ref,

@@ -1,15 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 const compiler = ['clang++', 'c++'].find(command =>
   spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0)
 const source = readFileSync(new URL('../../src/cli/main.cc', import.meta.url), 'utf8')
-const nativeBuild = source.match(/ {8}if \(buildJniLibs\) \{[\s\S]*?\n {8}\}/)?.[0]
-assert.ok(nativeBuild)
+const start = source.indexOf('        // Always evaluate NDK dependencies, including changed configuration and')
+const end = source.indexOf('\n      // just build for CI', start)
+assert.ok(start >= 0 && end > start)
+const nativeBuild = source.slice(start, end).replace(/\n {6}\}\s*$/, '')
 
 test('standard Android builds run without allow-exec and display NDK failures', {
   skip: process.platform === 'win32' || !compiler ? 'Requires a POSIX C++ compiler' : false
@@ -24,6 +26,8 @@ exit "\${NDK_PROBE_STATUS:-0}"
 
   const filename = path.join(directory, 'native-build.cc')
   const executable = path.join(directory, 'native-build')
+  mkdirSync(path.join(directory, 'jniLibs'))
+  writeFileSync(path.join(directory, 'jniLibs/liboro-runtime.so'), 'stale public library fixture')
   writeFileSync(filename, `
     #include <cstdlib>
     #include <filesystem>
@@ -34,7 +38,7 @@ exit "\${NDK_PROBE_STATUS:-0}"
     void logVerbose (const String& text) { std::cout << text << '\\n'; }
     void logError (const String& text) { std::cerr << text << '\\n'; }
     int main (int argc, char** argv) {
-      bool buildJniLibs = true, flagDebugMode = false, debugEnv = false, verboseEnv = false;
+      bool flagDebugMode = false, debugEnv = false, verboseEnv = false;
       std::stringstream ndkBuild, ndkBuildArgs;
       ndkBuild << argv[1];
       auto _main = std::filesystem::path(argv[2]);

@@ -822,7 +822,7 @@ namespace oro::runtime::webview::cookies {
         return callback("", "Cookie manager is unavailable");
       }
 
-      const auto jurl = attachment.env->NewStringUTF(cookieURL.c_str());
+      const auto jurl = android::StringWrap(attachment.env, cookieURL).j_str();
       const auto value = (jstring) CallClassMethodFromAndroidEnvironment(
         attachment.env,
         Object,
@@ -1054,8 +1054,8 @@ namespace oro::runtime::webview::cookies {
         return callback(false, "Cookie manager is unavailable");
       }
 
-      const auto jurl = attachment.env->NewStringUTF(cookieURL.c_str());
-      const auto jcookie = attachment.env->NewStringUTF(cookieValue.c_str());
+      const auto jurl = android::StringWrap(attachment.env, cookieURL).j_str();
+      const auto jcookie = android::StringWrap(attachment.env, cookieValue).j_str();
 
       CallVoidClassMethodFromAndroidEnvironment(
         attachment.env,
@@ -1430,9 +1430,9 @@ namespace oro::runtime::webview::cookies {
         return callback(false, "Cookie manager is unavailable");
       }
 
-      const auto jurl = attachment.env->NewStringUTF(cookieURL.c_str());
+      const auto jurl = android::StringWrap(attachment.env, cookieURL).j_str();
       for (const auto& expired : cookies) {
-        const auto jcookie = attachment.env->NewStringUTF(expired.c_str());
+        const auto jcookie = android::StringWrap(attachment.env, expired).j_str();
         CallVoidClassMethodFromAndroidEnvironment(
           attachment.env,
           cookieManager,

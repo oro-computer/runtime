@@ -160,7 +160,8 @@ namespace oro::runtime::filesystem {
         // init (or re-init) handles as needed
         // init context
         context->isDirectory = std::filesystem::is_directory(path);
-        context->lastUpdated = Watcher::Clock::now();
+        // The debounce window starts after the first delivered event.
+        context->lastUpdated = Watcher::Clock::now() - std::chrono::milliseconds(this->options.debounce);
         context->watcher = this;
         context->name = std::filesystem::absolute(path).string();
 

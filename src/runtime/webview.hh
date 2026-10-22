@@ -11,6 +11,10 @@
 #include "webview/webview.hh"
 #include "webview/client.hh"
 
+#if ORO_RUNTIME_PLATFORM_LINUX
+struct _WebKitWebContext;
+#endif
+
 namespace oro::runtime::bridge {
   // forward
   class Bridge;
@@ -406,8 +410,9 @@ namespace oro::runtime::webview {
 
   class IBridge : public ipc::IBridge {
     public:
-    #if ORO_RUNTIME_PLATFORM_LINUX && !ORO_RUNTIME_DESKTOP_EXTENSION
-      WebKitWebContext* webContext = nullptr;
+    #if ORO_RUNTIME_PLATFORM_LINUX
+      // The core archive and WebProcess extension must share this layout.
+      ::_WebKitWebContext* webContext = nullptr;
     #endif
 
       IBridge (

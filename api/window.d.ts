@@ -1,4 +1,34 @@
 /**
+ * @typedef {object} FullscreenState
+ * @property {boolean} supported Android 11+ native presentation is supported.
+ * @property {boolean} active Whether a window currently owns fullscreen.
+ * @property {number|null} owner Current fullscreen window index.
+ * @property {boolean} customView Whether a browser custom view is being shown.
+ * @property {boolean} requiresManagedInsets Call setSystemAppearance before entry.
+ * @property {boolean} pointerCapture False; native fullscreen does not capture a pointer.
+ */
+/**
+ * @typedef {object} ContentProtectionState
+ * @property {boolean} enabled Protection requested for this window.
+ * @property {boolean} activityProtected Android currently protects the entire activity.
+ */
+/**
+ * @typedef {object} ShareOptions
+ * @property {string} [title]
+ * @property {string} [text]
+ * @property {string} [url]
+ * @property {File[]} [files] Android only: up to 16 files, 8 MiB total.
+ */
+/**
+ * @typedef {object} SystemAppearanceOptions
+ * @property {'system'|'light'|'dark'} theme System bar icon contrast.
+ * @property {string} color Opaque surface color, exactly `#rrggbb`.
+ * @property {'native'|'web'} insets Explicit inset owner. Native pads content;
+ * web emits CSS-pixel insets for the app to consume. Stop app-owned native inset
+ * listeners before adopting this API to prevent double padding. Runtime disables
+ * automatic IME resizing while the opted-in window is foreground.
+ */
+/**
  * @param {string} url
  * @return {string}
  * @ignore
@@ -207,6 +237,15 @@ export class ApplicationWindow extends EventTarget {
      */
     showInspector(): Promise<object>;
     /**
+     * Acknowledges that this window has a usable application screen. Call after
+     * mounting the UI and loading required styles. Android apps configured with
+     * `[webview] require_ready = true` retain native startup recovery until this
+     * acknowledgement. Only the current window can acknowledge its own readiness.
+     * This does not replay operations or establish application authorization.
+     * @returns {Promise<void>}
+     */
+    markReady(): Promise<void>;
+    /**
      * Sets the background color of the window
      * @param {object} opts - an options object
      * @param {number} opts.red - the red value
@@ -263,14 +302,48 @@ export class ApplicationWindow extends EventTarget {
     showDirectoryFilePicker(options: object): Promise<string[]>;
     /**
      * Opens the platform share sheet for the current window.
-     * @param {{ title?: string, text?: string, url?: string }} [options]
+     * New Android file opens expire after 24 hours. Recipients can retain copies.
+     * Resolution means a share target was selected, not that delivery completed.
+     * @param {ShareOptions} [options]
      * @return {Promise<void>}
      */
-    share(options?: {
-        title?: string;
-        text?: string;
-        url?: string;
-    }): Promise<void>;
+    share(options?: ShareOptions): Promise<void>;
+    /**
+     * Sets Android 11+ system surfaces for this window. The foreground window owns
+     * appearance; `system` follows configuration changes. Insets/IME updates arrive
+     * as `windowinsetschange` CustomEvents. Earlier Android versions and other
+     * platforms reject with `ENOSYS`.
+     * @param {SystemAppearanceOptions} options
+     * @returns {Promise<void>}
+     */
+    setSystemAppearance(options: SystemAppearanceOptions): Promise<void>;
+    /**
+     * Enters or exits Android 11+ native fullscreen for the current foreground
+     * window. First select explicit inset ownership with setSystemAppearance.
+     * A native Exit fullscreen control, Back, suspension, hiding, and renderer
+     * destruction exit presentation. Entry never captures a pointer or hides IME.
+     * Observe windowfullscreenchange for native exits. Browser DOM fullscreen is
+     * a separate capability. Other platforms reject with ENOSYS.
+     * @param {boolean} enabled
+     * @returns {Promise<FullscreenState>}
+     */
+    setFullscreen(enabled: boolean): Promise<FullscreenState>;
+    /**
+     * Reads Android native fullscreen state for the current foreground window.
+     * Other platforms reject with ENOSYS.
+     * @returns {Promise<FullscreenState>}
+     */
+    getFullscreenState(): Promise<FullscreenState>;
+    /**
+     * Requests Android FLAG_SECURE while this window is visible. The whole native
+     * activity is protected, including recents previews and ordinary screenshots.
+     * This does not protect clipboard, shared files, external displays, or secrets
+     * already exported by the application. Custom native flag owners must coordinate
+     * with this runtime API. Other platforms reject with ENOSYS.
+     * @param {boolean} enabled
+     * @returns {Promise<ContentProtectionState>}
+     */
+    setContentProtection(enabled: boolean): Promise<ContentProtectionState>;
     /**
      * This is a high-level API that you should use instead of `ipc.request` when
      * you want to send a message to another window or to the backend.
@@ -365,6 +438,68 @@ export default ApplicationWindow;
  * @ignore
  */
 export const constants: typeof statuses;
+export type FullscreenState = {
+    /**
+     * Android 11+ native presentation is supported.
+     */
+    supported: boolean;
+    /**
+     * Whether a window currently owns fullscreen.
+     */
+    active: boolean;
+    /**
+     * Current fullscreen window index.
+     */
+    owner: number | null;
+    /**
+     * Whether a browser custom view is being shown.
+     */
+    customView: boolean;
+    /**
+     * Call setSystemAppearance before entry.
+     */
+    requiresManagedInsets: boolean;
+    /**
+     * False; native fullscreen does not capture a pointer.
+     */
+    pointerCapture: boolean;
+};
+export type ContentProtectionState = {
+    /**
+     * Protection requested for this window.
+     */
+    enabled: boolean;
+    /**
+     * Android currently protects the entire activity.
+     */
+    activityProtected: boolean;
+};
+export type ShareOptions = {
+    title?: string;
+    text?: string;
+    url?: string;
+    /**
+     * Android only: up to 16 files, 8 MiB total.
+     */
+    files?: File[];
+};
+export type SystemAppearanceOptions = {
+    /**
+     * System bar icon contrast.
+     */
+    theme: "system" | "light" | "dark";
+    /**
+     * Opaque surface color, exactly `#rrggbb`.
+     */
+    color: string;
+    /**
+     * Explicit inset owner. Native pads content;
+     * web emits CSS-pixel insets for the app to consume. Stop app-owned native inset
+     * listeners before adopting this API to prevent double padding. Runtime disables
+     * automatic IME resizing while the opted-in window is foreground.
+     */
+    insets: "native" | "web";
+};
 import ipc from './ipc.js';
 import * as statuses from './window/constants.js';
 import client from './application/client.js';

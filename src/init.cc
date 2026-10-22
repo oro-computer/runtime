@@ -37,6 +37,20 @@ extern "C" {
     return 0;
   }
 
+  const char* oro_runtime_init_get_asset_manifest_sha256 () {
+  #if defined(ORO_RUNTIME_ASSET_MANIFEST_SHA256)
+    return ORO_RUNTIME_ASSET_MANIFEST_SHA256;
+  #endif
+    return "";
+  }
+
+  const char* oro_runtime_init_get_cli_version () {
+  #if defined(ORO_RUNTIME_PACKAGING_CLI_VERSION)
+    return ORO_RUNTIME_PACKAGING_CLI_VERSION;
+  #endif
+    return "";
+  }
+
   int oro_runtime_init_get_user_config_format () {
     return __oro_runtime_user_config_format;
   }

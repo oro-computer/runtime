@@ -60,6 +60,11 @@ import location from './location.js'
 import gc from './gc.js'
 
 let nextSeq = 1
+// Async replies from an obsolete document must not resolve requests created by
+// its replacement, whose local counter starts again at one. This identifies a
+// JS realm; it does not authenticate a caller or authorize an operation.
+const sequenceEpoch = globalThis.crypto?.randomUUID?.() ??
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
 const cache = {}
 
 function initializeXHRIntercept () {
@@ -408,14 +413,22 @@ export const TIMEOUT = 32 * 1000
 export const kDebugEnabled = Symbol.for('oro.runtime.ipc.debug.enabled')
 
 /**
- * Parses `seq` as integer value
+ * @typedef {object} ParseSeqOptions
+ * @property {boolean} [bigint=false] Return the counter as a BigInt.
+ */
+
+/**
+ * Parses the numeric sequence counter, ignoring a document/worker namespace
+ * suffix. Use the complete string to correlate replies: a counter alone is
+ * not unique across document lifetimes.
  * @param {string|number} seq
- * @param {object=} [options]
- * @param {boolean} [options.bigint = false]
+ * @param {ParseSeqOptions} [options]
+ * @returns {number|bigint}
  * @ignore
  */
 export function parseSeq (seq, options) {
-  const value = String(seq).replace(/^R/i, '').replace(/n$/, '')
+  let value = String(seq).replace(/^R/i, '').replace(/n$/, '')
+  if (/^[0-9]+-[a-z0-9-]+$/i.test(value)) value = value.slice(0, value.indexOf('-'))
   return options?.bigint === true ? BigInt(value) : parseInt(value)
 }
 
@@ -1131,7 +1144,7 @@ export class IPCSearchParams extends URLSearchParams {
     super({
       ...serializedParams,
       index: globalThis.__args?.index ?? 0,
-      seq: serializedParams?.seq ?? 'R' + nextSeq++
+      seq: serializedParams?.seq ?? `R${nextSeq++}-${sequenceEpoch}`
     })
 
     if (serializedParams && typeof serializedParams === 'object') {
@@ -1193,9 +1206,51 @@ export class IPCSearchParams extends URLSearchParams {
   }
 }
 
+// A descriptor stays on its opening transport even if the desktop extension
+// becomes available later or the caller switches between sync and async APIs.
+const fileDescriptorTransports = new Map()
+
+function usesExtensionTransport (command, params, options) {
+  if (typeof options?.useExtensionIPCIfAvailable === 'boolean') {
+    return options.useExtensionIPCIfAvailable
+  }
+  if (!command.startsWith('fs.')) return false
+  const owner = fileDescriptorTransports.get(params.get('id'))
+  return owner ? owner.extension : params.get('__sync__') !== 'true'
+}
+
+function trackDescriptorTransport (command, params, result, extension) {
+  if (!command.startsWith('fs.') || result.err) return result
+  const id = params.get('id')
+  if (id && (command === 'fs.open' || command === 'fs.opendir')) {
+    fileDescriptorTransports.set(id, { extension, retained: false })
+  } else if (id && (command === 'fs.close' || command === 'fs.closedir')) {
+    fileDescriptorTransports.delete(id)
+  } else if (id && command === 'fs.retainOpenDescriptor') {
+    const owner = fileDescriptorTransports.get(id)
+    if (owner) owner.retained = true
+  } else if (command === 'fs.closeOpenDescriptors') {
+    for (const [id, owner] of fileDescriptorTransports) {
+      if (owner.extension === extension && (params.get('preserveRetained') === 'false' || !owner.retained)) {
+        fileDescriptorTransports.delete(id)
+      }
+    }
+  } else if (command === 'fs.getOpenDescriptors' && Array.isArray(result.data)) {
+    const current = new Set(result.data.map(entry => String(entry.id)))
+    for (const [id, owner] of fileDescriptorTransports) {
+      if (owner.extension === extension && !current.has(id)) fileDescriptorTransports.delete(id)
+    }
+    for (const id of current) {
+      if (!fileDescriptorTransports.has(id)) fileDescriptorTransports.set(id, { extension, retained: true })
+    }
+  }
+  return result
+}
+
 /**
- * Sends a synchronous IPC command over XHR returning a `Result`
- * upon success or error.
+ * Sends a synchronous IPC command returning a `Result` upon success or error.
+ * Descriptor operations retain the transport that opened the handle across sync
+ * and async calls. `useExtensionIPCIfAvailable` explicitly selects a transport.
  * @param {string} command
  * @param {any?} [value]
  * @param {(object|null|Buffer|Uint8Array|ArrayBuffer|string|Array)=} [options]
@@ -1241,12 +1296,17 @@ export function sendSync (command, value = '', options = null, buffer = null) {
 
   if (
     typeof globalThis.__global_ipc_extension_handler === 'function' &&
-    options?.useExtensionIPCIfAvailable === true
+    usesExtensionTransport(command, params, options)
   ) {
     if (!(command.startsWith('fs.') && isFileSystemBookmark({ params }))) {
       let response = null
       try {
-        response = globalThis.__global_ipc_extension_handler(uri)
+        const bytes = buffer == null
+          ? null
+          : ArrayBuffer.isView(buffer)
+            ? Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+            : Buffer.from(buffer)
+        response = globalThis.__global_ipc_extension_handler(uri, bytes)
       } catch (err) {
         return Result.from(null, err)
       }
@@ -1257,14 +1317,14 @@ export function sendSync (command, value = '', options = null, buffer = null) {
         } catch {}
       }
 
-      return Result.from(response, null, command)
+      return trackDescriptorTransport(command, params, Result.from(response, null, command), true)
     }
   }
 
   const request = new globalThis.XMLHttpRequest()
 
   if (debug.enabled) {
-    debug.log('ipc.sendSync: %s', uri)
+    debug.log('ipc.sendSync:', command)
   }
 
   if (options?.responseType && !binaryTextResponse) {
@@ -1288,10 +1348,10 @@ export function sendSync (command, value = '', options = null, buffer = null) {
       : getRequestResponse(request, { ...options, responseType: '' })
     : getRequestResponse(request, options)
   const headers = request.getAllResponseHeaders()
-  const result = Result.from(response, null, command, headers)
+  const result = trackDescriptorTransport(command, params, Result.from(response, null, command, headers), false)
 
   if (debug.enabled) {
-    debug.log('ipc.sendSync: (resolved)', command, result)
+    debug.log('ipc.sendSync: (resolved)', command)
   }
 
   if (options?.cache === true) {
@@ -1323,7 +1383,7 @@ export async function emit (name, value, target, options) {
   await ready()
 
   if (debug.enabled) {
-    debug.log('ipc.emit:', name, value, target, options)
+    debug.log('ipc.emit:')
   }
 
   if (typeof value === 'string') {
@@ -1359,7 +1419,7 @@ export async function resolve (seq, value) {
   await ready()
 
   if (debug.enabled) {
-    debug.log('ipc.resolve:', seq, value)
+    debug.log('ipc.resolve:', seq)
   }
 
   const index = globalThis.__args?.index || 0
@@ -1385,7 +1445,7 @@ export async function send (command, value, options = null) {
   }
 
   if (debug.enabled) {
-    debug.log('ipc.send:', command, value)
+    debug.log('ipc.send:', command)
   }
 
   const params = new IPCSearchParams(value)
@@ -1393,7 +1453,7 @@ export async function send (command, value, options = null) {
 
   if (
     typeof globalThis.__global_ipc_extension_handler === 'function' &&
-    (options?.useExtensionIPCIfAvailable || command.startsWith('fs.'))
+    usesExtensionTransport(command, params, options)
   ) {
     if (!(command.startsWith('fs.') && isFileSystemBookmark({ params }))) {
       let response = null
@@ -1409,7 +1469,7 @@ export async function send (command, value, options = null) {
         } catch {}
       }
 
-      return Result.from(response, null, command)
+      return trackDescriptorTransport(command, params, Result.from(response, null, command), true)
     }
   }
 
@@ -1424,9 +1484,9 @@ export async function send (command, value, options = null) {
     }
 
     function onresolve (event) {
-      const result = Result.from(event.detail, null, command)
+      const result = trackDescriptorTransport(command, params, Result.from(event.detail, null, command), false)
       if (debug.enabled) {
-        debug.log('ipc.send: (resolved)', command, result)
+        debug.log('ipc.send: (resolved)', command)
       }
 
       if (options?.cache === true) {
@@ -1469,7 +1529,7 @@ export async function write (command, value, buffer, options) {
 
   if (
     typeof globalThis.__global_ipc_extension_handler === 'function' &&
-    (options?.useExtensionIPCIfAvailable || command.startsWith('fs.'))
+    usesExtensionTransport(command, params, options)
   ) {
     if (!(command.startsWith('fs.') && isFileSystemBookmark({ params }))) {
       let response = null
@@ -1485,7 +1545,7 @@ export async function write (command, value, buffer, options) {
         } catch {}
       }
 
-      return Result.from(response, null, command)
+      return trackDescriptorTransport(command, params, Result.from(response, null, command), true)
     }
   }
 
@@ -1551,10 +1611,10 @@ export async function write (command, value, buffer, options) {
 
         const response = getRequestResponse(request, options)
         const headers = request.getAllResponseHeaders()
-        const result = Result.from(response, null, command, headers)
+        const result = trackDescriptorTransport(command, params, Result.from(response, null, command, headers), false)
 
         if (debug.enabled) {
-          debug.log('ipc.write: (resolved)', command, result)
+          debug.log('ipc.write: (resolved)', command)
         }
 
         if (signal && onAbort) {
@@ -1585,7 +1645,7 @@ export async function write (command, value, buffer, options) {
   await request.send(buffer || null)
 
   if (debug.enabled) {
-    debug.log('ipc.write:', uri, buffer || null)
+    debug.log('ipc.write:', command)
   }
 
   return await pending
@@ -1616,7 +1676,7 @@ export async function request (command, value, options = null) {
 
   if (
     typeof globalThis.__global_ipc_extension_handler === 'function' &&
-    (options?.useExtensionIPCIfAvailable || command.startsWith('fs.'))
+    usesExtensionTransport(command, params, options)
   ) {
     if (!(command.startsWith('fs.') && isFileSystemBookmark({ params }))) {
       let response = null
@@ -1632,7 +1692,7 @@ export async function request (command, value, options = null) {
         } catch {}
       }
 
-      return Result.from(response, null, command)
+      return trackDescriptorTransport(command, params, Result.from(response, null, command), true)
     }
   }
 
@@ -1702,10 +1762,10 @@ export async function request (command, value, options = null) {
 
         const response = getRequestResponse(request, options)
         const headers = request.getAllResponseHeaders()
-        const result = Result.from(response, null, command, headers)
+        const result = trackDescriptorTransport(command, params, Result.from(response, null, command, headers), false)
 
         if (debug.enabled) {
-          debug.log('ipc.request: (resolved)', command, result)
+          debug.log('ipc.request: (resolved)', command)
         }
 
         if (options?.cache === true) {
@@ -1751,7 +1811,7 @@ export async function request (command, value, options = null) {
   request.send(null)
 
   if (debug.enabled) {
-    debug.log('ipc.request:', uri)
+    debug.log('ipc.request:', command)
   }
 
   return await pending

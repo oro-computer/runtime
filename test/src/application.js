@@ -801,6 +801,11 @@ if (!['android', 'ios', 'win32'].includes(process.platform)) {
     t.equal(result.err, null, 'setSystemMenuItemVisible succeeds')
   })
 
+  test('window.markReady acknowledges the current window', async (t) => {
+    const currentWindow = await application.getCurrentWindow()
+    t.equal(await currentWindow.markReady(), undefined, 'native readiness acknowledgement succeeds')
+  })
+
   test('window.showInspector', async (t) => {
     const mainWindow = await application.getCurrentWindow()
     t.equal(

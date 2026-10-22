@@ -2810,16 +2810,12 @@ test('Android bootstrap separates build packages from emulator packages', () => 
     /<uses-sdk/,
     'Android SDK levels should come from Gradle instead of the application manifest'
   )
-  assert.match(
-    cli,
-    /\{pkg \/ "main\.kt", "src\/android\/main\.kt"\},[\s\S]*\{pkg \/ "UsbService\.kt", "src\/android\/UsbService\.kt"\}/,
-    'Android application staging should include the UsbService referenced by MainActivity'
-  )
-  assert.match(
-    cli,
-    /\{runtime \/ "usb" \/ "usb\.kt", "src\/runtime\/usb\/usb\.kt"\}/,
-    'Android application staging should include the USBPlatform implementation used by UsbService'
-  )
+  const catalog = cli.match(/androidRuntimeSourceCatalog \(\) \{\s*return \{([\s\S]*?)\n {2}\};/)?.[1]
+  assert.ok(catalog, 'Android application staging must use the compiled source catalog')
+  for (const name of ['src/android/main.kt', 'src/android/UsbService.kt', 'src/runtime/usb/usb.kt']) {
+    assert.ok(catalog.includes(`"${name}"`), `Android source catalog must include ${name}`)
+  }
+  assert.match(cli, /for \(const auto& name : androidRuntimeSourceCatalog\(\)\)/)
   assert.doesNotMatch(
     cli,
     /\{runtime \/ "usb" \/ "oro\.kt", "src\/runtime\/usb\/oro\.kt"\}/,

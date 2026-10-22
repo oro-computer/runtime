@@ -554,7 +554,7 @@ namespace oro::runtime::core::services::usb {
           return false;
         }
 
-        jstring deviceIdString = attachment.env->NewStringUTF(descriptor.deviceId.c_str());
+        jstring deviceIdString = android::StringWrap(attachment.env, descriptor.deviceId).j_str();
         if (!deviceIdString) {
           attachment.env->DeleteLocalRef(array);
           attachment.env->DeleteLocalRef(stringClass);

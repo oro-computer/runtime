@@ -88,7 +88,7 @@ namespace oro::runtime::app {
 
   #if ORO_RUNTIME_PLATFORM_ANDROID
     this->runtime.android.jvm = options.env;
-    this->runtime.android.self = options.self;
+    this->runtime.android.self = options.env->NewGlobalRef(options.self);
   #endif
 
   #if !ORO_RUNTIME_DESKTOP_EXTENSION

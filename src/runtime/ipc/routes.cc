@@ -52,6 +52,86 @@
 #include <cmath>
 #include <ctime>
 
+#if ORO_RUNTIME_PLATFORM_ANDROID
+namespace {
+  bool androidWebviewTlsPolicy (
+    oro::runtime::app::App& app,
+    oro::runtime::String& value,
+    bool replace = false
+  ) {
+    const auto attachment = oro::runtime::android::JNIEnvironmentAttachment(app.runtime.android.jvm);
+    auto env = attachment.env;
+    if (!env || !app.runtime.android.self) return false;
+    if (replace) {
+      const auto input = oro::runtime::android::StringWrap(env, value).j_str();
+      const auto accepted = CallClassMethodFromAndroidEnvironment(
+        env, Boolean, app.runtime.android.self, "setWebviewTlsPolicy", "(Ljava/lang/String;)Z", input
+      );
+      env->DeleteLocalRef(input);
+      if (env->ExceptionCheck() || !accepted) {
+        env->ExceptionClear();
+        return false;
+      }
+    } else {
+      const auto result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+        env, app.runtime.android.self, "getWebviewTlsPolicy", "()Ljava/lang/String;"
+      ));
+      if (env->ExceptionCheck() || !result) {
+        env->ExceptionClear();
+        return false;
+      }
+      value = oro::runtime::android::StringWrap(env, result).str();
+      env->DeleteLocalRef(result);
+    }
+    return true;
+  }
+  oro::runtime::Mutex documentQueryMutex;
+  oro::runtime::Atomic<jlong> nextDocumentQuery = 1;
+  oro::runtime::Map<jlong, oro::runtime::Function<void(const oro::runtime::String&)>> documentQueries;
+  oro::runtime::Mutex platformOperationMutex;
+  oro::runtime::Atomic<jlong> nextPlatformOperation = 1;
+  oro::runtime::Map<jlong, oro::runtime::Function<void(const oro::runtime::String&)>> platformOperations;
+
+  void finishPlatformOperation (jlong token, const oro::runtime::String& source) {
+    oro::runtime::Function<void(const oro::runtime::String&)> callback;
+    {
+      oro::runtime::Lock lock(platformOperationMutex);
+      const auto found = platformOperations.find(token);
+      if (found == platformOperations.end()) return;
+      callback = std::move(found->second);
+      platformOperations.erase(found);
+    }
+    callback(source);
+  }
+
+  void finishDocumentQuery (jlong token, const oro::runtime::String& source) {
+    oro::runtime::Function<void(const oro::runtime::String&)> callback;
+    {
+      oro::runtime::Lock lock(documentQueryMutex);
+      const auto found = documentQueries.find(token);
+      if (found == documentQueries.end()) return;
+      callback = std::move(found->second);
+      documentQueries.erase(found);
+    }
+    callback(source);
+  }
+}
+
+extern "C" void ANDROID_EXTERNAL(app, App, onDocumentQueryResult)(JNIEnv* env, jobject self, jlong token, jstring value) {
+  const auto source = value && env->GetStringLength(value) <= 1'048'576
+    ? oro::runtime::android::StringWrap(env, value).str()
+    : oro::runtime::String("{\"err\":{\"code\":\"E2BIG\",\"message\":\"Document query result exceeds the limit\"}}");
+  finishDocumentQuery(token, source);
+}
+
+extern "C" void ANDROID_EXTERNAL(app, App, onPlatformOperationResult)(JNIEnv* env, jobject self, jlong token, jstring value) {
+  const auto source = value && env->GetStringLength(value) <= 524288
+    ? oro::runtime::android::StringWrap(env, value).str()
+    : oro::runtime::String("{\"err\":{\"code\":\"E2BIG\",\"message\":\"Native platform result exceeds the limit\"}}");
+  finishPlatformOperation(token, source);
+}
+#endif
+
 namespace io = oro::runtime::io;
 namespace env = oro::runtime::env;
 namespace INI = oro::runtime::INI;
@@ -3490,6 +3570,14 @@ static void mapIPCRoutes (Router *router) {
       value = userConfig.at("webview.tls_pins");
     }
 
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    if (!androidWebviewTlsPolicy(*app, value)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "ETRUST"}, {"message", "TLS policy is unavailable"}
+      }});
+    }
+  #endif
+
     reply(Result::Data {
       message,
       JSON::Object::Entries {
@@ -3534,9 +3622,25 @@ static void mapIPCRoutes (Router *router) {
     const bool replace = (mode == "replace");
     String newValue;
 
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    // Merge against durable approval, including after a cold native start.
+    if (!replace && !androidWebviewTlsPolicy(*app, newValue)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "ETRUST"}, {"message", "TLS policy is unavailable"}
+      }});
+    }
+    newValue = replace ? pins : mergeTlsPinsConfigValue(newValue, pins);
+    if (!androidWebviewTlsPolicy(*app, newValue, true)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "ETRUST"}, {"message", "Unable to persist TLS policy"}
+      }});
+    }
+  #endif
+
     // Update global runtime config used by Android and other consumers.
     {
       auto& globalConfig = runtime.userConfig;
+    #if !ORO_RUNTIME_PLATFORM_ANDROID
       if (replace) {
         newValue = pins;
       } else {
@@ -3547,6 +3651,8 @@ static void mapIPCRoutes (Router *router) {
               : "");
         newValue = mergeTlsPinsConfigValue(combined, pins);
       }
+
+    #endif
 
       globalConfig["webview_tls_pins"] = newValue;
       globalConfig["webview.tls_pins"] = newValue;
@@ -8430,7 +8536,9 @@ static void mapIPCRoutes (Router *router) {
       NSLog(@"%s", value);
       os_log_with_type(ORO_RUNTIME_OS_LOG_BUNDLE, OS_LOG_TYPE_INFO, "%{public}s", value);
     #elif ORO_RUNTIME_PLATFORM_ANDROID
-      __android_log_print(ANDROID_LOG_DEBUG, "", "%s", value);
+      if (config::isDebugEnabled()) {
+        __android_log_print(ANDROID_LOG_DEBUG, "", "%s", value);
+      }
     #else
       printf("%s\n", value);
     #endif
@@ -8453,6 +8561,561 @@ static void mapIPCRoutes (Router *router) {
     }});
   });
 
+  for (const auto& entry : {
+    std::pair { "diagnostics.capabilities", "getRuntimeCapabilities" },
+    std::pair { "secureStorage.status", "getSecureStorageStatus" }
+  }) {
+    router->map(entry.first, [method = String(entry.second)](auto message, auto router, auto reply) {
+    #if ORO_RUNTIME_PLATFORM_ANDROID
+      const auto app = App::sharedApplication();
+      if (!app || !app->runtime.android.self) return reply(Result::Err { message, "Application is unavailable" });
+      const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+      const auto env = attachment.env;
+      if (!env) return reply(Result::Err { message, "Android capability query is unavailable" });
+      const auto result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+        env, app->runtime.android.self, method.c_str(), "()Ljava/lang/String;"
+      ));
+      if (env->ExceptionCheck() || !result) {
+        env->ExceptionClear();
+        return reply(Result::Err { message, "Android capability query failed" });
+      }
+      const auto source = android::StringWrap(env, result).str();
+      env->DeleteLocalRef(result);
+      reply(Result::Data { message, JSON::parse(source) });
+    #else
+      reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "ENOSYS"}, {"message", "Android capability query is unavailable on this platform"}
+      }});
+    #endif
+    });
+  }
+
+  router->map("diagnostics.buildIdentity", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    if (!app || !app->runtime.android.self) {
+      return reply(Result::Err { message, "Application is unavailable" });
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+      attachment.env, app->runtime.android.self, "getBuildIdentity", "()Ljava/lang/String;"
+    ));
+    if (attachment.env->ExceptionCheck() || !result) {
+      attachment.env->ExceptionClear();
+      return reply(Result::Err { message, "Build identity is unavailable" });
+    }
+    const auto data = android::StringWrap(attachment.env, result).str();
+    attachment.env->DeleteLocalRef(result);
+    reply(Result::Data { message, JSON::parse(data) });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Android build identity is unavailable on this platform"}
+    }});
+  #endif
+  });
+
+  router->map("runtime.platform", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    const auto feature = message.get("feature");
+    const auto action = message.get("action");
+    const auto id = message.get("id");
+    const auto documentToken = message.get("documentToken");
+    const auto options = message.get("options", "{}");
+    if (!app || !app->runtime.android.self || message.index < 0 || id.empty() || id.size() > 80 ||
+        options.size() > 196608 || action.empty() || action.size() > 64 || documentToken.size() > 32 ||
+        (feature != "authentication" && feature != "launcher" && feature != "deferred" && feature != "cancel" &&
+         feature != "credentials" && feature != "notifications" && feature != "extension")) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "EINVAL"}, {"message", "Invalid native platform operation"}
+      }});
+    }
+    const auto token = nextPlatformOperation.fetch_add(1);
+    {
+      Lock lock(platformOperationMutex);
+      if (platformOperations.size() >= 64) return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "EBUSY"}, {"message", "Native platform operation capacity reached"}
+      }});
+      platformOperations[token] = [app, message, reply](const String& source) {
+        app->dispatch([message, reply, source]() {
+          try {
+            const auto result = JSON::parse(source).template as<JSON::Object>();
+            if (result.has("err")) return reply(Result::Err { message, result.get("err") });
+            reply(Result::Data { message, result.get("data") });
+          } catch (const JSON::Error&) {
+            reply(Result::Err { message, "Invalid native platform result" });
+          }
+        });
+      };
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto env = attachment.env;
+    if (!env || env->PushLocalFrame(12) != JNI_OK) {
+      if (env) env->ExceptionClear();
+      return finishPlatformOperation(token, "{\"err\":{\"code\":\"EIO\",\"message\":\"Native platform unavailable\"}}");
+    }
+    const auto featureValue = android::StringWrap(env, feature).j_str();
+    const auto actionValue = android::StringWrap(env, action).j_str();
+    const auto optionsValue = android::StringWrap(env, options).j_str();
+    const auto idValue = android::StringWrap(env, id).j_str();
+    const auto documentValue = android::StringWrap(env, documentToken).j_str();
+    if (!env->ExceptionCheck()) CallVoidClassMethodFromAndroidEnvironment(
+      env, app->runtime.android.self, "startPlatformOperation", "(JILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+      token, static_cast<jint>(message.index), featureValue, actionValue, optionsValue, idValue, documentValue
+    );
+    const bool failed = env->ExceptionCheck();
+    env->ExceptionClear();
+    env->PopLocalFrame(nullptr);
+    if (failed) finishPlatformOperation(token, "{\"err\":{\"code\":\"EIO\",\"message\":\"Native platform unavailable\"}}");
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Native platform operations are available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("background.task", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    const auto action = message.get("action");
+    const auto options = message.get("options", "{}");
+    if (!app || !app->runtime.android.self || options.size() > 4096 ||
+        (action != "register" && action != "schedule" && action != "cancel" && action != "status")) {
+      return reply(Result::Err { message, "Invalid native background operation" });
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto env = attachment.env;
+    if (!env || env->PushLocalFrame(8) != JNI_OK) {
+      if (env) env->ExceptionClear();
+      return reply(Result::Err { message, "Native background state is unavailable" });
+    }
+    const auto actionValue = android::StringWrap(env, action).j_str();
+    const auto optionsValue = android::StringWrap(env, options).j_str();
+    jstring result = nullptr;
+    if (!env->ExceptionCheck()) result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+      env, app->runtime.android.self, "backgroundOperation", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+      actionValue, optionsValue
+    ));
+    const bool failed = env->ExceptionCheck() || !result;
+    env->ExceptionClear();
+    const auto source = failed ? String() : android::StringWrap(env, result).str();
+    env->PopLocalFrame(nullptr);
+    if (failed) return reply(Result::Err { message, "Native background operation failed" });
+    const auto data = JSON::parse(source).template as<JSON::Object>();
+    if (data.has("err")) return reply(Result::Err { message, data.get("err") });
+    reply(Result::Data { message, data.get("data") });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Native background cleanup is available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("documentAccess.query", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    const auto action = message.get("action");
+    const auto uri = message.get("uri");
+    const auto options = message.get("options", "{}");
+    if (!app || !app->runtime.android.self || uri.empty() || uri.size() > 4096 || options.size() > 4096 || uri.find('\0') != String::npos ||
+        (action != "stat" && action != "children")) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "EINVAL"}, {"message", "Invalid document provider query"}
+      }});
+    }
+    const auto token = nextDocumentQuery.fetch_add(1);
+    {
+      Lock lock(documentQueryMutex);
+      if (documentQueries.size() >= 2) {
+        return reply(Result::Err { message, JSON::Object::Entries {
+          {"code", "EBUSY"}, {"message", "Two document queries are already pending"}
+        }});
+      }
+      documentQueries[token] = [app, message, reply](const String& source) {
+        app->dispatch([message, reply, source]() {
+          try {
+            const auto result = JSON::parse(source).template as<JSON::Object>();
+            if (result.has("err")) return reply(Result::Err { message, result.get("err") });
+            reply(Result::Data { message, result.get("data") });
+          } catch (const JSON::Error&) {
+            reply(Result::Err { message, "Document provider returned an invalid result" });
+          }
+        });
+      };
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto env = attachment.env;
+    if (!env || env->PushLocalFrame(8) != JNI_OK) {
+      if (env) env->ExceptionClear();
+      return finishDocumentQuery(token, "{\"err\":{\"code\":\"EIO\",\"message\":\"Document query unavailable\"}}");
+    }
+    const auto actionValue = android::StringWrap(env, action).j_str();
+    const auto uriValue = android::StringWrap(env, uri).j_str();
+    const auto optionsValue = android::StringWrap(env, options).j_str();
+    if (!env->ExceptionCheck()) {
+      CallVoidClassMethodFromAndroidEnvironment(
+        env, app->runtime.android.self, "startDocumentQuery", "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+        token, actionValue, uriValue, optionsValue
+      );
+    }
+    const bool failed = env->ExceptionCheck();
+    env->ExceptionClear();
+    env->PopLocalFrame(nullptr);
+    if (failed) finishDocumentQuery(token, "{\"err\":{\"code\":\"EIO\",\"message\":\"Document query unavailable\"}}");
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Scoped document queries are available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("documentAccess", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    const auto action = message.get("action");
+    const auto uri = message.get("uri");
+    const auto flags = message.get("flags", "0");
+    if (!app || !app->runtime.android.self || uri.size() > 4096 || uri.find('\0') != String::npos ||
+        (action != "list" && action != "persist" && action != "release") ||
+        (action != "list" && flags != "1" && flags != "2" && flags != "3")) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"type", "TypeError"}, {"message", "Invalid document access request"}
+      }});
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto env = attachment.env;
+    const auto actionValue = android::StringWrap(env, action).j_str();
+    const auto uriValue = android::StringWrap(env, uri).j_str();
+    const auto result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+      env, app->runtime.android.self, "documentAccess", "(Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/String;",
+      actionValue, uriValue, action == "list" ? 0 : flags[0] - '0'
+    ));
+    env->DeleteLocalRef(actionValue);
+    env->DeleteLocalRef(uriValue);
+    if (env->ExceptionCheck() || !result) {
+      env->ExceptionClear();
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"type", "NotAllowedError"}, {"message", "Document grant is unavailable, revoked, or not persistable"}
+      }});
+    }
+    const auto data = android::StringWrap(env, result).str();
+    env->DeleteLocalRef(result);
+    reply(Result::Data { message, JSON::parse(data) });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Persistent document grants are available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("window.presentation", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    const auto window = app ? app->runtime.windowManager.getWindowForBridge(&router->bridge) : nullptr;
+    const auto action = message.get("action");
+    const auto enabled = message.get("enabled");
+    if (!window || message.get("runtime-frame-type") != "top-level" ||
+        (action != "fullscreen" && action != "fullscreen-status" && action != "protection") ||
+        (enabled != "true" && enabled != "false")) {
+      return reply(Result::Err { message, "Invalid window presentation request" });
+    }
+    if (action == "fullscreen" && app->runtime.android.buildInformation.sdk < 30) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "ENOSYS"}, {"message", "Native fullscreen requires Android 11 or later"}
+      }});
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto env = attachment.env;
+    if (!env) return reply(Result::Err { message, "Android presentation is unavailable" });
+    SharedPointer<void> owner;
+    {
+      Lock lock(window->mutex);
+      if (window->self) {
+        owner = SharedPointer<void>(env->NewGlobalRef(window->self), [jvm = app->runtime.android.jvm](void* value) {
+          const auto attachment = android::JNIEnvironmentAttachment(jvm);
+          if (attachment.env && value) attachment.env->DeleteGlobalRef(static_cast<jobject>(value));
+        });
+      }
+    }
+    if (env->ExceptionCheck() || !owner) {
+      env->ExceptionClear();
+      return reply(Result::Err { message, "Window presentation owner is unavailable" });
+    }
+    app->dispatch([=]() {
+      const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+      const auto env = attachment.env;
+      if (!env) return reply(Result::Err { message, "Android presentation is unavailable" });
+      const auto actionValue = android::StringWrap(env, action).j_str();
+      if (env->ExceptionCheck() || !actionValue) {
+        env->ExceptionClear();
+        return reply(Result::Err { message, "Window presentation allocation failed" });
+      }
+      const auto result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+        env, static_cast<jobject>(owner.get()), "setPresentation", "(Ljava/lang/String;Z)Ljava/lang/String;",
+        actionValue, enabled == "true"
+      ));
+      env->DeleteLocalRef(actionValue);
+      if (env->ExceptionCheck() || !result) {
+        env->ExceptionClear();
+        return reply(Result::Err { message, "Window presentation failed" });
+      }
+      const auto source = android::StringWrap(env, result).str();
+      env->DeleteLocalRef(result);
+      const auto data = JSON::parse(source).template as<JSON::Object>();
+      if (data.has("err")) return reply(Result::Err { message, data.get("err") });
+      reply(Result::Data { message, data.get("data") });
+    });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Native presentation is available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("window.setSystemAppearance", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    if (app && app->runtime.android.buildInformation.sdk < 30) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "ENOSYS"}, {"message", "Managed system appearance and animated insets require Android 11 or later"}
+      }});
+    }
+    const auto window = app ? app->runtime.windowManager.getWindowForBridge(&router->bridge) : nullptr;
+    const auto options = message.get("options");
+    if (!window || options.size() > 4096 || message.get("runtime-frame-type") != "top-level") {
+      return reply(Result::Err { message, "Invalid system appearance request" });
+    }
+    const auto index = window->index;
+    app->dispatch([=]() {
+      if (!app->runtime.android.activity || app->runtime.windowManager.getWindow(index) != window) {
+        return reply(Result::Err { message, "Window closed before system appearance could be applied" });
+      }
+      const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+      const auto value = android::StringWrap(attachment.env, options).j_str();
+      const auto accepted = CallClassMethodFromAndroidEnvironment(
+        attachment.env, Boolean, app->runtime.android.activity, "setSystemAppearance", "(ILjava/lang/String;)Z", index, value
+      );
+      attachment.env->DeleteLocalRef(value);
+      if (!accepted) return reply(Result::Err { message, "System appearance is unavailable or invalid" });
+      reply(Result::Data { message, JSON::Object::Entries {} });
+    });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "System appearance is available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("haptics.perform", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    const auto window = app ? app->runtime.windowManager.getWindowForBridge(&router->bridge) : nullptr;
+    const auto kind = message.get("kind");
+    if (!window || (kind != "selection" && kind != "confirmation" && kind != "rejection")) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"type", "TypeError"}, {"message", "Invalid haptic request"}
+      }});
+    }
+    const auto index = window->index;
+    app->dispatch([=]() {
+      if (!app->runtime.android.activity || app->runtime.windowManager.getWindow(index) != window) {
+        return reply(Result::Err { message, "Window closed before feedback could be performed" });
+      }
+      const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+      const auto value = android::StringWrap(attachment.env, kind).j_str();
+      const auto accepted = CallClassMethodFromAndroidEnvironment(
+        attachment.env, Boolean, app->runtime.android.activity, "performHaptic", "(ILjava/lang/String;)Z",
+        index, value
+      );
+      attachment.env->DeleteLocalRef(value);
+      reply(Result::Data { message, JSON::Object::Entries {{"accepted", accepted}} });
+    });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Semantic feedback is available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("networkStatus.get", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    if (!app || !app->runtime.android.self || !app->runtime.services.networkStatus.enabled) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "ENOSYS"}, {"message", "Network status monitoring is unavailable"}
+      }});
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+      attachment.env, app->runtime.android.self, "getNetworkStatus", "()Ljava/lang/String;"
+    ));
+    if (!result || attachment.env->ExceptionCheck()) {
+      attachment.env->ExceptionClear();
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Unable to read network status"}
+      }});
+    }
+    const auto json = android::StringWrap(attachment.env, result).str();
+    attachment.env->DeleteLocalRef(result);
+    reply(Result::Data { message, JSON::parse(json) });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Detailed network status is available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("window.markReady", [](auto message, auto router, auto reply) {
+    const auto app = App::sharedApplication();
+    const auto window = app ? app->runtime.windowManager.getWindowForBridge(&router->bridge) : nullptr;
+    if (!window || message.get("runtime-frame-type") != "top-level") {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Readiness requires a top-level application window"}
+      }});
+    }
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    app->dispatch([=]() {
+      if (!app->runtime.android.activity || app->runtime.windowManager.getWindow(window->index) != window) {
+        return reply(Result::Err { message, "Window closed before readiness could be acknowledged" });
+      }
+      const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+      CallVoidClassMethodFromAndroidEnvironment(
+        attachment.env, app->runtime.android.activity, "markWindowReady", "(IZ)V", window->index, true
+      );
+      if (attachment.env->ExceptionCheck()) {
+        attachment.env->ExceptionClear();
+        return reply(Result::Err { message, "Readiness acknowledgement is unavailable" });
+      }
+      reply(Result::Data { message, JSON::Object::Entries {} });
+    });
+  #else
+    reply(Result::Data { message, JSON::Object::Entries {} });
+  #endif
+  });
+
+  for (const auto settings : { false, true }) {
+    router->map(settings ? "notification.openChannelSettings" : "notification.deliveryStatus", [settings](auto message, auto router, auto reply) {
+    #if ORO_RUNTIME_PLATFORM_ANDROID
+      const auto app = App::sharedApplication();
+      const auto channel = message.get("channel", "default");
+      if (!app || !app->runtime.android.activity || channel.empty() || channel.size() > 256) {
+        return reply(Result::Err { message, "Invalid notification channel request" });
+      }
+      app->dispatch([=]() {
+        if (!app->runtime.android.activity) return reply(Result::Err { message, "Activity is unavailable" });
+        const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+        const auto env = attachment.env;
+        const auto value = android::StringWrap(env, channel).j_str();
+        bool success = false;
+        jstring result = nullptr;
+        if (settings) {
+          success = CallClassMethodFromAndroidEnvironment(
+            env, Boolean, app->runtime.android.activity, "openNotificationChannelSettings", "(Ljava/lang/String;)Z", value
+          );
+        } else {
+          result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+            env, app->runtime.android.activity, "getNotificationDeliveryStatus", "(Ljava/lang/String;)Ljava/lang/String;", value
+          ));
+          success = result != nullptr;
+        }
+        env->DeleteLocalRef(value);
+        if (env->ExceptionCheck() || !success) {
+          env->ExceptionClear();
+          if (result) env->DeleteLocalRef(result);
+          return reply(Result::Err { message, "Notification channel controls are unavailable" });
+        }
+        if (settings) return reply(Result::Data { message, JSON::Object::Entries {} });
+        const auto data = android::StringWrap(env, result).str();
+        env->DeleteLocalRef(result);
+        reply(Result::Data { message, JSON::parse(data) });
+      });
+    #else
+      reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "ENOSYS"}, {"message", "Android notification channel controls are unavailable on this platform"}
+      }});
+    #endif
+    });
+  }
+
+  router->map("notification.getResponses", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    if (!app || !app->runtime.android.self) {
+      return reply(Result::Err { message, "Application is unavailable" });
+    }
+    if (!app->runtime.services.permissions.hasRuntimePermission("notifications")) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Notification access is not allowed"}
+      }});
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto result = static_cast<jstring>(CallObjectClassMethodFromAndroidEnvironment(
+      attachment.env,
+      app->runtime.android.self,
+      "getNotificationResponses",
+      "()Ljava/lang/String;"
+    ));
+    if (attachment.env->ExceptionCheck() || !result) {
+      attachment.env->ExceptionClear();
+      if (result) attachment.env->DeleteLocalRef(result);
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Notification receipts are unavailable"}
+      }});
+    }
+    const auto json = android::StringWrap(attachment.env, result).str();
+    attachment.env->DeleteLocalRef(result);
+    reply(Result::Data { message, JSON::parse(json) });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"},
+      {"message", "Notification response receipts are available only on Android"}
+    }});
+  #endif
+  });
+
+  router->map("notification.acknowledgeResponse", [](auto message, auto router, auto reply) {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    const auto app = App::sharedApplication();
+    if (!app || !app->runtime.android.self) {
+      return reply(Result::Err { message, "Application is unavailable" });
+    }
+    const auto receiptId = message.get("receiptId");
+    if (receiptId.empty() || receiptId.size() > 256) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Invalid notification receipt identity"}
+      }});
+    }
+    if (!app->runtime.services.permissions.hasRuntimePermission("notifications")) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Notification access is not allowed"}
+      }});
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+    const auto identity = android::StringWrap(attachment.env, receiptId).j_str();
+    const auto success = CallClassMethodFromAndroidEnvironment(
+      attachment.env,
+      Boolean,
+      app->runtime.android.self,
+      "acknowledgeNotificationResponse",
+      "(Ljava/lang/String;)Z",
+      identity
+    );
+    attachment.env->DeleteLocalRef(identity);
+    if (attachment.env->ExceptionCheck() || !success) {
+      attachment.env->ExceptionClear();
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"message", "Unable to acknowledge notification receipt"}
+      }});
+    }
+    reply(Result::Data { message, JSON::Object::Entries {} });
+  #else
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"},
+      {"message", "Notification response receipts are available only on Android"}
+    }});
+  #endif
+  });
+
   router->map("notification.show", [](auto message, auto router, auto reply) {
     auto err = validateMessageParameters(message, {
       "id",
@@ -8472,11 +9135,8 @@ static void mapIPCRoutes (Router *router) {
     options.icon = message.get("icon");
     options.image = message.get("image");
     options.body = message.get("body");
-    options.channel = replace(
-      message.get("channel", "default"),
-      "default",
-      router->bridge.userConfig["meta_bundle_identifier"]
-    );
+    options.channel = message.get("channel", "default");
+    if (options.channel == "default") options.channel = router->bridge.userConfig["meta_bundle_identifier"];
     options.category = message.get("category");
     options.vibrate = message.get("vibrate");
     options.badge = message.get("badge");
@@ -8511,7 +9171,9 @@ static void mapIPCRoutes (Router *router) {
       message.get("tag")
     };
 
-    router->bridge.getRuntime()->services.notifications.close(notification);
+    if (!router->bridge.getRuntime()->services.notifications.close(notification)) {
+      return reply(Result::Err { message, "Notification cancellation could not be submitted" });
+    }
 
     reply(Result { message.seq, message, JSON::Object::Entries {
       {"id", notification.identifier}
@@ -9041,6 +9703,19 @@ static void mapIPCRoutes (Router *router) {
     auto userConfig = router->bridge.userConfig;
 
     if (frameType == "top-level" && frameSource != "serviceworker") {
+    #if ORO_RUNTIME_PLATFORM_ANDROID
+      if (message.value == "runtimeinit" && window && app->runtime.android.activity) {
+        const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+        CallVoidClassMethodFromAndroidEnvironment(
+          attachment.env,
+          app->runtime.android.activity,
+          "markWindowReady",
+          "(IZ)V",
+          window->index,
+          false
+        );
+      }
+    #endif
       if (message.value == "beforeruntimeinit") {
         if (window) {
           router->bridge.getRuntime()->services.cdp.onWindowBeforeRuntimeInit(window->index);
@@ -9351,7 +10026,8 @@ static void mapIPCRoutes (Router *router) {
     uint64_t id;
     REQUIRE_AND_GET_MESSAGE_VALUE(id, "id", std::stoull);
 
-    if (!router->bridge.getRuntime()->queuedResponses.contains(id)) {
+    auto response = router->bridge.getRuntime()->takeQueuedResponse(id);
+    if (!response) {
       return reply(Result::Err { message, JSON::Object::Entries {
         {"id", std::to_string(id)},
         {"type", "NotFoundError"},
@@ -9360,9 +10036,8 @@ static void mapIPCRoutes (Router *router) {
     }
 
     auto result = Result { message.seq, message };
-    result.queuedResponse = router->bridge.getRuntime()->queuedResponses[id];
+    result.queuedResponse = std::move(*response);
     reply(result);
-    router->bridge.getRuntime()->queuedResponses.erase(id);
   });
 
   /**
@@ -11970,10 +12645,28 @@ static void mapIPCRoutes (Router *router) {
       });
     }
 
+    if (message.get("files").size() > 32768 || message.buffer.size() > 8388608 ||
+        message.get("title").size() > 4096 || message.get("text").size() > 65536 ||
+        message.get("url").size() > 8192) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"type", "RangeError"}, {"message", "Share payload exceeds runtime limits"}
+      } });
+    }
+
+  #if !ORO_RUNTIME_PLATFORM_ANDROID
+    if (!message.get("files").empty()) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"type", "NotSupportedError"}, {"message", "File sharing is available only on Android"}
+      } });
+    }
+  #endif
+
     const auto options = window::Dialog::ShareOptions {
       .title = message.get("title"),
       .text = message.get("text"),
-      .url = message.get("url")
+      .url = message.get("url"),
+      .files = message.get("files"),
+      .data = message.buffer
     };
 
     app->dispatch([=]() {

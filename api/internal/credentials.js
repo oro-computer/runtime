@@ -1,7 +1,6 @@
 /* global DOMException */
 import ipc from '../ipc.js'
 import location from '../location.js'
-import os from '../os.js'
 
 const SUPPORTED_TRANSPORTS = new Set(['sms'])
 const nativeCredentials = globalThis.navigator?.credentials ?? null
@@ -9,7 +8,6 @@ const nativeGet =
   typeof nativeCredentials?.get === 'function'
     ? nativeCredentials.get.bind(nativeCredentials)
     : null
-const isIOS = os.platform() === 'ios'
 
 class OTPCredential {
   #code = ''
@@ -79,8 +77,9 @@ async function get (options, ...args) {
     )
   }
 
-  // WebKit's credentials container supports passkeys, but not Web OTP.
-  if (nativeGet && isIOS && !('otp' in options) && typeof args[0] !== 'function') {
+  // Keep native password/passkey requests separate from the Web OTP adapter.
+  // The browser/provider determines support and validates the relying party.
+  if (nativeGet && !('otp' in options) && typeof args[0] !== 'function') {
     return nativeGet(options)
   }
 

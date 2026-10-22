@@ -348,7 +348,7 @@ export class Test {
 
   /**
    * @param {Function} fn
-   * @param {RegExp | any} [expected]
+   * @param {RegExp | ErrorConstructor} [expected]
    * @param {string} [message]
    * @returns {void}
    */
@@ -375,6 +375,8 @@ export class Test {
 
     if (expected instanceof RegExp) {
       pass = !!(caught && expected.test(caught.message))
+    } else if (typeof expected === 'function' && expected.prototype) {
+      pass = !!(caught && caught instanceof expected)
     } else if (expected) {
       throw new Error(
         `t.throws() not implemented for expected: ${typeof expected}`

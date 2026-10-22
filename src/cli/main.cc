@@ -4174,6 +4174,370 @@ inline bool isRuntimeSharedLibrary(const fs::path& path) {
   return false;
 }
 
+static void androidCopyResources (const Path& root, const Path& destination) {
+  if (!fs::is_directory(root)) throw std::runtime_error("Android resources must name a readable directory");
+  for (const auto& entry : fs::recursive_directory_iterator(root)) {
+    if (entry.is_symlink()) throw std::runtime_error("Android resources must not contain symbolic links");
+    if (entry.is_directory()) continue;
+    if (!entry.is_regular_file()) throw std::runtime_error("Android resources must contain only regular files");
+    const auto output = destination / entry.path().lexically_relative(root);
+    fs::create_directories(output.parent_path());
+    fs::copy_file(entry.path(), output, fs::copy_options::overwrite_existing);
+  }
+}
+
+static Vector<String> androidConfigList (const String& value) {
+  Vector<String> result;
+  std::istringstream stream(replace(value, ",", " "));
+  String entry;
+  while (stream >> entry) result.push_back(entry);
+  return result;
+}
+
+static bool androidFixedMavenDependency (const String& coordinate) {
+  static const std::regex fixed("[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[0-9][A-Za-z0-9_.-]*");
+  static const std::regex snapshot(":[^:]*snapshot[^:]*$", std::regex::icase);
+  return std::regex_match(coordinate, fixed) && !std::regex_search(coordinate, snapshot);
+}
+
+static bool androidResourceReference (const String& value, const String& type) {
+  if (value.size() > 160) return false;
+  if (type == "style") return std::regex_match(value, std::regex("@style/[A-Za-z][A-Za-z0-9_.]*"));
+  if (type == "drawable") return std::regex_match(value, std::regex("@drawable/[a-z][a-z0-9_]*"));
+  return false;
+}
+
+// This compiled catalog is also used by package validation and project generation.
+static Vector<String> androidRuntimeSourceCatalog () {
+  return {
+    "src/android/app.kt",
+    "src/android/main.kt",
+    "src/android/UsbService.kt",
+    "src/runtime/app/app.kt",
+    "src/runtime/app/documents.kt",
+    "src/runtime/app/background.kt",
+    "src/runtime/app/platform_operations.kt",
+    "src/runtime/app/authentication.kt",
+    "src/runtime/app/launcher.kt",
+    "src/runtime/app/deferred.kt",
+    "src/runtime/app/native_https.kt",
+    "src/runtime/app/credentials.kt",
+    "src/runtime/app/notifications.kt",
+    "src/runtime/app/extensions.kt",
+    "src/runtime/bridge/bridge.kt",
+    "src/runtime/debug/console.kt",
+    "src/runtime/ipc/message.kt",
+    "src/runtime/securestorage/secure_storage.kt",
+    "src/runtime/usb/usb.kt",
+    "src/runtime/webview.kt",
+    "src/runtime/webview/navigator.kt",
+    "src/runtime/webview/scheme_handlers.kt",
+    "src/runtime/window/dialog.kt",
+    "src/runtime/window/share.kt",
+    "src/runtime/window/appearance.kt",
+    "src/runtime/window/manager.kt",
+    "src/runtime/window/window.kt",
+  };
+}
+
+static String androidInputDigest (std::istream& input) {
+#if ORO_CLI_HAS_SODIUM
+  crypto_hash_sha256_state state;
+  crypto_hash_sha256_init(&state);
+  std::array<char, 65536> chunk;
+  while (input) {
+    input.read(chunk.data(), chunk.size());
+    crypto_hash_sha256_update(&state,
+      reinterpret_cast<const unsigned char*>(chunk.data()), input.gcount());
+  }
+  if (!input.eof()) throw std::runtime_error("Unable to read Android distribution input");
+  std::array<unsigned char, crypto_hash_sha256_BYTES> digest;
+  crypto_hash_sha256_final(&state, digest.data());
+  std::array<char, crypto_hash_sha256_BYTES * 2 + 1> hex;
+  sodium_bin2hex(hex.data(), hex.size(), digest.data(), digest.size());
+  return String(hex.data());
+#else
+  throw std::runtime_error("Android distribution validation requires libsodium");
+#endif
+}
+
+#ifndef ORO_CLI_SOURCE_FINGERPRINT
+#define ORO_CLI_SOURCE_FINGERPRINT "unverified"
+#endif
+
+static JSON::Object androidDistributionContract () {
+  if (String(ORO_CLI_SOURCE_FINGERPRINT).size() != 64) {
+    throw std::runtime_error("Android distribution requires a source-fingerprinted CLI; rebuild the CLI with the source installer");
+  }
+  JSON::Array sources;
+  for (const auto& name : androidRuntimeSourceCatalog()) {
+    const auto path = prefixPath(name);
+    std::error_code error;
+    if (!fs::is_regular_file(path, error) || fs::file_size(path, error) == 0 || error) {
+      throw std::runtime_error("Incomplete Android runtime distribution: " + name + "; rebuild and distribute the CLI and runtime together");
+    }
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw std::runtime_error("Unreadable Android runtime source: " + name);
+    sources.push(JSON::Object::Entries {{"path", name}, {"sha256", androidInputDigest(input)}});
+  }
+  auto api = env::get("ORO_HOME_API");
+  const auto apiRoot = api.empty() ? prefixPath("api") : Path(api);
+  JSON::Array apis;
+  for (const auto& name : Vector<String> {
+    "authentication.js", "launcher.js", "background/deferred.js", "credentials.js", "native.js",
+    "notification.js", "internal/platform-request.js", "internal/credentials.js", "internal/runtime-contract.json"
+  }) {
+    const auto path = apiRoot / name;
+    std::error_code error;
+    if (!fs::is_regular_file(path, error) || fs::file_size(path, error) == 0 || error) {
+      throw std::runtime_error("Incomplete Android API distribution: " + name);
+    }
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw std::runtime_error("Unreadable Android API input: " + name);
+    apis.push(JSON::Object::Entries {{"path", name}, {"sha256", androidInputDigest(input)}});
+  }
+  std::ifstream contractInput(apiRoot / "internal" / "runtime-contract.json");
+  if (!contractInput) throw std::runtime_error("Missing Android API runtime contract");
+  const String source((std::istreambuf_iterator<char>(contractInput)), std::istreambuf_iterator<char>());
+  const auto contract = JSON::parse(source).as<JSON::Object>();
+  if (!contract.has("androidBridgeProtocol") || contract.get("androidBridgeProtocol").str() != "5") {
+    throw std::runtime_error("Android CLI and API bridge protocols differ; rebuild and distribute all runtime inputs together");
+  }
+  std::istringstream gradle(gGradleBuildForSource);
+  std::istringstream manifest(gAndroidManifest);
+  return JSON::Object::Entries {
+    {"schema", 1}, {"androidBridgeProtocol", 5}, {"cliVersion", VERSION_FULL_STRING},
+    {"cliSourceFingerprint", ORO_CLI_SOURCE_FINGERPRINT},
+    {"sources", sources}, {"apis", apis}, {"gradleTemplateSha256", androidInputDigest(gradle)},
+    {"manifestTemplateSha256", androidInputDigest(manifest)}
+  };
+}
+
+static String androidNormalizeBuildPaths (
+  String value,
+  const Path& project,
+  const Path& source,
+  const Path& runtime
+) {
+  Vector<std::pair<String, String>> roots;
+  for (const auto& entry : Vector<std::pair<Path, String>> {
+    {project, "<android-build>"}, {source, "<application>"}, {runtime, "<runtime>"}
+  }) {
+    const auto path = fs::absolute(entry.first).lexically_normal();
+    roots.push_back({path.string(), entry.second});
+    if (path.generic_string() != path.string()) roots.push_back({path.generic_string(), entry.second});
+  }
+  std::sort(roots.begin(), roots.end(), [](const auto& left, const auto& right) {
+    return left.first.size() > right.first.size();
+  });
+  for (const auto& [path, replacement] : roots) {
+    if (path.size() <= 1) continue;
+    size_t offset = 0;
+    while ((offset = value.find(path, offset)) != String::npos) {
+      const auto end = offset + path.size();
+      if (end < value.size() && String("/\\ \t\r\n\"':;)").find(value[end]) == String::npos) {
+        offset = end;
+        continue;
+      }
+      value.replace(offset, path.size(), replacement);
+      offset += replacement.size();
+    }
+  }
+  return value;
+}
+
+static Vector<Path> androidApplicationInputFiles (const Path& project) {
+  std::map<String, Path> files;
+  const auto add = [&](const Path& path) {
+    if (!fs::exists(path) && !fs::is_symlink(path)) return;
+    const auto visit = [&](const auto& entry) {
+      if (entry.is_symlink()) throw std::runtime_error("Android native application inputs must not contain symbolic links");
+      if (!entry.is_regular_file()) return;
+      const auto relative = entry.path().lexically_relative(project).generic_string();
+      if (relative.empty() || relative.size() > 4096 || relative.starts_with("/") ||
+          relative.find(':') != String::npos || relative.find('\\') != String::npos ||
+          relative == ".." || relative.starts_with("../")) {
+        throw std::runtime_error("Android native input paths must be portable project-relative paths");
+      }
+      // This header is generated from settings and the digest that includes this inventory.
+      if (relative == "app/src/main/jni/include/oro/_user-config-bytes.hh") return;
+      files[relative] = entry.path();
+      if (files.size() > 100000) throw std::runtime_error("Android native input inventory exceeds 100000 files");
+    };
+    if (fs::is_symlink(path)) throw std::runtime_error("Android native input roots must not be symbolic links");
+    if (fs::is_directory(path)) {
+      for (const auto& entry : fs::recursive_directory_iterator(path)) visit(entry);
+    } else {
+      visit(fs::directory_entry(path));
+    }
+  };
+  for (const auto& name : {
+    "app/src/main/java", "app/src/main/kotlin", "app/src/main/res", "app/src/main/jni",
+    "app/src/main/libs", "app/libs", "app/src/main/AndroidManifest.xml", "app/proguard-rules.pro",
+    "app/build.gradle", "build.gradle", "settings.gradle", "gradle.properties",
+    "gradle/wrapper/gradle-wrapper.properties"
+  }) add(project / name);
+  for (const auto& entry : fs::directory_iterator(project)) {
+    if (!std::regex_match(entry.path().filename().string(), std::regex("oroManifest[0-9]+"))) continue;
+    if (entry.is_symlink()) throw std::runtime_error("Android manifest modules must not be symbolic links");
+    add(entry.path() / "build.gradle");
+    add(entry.path() / "src/main");
+  }
+  Vector<Path> result;
+  for (const auto& [name, path] : files) result.push_back(path);
+  return result;
+}
+
+static JSON::Object androidApplicationInputs (
+  const Path& project,
+  const Map<>& configuration,
+  const Path& source,
+  const Path& runtime,
+  bool debug
+) {
+  JSON::Object normalized;
+  for (const auto& [key, value] : configuration) {
+    if (key != "ini_code") normalized[key] = androidNormalizeBuildPaths(value, project, source, runtime);
+  }
+  std::istringstream settings(normalized.str());
+  JSON::Array files;
+  uint64_t total = 0;
+  for (const auto& path : androidApplicationInputFiles(project)) {
+    const auto size = fs::file_size(path);
+    total += size;
+    if (total > 8589934592ULL) throw std::runtime_error("Android native input inventory exceeds 8 GiB");
+    const auto name = path.filename().string();
+    const bool normalize = name.ends_with(".gradle") || name.ends_with(".properties") ||
+      name == "Android.mk" || name == "Application.mk";
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw std::runtime_error("Unable to read Android native application input");
+    String digest;
+    uint64_t normalizedSize = size;
+    if (normalize) {
+      if (size > 16777216) throw std::runtime_error("Android native build file exceeds 16 MiB");
+      const String bytes((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+      if (!input.eof() && input.fail()) throw std::runtime_error("Unable to read Android native build file");
+      const auto value = androidNormalizeBuildPaths(bytes, project, source, runtime);
+      normalizedSize = value.size();
+      std::istringstream canonical(value);
+      digest = androidInputDigest(canonical);
+    } else {
+      digest = androidInputDigest(input);
+    }
+    files.push(JSON::Object::Entries {
+      {"path", path.lexically_relative(project).generic_string()}, {"size", normalizedSize},
+      {"sha256", digest}, {"normalization", normalize ? "build-paths" : "bytes"}
+    });
+  }
+  return JSON::Object::Entries {
+    {"schema", 1}, {"scope", "staged-android-inputs-v1"}, {"debug", debug},
+    {"configurationSha256", androidInputDigest(settings)}, {"files", files}
+  };
+}
+
+static Vector<Path> androidNativeArchiveInputs (const Path& root) {
+  Vector<Path> archives;
+  // Installed ABI directories can be links into the runtime build tree. Enter
+  // each Android directory explicitly without following arbitrary nested links.
+  for (const auto& abi : fs::directory_iterator(root)) {
+    if (!abi.path().filename().string().ends_with("-android") || !abi.is_directory()) {
+      continue;
+    }
+    for (const auto& archive : fs::directory_iterator(abi.path())) {
+      if (archive.path().extension() == ".a" && archive.is_regular_file()) {
+        archives.push_back(archive.path());
+      }
+    }
+  }
+  std::sort(archives.begin(), archives.end());
+  if (archives.empty()) {
+    throw std::runtime_error("Android build provenance requires native archives");
+  }
+  return archives;
+}
+
+// Hash the files that will actually be packaged, using SHA-256 rather than a
+// version label. The manifest itself is bound into the application's init shim.
+static String androidAssetManifest (const Path& root, const JSON::Object& inputs) {
+#if ORO_CLI_HAS_SODIUM
+  const auto sha256 = [](std::istream& input) {
+    crypto_hash_sha256_state state;
+    crypto_hash_sha256_init(&state);
+    std::array<char, 65536> chunk;
+    while (input) {
+      input.read(chunk.data(), chunk.size());
+      crypto_hash_sha256_update(&state,
+        reinterpret_cast<const unsigned char*>(chunk.data()), input.gcount());
+    }
+    if (!input.eof()) throw std::runtime_error("Unable to read Android build input");
+    std::array<unsigned char, crypto_hash_sha256_BYTES> digest;
+    crypto_hash_sha256_final(&state, digest.data());
+    std::array<char, crypto_hash_sha256_BYTES * 2 + 1> hex;
+    sodium_bin2hex(hex.data(), hex.size(), digest.data(), digest.size());
+    return String(hex.data());
+  };
+  Vector<Path> files;
+  for (auto iterator = fs::recursive_directory_iterator(root); iterator != fs::recursive_directory_iterator(); ++iterator) {
+    const auto& entry = *iterator;
+    const auto name = toLowerCase(entry.path().filename().string());
+    // Keep this policy aligned with gGradleApp's explicit AAPT asset filter.
+    const auto ignored = name.starts_with(".") || name.ends_with(".scc") ||
+      name.ends_with("~") || name == "cvs" || name == "thumbs.db" || name == "picasa.ini" ||
+      (entry.is_directory() && name.starts_with("_"));
+    if (ignored) {
+      if (entry.is_directory()) iterator.disable_recursion_pending();
+      continue;
+    }
+    if (entry.is_symlink()) throw std::runtime_error("Android packaged assets must not contain symbolic links");
+    if (entry.is_regular_file() && entry.path() != root / "oro-build-evidence.json") files.push_back(entry.path());
+  }
+  std::sort(files.begin(), files.end());
+  if (files.size() > 100000) throw std::runtime_error("Android asset manifest exceeds 100000 files");
+  JSON::Array assets;
+  for (const auto& path : files) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw std::runtime_error("Unable to open Android packaged asset");
+    assets.push(JSON::Object::Entries {
+      {"path", fs::relative(path, root).generic_string()},
+      {"size", static_cast<uint64_t>(fs::file_size(path))},
+      {"sha256", sha256(input)}
+    });
+  }
+  JSON::Array archives;
+  const auto nativeRoot = prefixPath("lib");
+  for (const auto& path : androidNativeArchiveInputs(nativeRoot)) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw std::runtime_error("Unable to open Android native archive");
+    archives.push(JSON::Object::Entries {
+      {"path", path.lexically_relative(nativeRoot).generic_string()}, {"sha256", sha256(input)}
+    });
+  }
+  auto boundInputs = inputs;
+  auto application = inputs.get("applicationInputs").as<JSON::Object>();
+  application["nativeArchives"] = archives;
+  std::istringstream runtimeContract(inputs.get("androidDistribution").str());
+  application["runtimeContractSha256"] = sha256(runtimeContract);
+  application["toolchain"] = JSON::Object::Entries {
+    {"sdk", inputs.get("sdk")}, {"nativePlatform", inputs.get("nativePlatform")},
+    {"ndkVersion", inputs.get("ndkVersion")}
+  };
+  std::istringstream applicationStream(application.str());
+  boundInputs["applicationInputs"] = JSON::Object::Entries {
+    {"sha256", sha256(applicationStream)}, {"inventory", application}
+  };
+  const auto manifest = JSON::Object(JSON::Object::Entries {
+    {"schema", 1}, {"androidBridgeProtocol", 5}, {"inputs", boundInputs},
+    {"nativeArchives", archives}, {"assets", assets}
+  }).str();
+  if (manifest.size() > 16777216) throw std::runtime_error("Android asset manifest exceeds 16 MiB");
+  writeFile(root / "oro-build-evidence.json", manifest);
+  std::istringstream stream(manifest);
+  return sha256(stream);
+#else
+  throw std::runtime_error("Android asset provenance requires a CLI built with libsodium");
+#endif
+}
+
 static Process::PID appPid = 0;
 static SharedPointer<Process> appProcess = nullptr;
 static std::atomic<int> appStatus = -1;
@@ -6554,6 +6918,16 @@ int main (int argc, char* argv[]) {
     exit(matches.empty() ? 1 : 0);
   }
 
+  if (equal(effectiveSubcommand, "--android-runtime-contract")) {
+    try {
+      std::cout << androidDistributionContract().str() << std::endl;
+      exit(0);
+    } catch (const std::exception& error) {
+      logError(error.what());
+      exit(1);
+    }
+  }
+
   if (equal(effectiveSubcommand, "--prefix")) {
     std::cout << getHomeHome() << std::endl;
     exit(0);
@@ -8536,8 +8910,25 @@ int main (int argc, char* argv[]) {
     auto androidEnableStandardNdkBuild = settings["android_enable_standard_ndk_build"] == "true";
 
     settings.insert(std::make_pair("android_bundle_identifier", replace(settings["meta_bundle_identifier"], "-", "_")));
+    const auto androidApplicationConfiguration = settings;
+    const auto androidInputProject = fs::absolute(paths.platformSpecificOutputPath);
+    const auto androidInputSource = fs::absolute(targetPath);
+    String androidInputSnapshot;
+    const auto verifyAndroidInputSnapshot = [&]() {
+      if (androidApplicationInputs(androidInputProject, androidApplicationConfiguration,
+          androidInputSource, prefixPath(), flagDebugMode).str() != androidInputSnapshot) {
+        logError("Android native inputs changed during compilation; rebuild with stable sources and build hooks.");
+        exit(1);
+      }
+    };
 
     if (flagBuildForAndroid) {
+      try {
+        androidDistributionContract();
+      } catch (const std::exception& error) {
+        logError(error.what());
+        exit(1);
+      }
       auto bundle_path = Path(replace(settings["android_bundle_identifier"], "\\.", "/")).make_preferred();
       auto bundle_path_underscored = replace(replace(settings["android_bundle_identifier"], "_", "_1"), "\\.", "_");
 
@@ -8557,6 +8948,22 @@ int main (int argc, char* argv[]) {
         settings["android_application"] = String(DEFAULT_ANDROID_APPLICATION_NAME);
       }
 
+      if (settings["android_application_theme"].empty()) {
+        settings["android_application_theme"] = "@style/Theme.AppCompat.DayNight";
+      }
+      if (!androidResourceReference(settings["android_application_theme"], "style")) {
+        throw std::runtime_error("android.application_theme requires an @style/name resource reference");
+      }
+      settings["android_usb_notification_icon_metadata"] = "";
+      if (!settings["android_usb_notification_icon"].empty()) {
+        if (!androidResourceReference(settings["android_usb_notification_icon"], "drawable")) {
+          throw std::runtime_error("android.usb_notification_icon requires an @drawable/name resource reference");
+        }
+        settings["android_usb_notification_icon_metadata"] =
+          "<meta-data android:name=\"oro.runtime.usb.small_icon\" android:resource=\"" +
+          settings["android_usb_notification_icon"] + "\" />";
+      }
+
       fs::create_directories(output);
       fs::create_directories(src);
       fs::create_directories(pkg);
@@ -8567,6 +8974,7 @@ int main (int argc, char* argv[]) {
       fs::create_directories(res / "layout");
       fs::create_directories(res / "values");
       fs::create_directories(res / "mipmap");
+      fs::create_directories(res / "xml");
 
       pathResources = { src / "main" / "assets" };
 
@@ -8753,35 +9161,60 @@ int main (int argc, char* argv[]) {
 
       manifestContext["android_manifest_xml_permissions"] = "\n";
 
-      if (settings["permissions_allow_local_network"] != "false") {
+      if (settings["permissions_allow_biometrics"] == "true") {
+        manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.USE_BIOMETRIC\" />\n";
+      }
+
+      manifestContext["android_background_service"] = "";
+      if (settings["background_enabled"] == "true") {
+        manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.RECEIVE_BOOT_COMPLETED\" />\n";
+        manifestContext["android_background_service"] =
+          "<service android:name=\"oro.runtime.app.RuntimeBackgroundJob\" android:permission=\"android.permission.BIND_JOB_SERVICE\" android:exported=\"true\" />";
+      }
+      if (settings["background_deferred_enabled"] == "true") {
+        if (settings["background_enabled"] != "true") {
+          manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.RECEIVE_BOOT_COMPLETED\" />\n";
+        }
+        manifestContext["android_background_service"] +=
+          "<service android:name=\"oro.runtime.app.RuntimeDeferredJob\" android:permission=\"android.permission.BIND_JOB_SERVICE\" android:exported=\"true\" />";
+      }
+
+      if (settings["permissions_allow_usb"] == "true") {
+        manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.FOREGROUND_SERVICE\" />\n";
+        manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE\" />\n";
+      }
+
+      if (settings["permissions_allow_local_network"] == "true") {
         manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.ACCESS_LOCAL_NETWORK\" />\n";
       }
 
-      if (settings["permissions_allow_notifications"] != "false") {
+      if (settings["permissions_allow_notifications"] == "true") {
         manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />\n";
       }
 
-      if (settings["permissions_allow_geolocation"] != "false") {
+      if (settings["permissions_allow_geolocation"] == "true") {
         manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\" />\n";
         manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\" />\n";
-        if (settings["permissions_allow_geolocation_in_background"] != "false") {
+        if (settings["permissions_allow_geolocation_in_background"] == "true") {
           manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.ACCESS_BACKGROUND_LOCATION\" />\n";
         }
       }
 
-      if (settings["permissions_allow_user_media"] != "false") {
-        if (settings["permissions_allow_camera"] != "false") {
+      if (settings["permissions_allow_user_media"] == "true" ||
+          settings["permissions_allow_camera"] == "true" || settings["permissions_allow_microphone"] == "true") {
+        if (settings["permissions_allow_camera"] == "true" ||
+            (settings["permissions_allow_user_media"] == "true" && settings["permissions_allow_camera"] != "false")) {
           manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.CAMERA\" />\n";
         }
 
-        if (settings["permissions_allow_microphone"] != "false") {
-          manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.CAPTURE_AUDIO_OUTPUT\" />\n";
+        if (settings["permissions_allow_microphone"] == "true" ||
+            (settings["permissions_allow_user_media"] == "true" && settings["permissions_allow_microphone"] != "false")) {
           manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.MODIFY_AUDIO_SETTINGS\" />\n";
           manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.RECORD_AUDIO\" />\n";
         }
       }
 
-      if (settings["permissions_allow_read_media"] != "false") {
+      if (settings["permissions_allow_read_media"] == "true") {
         manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />\n";
         manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"29\" />\n";
         if (settings["permissions_allow_read_media_images"] != "false") {
@@ -8814,13 +9247,13 @@ int main (int argc, char* argv[]) {
         }
       }
 
-      if (settings["android_allow_cleartext"].size() == 0) {
-        if (flagDebugMode) {
-          settings["android_allow_cleartext"] = "android:usesCleartextTraffic=\"true\"\n";
-        } else {
-          settings["android_allow_cleartext"] = "";
-        }
+      const auto cleartext = trim(settings["android_allow_cleartext"]);
+      if (!cleartext.empty() && cleartext != "true" && cleartext != "false") {
+        logError("[android] allow_cleartext must be true or false");
+        exit(1);
       }
+      settings["android_allow_cleartext"] = String("android:usesCleartextTraffic=\"") +
+        (cleartext == "true" || (cleartext.empty() && flagDebugMode) ? "true" : "false") + "\"\n";
 
       settings["android_activity_intent_filters"] = "";
       if (settings["meta_application_links"].size() > 0) {
@@ -8880,6 +9313,46 @@ int main (int argc, char* argv[]) {
       }
 
       // Android Project
+      settings["android_launcher_metadata"] = "";
+      settings["android_shortcut_strings"] = "";
+      String launcherXml = "<shortcuts xmlns:android=\"http://schemas.android.com/apk/res/android\">\n";
+      if (settings["launcher_enabled"] == "true") {
+        const auto names = androidConfigList(settings["launcher_static_destinations"]);
+        if (names.size() > 4) throw std::runtime_error("At most four static launcher destinations are supported");
+        std::unordered_set<String> seen;
+        const auto escape = [](String value) {
+          value = replace(value, "&", "&amp;");
+          value = replace(value, "<", "&lt;");
+          value = replace(value, ">", "&gt;");
+          value = replace(value, "\"", "&quot;");
+          return replace(value, "'", "&apos;");
+        };
+        auto activity = settings["android_main_activity"];
+        if (activity.starts_with(".")) activity = settings["android_bundle_identifier"] + activity;
+        else if (activity.find('.') == String::npos) activity = settings["android_bundle_identifier"] + "." + activity;
+        for (const auto& name : names) {
+          const auto label = settings["launcher_static_" + name + "_label"];
+          if (!std::regex_match(name, std::regex("[a-zA-Z0-9_-]{1,64}")) || !seen.insert(name).second ||
+              label.empty() || label.size() > 320 || std::any_of(label.begin(), label.end(), [](unsigned char c) { return c < 32 || c == 127; })) {
+            throw std::runtime_error("Static launcher destinations require unique IDs and bounded labels");
+          }
+          const auto resource = "runtime_shortcut_" + std::to_string(seen.size());
+          String text;
+          for (const auto character : label) {
+            if (character == '\\' || character == '"') text += '\\';
+            text += character;
+          }
+          settings["android_shortcut_strings"] += "  <string name=\"" + resource + "\" formatted=\"false\">&quot;" + escape(text) + "&quot;</string>\n";
+          launcherXml += "  <shortcut android:shortcutId=\"oro.static." + name + "\" android:enabled=\"true\" android:shortcutShortLabel=\"@string/" + resource + "\">\n" +
+            "    <intent android:action=\"" + escape(settings["android_bundle_identifier"]) + ".oro.LAUNCH_DESTINATION\" android:targetPackage=\"" +
+            escape(settings["android_bundle_identifier"]) + "\" android:targetClass=\"" + escape(activity) + "\">\n" +
+            "      <extra android:name=\"oro.launcher.static\" android:value=\"" + name + "\" />\n    </intent>\n  </shortcut>\n";
+        }
+        if (!names.empty()) settings["android_launcher_metadata"] =
+          "<meta-data android:name=\"android.app.shortcuts\" android:resource=\"@xml/runtime_shortcuts\" />";
+      }
+      launcherXml += "</shortcuts>\n";
+      writeFile(res / "xml" / "runtime_shortcuts.xml", launcherXml);
       writeFile(
         src / "main" / "AndroidManifest.xml",
         trim(tmpl(tmpl(gAndroidManifest, settings), manifestContext))
@@ -8902,6 +9375,48 @@ int main (int argc, char* argv[]) {
       }
 
 
+      settings["android_credentials_dependencies"] = settings["webview_webauthn_enabled"] == "true"
+        ? "implementation 'androidx.credentials:credentials:1.6.0'\n  implementation 'androidx.credentials:credentials-play-services-auth:1.6.0'"
+        : "";
+      if (!settings["android_runtime_protocol"].empty() && settings["android_runtime_protocol"] != "5") {
+        logError("Configured Android runtime protocol is unsupported by this CLI");
+        exit(1);
+      }
+      settings["android_extension_modules"] = "";
+      settings["android_extension_dependencies"] = "";
+      size_t manifestIndex = 0;
+      for (const auto& name : androidConfigList(settings["android_manifests"])) {
+        const auto input = targetPath / name;
+        std::error_code error;
+        if (!fs::is_regular_file(input, error) || fs::file_size(input, error) > 1048576 || error || manifestIndex >= 32) {
+          logError("Android extension manifests require at most 32 readable XML files of at most 1 MiB each");
+          exit(1);
+        }
+        const auto module = "oroManifest" + std::to_string(manifestIndex++);
+        const auto directory = output / module;
+        fs::create_directories(directory / "src" / "main");
+        writeFile(directory / "src" / "main" / "AndroidManifest.xml", convertWStringToString(readFile(input)));
+        writeFile(directory / "build.gradle",
+          "apply plugin: 'com.android.library'\nandroid {\n  namespace 'oro.runtime.manifest." + module +
+          "'\n  compileSdk 37\n  defaultConfig { minSdk 26 }\n}\n");
+        settings["android_extension_modules"] += "include ':" + module + "'\n";
+        settings["android_extension_dependencies"] += "implementation project(':" + module + "')\n  ";
+      }
+      std::set<String> androidDependencies;
+      for (const auto& coordinate : androidConfigList(settings["android_dependencies"])) {
+        if (!androidFixedMavenDependency(coordinate) ||
+            !androidDependencies.insert(coordinate.substr(0, coordinate.rfind(':'))).second || androidDependencies.size() > 64) {
+          logError("Android dependencies require at most 64 unique Maven coordinates with fixed, non-snapshot versions");
+          exit(1);
+        }
+        const auto artifact = coordinate.substr(0, coordinate.rfind(':'));
+        if (artifact == "androidx.webkit:webkit" || artifact == "androidx.credentials:credentials" ||
+            artifact == "androidx.credentials:credentials-play-services-auth") {
+          logError("Runtime-owned WebKit and Credential Manager dependencies cannot be overridden");
+          exit(1);
+        }
+        settings["android_extension_dependencies"] += "implementation '" + coordinate + "'\n  ";
+      }
       writeFile(app / "proguard-rules.pro", trim(tmpl(gProGuardRules, settings)));
       writeFile(app / "build.gradle", trim(tmpl(gGradleBuildForSource, settings)));
 
@@ -8912,10 +9427,17 @@ int main (int argc, char* argv[]) {
       writeFile(res / "layout" / "web_view.xml", trim(tmpl(gAndroidLayoutWebView, settings)));
       writeFile(res / "layout" / "window_container_view.xml", trim(tmpl(gAndroidLayoutWindowContainerView, settings)));
       writeFile(res / "values" / "strings.xml", trim(tmpl(gAndroidValuesStrings, settings)));
+      writeFile(res / "xml" / "runtime_data_extraction_rules.xml", trim(gAndroidDataExtractionRules));
+      writeFile(res / "xml" / "runtime_share_paths.xml", trim(gAndroidSharePaths));
 
       // allow user space to override all `res/` files
-      if (fs::exists(androidResources)) {
-        fs::copy(androidResources, res, fs::copy_options::overwrite_existing);
+      if (!androidResources.empty()) {
+        try {
+          androidCopyResources(targetPath / androidResources, res);
+        } catch (const std::exception& error) {
+          logError(error.what());
+          exit(1);
+        }
       }
 
       auto cflags = flagDebugMode
@@ -9467,27 +9989,15 @@ int main (int argc, char* argv[]) {
         trim(tmpl(tmpl(gAndroidMakefile, makefileContext), settings))
       );
 
-      // Android Sources
-      std::map<Path, String> sources = {
-        // android app package files
-        {pkg / "app.kt", "src/android/app.kt"},
-        {pkg / "main.kt", "src/android/main.kt"},
-        {pkg / "UsbService.kt", "src/android/UsbService.kt"},
-
-        // runtime package files
-        {runtime / "app" / "app.kt", "src/runtime/app/app.kt"},
-        {runtime / "bridge" / "bridge.kt", "src/runtime/bridge/bridge.kt"},
-        {runtime / "debug" / "console.kt", "src/runtime/debug/console.kt"},
-        {runtime / "ipc" / "message.kt", "src/runtime/ipc/message.kt"},
-        {runtime / "securestorage" / "secure_storage.kt", "src/runtime/securestorage/secure_storage.kt"},
-        {runtime / "usb" / "usb.kt", "src/runtime/usb/usb.kt"},
-        {runtime / "webview.kt", "src/runtime/webview.kt"},
-        {runtime / "webview" / "navigator.kt", "src/runtime/webview/navigator.kt"},
-        {runtime / "webview" / "scheme_handlers.kt", "src/runtime/webview/scheme_handlers.kt"},
-        {runtime / "window" / "dialog.kt", "src/runtime/window/dialog.kt"},
-        {runtime / "window" / "manager.kt", "src/runtime/window/manager.kt"},
-        {runtime / "window" / "window.kt", "src/runtime/window/window.kt"},
-      };
+      // Use the compiled distribution catalog, not a second source inventory.
+      std::map<Path, String> sources;
+      for (const auto& name : androidRuntimeSourceCatalog()) {
+        const auto relative = Path(name).lexically_relative("src");
+        const auto destination = name.starts_with("src/android/")
+          ? pkg / Path(name).filename()
+          : runtime / relative.lexically_relative("runtime");
+        sources[destination] = name;
+      }
 
       for (const auto& entry : sources) {
         const auto filename = prefixPath(entry.second);
@@ -9503,8 +10013,22 @@ int main (int argc, char* argv[]) {
         );
       }
 
+      String configuredExtensions = "package oro.runtime.app\n\ninternal object ConfiguredNativeExtensions {\n";
+      configuredExtensions += "  fun create (): List<NativeExtension> = listOf(\n";
+      std::set<String> extensionClasses;
+      for (const auto& name : androidConfigList(settings["android_extensions"])) {
+        if (!std::regex_match(name, std::regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+")) ||
+            !extensionClasses.insert(name).second || extensionClasses.size() > 32) {
+          logError("Android extensions require at most 32 unique fully qualified NativeExtension classes");
+          exit(1);
+        }
+        configuredExtensions += "    " + name + "(),\n";
+      }
+      configuredExtensions += "  )\n}\n";
+      writeFile(runtime / "app" / "configured_extensions.kt", configuredExtensions);
+
       // custom source files
-      for (auto const &file : parseStringList(settings["android_sources"])) {
+      for (auto const &file : androidConfigList(settings["android_sources"])) {
         // log(String("Android source: " + String(target / file)).c_str());
         writeFile(
           pkg / Path(file).filename(),
@@ -10726,6 +11250,40 @@ int main (int argc, char* argv[]) {
       fs::remove_all(pathResources / "oro" / "node_modules");
     }
 
+    if (flagBuildForAndroid) {
+      const auto libraries = paths.platformSpecificOutputPath / "app/src/main/libs";
+      fs::create_directories(libraries);
+      size_t copied = 0;
+      for (const auto& entry : fs::directory_iterator(prefixPath("lib"))) {
+        if (!entry.is_directory() || !entry.path().filename().string().ends_with("-android")) continue;
+        const auto abi = replace(entry.path().filename().string(), "-android", "");
+        fs::copy(entry.path(), libraries / abi, fs::copy_options::overwrite_existing | fs::copy_options::recursive);
+        ++copied;
+      }
+      if (copied == 0) {
+        logError("No Android native libraries were staged; install the Android runtime SDK before building.");
+        exit(1);
+      }
+      const auto applicationInputs = androidApplicationInputs(androidInputProject,
+        androidApplicationConfiguration, androidInputSource, prefixPath(), flagDebugMode);
+      androidInputSnapshot = applicationInputs.str();
+      const auto manifestDigest = androidAssetManifest(pathResources, JSON::Object::Entries {
+        {"cliVersion", VERSION_FULL_STRING},
+        {"cliRevision", VERSION_HASH_STRING},
+        {"androidDistribution", androidDistributionContract()},
+        {"applicationInputs", applicationInputs},
+        {"debug", flagDebugMode},
+        {"sdk", "android-37.0"},
+        {"nativePlatform", "android-26"},
+        {"ndkVersion", "29.0.14206865"}
+      });
+      const auto header = settings["ini_code"] +
+        "\n#define ORO_RUNTIME_ASSET_MANIFEST_SHA256 \"" + manifestDigest + "\"\n" +
+        "#define ORO_RUNTIME_PACKAGING_CLI_VERSION \"" + VERSION_FULL_STRING + "\"\n";
+      writeFile(paths.platformSpecificOutputPath / "app" / "src" / "main" / "jni" /
+        "include" / "oro" / "_user-config-bytes.hh", header);
+    }
+
       if (flagBuildForIOS) {
         if (flagBuildForSimulator) {
           if (settings.count("ios_simulator_uuid") < 0) {
@@ -11015,74 +11573,17 @@ int main (int argc, char* argv[]) {
           }
         }
 
-        // TODO(mribbons): Cache binaries, hash based on source contents. Copy if cache matches rather than building.
-        // TODO(mribbons): Expand cache system to other target platforms
-
         auto output = paths.platformSpecificOutputPath;
         auto src = app / "src";
         auto _main = src / "main";
         auto app_mk = _main / "jni" / "Application.mk";
         auto jni = _main / "jni";
         auto jniLibs = _main / "jniLibs";
-        auto libs = _main / "libs";
-        auto obj = _main / "obj";
-
-        if (fs::exists(obj)) {
-          fs::remove_all(obj);
-        }
-
-        // TODO(mribbons) - Copy specific abis
-        fs::create_directories(libs);
-        int androidStaticLibCount = 0;
-        for (auto const& dir_entry : fs::directory_iterator(prefixFile() + "lib")) {
-          if (dir_entry.is_directory() && dir_entry.path().stem().string().find("-android") != String::npos) {
-            auto dest = libs / replace(dir_entry.path().stem().string(), "-android", "");
-            try {
-              if (debugEnv) logDebug("copy android lib: "+ dir_entry.path().string() + " => " + dest.string());
-              fs::copy(
-                dir_entry.path(),
-                dest,
-                fs::copy_options::overwrite_existing | fs::copy_options::recursive
-              );
-              androidStaticLibCount++;
-            } catch (fs::filesystem_error &e) {
-              logError(String("Unable to copy android lib: ") + (fs::exists(dest) ? "exists" : "missing") + ": " + e.what());
-              throw;
-            }
-          }
-        }
-
-        if (androidStaticLibCount == 0) {
-          const String cliName(gCliDisplayName);
-          logError("No android static libs copied, app won't build. Run '" + cliName + " setup --platform=android' and check " + prefixFile() + "lib. See README (Troubleshooting)");
-          exit(1);
-        }
-
-        auto buildJniLibs = true;
-        if (fs::exists(jniLibs)) {
-          int androidSharedLibCount = 0;
-          for (auto const& dir_entry : fs::recursive_directory_iterator(jniLibs)) {
-            if (isRuntimeSharedLibrary(dir_entry.path())) {
-              // Count the number of runtime .so files in jniLibs, there will be one for each android architecture
-              androidSharedLibCount++;
-            }
-          }
-
-          // if we have found runtime .so's, we don't need to recompile, unless:
-          // the runtime shared library count doesn't match the static lib count - There should be one libuv.a and runtime archive per android architecture
-          if (androidSharedLibCount > 0 && androidSharedLibCount != (androidStaticLibCount / 2)) {
-            buildJniLibs = true;
-            logWarn("Android Shared Lib Count is incorrect, forcing rebuild.");
-            fs::remove_all(jniLibs);
-          } else {
-            buildJniLibs = false;
-          }
-        }
-
         fs::create_directories(jniLibs);
 
-        // don't build unless we're sure it is required, ndkbuild errors out if jniLibs is already populated
-        if (buildJniLibs) {
+        // Always evaluate NDK dependencies, including changed configuration and
+        // copied runtime archives. The presence of a .so does not prove freshness.
+        {
           ndkBuildArgs
             << ndkBuild.str()
             << " -j"
@@ -11114,6 +11615,7 @@ int main (int argc, char* argv[]) {
           exit(1);
         }
 
+        verifyAndroidInputSnapshot();
         exit(0);
       }
 
@@ -11163,6 +11665,7 @@ int main (int argc, char* argv[]) {
       androidState.quote = quote;
       androidState.slash = slash;
       fs::current_path(cwd);
+      verifyAndroidInputSnapshot();
     }
 
     auto extraFlags = flagDebugMode
@@ -11451,6 +11954,7 @@ int main (int argc, char* argv[]) {
 
           auto CXX = env::get("CXX");
           auto CC = env::get("CC");
+          size_t nextObjectIndex = 0;
 
         for (auto source : sources) {
           if (env::get("DEBUG") == "1" || env::get("VERBOSE") == "1") {
@@ -11536,7 +12040,7 @@ int main (int argc, char* argv[]) {
                 compiler = compiler.substr(0, compiler.size() - 6) + "cc.exe";
               }
             } else if (source.ends_with(".o") || source.ends_with(".a")) {
-              objects << source << " ";
+              objects << quoteBuildPath(source) << " ";
               continue;
             } else if (source.ends_with(".c") || source.ends_with(".m")) {
               compiler = CC.size() > 0 ? CC : "clang";
@@ -11556,25 +12060,24 @@ int main (int argc, char* argv[]) {
               continue;
             }
 
-            auto objectFile = source;
-            objectFile = replace(objectFile, "\\.mm$", ".o");
-            objectFile = replace(objectFile, "\\.m$", ".o");
-            objectFile = replace(objectFile, "\\.cc$", ".o");
-            objectFile = replace(objectFile, "\\.c$", ".o");
+            // Every extension owns its objects, including its configured init shim.
+            const auto objectDirectory = targetPath / paths.platformSpecificOutputPath /
+              "extensions" / extension / "objects";
+            fs::create_directories(objectDirectory);
+            const auto object = objectDirectory /
+              (std::to_string(nextObjectIndex++) + "-" + Path(source).stem().string() + ".o");
 
-            auto object = Path(objectFile);
-
-            objects << (quote + object.string() + quote) << " ";
+            objects << quoteBuildPath(object) << " ";
             auto compileExtensionObjectCommand = StringStream();
             compileExtensionObjectCommand
               << quote // win32 - quote the entire command
               << quote // win32 - quote the binary path
               << compiler
               << quote // win32 - quote the binary path
-              << " -I" + Path(paths.platformSpecificOutputPath / "include").string()
-              << (" -I" + quote + trim(prefixFile("include")) + quote)
-              << (" -I" + quote + trim(prefixFile("src")) + quote)
-              << (" -L" + quote + trim(prefixFile("lib")) + quote)
+              << " -I" << quoteBuildPath(paths.platformSpecificOutputPath / "include")
+              << " -I" << quoteBuildPath(prefixPath("include"))
+              << " -I" << quoteBuildPath(prefixPath("src"))
+              << " -L" << quoteBuildPath(prefixPath("lib"))
             #if defined(_WIN32)
               << (" -L" + quote + trim(prefixFile("lib\\" + platform.arch + "-desktop")) + quote)
               << (debugBuild ? " -fms-runtime-lib=dll_dbg" : " -fms-runtime-lib=dll")
@@ -11582,7 +12085,7 @@ int main (int argc, char* argv[]) {
               << " -DWIN32_LEAN_AND_MEAN"
               << " -Wno-nonportable-include-path"
             #else
-              << (" -L" + quote + trim(prefixFile("lib/" + platform.arch + "-desktop")) + quote)
+              << " -L" << quoteBuildPath(prefixPath("lib/" + platform.arch + "-desktop"))
             #endif
               << " -fvisibility=hidden"
               << " -DIOS=0"
@@ -11597,32 +12100,11 @@ int main (int argc, char* argv[]) {
               << " -fPIC"
             #endif
               << " " << trim(compilerFlags + " " + (flagDebugMode ? compilerDebugFlags : ""))
-              << " -c " << (quote + source + quote)
-              << " -o " << (quote + object.string() + quote)
+              << " -c " << quoteBuildPath(source)
+              << " -o " << quoteBuildPath(object)
               << quote;
 
-            struct stat sourceStats;
-            struct stat objectStats;
-            struct stat libraryStats;
-
-            if (fs::exists(object)) {
-              if (stat(convertWStringToString(source).c_str(), &sourceStats) == 0) {
-                if (stat(convertWStringToString(object).c_str(), &objectStats) == 0) {
-                  if (objectStats.st_mtime > sourceStats.st_mtime) {
-                    continue;
-                  }
-                }
-              }
-
-              if (stat(convertWStringToString(source).c_str(), &sourceStats) == 0) {
-                if (stat(convertWStringToString(lib).c_str(), &libraryStats) == 0) {
-                  if (libraryStats.st_mtime > sourceStats.st_mtime) {
-                    continue;
-                  }
-                }
-              }
-            }
-
+            // Recompile against this build's config, headers and compiler flags.
             if (env::get("DEBUG") == "1" || env::get("VERBOSE") == "1") {
               logVerbose(compileExtensionObjectCommand.str());
             }
@@ -11823,20 +12305,20 @@ int main (int argc, char* argv[]) {
             << " -lwhisper"
             << " " << runtimeLinkFlag()
           #endif
-            << (" -L" + quote + trim(prefixFile("lib/" + platform.arch + "-desktop")) + quote)
+            << " -L" << quoteBuildPath(prefixPath("lib/" + platform.arch + "-desktop"))
           #endif
             << " -fvisibility=hidden"
             << " " << trim(linkerFlags + " " + (flagDebugMode ? linkerDebugFlags : ""))
-            << " -I" + Path(paths.platformSpecificOutputPath / "include").string()
-            << (" -I" + quote + trim(prefixFile("include")) + quote)
-            << (" -I" + quote + trim(prefixFile("src")) + quote)
-            << (" -L" + quote + trim(prefixFile("lib")) + quote)
+            << " -I" << quoteBuildPath(paths.platformSpecificOutputPath / "include")
+            << " -I" << quoteBuildPath(prefixPath("include"))
+            << " -I" << quoteBuildPath(prefixPath("src"))
+            << " -L" << quoteBuildPath(prefixPath("lib"))
             << " -shared"
             << " -std=c++2a"
           #if defined(__linux__)
             << " -fPIC"
           #endif
-            << " -o " << (quote + lib.string() + quote)
+            << " -o " << quoteBuildPath(lib)
             << quote; // win32 - quote the entire command
 
           if (platform.mac) {
@@ -11865,12 +12347,6 @@ int main (int argc, char* argv[]) {
               exit(r.exitCode);
             }
           } while (0);
-
-          if (!flagDebugMode) {
-            for (const auto& object : parseStringList(objects.str(), ' ')) {
-              fs::remove_all(object);
-            }
-          }
         }
       }
 

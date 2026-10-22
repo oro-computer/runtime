@@ -947,9 +947,19 @@ export function format (format, ...args) {
   return str
 }
 
+/**
+ * Parses JSON without modifying valid escape sequences. Invalid JSON containing
+ * unescaped backslashes retains the legacy path-repair fallback.
+ * @param {unknown} string
+ * @returns {any|null}
+ */
 export function parseJSON (string) {
   if (string !== null) {
     string = String(string)
+
+    try {
+      return JSON.parse(string)
+    } catch {}
 
     try {
       const encoded = encodeURIComponent(string)
@@ -963,10 +973,6 @@ export function parseJSON (string) {
         const regex = new RegExp('(?<!%5C)%5C', 'g')
         return JSON.parse(decodeURIComponent(encoded.replace(regex, '%5C%5C')))
       }
-    } catch {}
-
-    try {
-      return JSON.parse(string)
     } catch {}
   }
 

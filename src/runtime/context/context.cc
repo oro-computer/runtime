@@ -69,7 +69,7 @@ namespace oro::runtime::context {
   ) {
     this->jvm = jvm;
     this->activity = activity;
-    this->contentResolver.activity = activity;
+    this->contentResolver.application = this->self;
     this->contentResolver.jvm = jvm;
   }
 #endif
@@ -94,6 +94,15 @@ namespace oro::runtime::context {
     const String& seq,
     const String& params,
     QueuedResponse queuedResponse
+  ) {
+    return this->createQueuedResponse(seq, params, std::move(queuedResponse), false);
+  }
+
+  String RuntimeContext::createQueuedResponse (
+    const String& seq,
+    const String& params,
+    QueuedResponse queuedResponse,
+    bool useExtensionIPC
   ) {
     if (queuedResponse.id == 0) {
       queuedResponse.id = rand64();
@@ -126,13 +135,24 @@ namespace oro::runtime::context {
       "  seq,                                                                \n"
       "  params,                                                             \n"
       "  headers,                                                            \n"
-      "  { workerId }                                                        \n"
+      "  { workerId, useExtensionIPCIfAvailable: " + String(useExtensionIPC ? "true" : "false") + " }\n"
       ");                                                                    \n"
     );
 
     Lock lock(this->mutex);
     this->queuedResponses[queuedResponse.id] = std::move(queuedResponse);
     return script;
+  }
+
+  std::optional<QueuedResponse> RuntimeContext::takeQueuedResponse (QueuedResponse::ID id) {
+    Lock lock(this->mutex);
+    const auto entry = this->queuedResponses.find(id);
+    if (entry == this->queuedResponses.end()) {
+      return std::nullopt;
+    }
+    auto response = std::move(entry->second);
+    this->queuedResponses.erase(entry);
+    return response;
   }
 
   DispatchContext::~DispatchContext () {}

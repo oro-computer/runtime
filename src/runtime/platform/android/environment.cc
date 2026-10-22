@@ -99,6 +99,8 @@ namespace oro::runtime::android {
 
   JNIEnvironmentAttachment&
   JNIEnvironmentAttachment::operator= (JNIEnvironmentAttachment&& attachment) {
+    if (this == &attachment) return *this;
+    this->detach();
     this->jvm = attachment.jvm;
     this->env = attachment.env;
     this->status = attachment.status;
@@ -114,6 +116,7 @@ namespace oro::runtime::android {
   }
 
   void JNIEnvironmentAttachment::attach (JavaVM *jvm, int version) {
+    this->detach();
     this->jvm = jvm;
     this->version = version;
 
@@ -121,8 +124,10 @@ namespace oro::runtime::android {
       this->status = this->jvm->GetEnv((void **) &this->env, this->version);
 
       if (this->status == JNI_EDETACHED) {
-        this->attached = this->jvm->AttachCurrentThread(&this->env, 0);
+        this->status = this->jvm->AttachCurrentThread(&this->env, nullptr);
+        this->attached = this->status == JNI_OK;
       }
+      if (this->status != JNI_OK) this->env = nullptr;
     }
   }
 
@@ -137,6 +142,7 @@ namespace oro::runtime::android {
     this->env = nullptr;
     this->jvm = nullptr;
     this->status = 0;
+    this->version = 0;
     this->attached = false;
 
     if (attached && jvm != nullptr) {

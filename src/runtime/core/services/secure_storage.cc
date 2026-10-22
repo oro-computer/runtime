@@ -1007,7 +1007,7 @@ namespace oro::runtime::core::services {
     }
 
     auto& android = app->runtime.android;
-    if (!android.jvm || !android.activity) {
+    if (!android.jvm || !android.self) {
       error = "Android runtime unavailable";
       return false;
     }
@@ -1018,7 +1018,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
+    jclass cls = loadSecureStorageClass(attachment.env, android.self);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1039,8 +1039,8 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jstring jScope = attachment.env->NewStringUTF(scope.c_str());
-    jstring jKey = attachment.env->NewStringUTF(key.c_str());
+    jstring jScope = android::StringWrap(attachment.env, scope).j_str();
+    jstring jKey = android::StringWrap(attachment.env, key).j_str();
     jbyteArray jValue = attachment.env->NewByteArray(static_cast<jsize>(value.size()));
 
     if (jValue != nullptr && value.size() > 0) {
@@ -1055,7 +1055,7 @@ namespace oro::runtime::core::services {
     jboolean result = attachment.env->CallStaticBooleanMethod(
       cls,
       method,
-      android.activity,
+      android.self,
       jScope,
       jKey,
       jValue
@@ -1244,7 +1244,7 @@ namespace oro::runtime::core::services {
     }
 
     auto& android = app->runtime.android;
-    if (!android.jvm || !android.activity) {
+    if (!android.jvm || !android.self) {
       error = "Android runtime unavailable";
       return false;
     }
@@ -1255,7 +1255,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
+    jclass cls = loadSecureStorageClass(attachment.env, android.self);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1276,13 +1276,13 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jstring jScope = attachment.env->NewStringUTF(scope.c_str());
-    jstring jKey = attachment.env->NewStringUTF(key.c_str());
+    jstring jScope = android::StringWrap(attachment.env, scope).j_str();
+    jstring jKey = android::StringWrap(attachment.env, key).j_str();
 
     jbyteArray jResult = static_cast<jbyteArray>(attachment.env->CallStaticObjectMethod(
       cls,
       method,
-      android.activity,
+      android.self,
       jScope,
       jKey
     ));
@@ -1436,7 +1436,7 @@ namespace oro::runtime::core::services {
     }
 
     auto& android = app->runtime.android;
-    if (!android.jvm || !android.activity) {
+    if (!android.jvm || !android.self) {
       error = "Android runtime unavailable";
       return false;
     }
@@ -1447,7 +1447,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
+    jclass cls = loadSecureStorageClass(attachment.env, android.self);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1468,13 +1468,13 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jstring jScope = attachment.env->NewStringUTF(scope.c_str());
-    jstring jKey = attachment.env->NewStringUTF(key.c_str());
+    jstring jScope = android::StringWrap(attachment.env, scope).j_str();
+    jstring jKey = android::StringWrap(attachment.env, key).j_str();
 
     jboolean result = attachment.env->CallStaticBooleanMethod(
       cls,
       method,
-      android.activity,
+      android.self,
       jScope,
       jKey
     );
@@ -1623,7 +1623,7 @@ namespace oro::runtime::core::services {
     }
 
     auto& android = app->runtime.android;
-    if (!android.jvm || !android.activity) {
+    if (!android.jvm || !android.self) {
       error = "Android runtime unavailable";
       return false;
     }
@@ -1634,7 +1634,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
+    jclass cls = loadSecureStorageClass(attachment.env, android.self);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1655,11 +1655,11 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jstring jScope = attachment.env->NewStringUTF(scope.c_str());
+    jstring jScope = android::StringWrap(attachment.env, scope).j_str();
     jboolean result = attachment.env->CallStaticBooleanMethod(
       cls,
       method,
-      android.activity,
+      android.self,
       jScope
     );
 
@@ -1842,7 +1842,7 @@ namespace oro::runtime::core::services {
     }
 
     auto& android = app->runtime.android;
-    if (!android.jvm || !android.activity) {
+    if (!android.jvm || !android.self) {
       error = "Android runtime unavailable";
       return false;
     }
@@ -1853,7 +1853,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jclass cls = loadSecureStorageClass(attachment.env, android.activity);
+    jclass cls = loadSecureStorageClass(attachment.env, android.self);
     if (cls == nullptr) {
       attachment.printException();
       error = "SecureStorageManager class not found";
@@ -1874,11 +1874,11 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    jstring jScope = attachment.env->NewStringUTF(scope.c_str());
+    jstring jScope = android::StringWrap(attachment.env, scope).j_str();
     jobjectArray array = static_cast<jobjectArray>(attachment.env->CallStaticObjectMethod(
       cls,
       method,
-      android.activity,
+      android.self,
       jScope
     ));
 
@@ -1894,12 +1894,17 @@ namespace oro::runtime::core::services {
       keys.reserve(static_cast<size_t>(length));
       for (jsize i = 0; i < length; ++i) {
         auto element = static_cast<jstring>(attachment.env->GetObjectArrayElement(array, i));
-        const char* chars = attachment.env->GetStringUTFChars(element, nullptr);
-        if (chars != nullptr) {
-          keys.emplace_back(chars);
-          attachment.env->ReleaseStringUTFChars(element, chars);
+        if (element != nullptr) {
+          keys.push_back(android::StringWrap(attachment.env, element).str());
+          attachment.env->DeleteLocalRef(element);
         }
-        attachment.env->DeleteLocalRef(element);
+        if (attachment.env->ExceptionCheck()) {
+          attachment.env->ExceptionClear();
+          keys.clear();
+          error = "Failed to list keys";
+          ok = false;
+          break;
+        }
       }
       attachment.env->DeleteLocalRef(array);
     } else if (!ok) {

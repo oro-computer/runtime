@@ -1,0 +1,26 @@
+.TH ORO-INTERNAL-SHARE-FILES 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/share\-files \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/share\-files'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/share\-files is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBMAX_SHARE_BYTES\fR
+Documented variable exposed by this module.
+.TP
+\fBMAX_SHARE_FILES\fR
+Maximum number of Android share attachments per chooser request.
+.TP
+\fBvalidateFiles(files)\fR
+Validates public File objects before any data is read or native UI opens.
+\fBParameters:\fR
+.br
+\fIfiles\fR (File[]; required)
+\fBReturns:\fR
+.br
+\fInumber\fR Total byte count.

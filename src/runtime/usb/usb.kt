@@ -1,23 +1,26 @@
 package oro.runtime.usb
 
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.app.PendingIntent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
-import android.util.Log
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import org.json.JSONArray
 import org.json.JSONObject
-import __BUNDLE_IDENTIFIER__.UsbService
 
 object USBPlatform {
-  private const val TAG = "USBPlatform"
   private val lock = Any()
+  private val handler = Handler(Looper.getMainLooper())
   private val pendingRequests = mutableMapOf<Long, MutableSet<String>>()
 
   @JvmStatic
   fun enumerate (context: Context): String {
     val appContext = context.applicationContext
-    UsbService.ensureStarted(appContext)
-
     val manager = appContext.getSystemService(Context.USB_SERVICE) as UsbManager
     val array = JSONArray()
     for (device in manager.deviceList.values) {
@@ -33,7 +36,7 @@ object USBPlatform {
       .filter { it.isNotEmpty() }
       .toMutableSet()
 
-    if (ids.isEmpty()) {
+    if (ids.isEmpty() || ids.size > 16) {
       synchronized(lock) {
         pendingRequests.remove(requestId)
       }
@@ -42,14 +45,71 @@ object USBPlatform {
     }
 
     val appContext = context.applicationContext
-    UsbService.ensureStarted(appContext)
-
-    synchronized(lock) {
-      pendingRequests[requestId] = ids
+    val accepted = synchronized(lock) {
+      if (pendingRequests.size >= 32 || pendingRequests.containsKey(requestId)) {
+        false
+      } else {
+        pendingRequests[requestId] = ids
+        true
+      }
+    }
+    if (!accepted) {
+      for (id in ids) onPermissionResult(requestId, id, false)
+      return
     }
 
-    UsbService.instanceOrNull()?.let { dispatchPending(it, requestId) }
-      ?: Log.d(TAG, "UsbService not yet ready; deferring permission request $requestId")
+    // USB permission is a user interaction, not a foreground-service workflow.
+    // Enumeration and permission requests never start a service or request alerts.
+    handler.post {
+      val manager = appContext.getSystemService(Context.USB_SERVICE) as UsbManager
+      for (id in ids.toList()) {
+        val device = manager.deviceList.values.firstOrNull { it.deviceName == id }
+        if (device == null) {
+          notifyPermissionResult(id, false, requestId)
+        } else if (manager.hasPermission(device)) {
+          notifyPermissionResult(id, true, requestId)
+        } else {
+          requestDevicePermission(appContext, manager, device, requestId)
+        }
+      }
+    }
+  }
+
+  private fun requestDevicePermission (context: Context, manager: UsbManager, device: UsbDevice, requestId: Long) {
+    val action = "${context.packageName}.oro.USB_PERMISSION.${java.util.UUID.randomUUID()}"
+    val intent = PendingIntent.getBroadcast(context, 0, Intent(action).setPackage(context.packageName),
+      PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+    var completed = false
+    var registered = false
+    lateinit var receiver: BroadcastReceiver
+    lateinit var timeout: Runnable
+    fun finish (granted: Boolean) {
+      if (completed) return
+      completed = true
+      handler.removeCallbacks(timeout)
+      if (registered) context.unregisterReceiver(receiver)
+      intent.cancel()
+      notifyPermissionResult(device.deviceName, granted, requestId)
+    }
+    receiver = object : BroadcastReceiver() {
+      override fun onReceive (context: Context, intent: Intent) {
+        if (intent.action == action) finish(manager.hasPermission(device))
+      }
+    }
+    timeout = Runnable { finish(false) }
+    try {
+      if (Build.VERSION.SDK_INT >= 33) {
+        context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_NOT_EXPORTED)
+      } else {
+        @Suppress("DEPRECATION")
+        context.registerReceiver(receiver, IntentFilter(action))
+      }
+      registered = true
+      handler.postDelayed(timeout, 60_000)
+      manager.requestPermission(device, intent)
+    } catch (_: RuntimeException) {
+      finish(false)
+    }
   }
 
   internal fun notifyPermissionResult (deviceId: String, granted: Boolean, requestIdOverride: Long? = null) {
@@ -68,16 +128,12 @@ object USBPlatform {
           continue
         }
         val pending = entry.value
-        if (pending.remove(normalized) || requestIdOverride != null) {
+        if (pending.remove(normalized)) {
           affected.add(Pair(requestId, granted))
-          if (pending.isEmpty() || requestIdOverride != null) {
+          if (pending.isEmpty()) {
             iterator.remove()
           }
         }
-      }
-
-      if (affected.isEmpty() && requestIdOverride != null) {
-        affected.add(Pair(requestIdOverride, granted))
       }
     }
 
@@ -88,62 +144,6 @@ object USBPlatform {
 
   @JvmStatic
   external fun onPermissionResult (requestId: Long, deviceId: String, granted: Boolean)
-
-  internal fun onServiceReady(service: UsbService) {
-    dispatchPending(service, null)
-  }
-
-  private fun dispatchPending(service: UsbService, requestId: Long?) {
-    val pendingCopy = mutableMapOf<Long, List<String>>()
-    synchronized(lock) {
-      if (requestId != null) {
-        pendingRequests[requestId]?.let { pendingCopy[requestId] = it.toList() }
-      } else {
-        for ((id, ids) in pendingRequests) {
-          pendingCopy[id] = ids.toList()
-        }
-      }
-    }
-
-    for ((reqId, ids) in pendingCopy) {
-      for (id in ids) {
-        val ok = UsbService.requestPermissionForDevice(id)
-        if (!ok) {
-          removePending(reqId, id)
-          notifyPermissionResult(id, granted = false, requestIdOverride = reqId)
-        }
-      }
-    }
-  }
-
-  internal fun onServiceUnavailable() {
-    val snapshot = mutableMapOf<Long, List<String>>()
-    synchronized(lock) {
-      for ((requestId, ids) in pendingRequests) {
-        snapshot[requestId] = ids.toList()
-      }
-      pendingRequests.clear()
-    }
-    for ((requestId, ids) in snapshot) {
-      if (ids.isEmpty()) {
-        onPermissionResult(requestId, "", false)
-      } else {
-        for (id in ids) {
-          onPermissionResult(requestId, id, false)
-        }
-      }
-    }
-  }
-
-  private fun removePending(requestId: Long, deviceId: String) {
-    synchronized(lock) {
-      val pending = pendingRequests[requestId] ?: return
-      pending.remove(deviceId)
-      if (pending.isEmpty()) {
-        pendingRequests.remove(requestId)
-      }
-    }
-  }
 
   private fun deviceToJson (device: UsbDevice, hasPermission: Boolean): JSONObject {
     val obj = JSONObject()

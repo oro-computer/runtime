@@ -118,6 +118,8 @@ namespace oro::runtime::filesystem {
       SharedPointer<unsigned char[]> bytes = nullptr;
 
       static Map<String, Set<String>> mimeTypes;
+      /** Select an existing absolute resource directory for a native helper process. */
+      static bool setResourcesPath (const Path& resourcePath);
       static Path getResourcesPath ();
       static Path getResourcePath (const Path& resourcePath);
       static Path getResourcePath (const String& resourcePath);

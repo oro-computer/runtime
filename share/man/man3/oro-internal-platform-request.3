@@ -1,0 +1,26 @@
+.TH ORO-INTERNAL-PLATFORM-REQUEST 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:internal/platform\-request \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:internal/platform\-request'
+.fi
+.SH DESCRIPTION
+.PP
+oro:internal/platform\-request is a JavaScript API module exposed by the Oro Runtime.
+.SH REFERENCE
+.TP
+\fBplatformRequest(feature, action, options, signal)\fR
+Runs a bounded document\-owned Android operation and cancels its native work when the caller aborts. Native deadlines also release callers that disappear.
+\fBParameters:\fR
+.br
+\fIfeature\fR (string; required)
+.br
+\fIaction\fR (string; required)
+.br
+\fIoptions\fR (object; required)
+.br
+\fIsignal\fR (AbortSignal; optional)
+\fBReturns:\fR
+.br
+\fIPromise<any>\fR

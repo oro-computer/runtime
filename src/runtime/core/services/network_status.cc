@@ -17,13 +17,16 @@ namespace oro::runtime::core::services {
 
   #elif ORO_RUNTIME_PLATFORM_LINUX
     this->monitor = g_network_monitor_get_default();
-  #else
-    // Native network monitoring is implemented only on Apple and Linux.
+  #elif !ORO_RUNTIME_PLATFORM_ANDROID
+    // Native network monitoring is unavailable on this platform.
     this->enabled = false;
   #endif
   }
 
   NetworkStatus::~NetworkStatus () {
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    this->stop();
+  #endif
   #if ORO_RUNTIME_PLATFORM_APPLE
     this->stop();
     dispatch_release(this->queue);
@@ -33,7 +36,9 @@ namespace oro::runtime::core::services {
   }
 
   bool NetworkStatus::start () {
+  #if !ORO_RUNTIME_PLATFORM_ANDROID
     this->stop();
+  #endif
   #if ORO_RUNTIME_PLATFORM_APPLE
     this->monitor = nw_path_monitor_create();
 
@@ -98,6 +103,16 @@ namespace oro::runtime::core::services {
       this
     );
     return true;
+  #elif ORO_RUNTIME_PLATFORM_ANDROID
+    this->monitoring = true;
+    const auto& androidContext = this->context.android;
+    if (!androidContext.jvm || !androidContext.self) {
+      return true;
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(androidContext.jvm);
+    return CallClassMethodFromAndroidEnvironment(
+      attachment.env, Boolean, androidContext.self, "startNetworkStatusMonitor", "()Z"
+    );
   #endif
     return false;
   }
@@ -116,6 +131,16 @@ namespace oro::runtime::core::services {
       this->signal = 0;
       return true;
     }
+  #elif ORO_RUNTIME_PLATFORM_ANDROID
+    this->monitoring = false;
+    const auto& androidContext = this->context.android;
+    if (!androidContext.jvm || !androidContext.self) {
+      return true;
+    }
+    const auto attachment = android::JNIEnvironmentAttachment(androidContext.jvm);
+    return CallClassMethodFromAndroidEnvironment(
+      attachment.env, Boolean, androidContext.self, "stopNetworkStatusMonitor", "()Z"
+    );
   #endif
     return false;
   }
@@ -123,6 +148,30 @@ namespace oro::runtime::core::services {
   bool NetworkStatus::addObserver (const Observer& observer, const Observer::Callback callback) {
     return this->observers.add(observer, callback);
   }
+
+#if ORO_RUNTIME_PLATFORM_ANDROID
+  void NetworkStatus::report (const JSON::Object& status) {
+    Lock lock(this->statusMutex);
+    this->latestStatus = status;
+    if (this->updatePending || !this->monitoring) {
+      return;
+    }
+    this->updatePending = true;
+    if (!this->loop.dispatch([this]() {
+      JSON::Object current;
+      {
+        Lock lock(this->statusMutex);
+        current = this->latestStatus;
+        this->updatePending = false;
+      }
+      if (this->monitoring) {
+        this->observers.dispatch(current);
+      }
+    })) {
+      this->updatePending = false;
+    }
+  }
+#endif
 
   bool NetworkStatus::removeObserver (const Observer& observer) {
     return this->observers.remove(observer);

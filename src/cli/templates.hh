@@ -39,6 +39,7 @@ environment:
 general options:
   -h, --help                           print help message
   --prefix                             print install path
+  --android-runtime-contract           validate Android distribution and print its compiled contract
   -v, --version                        print program version
   -q, --quiet                          hint for less log output
   -V, --verbose                        enable verbose output (can be global)
@@ -1245,8 +1246,7 @@ constexpr auto gAndroidManifest = R"XML(
   xmlns:android="http://schemas.android.com/apk/res/android"
 >
   <uses-permission android:name="android.permission.INTERNET" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   {{android_manifest_xml_permissions}}
 
   <uses-feature
@@ -1260,13 +1260,16 @@ constexpr auto gAndroidManifest = R"XML(
 
   <application
     android:name="{{android_application}}"
-    android:allowBackup="true"
+    android:allowBackup="false"
+    android:fullBackupContent="false"
+    android:dataExtractionRules="@xml/runtime_data_extraction_rules"
     android:label="{{meta_title}}"
-    android:theme="@style/Theme.AppCompat.DayNight"
+    android:theme="{{android_application_theme}}"
     android:supportsRtl="true"
     {{android_application_icon_config}}
     {{android_allow_cleartext}}
   >
+    {{android_usb_notification_icon_metadata}}
     <meta-data
       android:name="android.webkit.WebView.MetricsOptOut"
       android:value="true"
@@ -1293,6 +1296,7 @@ constexpr auto gAndroidManifest = R"XML(
       </intent-filter>
 
       {{android_activity_intent_filters}}
+      {{android_launcher_metadata}}
     </activity>
 
     <service
@@ -1301,8 +1305,57 @@ constexpr auto gAndroidManifest = R"XML(
       android:foregroundServiceType="connectedDevice"
       android:stopWithTask="false"
     />
+    {{android_background_service}}
+    <receiver
+      android:name="oro.runtime.app.NotificationDismissReceiver"
+      android:exported="false"
+    />
+    <provider
+      android:name="oro.runtime.window.ShareFileProvider"
+      android:authorities="${applicationId}.oro.share"
+      android:exported="false"
+      android:grantUriPermissions="true"
+    >
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/runtime_share_paths" />
+    </provider>
   </application>
 </manifest>
+)XML";
+
+constexpr auto gAndroidSharePaths = R"XML(
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+  <cache-path name="shares" path="oro-share/" />
+</paths>
+)XML";
+
+constexpr auto gAndroidDataExtractionRules = R"XML(
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+  <cloud-backup>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+    <exclude domain="device_root" path="." />
+    <exclude domain="device_file" path="." />
+    <exclude domain="device_database" path="." />
+    <exclude domain="device_sharedpref" path="." />
+  </cloud-backup>
+  <device-transfer>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+    <exclude domain="device_root" path="." />
+    <exclude domain="device_file" path="." />
+    <exclude domain="device_database" path="." />
+    <exclude domain="device_sharedpref" path="." />
+  </device-transfer>
+</data-extraction-rules>
 )XML";
 
 //
@@ -2328,6 +2381,8 @@ android {
 
   aaptOptions {
     {{android_aapt}}
+    // Matches the CLI asset-manifest inventory policy.
+    ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~'
     noCompress {{android_aapt_no_compress}}
   }
 
@@ -2368,7 +2423,9 @@ dependencies {
   implementation 'androidx.lifecycle:lifecycle-process:2.7.0'
   implementation 'androidx.appcompat:appcompat:1.6.1'
   implementation 'androidx.core:core-ktx:1.13.0'
-  implementation 'androidx.webkit:webkit:1.9.0'
+  implementation('androidx.webkit:webkit:1.14.0') { version { strictly '1.14.0' } }
+  {{android_credentials_dependencies}}
+  {{android_extension_dependencies}}
 }
 )GROOVY";
 
@@ -2379,6 +2436,7 @@ constexpr auto gGradleSettings = R"GROOVY(
 rootProject.name = "{{build_name}}"
 startParameter.offline = false
 include ':app'
+{{android_extension_modules}}
 startParameter.offline=false
 )GROOVY";
 
@@ -2516,6 +2574,9 @@ include $(BUILD_SHARED_LIBRARY)
 // Android cpp `Application.mk` file
 //
 constexpr auto gAndroidApplicationMakefile = R"MAKE(
+## Keep generated native debug paths stable across project checkout locations.
+APP_CFLAGS += -ffile-prefix-map="$(abspath .)=."
+
 APP_ABI := {{android_native_abis}}
 APP_STL := c++_static
 )MAKE";
@@ -2524,6 +2585,13 @@ APP_STL := c++_static
 // Android `proguard-rules.pro` file
 //
 constexpr auto gProGuardRules = R"PGR(
+# JNI resolves runtime classes, fields, and callbacks by their declared names.
+# These references are invisible to the Java/Kotlin shrinker.
+-keep class oro.runtime.** { *; }
+-keepclassmembers class * {
+  @android.webkit.JavascriptInterface <methods>;
+}
+
 # Add project specific ProGuard rules here.
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.
@@ -2583,6 +2651,13 @@ constexpr auto gAndroidLayoutWindowContainerView = R"XML(
 constexpr auto gAndroidValuesStrings = R"XML(
 <resources>
   <string name="app_name">{{meta_title}}</string>
+  <string name="runtime_startup_loading">Loading…</string>
+  <string name="runtime_startup_failed">Unable to open the app. Reload to try again. Unsaved input may be lost. Check any pending action before submitting it again.</string>
+  <string name="runtime_package_mismatch">App files do not match this runtime. Install a matching app update, then reopen the app.</string>
+  <string name="runtime_webview_update_required">This app requires a newer Android System WebView. Update WebView or your browser provider, then reopen the app.</string>
+  <string name="runtime_fullscreen_exit">Exit fullscreen</string>
+  <string name="runtime_reload">Reload app</string>
+{{android_shortcut_strings}}
 </resources>
 )XML";
 

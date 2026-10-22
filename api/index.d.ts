@@ -560,13 +560,19 @@ declare module "oro:ipc" {
         [key: string]: any;
     } | null | undefined, caller?: Function | undefined): Error | null;
     /**
-     * Parses `seq` as integer value
+     * @typedef {object} ParseSeqOptions
+     * @property {boolean} [bigint=false] Return the counter as a BigInt.
+     */
+    /**
+     * Parses the numeric sequence counter, ignoring a document/worker namespace
+     * suffix. Use the complete string to correlate replies: a counter alone is
+     * not unique across document lifetimes.
      * @param {string|number} seq
-     * @param {object=} [options]
-     * @param {boolean} [options.bigint = false]
+     * @param {ParseSeqOptions} [options]
+     * @returns {number|bigint}
      * @ignore
      */
-    export function parseSeq(seq: string | number, options?: object | undefined): number | bigint;
+    export function parseSeq(seq: string | number, options?: ParseSeqOptions): number | bigint;
     /**
      * If `debug.enabled === true`, then debug output will be printed to console.
      * @param {boolean} [enable]
@@ -602,8 +608,9 @@ declare module "oro:ipc" {
      */
     export function ready(): Promise<void>;
     /**
-     * Sends a synchronous IPC command over XHR returning a `Result`
-     * upon success or error.
+     * Sends a synchronous IPC command returning a `Result` upon success or error.
+     * Descriptor operations retain the transport that opened the handle across sync
+     * and async calls. `useExtensionIPCIfAvailable` explicitly selects a transport.
      * @param {string} command
      * @param {any?} [value]
      * @param {(object|null|Buffer|Uint8Array|ArrayBuffer|string|Array)=} [options]
@@ -1173,6 +1180,12 @@ declare module "oro:ipc" {
         #private;
     }
     export default exports;
+    export type ParseSeqOptions = {
+        /**
+         * Return the counter as a BigInt.
+         */
+        bigint?: boolean;
+    };
     import { Buffer } from "oro:buffer";
     import { URL } from "oro:url/index";
     import * as exports from "oro:ipc";
@@ -2042,7 +2055,13 @@ declare module "oro:util" {
         let custom: symbol;
     }
     export function format(format: any, ...args: any[]): string;
-    export function parseJSON(string: any): any;
+    /**
+     * Parses JSON without modifying valid escape sequences. Invalid JSON containing
+     * unescaped backslashes retains the legacy path-repair fallback.
+     * @param {unknown} string
+     * @returns {any|null}
+     */
+    export function parseJSON(string: unknown): any | null;
     export function parseHeaders(headers: any): string[][];
     export function noop(): void;
     export function isValidPercentageValue(input: any): boolean;
@@ -2855,205 +2874,6 @@ declare module "oro:async" {
     export { AsyncLocalStorage, AsyncResource, AsyncContext, Deferred, executionAsyncResource, executionAsyncId, triggerAsyncId, createHook, AsyncHook };
 }
 
-declare module "oro:path/well-known" {
-    /**
-     * Well known path to the user's "Downloads" folder.
-     * @type {?string}
-     */
-    export const DOWNLOADS: string | null;
-    /**
-     * Well known path to the user's "Documents" folder.
-     * @type {?string}
-     */
-    export const DOCUMENTS: string | null;
-    /**
-     * Well known path to the user's "Pictures" folder.
-     * @type {?string}
-     */
-    export const PICTURES: string | null;
-    /**
-     * Well known path to the user's "Desktop" folder.
-     * @type {?string}
-     */
-    export const DESKTOP: string | null;
-    /**
-     * Well known path to the user's "Videos" folder.
-     * @type {?string}
-     */
-    export const VIDEOS: string | null;
-    /**
-     * Well known path to the user's "Music" folder.
-     * @type {?string}
-     */
-    export const MUSIC: string | null;
-    /**
-     * Well known path to the application's "resources" folder.
-     * @type {?string}
-     */
-    export const RESOURCES: string | null;
-    /**
-     * Well known path to the application's "config" folder.
-     * @type {?string}
-     */
-    export const CONFIG: string | null;
-    /**
-     * Well known path to the application's public "media" folder.
-     * @type {?string}
-     */
-    export const MEDIA: string | null;
-    /**
-     * Well known path to the application's "data" folder.
-     * @type {?string}
-     */
-    export const DATA: string | null;
-    /**
-     * Well known path to the application's "log" folder.
-     * @type {?string}
-     */
-    export const LOG: string | null;
-    /**
-     * Well known path to the application's "tmp" folder.
-     * @type {?string}
-     */
-    export const TMP: string | null;
-    /**
-     * Well known path to the application's "home" folder.
-     * This may be the user's HOME directory or the application container sandbox.
-     * @type {?string}
-     */
-    export const HOME: string | null;
-    namespace _default {
-        export { DOWNLOADS };
-        export { DOCUMENTS };
-        export { RESOURCES };
-        export { PICTURES };
-        export { DESKTOP };
-        export { VIDEOS };
-        export { CONFIG };
-        export { MEDIA };
-        export { MUSIC };
-        export { HOME };
-        export { DATA };
-        export { LOG };
-        export { TMP };
-    }
-    export default _default;
-}
-
-declare module "oro:os" {
-    /**
-     * Returns the operating system CPU architecture for which Oro Runtime was compiled.
-     * @returns {string} - 'arm64', 'ia32', 'x64', or 'unknown'
-     */
-    export function arch(): string;
-    /**
-     * Returns an array of objects containing information about each CPU/core.
-     * @returns {Array<object>} cpus - An array of objects containing information about each CPU/core.
-     * The properties of the objects are:
-     * - model `<string>` - CPU model name.
-     * - speed `<number>` - CPU clock speed (in MHz).
-     * - times `<object>` - An object containing the fields user, nice, sys, idle, irq representing the number of milliseconds the CPU has spent in each mode.
-     *   - user `<number>` - Time spent by this CPU or core in user mode.
-     *   - nice `<number>` - Time spent by this CPU or core in user mode with low priority (nice).
-     *   - sys `<number>` - Time spent by this CPU or core in system mode.
-     *   - idle `<number>` - Time spent by this CPU or core in idle mode.
-     *   - irq `<number>` - Time spent by this CPU or core in IRQ mode.
-     * @see {@link https://nodejs.org/api/os.html#os_os_cpus}
-     */
-    export function cpus(): Array<object>;
-    /**
-     * Returns an object containing network interfaces that have been assigned a network address.
-     * @returns {object}  - An object containing network interfaces that have been assigned a network address.
-     * Each key on the returned object identifies a network interface. The associated value is an array of objects that each describe an assigned network address.
-     * The properties available on the assigned network address object include:
-     * - address `<string>` - The assigned IPv4 or IPv6 address.
-     * - netmask `<string>` - The IPv4 or IPv6 network mask.
-     * - family `<string>` - The address family ('IPv4' or 'IPv6').
-     * - mac `<string>` - The MAC address of the network interface.
-     * - internal `<boolean>` - Indicates whether the network interface is a loopback interface.
-     * - scopeid `<number>` - The numeric scope ID (only specified when family is 'IPv6').
-     * - cidr `<string>` - The CIDR notation of the interface.
-     * @see {@link https://nodejs.org/api/os.html#os_os_networkinterfaces}
-     */
-    export function networkInterfaces(): object;
-    /**
-     * Returns the operating system platform.
-     * @returns {string} - 'android', 'cygwin', 'freebsd', 'linux', 'darwin', 'ios', 'openbsd', 'win32', or 'unknown'
-     * @see {@link https://nodejs.org/api/os.html#os_os_platform}
-     * The returned value is equivalent to `process.platform`.
-     */
-    export function platform(): string;
-    /**
-     * Returns the operating system name.
-     * @returns {string} - 'CYGWIN_NT', 'Mac', 'Darwin', 'FreeBSD', 'Linux', 'OpenBSD', 'Windows_NT', 'Win32', or 'Unknown'
-     * @see {@link https://nodejs.org/api/os.html#os_os_type}
-     */
-    export function type(): string;
-    /**
-     * @returns {boolean} - `true` if the operating system is Windows.
-     */
-    export function isWindows(): boolean;
-    /**
-     * @returns {string} - The operating system's default directory for temporary files.
-     */
-    export function tmpdir(): string;
-    /**
-     * Get resource usage.
-     */
-    export function rusage(): any;
-    /**
-     * Returns the system uptime in seconds.
-     * @returns {number} - The system uptime in seconds.
-     */
-    export function uptime(): number;
-    /**
-     * Returns the operating system name.
-     * @returns {string} - The operating system name.
-     */
-    export function uname(): string;
-    /**
-     * It's implemented in process.hrtime.bigint()
-     * @ignore
-     */
-    export function hrtime(): any;
-    /**
-     * Node.js doesn't have this method.
-     * @ignore
-     */
-    export function availableMemory(): any;
-    /**
-     * The host operating system. This value can be one of:
-     * - android
-     * - androidos
-     * - android-emulator
-     * - iphoneos
-     * - iphone-simulator
-     * - linux
-     * - macosx
-     * - unix
-     * - unknown
-     * - win32
-     * @ignore
-     * @return {'android'|'androidos'|'android-emulator'|'iphoneos'|'iphone-simulator'|'linux'|'macosx'|'unix'|'unknown'|'win32'}
-     */
-    export function host(): "android" | "androidos" | "android-emulator" | "iphoneos" | "iphone-simulator" | "linux" | "macosx" | "unix" | "unknown" | "win32";
-    /**
-     * Returns the home directory of the current user.
-     * @return {string}
-     */
-    export function homedir(): string;
-    export { constants };
-    /**
-     * @type {string}
-     * The operating system's end-of-line marker. `'\r\n'` on Windows and `'\n'` on POSIX.
-     */
-    export const EOL: string;
-    export default exports;
-    import constants from "oro:os/constants";
-    import * as exports from "oro:os";
-
-}
-
 declare module "oro:application/menu" {
     /**
      * Internal IPC for setting an application menu
@@ -3348,6 +3168,205 @@ declare module "oro:internal/events" {
         export { HotKeyEvent };
     }
     export default _default;
+}
+
+declare module "oro:path/well-known" {
+    /**
+     * Well known path to the user's "Downloads" folder.
+     * @type {?string}
+     */
+    export const DOWNLOADS: string | null;
+    /**
+     * Well known path to the user's "Documents" folder.
+     * @type {?string}
+     */
+    export const DOCUMENTS: string | null;
+    /**
+     * Well known path to the user's "Pictures" folder.
+     * @type {?string}
+     */
+    export const PICTURES: string | null;
+    /**
+     * Well known path to the user's "Desktop" folder.
+     * @type {?string}
+     */
+    export const DESKTOP: string | null;
+    /**
+     * Well known path to the user's "Videos" folder.
+     * @type {?string}
+     */
+    export const VIDEOS: string | null;
+    /**
+     * Well known path to the user's "Music" folder.
+     * @type {?string}
+     */
+    export const MUSIC: string | null;
+    /**
+     * Well known path to the application's "resources" folder.
+     * @type {?string}
+     */
+    export const RESOURCES: string | null;
+    /**
+     * Well known path to the application's "config" folder.
+     * @type {?string}
+     */
+    export const CONFIG: string | null;
+    /**
+     * Well known path to the application's public "media" folder.
+     * @type {?string}
+     */
+    export const MEDIA: string | null;
+    /**
+     * Well known path to the application's "data" folder.
+     * @type {?string}
+     */
+    export const DATA: string | null;
+    /**
+     * Well known path to the application's "log" folder.
+     * @type {?string}
+     */
+    export const LOG: string | null;
+    /**
+     * Well known path to the application's "tmp" folder.
+     * @type {?string}
+     */
+    export const TMP: string | null;
+    /**
+     * Well known path to the application's "home" folder.
+     * This may be the user's HOME directory or the application container sandbox.
+     * @type {?string}
+     */
+    export const HOME: string | null;
+    namespace _default {
+        export { DOWNLOADS };
+        export { DOCUMENTS };
+        export { RESOURCES };
+        export { PICTURES };
+        export { DESKTOP };
+        export { VIDEOS };
+        export { CONFIG };
+        export { MEDIA };
+        export { MUSIC };
+        export { HOME };
+        export { DATA };
+        export { LOG };
+        export { TMP };
+    }
+    export default _default;
+}
+
+declare module "oro:os" {
+    /**
+     * Returns the operating system CPU architecture for which Oro Runtime was compiled.
+     * @returns {string} - 'arm64', 'ia32', 'x64', or 'unknown'
+     */
+    export function arch(): string;
+    /**
+     * Returns an array of objects containing information about each CPU/core.
+     * @returns {Array<object>} cpus - An array of objects containing information about each CPU/core.
+     * The properties of the objects are:
+     * - model `<string>` - CPU model name.
+     * - speed `<number>` - CPU clock speed (in MHz).
+     * - times `<object>` - An object containing the fields user, nice, sys, idle, irq representing the number of milliseconds the CPU has spent in each mode.
+     *   - user `<number>` - Time spent by this CPU or core in user mode.
+     *   - nice `<number>` - Time spent by this CPU or core in user mode with low priority (nice).
+     *   - sys `<number>` - Time spent by this CPU or core in system mode.
+     *   - idle `<number>` - Time spent by this CPU or core in idle mode.
+     *   - irq `<number>` - Time spent by this CPU or core in IRQ mode.
+     * @see {@link https://nodejs.org/api/os.html#os_os_cpus}
+     */
+    export function cpus(): Array<object>;
+    /**
+     * Returns an object containing network interfaces that have been assigned a network address.
+     * @returns {object}  - An object containing network interfaces that have been assigned a network address.
+     * Each key on the returned object identifies a network interface. The associated value is an array of objects that each describe an assigned network address.
+     * The properties available on the assigned network address object include:
+     * - address `<string>` - The assigned IPv4 or IPv6 address.
+     * - netmask `<string>` - The IPv4 or IPv6 network mask.
+     * - family `<string>` - The address family ('IPv4' or 'IPv6').
+     * - mac `<string>` - The MAC address of the network interface.
+     * - internal `<boolean>` - Indicates whether the network interface is a loopback interface.
+     * - scopeid `<number>` - The numeric scope ID (only specified when family is 'IPv6').
+     * - cidr `<string>` - The CIDR notation of the interface.
+     * @see {@link https://nodejs.org/api/os.html#os_os_networkinterfaces}
+     */
+    export function networkInterfaces(): object;
+    /**
+     * Returns the operating system platform.
+     * @returns {string} - 'android', 'cygwin', 'freebsd', 'linux', 'darwin', 'ios', 'openbsd', 'win32', or 'unknown'
+     * @see {@link https://nodejs.org/api/os.html#os_os_platform}
+     * The returned value is equivalent to `process.platform`.
+     */
+    export function platform(): string;
+    /**
+     * Returns the operating system name.
+     * @returns {string} - 'CYGWIN_NT', 'Mac', 'Darwin', 'FreeBSD', 'Linux', 'OpenBSD', 'Windows_NT', 'Win32', or 'Unknown'
+     * @see {@link https://nodejs.org/api/os.html#os_os_type}
+     */
+    export function type(): string;
+    /**
+     * @returns {boolean} - `true` if the operating system is Windows.
+     */
+    export function isWindows(): boolean;
+    /**
+     * @returns {string} - The operating system's default directory for temporary files.
+     */
+    export function tmpdir(): string;
+    /**
+     * Get resource usage.
+     */
+    export function rusage(): any;
+    /**
+     * Returns the system uptime in seconds.
+     * @returns {number} - The system uptime in seconds.
+     */
+    export function uptime(): number;
+    /**
+     * Returns the operating system name.
+     * @returns {string} - The operating system name.
+     */
+    export function uname(): string;
+    /**
+     * It's implemented in process.hrtime.bigint()
+     * @ignore
+     */
+    export function hrtime(): any;
+    /**
+     * Node.js doesn't have this method.
+     * @ignore
+     */
+    export function availableMemory(): any;
+    /**
+     * The host operating system. This value can be one of:
+     * - android
+     * - androidos
+     * - android-emulator
+     * - iphoneos
+     * - iphone-simulator
+     * - linux
+     * - macosx
+     * - unix
+     * - unknown
+     * - win32
+     * @ignore
+     * @return {'android'|'androidos'|'android-emulator'|'iphoneos'|'iphone-simulator'|'linux'|'macosx'|'unix'|'unknown'|'win32'}
+     */
+    export function host(): "android" | "androidos" | "android-emulator" | "iphoneos" | "iphone-simulator" | "linux" | "macosx" | "unix" | "unknown" | "win32";
+    /**
+     * Returns the home directory of the current user.
+     * @return {string}
+     */
+    export function homedir(): string;
+    export { constants };
+    /**
+     * @type {string}
+     * The operating system's end-of-line marker. `'\r\n'` on Windows and `'\n'` on POSIX.
+     */
+    export const EOL: string;
+    export default exports;
+    import constants from "oro:os/constants";
+    import * as exports from "oro:os";
+
 }
 
 declare module "oro:process/signal" {
@@ -5252,11 +5271,17 @@ declare module "oro:diagnostics/metric" {
 }
 
 declare module "oro:diagnostics/window" {
+    /**
+     * @typedef {object} RequestAnimationFrameMetricOptions
+     * @property {number} [sampleSize=60] Rolling sample capacity, from 1 to 3600.
+     */
+    /** Measures distinct animation frame timestamps using a bounded rolling buffer. */
     export class RequestAnimationFrameMetric extends Metric {
-        constructor(options: any);
+        /** @param {RequestAnimationFrameMetricOptions} [options] */
+        constructor(options?: RequestAnimationFrameMetricOptions);
         originalRequestAnimationFrame: typeof requestAnimationFrame;
         requestAnimationFrame(callback: any): any;
-        sampleSize: any;
+        sampleSize: number;
         sampleTick: number;
         channel: import("oro:diagnostics/channels").Channel;
         value: {
@@ -5264,14 +5289,17 @@ declare module "oro:diagnostics/window" {
             samples: number;
         };
         now: number;
-        samples: Uint8Array<any>;
+        samples: Float64Array<ArrayBuffer>;
+        /** @param {number} timestamp Animation frame timestamp in milliseconds. */
+        update(timestamp: number): void;
         toJSON(): {
-            sampleSize: any;
+            sampleSize: number;
             sampleTick: number;
             samples: number[];
             rate: number;
             now: number;
         };
+        #private;
     }
     export class FetchMetric extends Metric {
         constructor(_options: any);
@@ -5318,10 +5346,97 @@ declare module "oro:diagnostics/window" {
         export { metrics };
     }
     export default _default;
+    export type RequestAnimationFrameMetricOptions = {
+        /**
+         * Rolling sample capacity, from 1 to 3600.
+         */
+        sampleSize?: number;
+    };
     import { Metric } from "oro:diagnostics/metric";
 }
 
 declare module "oro:diagnostics/runtime" {
+    /**
+     * @typedef {object} AndroidStartupTiming
+     * @property {'native-library'|'native-allocation'|'native-extensions'|'process-lifecycle'} phase Fixed native startup phase.
+     * @property {number} durationMs Monotonic duration; excludes process launch and renderer startup.
+     */
+    /**
+     * @typedef {object} AndroidLifecycleEvent
+     * @property {number} index Runtime window index.
+     * @property {'loading'|'ready'|'failed'|'renderer-lost'|'reload'} phase
+     * @property {number} elapsedMs Monotonic time since the first retained process event.
+     * @property {number} durationMs Startup elapsed time for ready/failure; zero otherwise.
+     */
+    /**
+     * @typedef {object} AndroidBuildIdentity
+     * @property {string} nativeVersion Version compiled into the native runtime.
+     * @property {string} nativeRevision Source revision compiled into the native runtime.
+     * @property {string} cliVersion CLI that generated this application's init shim.
+     * @property {string} assetManifestSha256 SHA-256 of asset and build evidence bound into the native init shim; not the APK digest.
+     * @property {string|null} applicationInputSha256 Staged Android native files, normalized settings, SDK inventory and toolchain input fingerprint; null for older or unbound evidence. APK digest and signing certificate identify the exact compiled artifact.
+     * @property {number} androidBridgeProtocol Native bridge contract version.
+     * @property {string} abi Compiled architecture.
+     * @property {boolean} debug
+     * @property {number} sdk Device SDK.
+     * @property {number} targetSdk Application target SDK.
+     * @property {string|null} webViewVersion Installed WebView package version.
+     * @property {boolean} assetsVerified Whether native startup verified all packaged assets.
+     * @property {AndroidProcessExits} processExits Redacted, OS-retained exit summaries.
+     * @property {AndroidLifecycleEvent[]} lifecycleEvents At most 64 process-local timings; no URLs or application payloads.
+     * @property {AndroidStartupTiming[]} startupTimings At most four native startup phases; no application payloads.
+     */
+    /**
+     * @typedef {object} AndroidProcessExit
+     * @property {boolean} buildIdentityKnown False; OS history may predate the running artifact.
+     * @property {number} reason Android ApplicationExitInfo reason code.
+     * @property {number} status Exit status code.
+     * @property {number} timestamp Unix milliseconds.
+     * @property {number} importance Android process importance.
+     * @property {number} pssKiB Last recorded proportional memory size.
+     * @property {number} rssKiB Last recorded resident memory size.
+     */
+    /**
+     * @typedef {object} AndroidProcessExits
+     * @property {boolean} available API 30+ system query succeeded.
+     * @property {AndroidProcessExit[]} entries At most 16 summaries; no descriptions, traces, or process names.
+     */
+    /**
+     * @typedef {object} RuntimeCapabilities
+     * @property {boolean} nativeFullscreen Requires Android 11+ and a live foreground window.
+     * @property {boolean} fullscreenRequiresManagedInsets
+     * @property {boolean} screenProtection Android FLAG_SECURE, not control of exported content.
+     * @property {boolean} documentMetadata
+     * @property {boolean} documentTreeQueries Existing user-selected tree grants only.
+     * @property {number} documentQueryWorkers
+     * @property {number} documentQueryDeadlineMs
+     * @property {boolean} nativeBackgroundCleanup Explicitly enabled native share-prune scheduling.
+     * @property {boolean} backgroundJavaScript False; arbitrary durable JS execution is unavailable.
+     * @property {boolean} push False until a native provider and authenticated backend are configured.
+     * @property {boolean} biometricSecretUnlock
+     * @property {boolean} namedLauncherDestinations
+     * @property {boolean} nativeDeferredReads Configured native read/reconciliation scheduler; query registered executors separately.
+     * @property {boolean} deferredWrites False; queued mutation replay is not supported.
+     * @property {boolean} webAuthentication Explicit WebAuthn app integration and WebView feature support. This does not establish relying-party/domain association or enrollment.
+     * @property {boolean} nativePasswordSelection Explicit Android 14+ framework password chooser; separate from Autofill and passkeys.
+     * @property {boolean} nativeNotificationPresentation Channel/group/public-version submission with shared response receipts.
+     * @property {boolean} nativeExtensions Configured compiled native extension lifecycle and document-owned operations.
+     * @property {boolean} pointerCapture
+     * @property {boolean} historicalProcessExits
+     */
+    /**
+     * Reports implemented Android native contracts and explicit unavailable features.
+     * A supported contract still needs permission, active ownership, and application
+     * authorization. Other platforms reject with ENOSYS.
+     * @returns {Promise<RuntimeCapabilities>}
+     */
+    export function getCapabilities(): Promise<RuntimeCapabilities>;
+    /**
+     * Reads Android build identity without URLs, account data, input values, or logs.
+     * Other platforms reject with `ENOSYS`. This is not proof of release signing.
+     * @returns {Promise<AndroidBuildIdentity>}
+     */
+    export function getBuildIdentity(): Promise<AndroidBuildIdentity>;
     /**
      * Queries runtime diagnostics.
      * @return {Promise<QueryDiagnostic>}
@@ -5978,9 +6093,193 @@ declare module "oro:diagnostics/runtime" {
         uv: UVDiagnostic;
     }
     namespace _default {
+        export { getCapabilities };
+        export { getBuildIdentity };
         export { query };
     }
     export default _default;
+    export type AndroidStartupTiming = {
+        /**
+         * Fixed native startup phase.
+         */
+        phase: "native-library" | "native-allocation" | "native-extensions" | "process-lifecycle";
+        /**
+         * Monotonic duration; excludes process launch and renderer startup.
+         */
+        durationMs: number;
+    };
+    export type AndroidLifecycleEvent = {
+        /**
+         * Runtime window index.
+         */
+        index: number;
+        phase: "loading" | "ready" | "failed" | "renderer-lost" | "reload";
+        /**
+         * Monotonic time since the first retained process event.
+         */
+        elapsedMs: number;
+        /**
+         * Startup elapsed time for ready/failure; zero otherwise.
+         */
+        durationMs: number;
+    };
+    export type AndroidBuildIdentity = {
+        /**
+         * Version compiled into the native runtime.
+         */
+        nativeVersion: string;
+        /**
+         * Source revision compiled into the native runtime.
+         */
+        nativeRevision: string;
+        /**
+         * CLI that generated this application's init shim.
+         */
+        cliVersion: string;
+        /**
+         * SHA-256 of asset and build evidence bound into the native init shim; not the APK digest.
+         */
+        assetManifestSha256: string;
+        /**
+         * Staged Android native files, normalized settings, SDK inventory and toolchain input fingerprint; null for older or unbound evidence. APK digest and signing certificate identify the exact compiled artifact.
+         */
+        applicationInputSha256: string | null;
+        /**
+         * Native bridge contract version.
+         */
+        androidBridgeProtocol: number;
+        /**
+         * Compiled architecture.
+         */
+        abi: string;
+        debug: boolean;
+        /**
+         * Device SDK.
+         */
+        sdk: number;
+        /**
+         * Application target SDK.
+         */
+        targetSdk: number;
+        /**
+         * Installed WebView package version.
+         */
+        webViewVersion: string | null;
+        /**
+         * Whether native startup verified all packaged assets.
+         */
+        assetsVerified: boolean;
+        /**
+         * Redacted, OS-retained exit summaries.
+         */
+        processExits: AndroidProcessExits;
+        /**
+         * At most 64 process-local timings; no URLs or application payloads.
+         */
+        lifecycleEvents: AndroidLifecycleEvent[];
+        /**
+         * At most four native startup phases; no application payloads.
+         */
+        startupTimings: AndroidStartupTiming[];
+    };
+    export type AndroidProcessExit = {
+        /**
+         * False; OS history may predate the running artifact.
+         */
+        buildIdentityKnown: boolean;
+        /**
+         * Android ApplicationExitInfo reason code.
+         */
+        reason: number;
+        /**
+         * Exit status code.
+         */
+        status: number;
+        /**
+         * Unix milliseconds.
+         */
+        timestamp: number;
+        /**
+         * Android process importance.
+         */
+        importance: number;
+        /**
+         * Last recorded proportional memory size.
+         */
+        pssKiB: number;
+        /**
+         * Last recorded resident memory size.
+         */
+        rssKiB: number;
+    };
+    export type AndroidProcessExits = {
+        /**
+         * API 30+ system query succeeded.
+         */
+        available: boolean;
+        /**
+         * At most 16 summaries; no descriptions, traces, or process names.
+         */
+        entries: AndroidProcessExit[];
+    };
+    export type RuntimeCapabilities = {
+        /**
+         * Requires Android 11+ and a live foreground window.
+         */
+        nativeFullscreen: boolean;
+        fullscreenRequiresManagedInsets: boolean;
+        /**
+         * Android FLAG_SECURE, not control of exported content.
+         */
+        screenProtection: boolean;
+        documentMetadata: boolean;
+        /**
+         * Existing user-selected tree grants only.
+         */
+        documentTreeQueries: boolean;
+        documentQueryWorkers: number;
+        documentQueryDeadlineMs: number;
+        /**
+         * Explicitly enabled native share-prune scheduling.
+         */
+        nativeBackgroundCleanup: boolean;
+        /**
+         * False; arbitrary durable JS execution is unavailable.
+         */
+        backgroundJavaScript: boolean;
+        /**
+         * False until a native provider and authenticated backend are configured.
+         */
+        push: boolean;
+        biometricSecretUnlock: boolean;
+        namedLauncherDestinations: boolean;
+        /**
+         * Configured native read/reconciliation scheduler; query registered executors separately.
+         */
+        nativeDeferredReads: boolean;
+        /**
+         * False; queued mutation replay is not supported.
+         */
+        deferredWrites: boolean;
+        /**
+         * Explicit WebAuthn app integration and WebView feature support. This does not establish relying-party/domain association or enrollment.
+         */
+        webAuthentication: boolean;
+        /**
+         * Explicit Android 14+ framework password chooser; separate from Autofill and passkeys.
+         */
+        nativePasswordSelection: boolean;
+        /**
+         * Channel/group/public-version submission with shared response receipts.
+         */
+        nativeNotificationPresentation: boolean;
+        /**
+         * Configured compiled native extension lifecycle and document-owned operations.
+         */
+        nativeExtensions: boolean;
+        pointerCapture: boolean;
+        historicalProcessExits: boolean;
+    };
 }
 
 declare module "oro:diagnostics/index" {
@@ -9031,7 +9330,50 @@ declare module "oro:window/hotkey" {
     import { HotKeyEvent } from "oro:internal/events";
 }
 
+declare module "oro:internal/share-files" {
+    /**
+     * Validates public File objects before any data is read or native UI opens.
+     * @param {File[]} files
+     * @returns {number} Total byte count.
+     */
+    export function validateFiles(files: File[]): number;
+    /** @type {number} Maximum bytes copied to Android's temporary share cache. */
+    export const MAX_SHARE_BYTES: number;
+    /** Maximum number of Android share attachments per chooser request. */
+    export const MAX_SHARE_FILES: 16;
+}
+
 declare module "oro:window" {
+    /**
+     * @typedef {object} FullscreenState
+     * @property {boolean} supported Android 11+ native presentation is supported.
+     * @property {boolean} active Whether a window currently owns fullscreen.
+     * @property {number|null} owner Current fullscreen window index.
+     * @property {boolean} customView Whether a browser custom view is being shown.
+     * @property {boolean} requiresManagedInsets Call setSystemAppearance before entry.
+     * @property {boolean} pointerCapture False; native fullscreen does not capture a pointer.
+     */
+    /**
+     * @typedef {object} ContentProtectionState
+     * @property {boolean} enabled Protection requested for this window.
+     * @property {boolean} activityProtected Android currently protects the entire activity.
+     */
+    /**
+     * @typedef {object} ShareOptions
+     * @property {string} [title]
+     * @property {string} [text]
+     * @property {string} [url]
+     * @property {File[]} [files] Android only: up to 16 files, 8 MiB total.
+     */
+    /**
+     * @typedef {object} SystemAppearanceOptions
+     * @property {'system'|'light'|'dark'} theme System bar icon contrast.
+     * @property {string} color Opaque surface color, exactly `#rrggbb`.
+     * @property {'native'|'web'} insets Explicit inset owner. Native pads content;
+     * web emits CSS-pixel insets for the app to consume. Stop app-owned native inset
+     * listeners before adopting this API to prevent double padding. Runtime disables
+     * automatic IME resizing while the opted-in window is foreground.
+     */
     /**
      * @param {string} url
      * @return {string}
@@ -9241,6 +9583,15 @@ declare module "oro:window" {
          */
         showInspector(): Promise<object>;
         /**
+         * Acknowledges that this window has a usable application screen. Call after
+         * mounting the UI and loading required styles. Android apps configured with
+         * `[webview] require_ready = true` retain native startup recovery until this
+         * acknowledgement. Only the current window can acknowledge its own readiness.
+         * This does not replay operations or establish application authorization.
+         * @returns {Promise<void>}
+         */
+        markReady(): Promise<void>;
+        /**
          * Sets the background color of the window
          * @param {object} opts - an options object
          * @param {number} opts.red - the red value
@@ -9297,14 +9648,48 @@ declare module "oro:window" {
         showDirectoryFilePicker(options: object): Promise<string[]>;
         /**
          * Opens the platform share sheet for the current window.
-         * @param {{ title?: string, text?: string, url?: string }} [options]
+         * New Android file opens expire after 24 hours. Recipients can retain copies.
+         * Resolution means a share target was selected, not that delivery completed.
+         * @param {ShareOptions} [options]
          * @return {Promise<void>}
          */
-        share(options?: {
-            title?: string;
-            text?: string;
-            url?: string;
-        }): Promise<void>;
+        share(options?: ShareOptions): Promise<void>;
+        /**
+         * Sets Android 11+ system surfaces for this window. The foreground window owns
+         * appearance; `system` follows configuration changes. Insets/IME updates arrive
+         * as `windowinsetschange` CustomEvents. Earlier Android versions and other
+         * platforms reject with `ENOSYS`.
+         * @param {SystemAppearanceOptions} options
+         * @returns {Promise<void>}
+         */
+        setSystemAppearance(options: SystemAppearanceOptions): Promise<void>;
+        /**
+         * Enters or exits Android 11+ native fullscreen for the current foreground
+         * window. First select explicit inset ownership with setSystemAppearance.
+         * A native Exit fullscreen control, Back, suspension, hiding, and renderer
+         * destruction exit presentation. Entry never captures a pointer or hides IME.
+         * Observe windowfullscreenchange for native exits. Browser DOM fullscreen is
+         * a separate capability. Other platforms reject with ENOSYS.
+         * @param {boolean} enabled
+         * @returns {Promise<FullscreenState>}
+         */
+        setFullscreen(enabled: boolean): Promise<FullscreenState>;
+        /**
+         * Reads Android native fullscreen state for the current foreground window.
+         * Other platforms reject with ENOSYS.
+         * @returns {Promise<FullscreenState>}
+         */
+        getFullscreenState(): Promise<FullscreenState>;
+        /**
+         * Requests Android FLAG_SECURE while this window is visible. The whole native
+         * activity is protected, including recents previews and ordinary screenshots.
+         * This does not protect clipboard, shared files, external displays, or secrets
+         * already exported by the application. Custom native flag owners must coordinate
+         * with this runtime API. Other platforms reject with ENOSYS.
+         * @param {boolean} enabled
+         * @returns {Promise<ContentProtectionState>}
+         */
+        setContentProtection(enabled: boolean): Promise<ContentProtectionState>;
         /**
          * This is a high-level API that you should use instead of `ipc.request` when
          * you want to send a message to another window or to the backend.
@@ -9399,6 +9784,68 @@ declare module "oro:window" {
      * @ignore
      */
     export const constants: typeof statuses;
+    export type FullscreenState = {
+        /**
+         * Android 11+ native presentation is supported.
+         */
+        supported: boolean;
+        /**
+         * Whether a window currently owns fullscreen.
+         */
+        active: boolean;
+        /**
+         * Current fullscreen window index.
+         */
+        owner: number | null;
+        /**
+         * Whether a browser custom view is being shown.
+         */
+        customView: boolean;
+        /**
+         * Call setSystemAppearance before entry.
+         */
+        requiresManagedInsets: boolean;
+        /**
+         * False; native fullscreen does not capture a pointer.
+         */
+        pointerCapture: boolean;
+    };
+    export type ContentProtectionState = {
+        /**
+         * Protection requested for this window.
+         */
+        enabled: boolean;
+        /**
+         * Android currently protects the entire activity.
+         */
+        activityProtected: boolean;
+    };
+    export type ShareOptions = {
+        title?: string;
+        text?: string;
+        url?: string;
+        /**
+         * Android only: up to 16 files, 8 MiB total.
+         */
+        files?: File[];
+    };
+    export type SystemAppearanceOptions = {
+        /**
+         * System bar icon contrast.
+         */
+        theme: "system" | "light" | "dark";
+        /**
+         * Opaque surface color, exactly `#rrggbb`.
+         */
+        color: string;
+        /**
+         * Explicit inset owner. Native pads content;
+         * web emits CSS-pixel insets for the app to consume. Stop app-owned native inset
+         * listeners before adopting this API to prevent double padding. Runtime disables
+         * automatic IME resizing while the opted-in window is foreground.
+         */
+        insets: "native" | "web";
+    };
     import ipc from "oro:ipc";
     import * as statuses from "oro:window/constants";
     import client from "oro:application/client";
@@ -9995,15 +10442,285 @@ declare module "oro:async_hooks" {
     export { AsyncLocalStorage, AsyncResource, executionAsyncResource, executionAsyncId, triggerAsyncId, createHook };
 }
 
-declare module "oro:background" {
-    export default background;
-    export namespace background {
-        let available: boolean;
-        function register(): Promise<never>;
-        function schedule(): Promise<never>;
-        function cancel(): Promise<never>;
-        function status(): Promise<never>;
+declare module "oro:internal/platform-request" {
+    /**
+     * Runs a bounded document-owned Android operation and cancels its native work
+     * when the caller aborts. Native deadlines also release callers that disappear.
+     * @param {string} feature
+     * @param {string} action
+     * @param {object} options
+     * @param {AbortSignal} [signal]
+     * @returns {Promise<any>}
+     */
+    export function platformRequest(feature: string, action: string, options: object, signal?: AbortSignal): Promise<any>;
+    export default platformRequest;
+}
+
+declare module "oro:authentication" {
+    /**
+     * Reads policy/enrollment availability without prompting or creating keys.
+     * Other platforms reject with ENOSYS.
+     * @param {AuthenticationOptions} [options]
+     * @returns {Promise<AuthenticationStatus>}
+     */
+    export function getStatus(options?: AuthenticationOptions): Promise<AuthenticationStatus>;
+    /**
+     * Encrypts at most 64 KiB after a native cryptographic authentication prompt.
+     * At most 64 protected keys are retained. Existing keys are never silently
+     * replaced after enrollment changes, removal or invalidation. Keep the returned
+     * sealed record and handle EKEYREVOKED/ENOENT through explicit app recovery.
+     * @param {string|Uint8Array|ArrayBuffer} value
+     * @param {ProtectedKeyOptions} options
+     * @returns {Promise<ProtectedSecret>}
+     */
+    export function seal(value: string | Uint8Array | ArrayBuffer, options: ProtectedKeyOptions): Promise<ProtectedSecret>;
+    /**
+     * Decrypts only through a user-authenticated native Cipher operation. Returns
+     * bytes; decoding or restoring an application session remains app-owned.
+     * @param {ProtectedSecret} sealed
+     * @param {ProtectedKeyOptions} options
+     * @returns {Promise<Uint8Array>}
+     */
+    export function open(sealed: ProtectedSecret, options: ProtectedKeyOptions): Promise<Uint8Array>;
+    /**
+     * Creates or reuses a non-exportable P-256 key and signs an enrollment challenge
+     * after cryptographic authentication. This does not enroll the key on a server.
+     * @param {ChallengeOptions} options
+     * @returns {Promise<ChallengeSignature>}
+     */
+    export function createSigningKey(options: ChallengeOptions): Promise<ChallengeSignature>;
+    /**
+     * Signs a fresh authority/account-bound server challenge using an existing
+     * authentication-gated key. No success boolean establishes server authority.
+     * @param {ChallengeOptions} options
+     * @returns {Promise<ChallengeSignature>}
+     */
+    export function signChallenge(options: ChallengeOptions): Promise<ChallengeSignature>;
+    /**
+     * Explicitly removes this app's protected secret or signing key. Ciphertext and
+     * server enrollment become unusable; revoke enrolled keys on the server too.
+     * @param {ProtectedKeyRemovalOptions} options
+     * @returns {Promise<void>}
+     */
+    export function removeKey(options: ProtectedKeyRemovalOptions): Promise<void>;
+    namespace _default {
+        export { getStatus };
+        export { seal };
+        export { open };
+        export { createSigningKey };
+        export { signChallenge };
+        export { removeKey };
     }
+    export default _default;
+    export type AuthenticationPolicy = "biometric" | "biometric-or-device";
+    export type AuthenticationOptions = {
+        /**
+         * Strong biometric, optionally device credential fallback. The fallback policy does not invalidate on biometric enrollment changes.
+         */
+        policy?: AuthenticationPolicy;
+        /**
+         * Aborting, navigation, renderer loss or backgrounding cancels the prompt.
+         */
+        signal?: AbortSignal;
+    };
+    export type ProtectedKeyOptions = AuthenticationOptions & {
+        id: string;
+    };
+    export type ProtectedKeyRemovalOptions = ProtectedKeyOptions & {
+        kind?: "secret" | "signing";
+    };
+    export type ProtectedSecret = {
+        schema: number;
+        id: string;
+        policy: AuthenticationPolicy;
+        /**
+         * Base64 AES-GCM IV.
+         */
+        iv: string;
+        /**
+         * Base64 ciphertext and authentication tag. Store this sealed record, not plaintext.
+         */
+        ciphertext: string;
+    };
+    export type AuthenticationStatus = {
+        /**
+         * Android API 30+.
+         */
+        supported: boolean;
+        /**
+         * Explicit capability and manifest permission.
+         */
+        enabled: boolean;
+        /**
+         * Current enrollment/hardware/policy result, not authenticated identity.
+         */
+        canAuthenticate: boolean;
+        /**
+         * Native BiometricManager result or -1 when unavailable.
+         */
+        statusCode: number;
+        policy: AuthenticationPolicy;
+        cryptographicOperationsOnly: boolean;
+        serverVerificationRequired: boolean;
+        /**
+         * At most one native prompt per process.
+         */
+        busy: boolean;
+    };
+    /**
+     * `authority` is an exact HTTPS origin, including a self-hosted IP origin when
+     * properly secured. `accountRef` is an opaque account reference. `challenge` is
+     * canonical Base64 of 16..1024 server-generated random bytes; `expiresAt` is a
+     * server challenge expiry in Unix milliseconds, at most five minutes ahead.
+     */
+    export type ChallengeOptions = ProtectedKeyOptions & {
+        authority: string;
+        accountRef: string;
+        challenge: string;
+        expiresAt: number;
+    };
+    export type ChallengeSignature = {
+        algorithm: "ECDSA_P256_SHA256";
+        /**
+         * Base64 SubjectPublicKeyInfo. Enrollment must be authenticated by the authority.
+         */
+        publicKey: string;
+        /**
+         * Base64 exact UTF-8 JSON bytes signed, binding application, authority, account, key, nonce and expiry.
+         */
+        payload: string;
+        /**
+         * Base64 ASN.1 DER ECDSA signature. The server must verify it, nonce single use, current account/key authorization and expiry.
+         */
+        signature: string;
+    };
+}
+
+declare module "oro:background" {
+    /**
+     * Checks the supported native task kind. This does not register a JS handler or
+     * authorize future application work. Other platforms reject with ENOSYS.
+     * @param {'share-prune'} taskKind
+     * @returns {Promise<BackgroundTaskSupport>}
+     */
+    export function register(taskKind: "share-prune"): Promise<BackgroundTaskSupport>;
+    /**
+     * Schedules one unique, persisted Android share-prune job. Scheduling replaces
+     * the previous cleanup of that kind. Android decides timing and boot recovery;
+     * force-stop prevents execution until relaunch. The task removes only expired
+     * runtime-owned share files; it never executes JS, contacts servers, or retries
+     * application mutations. Failed native cleanup has at most three attempts with
+     * Android exponential backoff starting at 30 seconds. Requires background.enabled.
+     * @param {BackgroundScheduleOptions} options
+     * @returns {Promise<BackgroundTaskState>}
+     */
+    export function schedule(options: BackgroundScheduleOptions): Promise<BackgroundTaskState>;
+    /**
+     * Cancels the unique native cleanup. A running deletion may finish its current
+     * file before observing cancellation. Already removed expired files stay removed.
+     * @param {'share-prune'} [taskKind='share-prune']
+     * @returns {Promise<BackgroundTaskState>}
+     */
+    export function cancel(taskKind?: "share-prune"): Promise<BackgroundTaskState>;
+    /**
+     * Reads actual native scheduling availability and durable state. An interrupted
+     * record with no retained OS job is explicit; it is not silently re-enqueued.
+     * Other platforms reject with ENOSYS.
+     * @param {'share-prune'} [taskKind='share-prune']
+     * @returns {Promise<BackgroundTaskStatus>}
+     */
+    export function status(taskKind?: "share-prune"): Promise<BackgroundTaskStatus>;
+    /**
+     * Whether this document requested the native Android cleanup capability.
+     * Read status() for actual manifest and scheduler availability.
+     * @type {boolean}
+     */
+    export const available: boolean;
+    /**
+     * @typedef {object} BackgroundModule
+     * @property {typeof available} available
+     * @property {typeof register} register
+     * @property {typeof schedule} schedule
+     * @property {typeof cancel} cancel
+     * @property {typeof status} status
+     */
+    /** @type {BackgroundModule} Native task entry points and the document's opt-in flag. */
+    export const background: BackgroundModule;
+    export default background;
+    export type BackgroundScheduleOptions = {
+        /**
+         * Native cleanup only; serialized payloads are rejected.
+         */
+        kind: "share-prune";
+        /**
+         * Earliest execution delay, from 0 through seven days.
+         */
+        delayMs?: number;
+        requiresCharging?: boolean;
+        requiresBatteryNotLow?: boolean;
+    };
+    export type BackgroundTaskState = {
+        schema?: number;
+        kind?: "share-prune";
+        phase?: "scheduling" | "scheduled" | "running" | "stopped" | "interrupted" | "completed" | "cancelled" | "rejected" | "failed" | "idle";
+        /**
+         * Opaque scheduling identity, not an authorization token.
+         */
+        generation?: string;
+        /**
+         * At most three native cleanup attempts.
+         */
+        attempts?: number;
+        /**
+         * Earliest Unix execution time; never a deadline guarantee.
+         */
+        notBefore?: number;
+        updatedAt?: number;
+    };
+    export type BackgroundTaskSupport = {
+        kind: "share-prune";
+        available: boolean;
+        maximumAttempts: number;
+        /**
+         * False; Android controls execution time.
+         */
+        exactTiming: boolean;
+        /**
+         * False; the app must be launched again.
+         */
+        survivesForceStop: boolean;
+    };
+    export type BackgroundTaskStatus = {
+        /**
+         * Requires explicit background.enabled and generated manifest declarations.
+         */
+        available: boolean;
+        kind: "share-prune";
+        supportedKinds: string[];
+        /**
+         * Android currently retains the job.
+         */
+        pending: boolean;
+        /**
+         * Durable last scheduling record.
+         */
+        state: BackgroundTaskState;
+        /**
+         * False.
+         */
+        backgroundJavaScript: boolean;
+        /**
+         * False.
+         */
+        push: boolean;
+    };
+    export type BackgroundModule = {
+        available: typeof available;
+        register: typeof register;
+        schedule: typeof schedule;
+        cancel: typeof cancel;
+        status: typeof status;
+    };
 }
 
 declare module "oro:bootstrap" {
@@ -15841,11 +16558,11 @@ declare module "oro:test/index" {
         ifError(err: Error | null | undefined, msg?: string): void;
         /**
          * @param {Function} fn
-         * @param {RegExp | any} [expected]
+         * @param {RegExp | ErrorConstructor} [expected]
          * @param {string} [message]
          * @returns {void}
          */
-        throws(fn: Function, expected?: RegExp | any, message?: string): void;
+        throws(fn: Function, expected?: RegExp | ErrorConstructor, message?: string): void;
         /**
          * Assert that a promise or async function rejects.
          * @param {PromiseLike<any>|(() => any)} input
@@ -18030,6 +18747,83 @@ declare module "oro:cookies" {
     export default _default;
 }
 
+declare module "oro:credentials" {
+    /**
+     * @typedef {object} PasswordSelectionOptions
+     * @property {string} [username] Restrict results to this exact saved username.
+     * @property {AbortSignal} [signal] Cancel the document-owned native prompt.
+     */
+    /**
+     * @typedef {object} SelectedPassword
+     * @property {string} username Provider-selected username.
+     * @property {string} password Private value for the interactive form only.
+     */
+    /**
+     * @typedef {object} PasswordSelectionStatus
+     * @property {boolean} supported Platform implements native password selection.
+     * @property {boolean} enabled Application opted into selection.
+     * @property {boolean} busy A selection request is active.
+     */
+    /**
+     * Queries support without opening a provider or reading a credential.
+     * Other platforms reject with ENOSYS.
+     * @returns {Promise<PasswordSelectionStatus>}
+     */
+    export function getStatus(): Promise<PasswordSelectionStatus>;
+    /**
+     * Opens the native provider chooser after an explicit user action. Results bind
+     * to the requesting foreground document and are never persisted or logged by
+     * this API. No remote origin is asserted; providers determine app association.
+     * It does not submit a form, save/update a password or authenticate a server.
+     * Cancellation rejects ABORT_ERR; no available credential rejects ENOENT.
+     * A provider result waits at most five seconds for the requesting Activity to
+     * resume, then revalidates document ownership and the foreground window.
+     * Cancellation, navigation, activity stop and the original deadline still apply.
+     * @param {PasswordSelectionOptions} [options]
+     * @returns {Promise<SelectedPassword>}
+     */
+    export function selectPassword(options?: PasswordSelectionOptions): Promise<SelectedPassword>;
+    namespace _default {
+        export { getStatus };
+        export { selectPassword };
+    }
+    export default _default;
+    export type PasswordSelectionOptions = {
+        /**
+         * Restrict results to this exact saved username.
+         */
+        username?: string;
+        /**
+         * Cancel the document-owned native prompt.
+         */
+        signal?: AbortSignal;
+    };
+    export type SelectedPassword = {
+        /**
+         * Provider-selected username.
+         */
+        username: string;
+        /**
+         * Private value for the interactive form only.
+         */
+        password: string;
+    };
+    export type PasswordSelectionStatus = {
+        /**
+         * Platform implements native password selection.
+         */
+        supported: boolean;
+        /**
+         * Application opted into selection.
+         */
+        enabled: boolean;
+        /**
+         * A selection request is active.
+         */
+        busy: boolean;
+    };
+}
+
 declare module "oro:dbus" {
     /**
      * Retrieves global DBus availability metadata.
@@ -18487,6 +19281,123 @@ declare module "oro:did" {
     import { DID } from "oro:did/index";
 }
 
+declare module "oro:document-access" {
+    /**
+     * Lists persisted grants. This does not establish that the provider is reachable.
+     * Other platforms reject with `ENOSYS`.
+     * @returns {Promise<DocumentGrant[]>}
+     */
+    export function list(): Promise<DocumentGrant[]>;
+    /**
+     * Retains an existing user-selected document grant across process death/reboot.
+     * Android must have granted the requested persistable modes; this never opens
+     * a permission prompt or obtains access to an arbitrary URI. At most 128 grants.
+     * @param {string} uri
+     * @param {DocumentGrantOptions} [options]
+     * @returns {Promise<void>}
+     */
+    export function persist(uri: string, options?: DocumentGrantOptions): Promise<void>;
+    /**
+     * Releases retained access. Close open files and stop using the URI first.
+     * @param {string} uri
+     * @param {DocumentGrantOptions} [options]
+     * @returns {Promise<void>}
+     */
+    export function release(uri: string, options?: DocumentGrantOptions): Promise<void>;
+    /**
+     * Queries a selected document or tree root without resolving a filesystem path.
+     * Unknown provider sizes remain null. Queries have a five-second result deadline;
+     * a timed-out provider may still occupy one of the two bounded worker slots.
+     * Providers enforce existing grants. Other platforms reject with ENOSYS.
+     * @param {string} uri
+     * @returns {Promise<DocumentMetadata>}
+     */
+    export function stat(uri: string): Promise<DocumentMetadata>;
+    /**
+     * Lists children within an existing selected tree grant. Entries contain proper
+     * child document URIs. Pages follow provider cursor order, which is not a durable
+     * snapshot: after edits or process loss, restart and reconcile by URI. At most
+     * 128 entries and 1 MiB of metadata per response, with two concurrent queries.
+     * This does not broaden grants or emulate ordinary filesystem path traversal.
+     * Other platforms reject with ENOSYS.
+     * @param {string} uri
+     * @param {DocumentChildrenOptions} [options]
+     * @returns {Promise<DocumentChildren>}
+     */
+    export function readDirectory(uri: string, options?: DocumentChildrenOptions): Promise<DocumentChildren>;
+    namespace _default {
+        export { list };
+        export { persist };
+        export { release };
+        export { stat };
+        export { readDirectory };
+    }
+    export default _default;
+    export type DocumentGrant = {
+        /**
+         * A scoped content URI, never a filesystem path.
+         */
+        uri: string;
+        read: boolean;
+        write: boolean;
+        /**
+         * Unix milliseconds.
+         */
+        persistedAt: number;
+    };
+    export type DocumentGrantOptions = {
+        read?: boolean;
+        write?: boolean;
+    };
+    export type DocumentMetadata = {
+        /**
+         * Provider URI; pass this URI directly to oro:fs.
+         */
+        uri: string;
+        /**
+         * Provider display name; never a filesystem path.
+         */
+        name: string | null;
+        /**
+         * A directory uses vnd.android.document/directory.
+         */
+        mimeType: string | null;
+        /**
+         * Bytes, or null when unknown.
+         */
+        size: number | null;
+        /**
+         * Unix milliseconds, or null when unknown.
+         */
+        lastModified: number | null;
+        /**
+         * Android DocumentsContract provider flags, not an access grant.
+         */
+        flags: number | null;
+    };
+    export type DocumentChildrenOptions = {
+        /**
+         * Cursor offset from 0 through 10000.
+         */
+        offset?: number;
+        /**
+         * Maximum entries, from 1 through 128.
+         */
+        limit?: number;
+    };
+    export type DocumentChildren = {
+        entries: DocumentMetadata[];
+        /**
+         * More entries exist beyond this page.
+         */
+        truncated: boolean;
+        /**
+         * Null at EOF or the 10000 offset limit.
+         */
+        nextOffset: number | null;
+    };
+}
+
 declare module "oro:fetch/fetch" {
     export function Headers(headers: any): void;
     export class Headers {
@@ -18570,6 +19481,32 @@ declare module "oro:fetch" {
     export * from "oro:fetch/index";
     export default fetch;
     import fetch from "oro:fetch/index";
+}
+
+declare module "oro:haptics" {
+    /**
+     * @typedef {object} HapticOptions
+     * @property {boolean} [enabled=false] The application's saved user preference.
+     */
+    /**
+     * Requests one feedback pulse. Android respects system/view preferences and
+     * suppresses pulses less than 100 ms apart. `true` means accepted by the view,
+     * not independently measured physical feedback. Other platforms reject `ENOSYS`.
+     * @param {'selection'|'confirmation'|'rejection'} kind
+     * @param {HapticOptions} [options]
+     * @returns {Promise<boolean>}
+     */
+    export function perform(kind: "selection" | "confirmation" | "rejection", options?: HapticOptions): Promise<boolean>;
+    namespace _default {
+        export { perform };
+    }
+    export default _default;
+    export type HapticOptions = {
+        /**
+         * The application's saved user preference.
+         */
+        enabled?: boolean;
+    };
 }
 
 declare module "oro:hci" {
@@ -19002,6 +19939,141 @@ declare module "oro:latica" {
     export * from "oro:latica/index";
     export default def;
     import def from "oro:latica/index";
+}
+
+declare module "oro:launcher" {
+    /**
+     * @typedef {object} LauncherDestination
+     * @property {string} id Stable opaque reference, 1..128 letters/digits/underscores/hyphens.
+     * @property {string} label User-visible label, 1..80 characters, no control characters.
+     * @property {string} accountRef Opaque account identity; never credentials or tokens.
+     * @property {string} targetRef Opaque saved target identity; never an executable URL or mutation.
+     */
+    /**
+     * @typedef {object} LauncherReceipt
+     * @property {string} receiptId
+     * @property {string} id
+     * @property {string|null} accountRef Null for a compile-time static entry, to be resolved after sign-in.
+     * @property {string} targetRef
+     * @property {boolean} static
+     * @property {number} receivedAt Unix milliseconds. At most 32 receipts, retained for seven days.
+     */
+    /**
+     * @typedef {object} LauncherStatus
+     * @property {boolean} available
+     * @property {boolean} pinSupported
+     * @property {number} maximumPerActivity Android's quota, shared with app-owned shortcuts.
+     * @property {boolean} rateLimited
+     * @property {'resolve-after-authentication'} authorizationBoundary
+     */
+    /**
+     * @typedef {object} LauncherPublicationResult
+     * @property {number} published
+     * @property {boolean} authorizationEstablished False; apps must authenticate and resolve targets.
+     */
+    /**
+     * @typedef {object} LauncherPinResult
+     * @property {boolean} requested
+     * @property {boolean} pinConfirmed False; submission is not user confirmation.
+     */
+    /**
+     * Reads native launcher support without publishing destinations.
+     * @returns {Promise<LauncherStatus>}
+     */
+    export function getStatus(): Promise<LauncherStatus>;
+    /**
+     * Replaces this runtime's dynamic destinations, preserving unrelated app
+     * shortcuts. Removed targets are disabled, including pinned copies. At most
+     * 16 entries and Android's per-activity quota. Must run from a visible window.
+     * @param {LauncherDestination[]} destinations
+     * @returns {Promise<LauncherPublicationResult>}
+     */
+    export function replace(destinations: LauncherDestination[]): Promise<LauncherPublicationResult>;
+    /**
+     * Requests Android's user-controlled pin flow for an existing destination.
+     * Submission is not confirmation that the user pinned the shortcut.
+     * @param {string} id
+     * @returns {Promise<LauncherPinResult>}
+     */
+    export function pin(id: string): Promise<LauncherPinResult>;
+    /**
+     * Reads pending cold/warm launch identities after restoring authorization.
+     * Reads do not consume receipts. Validate current IAM and handle removed
+     * accounts/targets; opening a shortcut must not replay a mutation.
+     * @returns {Promise<LauncherReceipt[]>}
+     */
+    export function getResponses(): Promise<LauncherReceipt[]>;
+    /**
+     * Acknowledges a reconciled or rejected routing receipt. Repeat acknowledgements
+     * are allowed. Call only after authenticated target resolution has completed.
+     * @param {string} receiptId
+     * @returns {Promise<void>}
+     */
+    export function acknowledgeResponse(receiptId: string): Promise<void>;
+    namespace _default {
+        export { getStatus };
+        export { replace };
+        export { pin };
+        export { getResponses };
+        export { acknowledgeResponse };
+    }
+    export default _default;
+    export type LauncherDestination = {
+        /**
+         * Stable opaque reference, 1..128 letters/digits/underscores/hyphens.
+         */
+        id: string;
+        /**
+         * User-visible label, 1..80 characters, no control characters.
+         */
+        label: string;
+        /**
+         * Opaque account identity; never credentials or tokens.
+         */
+        accountRef: string;
+        /**
+         * Opaque saved target identity; never an executable URL or mutation.
+         */
+        targetRef: string;
+    };
+    export type LauncherReceipt = {
+        receiptId: string;
+        id: string;
+        /**
+         * Null for a compile-time static entry, to be resolved after sign-in.
+         */
+        accountRef: string | null;
+        targetRef: string;
+        static: boolean;
+        /**
+         * Unix milliseconds. At most 32 receipts, retained for seven days.
+         */
+        receivedAt: number;
+    };
+    export type LauncherStatus = {
+        available: boolean;
+        pinSupported: boolean;
+        /**
+         * Android's quota, shared with app-owned shortcuts.
+         */
+        maximumPerActivity: number;
+        rateLimited: boolean;
+        authorizationBoundary: "resolve-after-authentication";
+    };
+    export type LauncherPublicationResult = {
+        published: number;
+        /**
+         * False; apps must authenticate and resolve targets.
+         */
+        authorizationEstablished: boolean;
+    };
+    export type LauncherPinResult = {
+        requested: boolean;
+        /**
+         * False; submission is not user confirmation.
+         */
+        pinConfirmed: boolean;
+    };
 }
 
 declare module "oro:mcp/index" {
@@ -19534,6 +20606,36 @@ declare module "oro:module" {
     export { createRequire, Module, builtins, isBuiltin };
 }
 
+declare module "oro:native" {
+    /**
+     * @typedef {object} NativeRequestOptions
+     * @property {AbortSignal} [signal] Abort native work and discard a late result.
+     */
+    /**
+     * Invokes a narrowly named native operation with a JSON object payload. Requests
+     * require a foreground interactive document, expire after 90 seconds and share
+     * native capacity limits. Results are limited to 512 KiB. The extension must
+     * implement its own feature authorization; trusted origin is not server IAM.
+     * Unregistered extensions and other platforms reject with ENOSYS.
+     * @param {string} extension Configured extension name.
+     * @param {string} action Operation name.
+     * @param {object} [payload]
+     * @param {NativeRequestOptions} [options]
+     * @returns {Promise<any>}
+     */
+    export function request(extension: string, action: string, payload?: object, options?: NativeRequestOptions): Promise<any>;
+    namespace _default {
+        export { request };
+    }
+    export default _default;
+    export type NativeRequestOptions = {
+        /**
+         * Abort native work and discard a late result.
+         */
+        signal?: AbortSignal;
+    };
+}
+
 declare module "oro:navigation/navigation" {
     export function setSerializer(serializer: any): void;
 }
@@ -19789,6 +20891,68 @@ declare module "oro:net" {
     export { TCPSocket as Socket, TCPServer as Server };
 }
 
+declare module "oro:network-status" {
+    /**
+     * @typedef {object} NetworkStatus
+     * @property {boolean} available Whether Android permits reading network state.
+     * @property {boolean} connected Whether a default network exists.
+     * @property {boolean} validated Whether Android validated Internet connectivity.
+     * @property {boolean} captivePortal Whether Android detected a captive portal.
+     * @property {boolean} metered Whether the current path is metered.
+     * @property {string[]} transports Reported wifi, cellular, ethernet, bluetooth, or vpn transports.
+     * @property {'online'|'offline'} name Online means the path is validated.
+     */
+    /**
+     * Reads Android's current default path without making a network request.
+     * Other platforms and disabled monitoring reject with `ENOSYS`.
+     * @returns {Promise<NetworkStatus>}
+     */
+    export function getStatus(): Promise<NetworkStatus>;
+    /**
+     * Observes native network path changes. Subscribe before reading `getStatus()`
+     * to obtain an initial snapshot without missing later changes. This function
+     * does not start polling or probe any application server.
+     * @param {(status: NetworkStatus) => void} callback
+     * @returns {() => void} Removes the listener.
+     */
+    export function onChange(callback: (status: NetworkStatus) => void): () => void;
+    namespace _default {
+        export { getStatus };
+        export { onChange };
+    }
+    export default _default;
+    export type NetworkStatus = {
+        /**
+         * Whether Android permits reading network state.
+         */
+        available: boolean;
+        /**
+         * Whether a default network exists.
+         */
+        connected: boolean;
+        /**
+         * Whether Android validated Internet connectivity.
+         */
+        validated: boolean;
+        /**
+         * Whether Android detected a captive portal.
+         */
+        captivePortal: boolean;
+        /**
+         * Whether the current path is metered.
+         */
+        metered: boolean;
+        /**
+         * Reported wifi, cellular, ethernet, bluetooth, or vpn transports.
+         */
+        transports: string[];
+        /**
+         * Online means the path is validated.
+         */
+        name: "online" | "offline";
+    };
+}
+
 declare module "oro:node-esm-loader" {
     export function resolve(specifier: any, _ctx: any, next: any): Promise<any>;
     export default resolve;
@@ -19881,6 +21045,144 @@ declare module "oro:internal/permissions" {
 }
 
 declare module "oro:notification" {
+    /**
+     * @typedef {object} AndroidNotificationChannel
+     * @property {string} id Immutable channel identity; at most 128 characters.
+     * @property {string} name User-visible channel name.
+     * @property {string} [description]
+     * @property {'min'|'low'|'default'|'high'} [importance='default'] Initial default; user settings remain authoritative.
+     * @property {string} [sound='default'] 'default', 'none', or a packaged raw/name resource.
+     * @property {boolean} [vibration=false]
+     * @property {boolean} [badge=true]
+     */
+    /**
+     * @typedef {object} AndroidNotificationChannelStatus
+     * @property {string} id
+     * @property {number} importance Current system importance.
+     * @property {boolean} sound
+     * @property {boolean} vibration
+     * @property {boolean} blocked
+     */
+    /**
+     * @typedef {object} AndroidPublicNotification
+     * @property {string} title Redacted public lock-screen title; at most 160 characters.
+     * @property {string} [body] Redacted public body; at most 512 characters.
+     */
+    /**
+     * @typedef {object} AndroidNotificationAction
+     * @property {string} action Opaque action identity.
+     * @property {string} title User-visible action label.
+     */
+    /**
+     * @typedef {object} AndroidNotificationOptions
+     * @property {string} id Opaque application identity, returned by the existing response ledger.
+     * @property {string} title
+     * @property {string} channel Existing channel identity, or 'default' for the built-in channel.
+     * @property {string} [body]
+     * @property {string} [tag]
+     * @property {string} [category]
+     * @property {boolean} [silent=false]
+     * @property {boolean} [renotify=false]
+     * @property {boolean} [requireInteraction=false]
+     * @property {AndroidNotificationAction[]} [actions] At most three opaque routing actions.
+     * @property {string} [group] Application-defined group key.
+     * @property {boolean} [groupSummary=false] Submit a summary explicitly; summaries are not generated automatically.
+     * @property {'all'|'summary'|'children'} [groupAlertBehavior='all'] Apply consistently to group members.
+     * @property {string} [smallIcon] Packaged drawable resource name.
+     * @property {AndroidPublicNotification} [publicVersion] Redacted replacement; private visibility is always retained.
+     */
+    /**
+     * @typedef {object} AndroidNotificationSubmission
+     * @property {string} id
+     * @property {boolean} submitted OS submission succeeded.
+     * @property {boolean} presentationObserved False; submission is not proof of display, sound or user attention.
+     */
+    /**
+     * Registers at most 32 immutable named Android channels. Reusing an ID with
+     * changed defaults rejects EEXIST; choose a new versioned ID instead. Existing
+     * user changes are preserved. Requires notification capability; does not prompt.
+     * @param {AndroidNotificationChannel[]} channels
+     * @returns {Promise<AndroidNotificationChannelStatus[]>}
+     */
+    export function configureChannels(channels: AndroidNotificationChannel[]): Promise<AndroidNotificationChannelStatus[]>;
+    /**
+     * Submits an Android notification with channel/group/public-version policy.
+     * Reads and acknowledgement use getResponses()/acknowledgeResponse(). This
+     * function does not establish account authority or deduplicate server events.
+     * Other platforms reject ENOSYS. Compiled native executors can use the same
+     * NativeNotifications.submit(Context, JSONObject) implementation without a WebView.
+     * @param {AndroidNotificationOptions} options
+     * @returns {Promise<AndroidNotificationSubmission>}
+     */
+    export function submit(options: AndroidNotificationOptions): Promise<AndroidNotificationSubmission>;
+    /**
+     * @typedef {object} AndroidNotificationCancelOptions
+     * @property {string} [tag=''] Exact tag used for submission.
+     */
+    /**
+     * Cancels an Android notification by its exact application ID/tag. Missing
+     * notifications are allowed. It does not create a dismissal receipt, revoke
+     * server state or acknowledge existing responses. Compiled receivers can use
+     * NativeNotifications.cancel(Context, id, tag) without an Activity or WebView.
+     * Other platforms reject with ENOSYS.
+     * @param {string} id
+     * @param {AndroidNotificationCancelOptions} [options]
+     * @returns {Promise<void>}
+     */
+    export function cancel(id: string, options?: AndroidNotificationCancelOptions): Promise<void>;
+    /**
+     * @typedef {object} NotificationResponseReceipt
+     * @property {string} receiptId Opaque identity used to acknowledge this receipt.
+     * @property {string} id Application notification identity.
+     * @property {string} action Action identity, `default`, or `dismiss`.
+     * @property {number} receivedAt Unix timestamp in milliseconds.
+     */
+    /**
+     * Reads Android notification responses retained across process restarts. Call
+     * after restoring authorization, resolve IDs against authorized application
+     * state, then acknowledge handled or obsolete receipts. Reading does not remove
+     * receipts. At most 64 responses are retained for seven days. Notification
+     * content and arbitrary `data` are not persisted. Other platforms reject with
+     * `ENOSYS`. A receipt does not establish authorization or verified presentation.
+     * @returns {Promise<NotificationResponseReceipt[]>}
+     */
+    export function getResponses(): Promise<NotificationResponseReceipt[]>;
+    /**
+     * Removes an Android response after application reconciliation. Repeated
+     * acknowledgements are allowed. Other platforms reject with `ENOSYS`.
+     * @param {string} receiptId Opaque identity returned by `getResponses()`.
+     * @returns {Promise<void>}
+     */
+    export function acknowledgeResponse(receiptId: string): Promise<void>;
+    /**
+     * @typedef {object} NotificationDeliveryStatus
+     * @property {boolean} enabled Application notifications and runtime capability are enabled.
+     * @property {string} channelId Native channel identity.
+     * @property {boolean} exists
+     * @property {boolean} blocked Channel importance is disabled.
+     * @property {number|null} importance Android importance, or null for a missing channel.
+     * @property {boolean} sound Whether the channel has a sound configured.
+     * @property {boolean} vibration Whether channel vibration is enabled.
+     * @property {boolean} canSubmit Current permission/channel state permits submission.
+     * @property {'submission-only'} deliveryBoundary Submission never proves presentation or delivery.
+     * @property {false} pushAvailable No unattended push transport is configured by this runtime.
+     */
+    /**
+     * Reads Android application/channel policy without asking for consent. Refresh
+     * after resume because the user can change it in Settings. Other platforms
+     * reject with `ENOSYS`; a true `canSubmit` does not establish server authorization.
+     * @param {string} [channel='default'] Native channel ID, or the application's default.
+     * @returns {Promise<NotificationDeliveryStatus>}
+     */
+    export function getDeliveryStatus(channel?: string): Promise<NotificationDeliveryStatus>;
+    /**
+     * Opens this Android application's channel controls in system Settings. Call
+     * from a user action. This never changes sound, DND, permission, or importance.
+     * Other platforms reject with `ENOSYS`.
+     * @param {string} [channel='default']
+     * @returns {Promise<void>}
+     */
+    export function openChannelSettings(channel?: string): Promise<void>;
     /**
      * Show a notification. Creates a `Notification` instance and displays
      * it to the user.
@@ -20290,6 +21592,172 @@ declare module "oro:notification" {
         #private;
     }
     export default Notification;
+    export type AndroidNotificationChannel = {
+        /**
+         * Immutable channel identity; at most 128 characters.
+         */
+        id: string;
+        /**
+         * User-visible channel name.
+         */
+        name: string;
+        description?: string;
+        /**
+         * Initial default; user settings remain authoritative.
+         */
+        importance?: "min" | "low" | "default" | "high";
+        /**
+         * 'default', 'none', or a packaged raw/name resource.
+         */
+        sound?: string;
+        vibration?: boolean;
+        badge?: boolean;
+    };
+    export type AndroidNotificationChannelStatus = {
+        id: string;
+        /**
+         * Current system importance.
+         */
+        importance: number;
+        sound: boolean;
+        vibration: boolean;
+        blocked: boolean;
+    };
+    export type AndroidPublicNotification = {
+        /**
+         * Redacted public lock-screen title; at most 160 characters.
+         */
+        title: string;
+        /**
+         * Redacted public body; at most 512 characters.
+         */
+        body?: string;
+    };
+    export type AndroidNotificationAction = {
+        /**
+         * Opaque action identity.
+         */
+        action: string;
+        /**
+         * User-visible action label.
+         */
+        title: string;
+    };
+    export type AndroidNotificationOptions = {
+        /**
+         * Opaque application identity, returned by the existing response ledger.
+         */
+        id: string;
+        title: string;
+        /**
+         * Existing channel identity, or 'default' for the built-in channel.
+         */
+        channel: string;
+        body?: string;
+        tag?: string;
+        category?: string;
+        silent?: boolean;
+        renotify?: boolean;
+        requireInteraction?: boolean;
+        /**
+         * At most three opaque routing actions.
+         */
+        actions?: AndroidNotificationAction[];
+        /**
+         * Application-defined group key.
+         */
+        group?: string;
+        /**
+         * Submit a summary explicitly; summaries are not generated automatically.
+         */
+        groupSummary?: boolean;
+        /**
+         * Apply consistently to group members.
+         */
+        groupAlertBehavior?: "all" | "summary" | "children";
+        /**
+         * Packaged drawable resource name.
+         */
+        smallIcon?: string;
+        /**
+         * Redacted replacement; private visibility is always retained.
+         */
+        publicVersion?: AndroidPublicNotification;
+    };
+    export type AndroidNotificationSubmission = {
+        id: string;
+        /**
+         * OS submission succeeded.
+         */
+        submitted: boolean;
+        /**
+         * False; submission is not proof of display, sound or user attention.
+         */
+        presentationObserved: boolean;
+    };
+    export type AndroidNotificationCancelOptions = {
+        /**
+         * Exact tag used for submission.
+         */
+        tag?: string;
+    };
+    export type NotificationResponseReceipt = {
+        /**
+         * Opaque identity used to acknowledge this receipt.
+         */
+        receiptId: string;
+        /**
+         * Application notification identity.
+         */
+        id: string;
+        /**
+         * Action identity, `default`, or `dismiss`.
+         */
+        action: string;
+        /**
+         * Unix timestamp in milliseconds.
+         */
+        receivedAt: number;
+    };
+    export type NotificationDeliveryStatus = {
+        /**
+         * Application notifications and runtime capability are enabled.
+         */
+        enabled: boolean;
+        /**
+         * Native channel identity.
+         */
+        channelId: string;
+        exists: boolean;
+        /**
+         * Channel importance is disabled.
+         */
+        blocked: boolean;
+        /**
+         * Android importance, or null for a missing channel.
+         */
+        importance: number | null;
+        /**
+         * Whether the channel has a sound configured.
+         */
+        sound: boolean;
+        /**
+         * Whether channel vibration is enabled.
+         */
+        vibration: boolean;
+        /**
+         * Current permission/channel state permits submission.
+         */
+        canSubmit: boolean;
+        /**
+         * Submission never proves presentation or delivery.
+         */
+        deliveryBoundary: "submission-only";
+        /**
+         * No unattended push transport is configured by this runtime.
+         */
+        pushAvailable: false;
+    };
     import { Enumeration } from "oro:enumeration";
     import URL from "oro:url";
 }
@@ -20350,7 +21818,46 @@ declare module "oro:secure-storage" {
      * @returns {Promise<string[]>}
      */
     export function keys(options?: SecureStorageOptions): Promise<string[]>;
+    /**
+     * @typedef {object} SecureStorageStatus
+     * @property {boolean} available Whether the Android Keystore metadata query succeeded.
+     * @property {boolean} keyPresent Whether an existing runtime key was found.
+     * @property {'unknown'|'not-created'|'key-missing'|'software'|'hardware'|'tee'|'strongbox'} protection
+     * @property {boolean} requiresRecovery Encrypted values exist without their key.
+     * @property {boolean|null} userAuthenticationRequired Existing key policy, or null when unknown.
+     * @property {'not-probed'} readability No encrypted values were decrypted by this inspection.
+     */
+    /**
+     * Inspects existing Android Keystore protection without creating a key, exporting
+     * key material, or decrypting application values. A present key does not prove
+     * every stored value is readable. Other platforms reject with ENOSYS.
+     * @returns {Promise<SecureStorageStatus>}
+     */
+    export function getStatus(): Promise<SecureStorageStatus>;
     export default api;
+    export type SecureStorageStatus = {
+        /**
+         * Whether the Android Keystore metadata query succeeded.
+         */
+        available: boolean;
+        /**
+         * Whether an existing runtime key was found.
+         */
+        keyPresent: boolean;
+        protection: "unknown" | "not-created" | "key-missing" | "software" | "hardware" | "tee" | "strongbox";
+        /**
+         * Encrypted values exist without their key.
+         */
+        requiresRecovery: boolean;
+        /**
+         * Existing key policy, or null when unknown.
+         */
+        userAuthenticationRequired: boolean | null;
+        /**
+         * No encrypted values were decrypted by this inspection.
+         */
+        readability: "not-probed";
+    };
     export type SecureStorageOptions = {
         /**
          * Origin string identifying the storage namespace.
@@ -20369,6 +21876,7 @@ declare module "oro:secure-storage" {
         removeItem: typeof removeItem;
         clear: typeof clear;
         keys: typeof keys;
+        getStatus: typeof getStatus;
     };
     import { Buffer } from "oro:buffer";
     /**
@@ -20378,6 +21886,7 @@ declare module "oro:secure-storage" {
      * @property {typeof removeItem} removeItem
      * @property {typeof clear} clear
      * @property {typeof keys} keys
+     * @property {typeof getStatus} getStatus
      */
     /** @type {SecureStorageModule} */
     const api: SecureStorageModule;
@@ -21115,7 +22624,11 @@ declare module "oro:tls" {
      *
      * This updates the process-wide `webview_tls_pins` configuration and refreshes
      * all active window/bridge configs so platform WebViews immediately see the
-     * new pins. Pins use the same format as the static `webview_tls_pins` config:
+     * new pins. On Android, approval is authenticated in backup-excluded storage and
+     * shared with compiled `NativeHttps` executors across cold starts. Changes close
+     * active native requests. Clearing pins restores platform trust; explicit native
+     * authority revocation rejects all certificates for that authority.
+     * Pins use the same format as the static `webview_tls_pins` config:
      *
      *   <host> sha256/<base64>
      *
@@ -22383,6 +23896,160 @@ declare module "oro:application/update" {
      */
     /** @type {UpdateModule} */
     const api: UpdateModule;
+}
+
+declare module "oro:background/deferred" {
+    /**
+     * @typedef {object} DeferredReadOptions
+     * @property {string} id Stable task identity, 1..128 letters/digits/underscores/hyphens.
+     * @property {string} kind Name registered by compiled native app code.
+     * @property {string} authorityRef Opaque configured server identity, never a URL or credential.
+     * @property {string} accountRef Opaque account identity; authorization is rechecked at execution.
+     * @property {string} targetRef Opaque resource identity.
+     * @property {string} operationRef Opaque operation identity for read-only status/reconciliation.
+     * @property {'any'|'unmetered'} [network='unmetered'] Android scheduling constraint, not server availability.
+     * @property {boolean} [requiresCharging=false]
+     * @property {boolean} [requiresBatteryNotLow=true]
+     * @property {number} [delayMs=0] Minimum delay, at most seven days. Timing is controlled by Android.
+     */
+    /**
+     * @typedef {DeferredReadOptions & { schema: number, generation: string, jobId: number, phase: string, attempts: number, updatedAt: number }} DeferredReadState
+     */
+    /**
+     * @typedef {object} DeferredReadSupport
+     * @property {boolean} available
+     * @property {string[]} registeredKinds
+     * @property {number} maximumTasks 32, including terminal records until explicitly released.
+     * @property {number} maximumAttempts 5 with Android exponential backoff starting at 30 seconds.
+     * @property {boolean} readOnly True. Queued writes need a separate approved/idempotent application executor contract.
+     * @property {boolean} queuedWrites False.
+     * @property {boolean} backgroundJavaScript False.
+     * @property {boolean} survivesForceStop False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
+     */
+    /** @returns {Promise<DeferredReadSupport>} */
+    export function getSupport(): Promise<DeferredReadSupport>;
+    /**
+     * Schedules an authorized native read/reconciliation. Reusing the same task ID
+     * with identical options returns its current state, without duplicate delivery.
+     * Changing an existing task returns EEXIST. Each attempt has a 60-second result
+     * deadline; a blocked native executor can still occupy the single worker.
+     * @param {DeferredReadOptions} options
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function enqueue(options: DeferredReadOptions): Promise<DeferredReadState>;
+    /** @returns {Promise<DeferredReadState[]>} */
+    export function list(): Promise<DeferredReadState[]>;
+    /**
+     * Reads retained OS scheduling state and the durable last outcome. Interrupted
+     * state is explicit and is never silently rescheduled.
+     * @param {string} id
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function status(id: string): Promise<DeferredReadState>;
+    /**
+     * Explicitly resumes an interrupted task after app reconciliation. Preserves
+     * the five-attempt budget and replaces its generation, so obsolete callbacks
+     * cannot complete the resumed task. The native executor reauthorizes it again.
+     * @param {string} id
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function resume(id: string): Promise<DeferredReadState>;
+    /**
+     * Cancels scheduling and signals a running native executor. An already-running
+     * read can finish; its result cannot complete a cancelled or replaced task.
+     * @param {string} id
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function cancel(id: string): Promise<DeferredReadState>;
+    /**
+     * Cancels and releases a retained task record. Preserve any required application
+     * receipt before releasing. A later enqueue of this ID starts a new generation.
+     * @param {string} id
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function release(id: string): Promise<DeferredReadState>;
+    namespace _default {
+        export { getSupport };
+        export { enqueue };
+        export { list };
+        export { status };
+        export { resume };
+        export { cancel };
+        export { release };
+    }
+    export default _default;
+    export type DeferredReadOptions = {
+        /**
+         * Stable task identity, 1..128 letters/digits/underscores/hyphens.
+         */
+        id: string;
+        /**
+         * Name registered by compiled native app code.
+         */
+        kind: string;
+        /**
+         * Opaque configured server identity, never a URL or credential.
+         */
+        authorityRef: string;
+        /**
+         * Opaque account identity; authorization is rechecked at execution.
+         */
+        accountRef: string;
+        /**
+         * Opaque resource identity.
+         */
+        targetRef: string;
+        /**
+         * Opaque operation identity for read-only status/reconciliation.
+         */
+        operationRef: string;
+        /**
+         * Android scheduling constraint, not server availability.
+         */
+        network?: "any" | "unmetered";
+        requiresCharging?: boolean;
+        requiresBatteryNotLow?: boolean;
+        /**
+         * Minimum delay, at most seven days. Timing is controlled by Android.
+         */
+        delayMs?: number;
+    };
+    export type DeferredReadState = DeferredReadOptions & {
+        schema: number;
+        generation: string;
+        jobId: number;
+        phase: string;
+        attempts: number;
+        updatedAt: number;
+    };
+    export type DeferredReadSupport = {
+        available: boolean;
+        registeredKinds: string[];
+        /**
+         * 32, including terminal records until explicitly released.
+         */
+        maximumTasks: number;
+        /**
+         * 5 with Android exponential backoff starting at 30 seconds.
+         */
+        maximumAttempts: number;
+        /**
+         * True. Queued writes need a separate approved/idempotent application executor contract.
+         */
+        readOnly: boolean;
+        /**
+         * False.
+         */
+        queuedWrites: boolean;
+        /**
+         * False.
+         */
+        backgroundJavaScript: boolean;
+        /**
+         * False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
+         */
+        survivesForceStop: boolean;
+    };
 }
 
 declare module "oro:child_process/worker" {
@@ -24262,6 +25929,77 @@ declare module "oro:vm/worker" {
 
 declare module "oro:vm/world" {
     export {};
+}
+
+declare module "oro:window/appearance" {
+    /**
+     * Observes changes after `ApplicationWindow.setSystemAppearance()` selects an
+     * inset owner. An `end` event also covers interrupted platform IME animations;
+     * use the reported inset values as the current state, not the target fraction.
+     * @param {(insets: WindowInsets) => void} callback
+     * @returns {() => void} Unsubscribe.
+     */
+    export function onInsetsChange(callback: (insets: WindowInsets) => void): () => void;
+    /**
+     * Observes the runtime activity's Back callback. Progress requires Android 14+.
+     * Start/progress/cancel never navigate; commit follows native history/activity
+     * handling. This observation does not intercept Back or replace an application's
+     * modal/drawer dismissal priority. Custom native callbacks must forward events.
+     * @param {(gesture: BackGesture) => void} callback
+     * @returns {() => void} Unsubscribe.
+     */
+    export function onBackGesture(callback: (gesture: BackGesture) => void): () => void;
+    namespace _default {
+        export { onInsetsChange };
+        export { onBackGesture };
+    }
+    export default _default;
+    export type WindowInsets = {
+        /**
+         * Which layer consumes the insets.
+         */
+        ownership: "native" | "web";
+        /**
+         * IME animation or ordinary inset change.
+         */
+        phase: "change" | "start" | "progress" | "end";
+        /**
+         * Animation fraction, bounded to [0, 1].
+         */
+        progress: number;
+        /**
+         * CSS pixels, including cutouts.
+         */
+        left: number;
+        /**
+         * CSS pixels, including status bars.
+         */
+        top: number;
+        /**
+         * CSS pixels, including cutouts.
+         */
+        right: number;
+        /**
+         * Navigation-bar CSS pixels.
+         */
+        bottom: number;
+        /**
+         * Keyboard bottom inset in CSS pixels.
+         */
+        imeBottom: number;
+        imeVisible: boolean;
+    };
+    export type BackGesture = {
+        phase: "start" | "progress" | "cancel" | "commit";
+        /**
+         * Gesture fraction, bounded to [0, 1].
+         */
+        progress: number;
+        /**
+         * Android swipe edge; null for non-gesture Back.
+         */
+        edge: number | null;
+    };
 }
 type MenuItemSelection = {
   title: string

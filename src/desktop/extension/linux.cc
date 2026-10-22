@@ -96,9 +96,12 @@ extern "C" {
     }
 
     auto context = getSharedMainContext();
-    g_main_context_invoke_full(
-      context,
-      G_PRIORITY_DEFAULT,
+    // invoke_full may execute inline on a worker when the context is idle.
+    // JSC results must always be delivered by WebKit's owning main context.
+    auto source = g_idle_source_new();
+    g_source_set_priority(source, G_PRIORITY_DEFAULT);
+    g_source_set_callback(
+      source,
       +[](gpointer userData) -> gboolean {
         auto callback = reinterpret_cast<Function<void()>*>(userData);
         (*callback)();
@@ -109,6 +112,8 @@ extern "C" {
         delete reinterpret_cast<Function<void()>*>(userData);
       }
     );
+    g_source_attach(source, context);
+    g_source_unref(source);
     g_main_context_unref(context);
   }
 
@@ -120,7 +125,7 @@ extern "C" {
 
     if (sharedBridge == nullptr) {
       sharedBridge = app->runtime.bridgeManager.get(0, {});
-      sharedBridge->userConfig = getUserConfig();
+      sharedBridge->userConfig = app->runtime.userConfig;
       sharedBridge->dispatchHandler = [](auto callback) { callback(); };
       sharedBridge->dispatchRouterCallbacksWithBridge = true;
       sharedBridge->evaluateJavaScriptHandler = [] (const auto source) {
@@ -229,6 +234,13 @@ extern "C" {
     if (message->get("__sync__") == "true") {
       auto bridge = getSharedBridge(context);
       auto state = std::make_shared<SyncRouteState>();
+      const auto operation = message->name;
+      if (oro::runtime::env::has("ORO_DEBUG_DISPATCH")) {
+        debug("Linux sync IPC: dedicated=%d bridgeDispatch=%d alive=%d",
+          bridge->getRuntime()->loop.options.dedicatedThread,
+          bridge->dispatchRouterCallbacksWithBridge,
+          bridge->getRuntime()->loop.alive());
+      }
 
       const auto routed = bridge->route(
         message->str(),
@@ -262,7 +274,7 @@ extern "C" {
             {"err", JSON::Object::Entries {
               {"message", "Desktop Linux extension IPC timed out"},
               {"type", "TimeoutError"},
-              {"source", source}
+              {"source", operation}
             }}
           };
 
@@ -298,7 +310,7 @@ extern "C" {
         {"err", JSON::Object::Entries {
           {"message", "Not found"},
           {"type", "NotFoundError"},
-          {"source", source}
+          {"source", operation}
         }}
       };
 
@@ -449,10 +461,19 @@ extern "C" {
     features.useIroh = false;
 #endif
 
-    auto userConfig = getUserConfig();
-    auto cwd = userConfig["web-process-extension_cwd"];
+    auto userConfig = sharedContext.config.bytes && sharedContext.config.size > 0
+      ? oro::runtime::config::parseUserConfigSource(
+        String(sharedContext.config.bytes, sharedContext.config.size),
+        sharedContext.config.format == static_cast<int>(oro::runtime::config::UserConfigFormat::Toml)
+          ? oro::runtime::config::UserConfigFormat::Toml
+          : oro::runtime::config::UserConfigFormat::Ini
+      )
+      : getUserConfig();
+    const auto cwd = userConfig["web-process-extension_cwd"];
 
-    if (cwd.size() > 0) {
+    // The core archive is also linked by WebKit's helper executable. Its
+    // executable directory is not the application's resource directory.
+    if (!cwd.empty() && oro::runtime::filesystem::Resource::setResourcesPath(cwd)) {
       setcwd(cwd);
       uv_chdir(cwd.c_str());
     }

@@ -1,0 +1,22 @@
+.TH ORO-HAPTICS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:haptics \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:haptics'
+.fi
+.SH DESCRIPTION
+.PP
+Optional Android semantic feedback. Applications must retain a user setting and pass it explicitly; system feedback preferences remain authoritative.
+.SH REFERENCE
+.TP
+\fBperform(kind, options)\fR
+Requests one feedback pulse. Android respects system/view preferences and suppresses pulses less than 100 ms apart. `true` means accepted by the view, not independently measured physical feedback. Other platforms reject `ENOSYS`.
+\fBParameters:\fR
+.br
+\fIkind\fR (\&'selection' \\| 'confirmation' \\| 'rejection'; required)
+.br
+\fIoptions\fR (HapticOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<boolean>\fR

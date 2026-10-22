@@ -425,7 +425,7 @@ export async function createWindow (opts) {
     maxHeight: opts.maxHeight ?? '100%',
     // @ts-ignore
     debug: opts.debug === true, // internal
-    userScript: encodeURIComponent(opts.userScript ?? ''),
+    userScript: opts.userScript ?? '',
     __runtime_primordial_overrides__: runtimePrimordialOverrides,
     config
   }

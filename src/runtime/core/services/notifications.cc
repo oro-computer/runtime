@@ -507,6 +507,10 @@ namespace oro::runtime::core::services {
 
     return true;
   #elif ORO_RUNTIME_PLATFORM_ANDROID
+    if (!this->dispatcher.context.android.jvm || !this->dispatcher.context.android.activity) {
+      callback(ShowResult { "Notification activity is unavailable", options.id });
+      return false;
+    }
     const auto attachment = android::JNIEnvironmentAttachment(this->dispatcher.context.android.jvm);
     // `activity.showNotification(
     //    id,
@@ -524,7 +528,7 @@ namespace oro::runtime::core::services {
     //    requireInteraction
     //    renotify
     // )`
-    const auto success = CallClassMethodFromAndroidEnvironment(
+    auto success = CallClassMethodFromAndroidEnvironment(
       attachment.env,
       Boolean,
       this->dispatcher.context.android.activity,
@@ -545,23 +549,31 @@ namespace oro::runtime::core::services {
         "Z" // requireInteraction
         "Z" // renotify
       ")Z",
-      attachment.env->NewStringUTF(options.id.c_str()),
-      attachment.env->NewStringUTF(options.title.c_str()),
-      attachment.env->NewStringUTF(options.body.c_str()),
-      attachment.env->NewStringUTF(options.tag.c_str()),
-      attachment.env->NewStringUTF(options.channel.c_str()),
-      attachment.env->NewStringUTF(options.category.c_str()),
+      android::StringWrap(attachment.env, options.id).j_str(),
+      android::StringWrap(attachment.env, options.title).j_str(),
+      android::StringWrap(attachment.env, options.body).j_str(),
+      android::StringWrap(attachment.env, options.tag).j_str(),
+      android::StringWrap(attachment.env, options.channel).j_str(),
+      android::StringWrap(attachment.env, options.category).j_str(),
       options.silent,
-      attachment.env->NewStringUTF(options.icon.c_str()),
-      attachment.env->NewStringUTF(options.image.c_str()),
-      attachment.env->NewStringUTF(options.vibrate.c_str()),
-      attachment.env->NewStringUTF(options.actions.c_str()),
-      attachment.env->NewStringUTF(options.data.c_str()),
+      android::StringWrap(attachment.env, options.icon).j_str(),
+      android::StringWrap(attachment.env, options.image).j_str(),
+      android::StringWrap(attachment.env, options.vibrate).j_str(),
+      android::StringWrap(attachment.env, options.actions).j_str(),
+      android::StringWrap(attachment.env, options.data).j_str(),
       options.requireInteraction,
       options.renotify
     );
+    if (attachment.env->ExceptionCheck()) {
+      attachment.env->ExceptionClear();
+      success = false;
+    }
 
     this->loop.dispatch([=, this] () {
+      if (!success) {
+        callback(ShowResult { "Notification could not be submitted", options.id });
+        return;
+      }
       callback(ShowResult { "", options.id });
       this->notificationPresentedObservers.dispatch(JSON::Object::Entries {
         {"id", options.id}
@@ -590,12 +602,13 @@ namespace oro::runtime::core::services {
     this->notificationResponseObservers.dispatch(json);
     return true;
   #elif ORO_RUNTIME_PLATFORM_ANDROID
+    if (!this->dispatcher.context.android.jvm || !this->dispatcher.context.android.activity) return false;
     const auto attachment = android::JNIEnvironmentAttachment(this->dispatcher.context.android.jvm);
     // `activity.showNotification(
     //    id,
     //    tag,
     // )`
-    const auto success = CallClassMethodFromAndroidEnvironment(
+    auto success = CallClassMethodFromAndroidEnvironment(
       attachment.env,
       Boolean,
       this->dispatcher.context.android.activity,
@@ -604,11 +617,16 @@ namespace oro::runtime::core::services {
         "Ljava/lang/String;" // id
         "Ljava/lang/String;" // tag
       ")Z",
-      attachment.env->NewStringUTF(notification.identifier.c_str()),
-      attachment.env->NewStringUTF(notification.tag.c_str())
+      android::StringWrap(attachment.env, notification.identifier).j_str(),
+      android::StringWrap(attachment.env, notification.tag).j_str()
     );
+    if (attachment.env->ExceptionCheck()) {
+      attachment.env->ExceptionClear();
+      success = false;
+    }
 
     this->loop.dispatch([=, this] () {
+      if (!success) return;
       const auto json = JSON::Object::Entries {
         {"id", notification.identifier},
         {"action", "dismiss"}

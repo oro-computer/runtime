@@ -914,15 +914,16 @@ class RuntimeQueuedResponses extends ConcurrentQueue {
 
   dispatch (id, seq, params, headers, options = null) {
     const workerId = options?.workerId || null
+    const useExtensionIPCIfAvailable = options?.useExtensionIPCIfAvailable === true
     const request = this.pendingDispatch.then(() => {
-      return this.dispatchOne(id, seq, params, headers, workerId)
+      return this.dispatchOne(id, seq, params, headers, workerId, useExtensionIPCIfAvailable)
     })
     const pending = request.catch(() => {})
     this.pendingDispatch = pending
     return request
   }
 
-  async dispatchOne (id, seq, params, headers, workerId) {
+  async dispatchOne (id, seq, params, headers, workerId, useExtensionIPCIfAvailable) {
     if (typeof params !== 'object') {
       params = {}
     }
@@ -930,8 +931,8 @@ class RuntimeQueuedResponses extends ConcurrentQueue {
     // Chromium documents cannot use a binary responseType with synchronous XHR.
     // WebKit reads synchronously because custom-scheme async XHR can stall.
     const result = /android|win32/i.test(ipc.primordials.platform)
-      ? await ipc.request('queuedResponse', { id }, { responseType: 'arraybuffer' })
-      : ipc.sendSync('queuedResponse', { id }, { responseType: 'arraybuffer' })
+      ? await ipc.request('queuedResponse', { id }, { responseType: 'arraybuffer', useExtensionIPCIfAvailable })
+      : ipc.sendSync('queuedResponse', { id }, { responseType: 'arraybuffer', useExtensionIPCIfAvailable })
 
     const worker = workerId
       ? RuntimeWorker.pool.get(workerId)?.deref?.()

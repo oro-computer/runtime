@@ -55,6 +55,12 @@ const char* oro_runtime_init_get_dev_host (void);
  */
 int oro_runtime_init_get_dev_port (void);
 
+/** SHA-256 of the packaged Android asset manifest, or empty for older embedders. */
+const char* oro_runtime_init_get_asset_manifest_sha256 (void);
+
+/** Version of the CLI that generated the embedded application, or empty. */
+const char* oro_runtime_init_get_cli_version (void);
+
 /**
  * Known user configuration formats returned by
  * `oro_runtime_init_get_user_config_format()`.

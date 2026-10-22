@@ -215,7 +215,7 @@ namespace {
         std::vector<std::string> missingPermissions;
 
         for (const auto& perm : requiredPermissions) {
-          jstring permString = attachment.env->NewStringUTF(perm.c_str());
+          jstring permString = oro::runtime::android::StringWrap(attachment.env, perm).j_str();
           const auto granted = CallClassMethodFromAndroidEnvironment(
             attachment.env,
             Boolean,
@@ -238,7 +238,7 @@ namespace {
             nullptr
           );
           for (jsize i = 0; i < (jsize) missingPermissions.size(); ++i) {
-            jstring permString = attachment.env->NewStringUTF(missingPermissions[i].c_str());
+            jstring permString = oro::runtime::android::StringWrap(attachment.env, missingPermissions[i]).j_str();
             attachment.env->SetObjectArrayElement(permissionsArray, i, permString);
             attachment.env->DeleteLocalRef(permString);
           }
@@ -294,7 +294,7 @@ namespace {
         jServices = attachment.env->NewObjectArray((jsize) serviceSet.size(), jstr, nullptr);
         jsize index = 0;
         for (const auto& svcId : serviceSet) {
-          jstring js = attachment.env->NewStringUTF(svcId.c_str());
+          jstring js = oro::runtime::android::StringWrap(attachment.env, svcId).j_str();
           attachment.env->SetObjectArrayElement(jServices, index++, js);
           attachment.env->DeleteLocalRef(js);
         }
@@ -362,7 +362,7 @@ namespace {
 	        JSON::Object json = JSON::Object::Entries {{"err", JSON::Object::Entries {{"type", "NotSupportedError"}, {"message", "BLE.connect missing"}}}};
 	        return cb(seq, json, oro::runtime::QueuedResponse{});
 	      }
-      jstring jAddr = attachment.env->NewStringUTF(deviceId.c_str());
+      jstring jAddr = oro::runtime::android::StringWrap(attachment.env, deviceId).j_str();
       pendingConnect[deviceId] = { seq, cb };
       attachment.env->CallStaticVoidMethod(c, m, svc.context.getRuntime()->android.activity, jAddr);
       attachment.env->DeleteLocalRef(jAddr);
@@ -375,7 +375,7 @@ namespace {
         if (c) {
           jmethodID m = attachment.env->GetStaticMethodID(c, "disconnect", "(Landroid/content/Context;Ljava/lang/String;)V");
           if (m) {
-            jstring jAddr = attachment.env->NewStringUTF(deviceId.c_str());
+            jstring jAddr = oro::runtime::android::StringWrap(attachment.env, deviceId).j_str();
             attachment.env->CallStaticVoidMethod(c, m, svc.context.getRuntime()->android.activity, jAddr);
             attachment.env->DeleteLocalRef(jAddr);
           }
@@ -430,7 +430,7 @@ namespace {
       jmethodID mGet = attachment.env->GetStaticMethodID(c, "getServices", "(Landroid/content/Context;Ljava/lang/String;)[Ljava/lang/String;");
 	      jmethodID mDisc = attachment.env->GetStaticMethodID(c, "discoverServices", "(Landroid/content/Context;Ljava/lang/String;)V");
 	      if (!mGet || !mDisc) { attachment.env->DeleteLocalRef(c); cb(seq, JSON::Object::Entries {{"err", JSON::Object::Entries {{"type", "NotSupportedError"}, {"message", "BLE.getServices/discoverServices missing"}}}}, oro::runtime::QueuedResponse{}); return; }
-      jstring jAddr = attachment.env->NewStringUTF(deviceId.c_str());
+      jstring jAddr = oro::runtime::android::StringWrap(attachment.env, deviceId).j_str();
       const bool hasFilter = !serviceFilter.empty();
       String normalizedFilterString;
       if (hasFilter) {
@@ -525,8 +525,8 @@ namespace {
       jmethodID mGetFlags = attachment.env->GetStaticMethodID(c, "getCharacteristicPropertiesFlags", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)[I");
 	      jmethodID mReq = attachment.env->GetStaticMethodID(c, "requestCharacteristics", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)V");
 	      if (!mGet || !mReq) { attachment.env->DeleteLocalRef(c); cb(seq, JSON::Object::Entries {{"err", JSON::Object::Entries {{"type", "NotSupportedError"}, {"message", "BLE.get/requestCharacteristics missing"}}}}, oro::runtime::QueuedResponse{}); return; }
-      jstring jAddr = attachment.env->NewStringUTF(deviceId.c_str());
-      jstring jSvc = attachment.env->NewStringUTF(service.c_str());
+      jstring jAddr = oro::runtime::android::StringWrap(attachment.env, deviceId).j_str();
+      jstring jSvc = oro::runtime::android::StringWrap(attachment.env, service).j_str();
       jobjectArray arr = (jobjectArray) attachment.env->CallStaticObjectMethod(c, mGet, svc.context.getRuntime()->android.activity, jAddr, jSvc);
       if (arr) {
         size_t n = (size_t) attachment.env->GetArrayLength(arr);
@@ -597,9 +597,9 @@ namespace {
 	      if (!c) { cb(seq, JSON::Object::Entries {{"err", JSON::Object::Entries {{"type", "NotSupportedError"}, {"message", "BLE class missing"}}}}, oro::runtime::QueuedResponse{}); return; }
 	      jmethodID m = attachment.env->GetStaticMethodID(c, "readCharacteristic", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
 	      if (!m) { attachment.env->DeleteLocalRef(c); cb(seq, JSON::Object::Entries {{"err", JSON::Object::Entries {{"type", "NotSupportedError"}, {"message", "BLE.readCharacteristic missing"}}}}, oro::runtime::QueuedResponse{}); return; }
-      jstring jAddr = attachment.env->NewStringUTF(deviceId.c_str());
-      jstring jSvc = attachment.env->NewStringUTF(service.c_str());
-      jstring jChr = attachment.env->NewStringUTF(characteristic.c_str());
+      jstring jAddr = oro::runtime::android::StringWrap(attachment.env, deviceId).j_str();
+      jstring jSvc = oro::runtime::android::StringWrap(attachment.env, service).j_str();
+      jstring jChr = oro::runtime::android::StringWrap(attachment.env, characteristic).j_str();
       const std::string key = deviceId + "|" + service + "|" + characteristic;
       pendingRead[key] = { seq, cb };
       attachment.env->CallStaticVoidMethod(c, m, svc.context.getRuntime()->android.activity, jAddr, jSvc, jChr);
@@ -615,9 +615,9 @@ namespace {
 	      if (!c) { cb(seq, JSON::Object::Entries {{"err", JSON::Object::Entries {{"type", "NotSupportedError"}, {"message", "BLE class missing"}}}}, oro::runtime::QueuedResponse{}); return; }
 	      jmethodID m = attachment.env->GetStaticMethodID(c, "writeCharacteristic", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[B)V");
 	      if (!m) { attachment.env->DeleteLocalRef(c); cb(seq, JSON::Object::Entries {{"err", JSON::Object::Entries {{"type", "NotSupportedError"}, {"message", "BLE.writeCharacteristic missing"}}}}, oro::runtime::QueuedResponse{}); return; }
-      jstring jAddr = attachment.env->NewStringUTF(deviceId.c_str());
-      jstring jSvc = attachment.env->NewStringUTF(service.c_str());
-      jstring jChr = attachment.env->NewStringUTF(characteristic.c_str());
+      jstring jAddr = oro::runtime::android::StringWrap(attachment.env, deviceId).j_str();
+      jstring jSvc = oro::runtime::android::StringWrap(attachment.env, service).j_str();
+      jstring jChr = oro::runtime::android::StringWrap(attachment.env, characteristic).j_str();
       jbyteArray jValue = attachment.env->NewByteArray((jsize) value.size());
       if (jValue && value.size() > 0) attachment.env->SetByteArrayRegion(jValue, 0, (jsize) value.size(), reinterpret_cast<const jbyte*>(value.data()));
       const std::string key = deviceId + "|" + service + "|" + characteristic;
@@ -636,9 +636,9 @@ namespace {
         if (c) {
           jmethodID m = attachment.env->GetStaticMethodID(c, "startNotifications", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
           if (m) {
-            jstring jAddr = attachment.env->NewStringUTF(deviceId.c_str());
-            jstring jSvc = attachment.env->NewStringUTF(service.c_str());
-            jstring jChr = attachment.env->NewStringUTF(characteristic.c_str());
+            jstring jAddr = oro::runtime::android::StringWrap(attachment.env, deviceId).j_str();
+            jstring jSvc = oro::runtime::android::StringWrap(attachment.env, service).j_str();
+            jstring jChr = oro::runtime::android::StringWrap(attachment.env, characteristic).j_str();
             attachment.env->CallStaticVoidMethod(c, m, svc.context.getRuntime()->android.activity, jAddr, jSvc, jChr);
             attachment.env->DeleteLocalRef(jAddr);
             attachment.env->DeleteLocalRef(jSvc);
@@ -656,9 +656,9 @@ namespace {
         if (c) {
           jmethodID m = attachment.env->GetStaticMethodID(c, "stopNotifications", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
           if (m) {
-            jstring jAddr = attachment.env->NewStringUTF(deviceId.c_str());
-            jstring jSvc = attachment.env->NewStringUTF(service.c_str());
-            jstring jChr = attachment.env->NewStringUTF(characteristic.c_str());
+            jstring jAddr = oro::runtime::android::StringWrap(attachment.env, deviceId).j_str();
+            jstring jSvc = oro::runtime::android::StringWrap(attachment.env, service).j_str();
+            jstring jChr = oro::runtime::android::StringWrap(attachment.env, characteristic).j_str();
             attachment.env->CallStaticVoidMethod(c, m, svc.context.getRuntime()->android.activity, jAddr, jSvc, jChr);
             attachment.env->DeleteLocalRef(jAddr);
             attachment.env->DeleteLocalRef(jSvc);

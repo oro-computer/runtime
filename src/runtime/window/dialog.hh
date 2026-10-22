@@ -3,6 +3,7 @@
 
 #include "../platform.hh"
 #include "../context.hh"
+#include "../bytes.hh"
 
 namespace oro::runtime::window {
   // forward
@@ -56,6 +57,8 @@ namespace oro::runtime::window {
         String title;
         String text;
         String url;
+        String files;
+        bytes::Buffer data;
       };
 
       using ShowCallback = Function<void(Vector<String>)>;
@@ -73,6 +76,10 @@ namespace oro::runtime::window {
 
       ShowCallback callback = nullptr;
       ShareCallback shareCallback = nullptr;
+    #if ORO_RUNTIME_PLATFORM_ANDROID
+      long shareToken = 0;
+      long pickerToken = 0;
+    #endif
       Window* window = nullptr;
 
       Dialog (Window* window);

@@ -149,7 +149,7 @@ namespace oro::runtime::core::services {
       return true;
     }
   #endif
-    return this->fd > 0 && this->dir == nullptr;
+    return this->fd >= 0 && this->dir == nullptr;
   }
 
   bool FS::Descriptor::isRetained () const {
@@ -251,8 +251,8 @@ namespace oro::runtime::core::services {
           const auto attachment = android::JNIEnvironmentAttachment(desc->fs->context.android.jvm);
           const auto assetManager = CallObjectClassMethodFromAndroidEnvironment(
             attachment.env,
-            this->context.android.activity,
-            "getAssetManager",
+            this->context.android.self,
+            "getAssets",
             "()Landroid/content/res/AssetManager;"
           );
 
@@ -261,7 +261,7 @@ namespace oro::runtime::core::services {
             assetManager,
             "list",
             "(Ljava/lang/String;)[Ljava/lang/String;",
-            attachment.env->NewStringUTF(name.c_str())
+            android::StringWrap(attachment.env, name).j_str()
           );
 
           const auto length = attachment.env->GetArrayLength(entries);
@@ -280,16 +280,21 @@ namespace oro::runtime::core::services {
         desc->resource.url.scheme == "content" ||
         desc->resource.url.scheme == "android.resource"
       ) {
-        if (this->context.android.contentResolver.hasAccess(desc->resource.url.str())) {
-          const auto json = JSON::Object::Entries {
-            {"source", "fs.access"},
-            {"data", JSON::Object::Entries {
-              {"mode", mode},
-            }}
-          };
-
-          return callback(seq, json, QueuedResponse{});
+        int code = 0;
+        if (mode != F_OK && mode != R_OK) {
+          code = ENOTSUP;
+        } else if (this->context.android.contentResolver.hasAccess(desc->resource.url.str(), &code)) {
+          return callback(seq, JSON::Object::Entries {
+            {"source", "fs.access"}, {"data", JSON::Object::Entries {{"mode", mode}}}
+          }, QueuedResponse{});
         }
+        return callback(seq, JSON::Object::Entries {
+          {"source", "fs.access"},
+          {"err", JSON::Object::Entries {
+            {"code", String(uv_err_name(uv_translate_sys_error(code ? code : EIO)))},
+            {"message", "Provider read access is unavailable; write/execute probes are unsupported"}
+          }}
+        }, QueuedResponse{});
       }
   #else
       if (desc->resource.url.scheme == "oro") {
@@ -607,22 +612,14 @@ namespace oro::runtime::core::services {
         Lock lock(this->mutex);
         AAsset_close(desc->androidAsset);
         desc->androidAsset = nullptr;
-        const auto json = JSON::Object::Entries {
-          {"source", "fs.close"},
-          {"data", JSON::Object::Entries {
-            {"id", std::to_string(desc->id)},
-            {"fd", desc->fd}
-          }}
-        };
-
+        // Reject another close while libuv releases the independently owned fd.
         this->removeDescriptor(desc->id);
-        return callback(seq, json, QueuedResponse{});
       } else if (
         desc->resource.url.scheme == "content" ||
         desc->resource.url.scheme == "android.resource"
       ) {
         Lock lock(this->mutex);
-        this->context.android.contentResolver.closeFileDescriptor(
+        const bool closed = this->context.android.contentResolver.closeFileDescriptor(
           desc->androidContent
         );
 
@@ -636,6 +633,14 @@ namespace oro::runtime::core::services {
         };
 
         this->removeDescriptor(desc->id);
+        if (!closed) {
+          return callback(seq, JSON::Object::Entries {
+            {"source", "fs.close"},
+            {"err", JSON::Object::Entries {
+              {"code", "EIO"}, {"message", "Provider close failed; the runtime descriptor was released"}
+            }}
+          }, QueuedResponse{});
+        }
         return callback(seq, json, QueuedResponse{});
       }
     #endif
@@ -667,7 +672,7 @@ namespace oro::runtime::core::services {
             }}
           };
 
-          desc->fs->removeDescriptor(desc->id);
+          if (desc->fs->getDescriptor(desc->id) == desc) desc->fs->removeDescriptor(desc->id);
         }
 
         ctx->callback(ctx->seq, json, QueuedResponse{});
@@ -701,21 +706,39 @@ namespace oro::runtime::core::services {
   ) {
     this->loop.dispatch([=, this]() {
       auto desc = std::make_shared<Descriptor>(this, id, path);
+      desc->openFlags = flags;
 
     #if ORO_RUNTIME_PLATFORM_ANDROID
       if (desc->resource.url.scheme == "oro") {
+        const auto failAsset = [&](int code) {
+          return callback(seq, JSON::Object::Entries {
+            {"source", "fs.open"},
+            {"err", JSON::Object::Entries {
+              {"code", String(uv_err_name(uv_translate_sys_error(code)))},
+              {"message", "Packaged asset is missing, read-only, or compressed without a file descriptor"}
+            }}
+          }, QueuedResponse{});
+        };
+        if ((flags & O_ACCMODE) != O_RDONLY || (flags & (O_TRUNC | O_APPEND))) return failAsset(EROFS);
         auto assetManager = filesystem::Resource::getSharedAndroidAssetManager();
+        if (!assetManager) return failAsset(ENOENT);
         desc->androidAsset = AAssetManager_open(
           assetManager,
           desc->resource.name.c_str(),
           AASSET_MODE_RANDOM
         );
 
-        desc->fd = AAsset_openFileDescriptor(
+        if (!desc->androidAsset) return failAsset(ENOENT);
+        desc->fd = AAsset_openFileDescriptor64(
           desc->androidAsset,
           &desc->androidAssetOffset,
           &desc->androidAssetLength
         );
+        if (desc->fd < 0) {
+          AAsset_close(desc->androidAsset);
+          desc->androidAsset = nullptr;
+          return failAsset(ENOTSUP);
+        }
 
         const auto json = JSON::Object::Entries {
           {"source", "fs.open"},
@@ -733,28 +756,53 @@ namespace oro::runtime::core::services {
         desc->resource.url.scheme == "content" ||
         desc->resource.url.scheme == "android.resource"
       ) {
+        String providerMode;
+        int providerError = android::ContentResolver::getOpenMode(flags, providerMode);
+        if (desc->resource.url.scheme == "android.resource" && (flags & O_ACCMODE) != O_RDONLY) providerError = EROFS;
+        const auto fail = [&](int code) {
+          return callback(seq, JSON::Object::Entries {
+            {"source", "fs.open"},
+            {"err", JSON::Object::Entries {
+              {"id", std::to_string(id)}, {"code", String(uv_err_name(uv_translate_sys_error(code)))},
+              {"type", code == EACCES ? "NotAllowedError" : code == ENOENT ? "NotFoundError" : "Error"},
+              {"message", "Document provider rejected the requested URI, grant, mode, or descriptor"}
+            }}
+          }, QueuedResponse{});
+        };
+        if (providerError) return fail(providerError);
         auto fileDescriptor = this->context.android.contentResolver.openFileDescriptor(
           desc->resource.url.str(),
           &desc->androidContentOffset,
-          &desc->androidContentLength
+          &desc->androidContentLength,
+          providerMode,
+          &providerError
         );
 
         if (fileDescriptor == nullptr) {
-          const auto json = JSON::Object::Entries {
-            {"source", "fs.open"},
-            {"err", JSON::Object::Entries {
-              {"id", std::to_string(desc->id)},
-              {"type", "NotFoundError"},
-              {"message", "Content does not exist at given URI"}
-            }}
-          };
-
-          return callback(seq, json, QueuedResponse{});
+          return fail(providerError ? providerError : EIO);
         }
 
         desc->fd = this->context.android.contentResolver.getFileDescriptorFD(
           fileDescriptor
         );
+        if (desc->fd < 0) {
+          this->context.android.contentResolver.closeFileDescriptor(fileDescriptor);
+          return fail(EIO);
+        }
+        const auto descriptorFlags = fcntl(desc->fd, F_GETFD);
+        if (descriptorFlags < 0 || fcntl(desc->fd, F_SETFD, descriptorFlags | FD_CLOEXEC) < 0) {
+          const auto code = errno;
+          this->context.android.contentResolver.closeFileDescriptor(fileDescriptor);
+          return fail(code);
+        }
+        if (flags & O_APPEND) {
+          const auto statusFlags = fcntl(desc->fd, F_GETFL);
+          if (statusFlags < 0 || fcntl(desc->fd, F_SETFL, statusFlags | O_APPEND) < 0) {
+            const auto code = errno;
+            this->context.android.contentResolver.closeFileDescriptor(fileDescriptor);
+            return fail(code);
+          }
+        }
 
         desc->androidContent = fileDescriptor;
 
@@ -885,8 +933,8 @@ namespace oro::runtime::core::services {
         const auto attachment = android::JNIEnvironmentAttachment(desc->fs->context.android.jvm);
         const auto assetManager = CallObjectClassMethodFromAndroidEnvironment(
           attachment.env,
-          desc->fs->context.android.activity,
-          "getAssetManager",
+          desc->fs->context.android.self,
+          "getAssets",
           "()Landroid/content/res/AssetManager;"
         );
 
@@ -895,17 +943,16 @@ namespace oro::runtime::core::services {
           assetManager,
           "list",
           "(Ljava/lang/String;)[Ljava/lang/String;",
-          attachment.env->NewStringUTF(name.c_str())
+          android::StringWrap(attachment.env, name).j_str()
         );
 
         const auto length = attachment.env->GetArrayLength(entries);
 
         for (int i = 0; i < length; ++i) {
           const auto entry = (jstring) attachment.env->GetObjectArrayElement(entries, i);
-          const auto filename = attachment.env->GetStringUTFChars(entry, nullptr);
-          if (filename != nullptr) {
-            desc->androidAssetDirectoryEntries.push(filename);
-            attachment.env->ReleaseStringUTFChars(entry, filename);
+          if (entry != nullptr) {
+            desc->androidAssetDirectoryEntries.push(android::StringWrap(attachment.env, entry).str());
+            attachment.env->DeleteLocalRef(entry);
           }
         }
 
@@ -927,28 +974,13 @@ namespace oro::runtime::core::services {
         desc->resource.url.scheme == "content" ||
         desc->resource.url.scheme == "android.resource"
       ) {
-        const auto entries = this->context.android.contentResolver.getPathnameEntriesFromContentURI(
-          desc->resource.url.str()
-        );
-
-        for (const auto& entry : entries) {
-          desc->androidContentDirectoryEntries.push(entry);
-        }
-
-        if (entries.size() > 0) {
-          desc->isAndroidContentDirectory = true;
-          const auto json = JSON::Object::Entries {
-            {"source", "fs.opendir"},
-            {"data", JSON::Object::Entries {
-              {"id", std::to_string(desc->id)}
-            }}
-          };
-
-          // insert into `descriptors` map
-          Lock lock(desc->fs->mutex);
-          desc->fs->descriptors.insert_or_assign(desc->id, desc);
-          return callback(seq, json, QueuedResponse{});
-        }
+        return callback(seq, JSON::Object::Entries {
+          {"source", "fs.opendir"},
+          {"err", JSON::Object::Entries {
+            {"code", "ENOTSUP"},
+            {"message", "Content URI directory traversal is not supported"}
+          }}
+        }, QueuedResponse{});
       }
     #endif
 
@@ -975,8 +1007,8 @@ namespace oro::runtime::core::services {
           const auto attachment = android::JNIEnvironmentAttachment(ctx->descriptor->fs->context.android.jvm);
           const auto assetManager = CallObjectClassMethodFromAndroidEnvironment(
             attachment.env,
-            ctx->descriptor->fs->context.android.activity,
-            "getAssetManager",
+            ctx->descriptor->fs->context.android.self,
+            "getAssets",
             "()Landroid/content/res/AssetManager;"
           );
 
@@ -985,17 +1017,16 @@ namespace oro::runtime::core::services {
             assetManager,
             "list",
             "(Ljava/lang/String;)[Ljava/lang/String;",
-            attachment.env->NewStringUTF(name.c_str())
+            android::StringWrap(attachment.env, name).j_str()
           );
 
           const auto length = attachment.env->GetArrayLength(entries);
 
           for (int i = 0; i < length; ++i) {
             const auto entry = (jstring) attachment.env->GetObjectArrayElement(entries, i);
-            const auto filename = attachment.env->GetStringUTFChars(entry, nullptr);
-            if (filename != nullptr) {
-              desc->androidAssetDirectoryEntries.push(filename);
-              attachment.env->ReleaseStringUTFChars(entry, filename);
+            if (entry != nullptr) {
+              desc->androidAssetDirectoryEntries.push(android::StringWrap(attachment.env, entry).str());
+              attachment.env->DeleteLocalRef(entry);
             }
           }
 
@@ -1443,6 +1474,7 @@ namespace oro::runtime::core::services {
   ) const {
     this->loop.dispatch([=, this]() mutable {
       auto desc = getDescriptor(id);
+      int64_t readPosition = static_cast<int64_t>(offset);
 
       if (desc == nullptr) {
         auto json = JSON::Object::Entries {
@@ -1459,32 +1491,25 @@ namespace oro::runtime::core::services {
       }
 
     #if ORO_RUNTIME_PLATFORM_ANDROID
-      if (desc->androidAsset != nullptr) {
-        const auto length = AAsset_getLength(desc->androidAsset);
-
-        if (offset >= static_cast<size_t>(length)) {
-          const auto headers = http::Headers {{
-            {"content-type", "application/octet-stream"},
-            {"content-length", 0}
-          }};
-
-          QueuedResponse queuedResponse {0};
-          queuedResponse.id = rand64();
-          queuedResponse.body = std::make_shared<unsigned char[]>(size);
-          queuedResponse.length = 0;
-          queuedResponse.headers = headers;
-          return callback(seq, JSON::Object{}, queuedResponse);
-        } else {
-          if (size > length - offset) {
-            size = length - offset;
-          }
-
-          offset += desc->androidAssetOffset;
+      if (desc->androidAsset != nullptr || desc->androidContent != nullptr) {
+        const bool asset = desc->androidAsset != nullptr;
+        const int code = (desc->openFlags & O_ACCMODE) == O_WRONLY ? EBADF :
+          android::ContentResolver::getReadRange(
+            offset, size,
+            asset ? desc->androidAssetOffset : desc->androidContentOffset,
+            asset ? desc->androidAssetLength : desc->androidContentLength,
+            readPosition, size
+          );
+        if (code) {
+          return callback(seq, JSON::Object::Entries {
+            {"source", "fs.read"},
+            {"err", JSON::Object::Entries {
+              {"code", String(uv_err_name(uv_translate_sys_error(code)))},
+              {"message", "Asset or provider read requires a readable descriptor and a supported position"}
+            }}
+          }, QueuedResponse{});
         }
-      } else if (desc->androidContent != nullptr) {
-        const auto length = desc->androidContentLength;
-
-        if (offset >= static_cast<size_t>(length)) {
+        if (size == 0) {
           const auto headers = http::Headers {{
             {"content-type", "application/octet-stream"},
             {"content-length", 0}
@@ -1492,16 +1517,10 @@ namespace oro::runtime::core::services {
 
           QueuedResponse queuedResponse {0};
           queuedResponse.id = rand64();
-          queuedResponse.body = std::make_shared<unsigned char[]>(size);
+          queuedResponse.body = std::make_shared<unsigned char[]>(0);
           queuedResponse.length = 0;
           queuedResponse.headers = headers;
           return callback(seq, JSON::Object{}, queuedResponse);
-        } else {
-          if (size > length - offset) {
-            size = length - offset;
-          }
-
-          offset += desc->androidContentOffset;
         }
       }
     #endif
@@ -1513,7 +1532,8 @@ namespace oro::runtime::core::services {
 
       ctx->setBuffer(bytes, size);
 
-      auto err = uv_fs_read(loop, req, desc->fd, &ctx->buf, 1, offset, [](uv_fs_t* req) {
+      auto err = uv_fs_read(loop, req, desc->fd, &ctx->buf, 1,
+        readPosition, [](uv_fs_t* req) {
         auto ctx = static_cast<RequestContext*>(req->data);
         auto desc = ctx->descriptor;
         auto json = JSON::Object {};
@@ -1673,6 +1693,14 @@ namespace oro::runtime::core::services {
       }
 
     #if ORO_RUNTIME_PLATFORM_ANDROID
+      if (desc->androidContent != nullptr && (desc->openFlags & O_ACCMODE) == O_RDONLY) {
+        return callback(seq, JSON::Object::Entries {
+          {"source", "fs.write"},
+          {"err", JSON::Object::Entries {
+            {"code", "EBADF"}, {"message", "Document descriptor was opened read-only"}
+          }}
+        }, QueuedResponse{});
+      }
       if (desc->androidAsset != nullptr) {
         auto json = JSON::Object::Entries {
           {"source", "fs.write"},

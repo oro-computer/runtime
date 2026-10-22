@@ -3,10 +3,13 @@ package oro.runtime.window
 import java.lang.Runtime
 
 import android.app.Activity
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.net.Uri
-import android.Manifest
-import android.os.Build
 import android.webkit.WebChromeClient
 
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,7 +29,10 @@ open class Dialog (val activity: WindowManagerActivity) {
     val mimeTypes: MutableList<String> = mutableListOf<String>(),
     val directories: Boolean = false,
     val multiple: Boolean = false,
-    val files: Boolean = true
+    val files: Boolean = true,
+    val owner: Window? = null,
+    val save: Boolean = false,
+    val defaultName: String = ""
   ) {
     init {
       if (params != null && params.acceptTypes.size > 0) {
@@ -36,7 +42,29 @@ open class Dialog (val activity: WindowManagerActivity) {
   }
 
   var callback: ((results: Array<Uri>) -> Unit)? = null
+  private var pickerActive = false
+  private var pickerOwner: Window? = null
   var sharePointer: Long = 0
+  private var shareActive = false
+  private var shareReceiver: BroadcastReceiver? = null
+  private var shareIntent: PendingIntent? = null
+
+  private fun finishShare (success: Boolean, error: String? = null) {
+    val pointer = sharePointer
+    sharePointer = 0
+    shareReceiver?.let { activity.unregisterReceiver(it) }
+    shareReceiver = null
+    shareIntent?.cancel()
+    shareIntent = null
+    if (pointer != 0L) onShareResult(pointer, success, error)
+  }
+
+  fun close () {
+    finishShare(false, "Sharing interrupted by activity destruction")
+    callback?.invoke(emptyArray())
+    callback = null
+    pickerOwner = null
+  }
 
   val launcherForSingleItem = activity.registerForActivityResult(
     ActivityResultContracts.GetContent(),
@@ -48,16 +76,24 @@ open class Dialog (val activity: WindowManagerActivity) {
     { uris -> this.resolve(uris) }
   )
 
-  // XXX(@jwerle): unused at the moment
   val launcherForSingleDocument = activity.registerForActivityResult(
     ActivityResultContracts.OpenDocument(),
     { uri -> this.resolve(uri) }
   )
 
-  // XXX(@jwerle): unused at the moment
   val launcherForMulitpleDocuments = activity.registerForActivityResult(
     ActivityResultContracts.OpenMultipleDocuments(),
     { uris -> this.resolve(uris) }
+  )
+
+  val launcherForDirectory = activity.registerForActivityResult(
+    ActivityResultContracts.OpenDocumentTree(),
+    { uri -> this.resolve(uri) }
+  )
+
+  val launcherForSaveDocument = activity.registerForActivityResult(
+    ActivityResultContracts.StartActivityForResult(),
+    { result -> this.resolve(if (result.resultCode == Activity.RESULT_OK) result.data?.data else null) }
   )
 
   // XXX(@jwerle): unused at the moment
@@ -74,14 +110,11 @@ open class Dialog (val activity: WindowManagerActivity) {
 
   val launcherForShare = activity.registerForActivityResult(
     ActivityResultContracts.StartActivityForResult(),
-    { result ->
+    { _ ->
+      shareActive = false
+      // Target selection is reported separately; resultCode is not delivery evidence.
       val pointer = sharePointer
-      sharePointer = 0
-
-      if (pointer != 0L) {
-        val success = result.resultCode == Activity.RESULT_OK
-        onShareResult(pointer, success, null)
-      }
+      activity.window.decorView.post { if (sharePointer == pointer) finishShare(false) }
     }
   )
 
@@ -99,18 +132,8 @@ open class Dialog (val activity: WindowManagerActivity) {
 
   fun resolve (uris: Array<Uri>) {
     val callback = this.callback
-
-    /*
-    for (uri in uris) {
-      this.activity.applicationContext.contentResolver.takePersistableUriPermission(
-        uri,
-        (
-          Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
-          Intent.FLAG_GRANT_READ_URI_PERMISSION
-        )
-      )
-    }
-    */
+    this.pickerActive = false
+    this.pickerOwner = null
 
     if (callback != null) {
       this.callback = null
@@ -118,44 +141,56 @@ open class Dialog (val activity: WindowManagerActivity) {
     }
   }
 
+  fun cancelFileSystemPicker (owner: Window) {
+    if (this.pickerOwner !== owner) return
+    val callback = this.callback
+    this.callback = null
+    this.pickerOwner = null
+    // Keep the launcher reserved until its outstanding platform result arrives.
+    callback?.invoke(emptyArray())
+  }
+
   fun showFileSystemPicker (
     options: FileSystemPickerOptions,
     callback: ((Array<Uri>) -> Unit)? = null
   ) {
-    val activity = this.activity as oro.runtime.app.AppActivity
-    val mimeType =
-      if (options.mimeTypes.size > 0 && options.mimeTypes[0].length > 0) {
-        options.mimeTypes[0]
-      } else { "*/*" }
-
-    this.callback = callback
-
-    val permissions = mutableListOf(
-      Manifest.permission.CAMERA
-    )
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      permissions += listOf(
-        Manifest.permission.READ_MEDIA_IMAGES,
-        Manifest.permission.READ_MEDIA_VIDEO,
-        Manifest.permission.READ_MEDIA_AUDIO
-      )
-    } else {
-      permissions += Manifest.permission.READ_EXTERNAL_STORAGE
-    }
-
-    activity.requestPermissions(permissions.toTypedArray(), { _ ->
-      activity.runOnUiThread {
-        // TODO(@jwerle): support the other launcher types above
-        // through the `showFileSystemPicker()` method some how
-        if (options.multiple) {
-          launcherForMulitpleItems.launch(mimeType)
-        } else {
-          //launcherForSingleDocument.launch(arrayOf(mimeType))
-          launcherForSingleItem.launch(mimeType)
-        }
+    this.activity.runOnUiThread {
+      val owner = options.owner
+      if (activity.isFinishing || activity.isDestroyed || (owner != null &&
+          (!owner.userMessageHandler.active || owner.fragment.window !== owner || !owner.fragment.hasWebView))) {
+        callback?.invoke(emptyArray())
+        return@runOnUiThread
       }
-    })
+      // A result belongs to exactly one picker. Do not replace an active request.
+      if (this.pickerActive) {
+        callback?.invoke(emptyArray())
+        return@runOnUiThread
+      }
+
+      this.callback = callback
+      this.pickerActive = true
+      this.pickerOwner = options.owner
+      val mimeTypes = options.mimeTypes.filter { it.isNotBlank() }
+        .ifEmpty { listOf("*/*") }.toTypedArray()
+
+      try {
+        if (options.save) {
+          val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+            .setType(mimeTypes.singleOrNull() ?: "*/*")
+            .putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+          if (options.defaultName.isNotBlank()) intent.putExtra(Intent.EXTRA_TITLE, options.defaultName)
+          launcherForSaveDocument.launch(intent)
+        } else if (options.directories && !options.files) {
+          launcherForDirectory.launch(null)
+        } else if (options.multiple) {
+          launcherForMulitpleDocuments.launch(mimeTypes)
+        } else {
+          launcherForSingleDocument.launch(mimeTypes)
+        }
+      } catch (_: RuntimeException) {
+        this.resolve(emptyArray<Uri>())
+      }
+    }
   }
 
   fun showFileSystemPicker (
@@ -163,6 +198,9 @@ open class Dialog (val activity: WindowManagerActivity) {
     directories: Boolean = false,
     multiple: Boolean = false,
     files: Boolean = true,
+    owner: Window?,
+    save: Boolean,
+    defaultName: String,
     pointer: Long = 0
   )  {
     return this.showFileSystemPicker(FileSystemPickerOptions(
@@ -170,7 +208,10 @@ open class Dialog (val activity: WindowManagerActivity) {
       mimeTypes.split("|").toMutableList(),
       directories,
       multiple,
-      files
+      files,
+      owner,
+      save,
+      defaultName
     ), fun (uris: Array<Uri>) {
       if (pointer != 0L) {
         this.onResults(pointer, uris)
@@ -182,48 +223,59 @@ open class Dialog (val activity: WindowManagerActivity) {
     title: String?,
     text: String?,
     url: String?,
+    files: String,
+    bytes: ByteArray,
     pointer: Long
   ) {
-    val activity = this.activity as oro.runtime.app.AppActivity
-    val parts = mutableListOf<String>()
-
-    if (!text.isNullOrBlank()) {
-      parts += text.trim()
-    }
-
-    if (!url.isNullOrBlank()) {
-      parts += url.trim()
-    }
-
-    if (parts.isEmpty() && !title.isNullOrBlank()) {
-      parts += title.trim()
-    }
-
-    if (parts.isEmpty()) {
-      if (pointer != 0L) {
-        onShareResult(pointer, false, null)
-      }
-      return
-    }
-
-    val intent = Intent(Intent.ACTION_SEND)
-    intent.type = "text/plain"
-    intent.putExtra(Intent.EXTRA_TEXT, parts.joinToString(separator = "\n\n"))
-
-    if (!title.isNullOrBlank()) {
-      intent.putExtra(Intent.EXTRA_SUBJECT, title)
-    }
-
-    val chooser = Intent.createChooser(intent, title ?: "Share")
-
-    sharePointer = pointer
-
     activity.runOnUiThread {
-      try {
-        launcherForShare.launch(chooser)
-      } catch (err: Exception) {
-        sharePointer = 0
-        onShareResult(pointer, false, err.message)
+      if (shareActive || activity.isFinishing || activity.isDestroyed) {
+        onShareResult(pointer, false, "Sharing is unavailable while another chooser is active")
+        return@runOnUiThread
+      }
+      shareActive = true
+      sharePointer = pointer
+      // File copying is bounded and runs off the Android UI thread.
+      kotlin.concurrent.thread(name = "oro-share") {
+        try {
+          val parts = listOfNotNull(text, url).filter { it.isNotBlank() }
+          val intent = Intent(Intent.ACTION_SEND).setType("text/plain")
+          if (parts.isNotEmpty()) intent.putExtra(Intent.EXTRA_TEXT, parts.joinToString("\n\n"))
+          if (!title.isNullOrBlank()) intent.putExtra(Intent.EXTRA_SUBJECT, title)
+          if (files.isNotEmpty()) {
+            ShareFiles.attach(activity.applicationContext, intent, files, bytes)
+          } else if (parts.isEmpty()) {
+            require(!title.isNullOrBlank()) { "Share data is empty" }
+            intent.putExtra(Intent.EXTRA_TEXT, title)
+          }
+          activity.runOnUiThread {
+            if (sharePointer != pointer || activity.isDestroyed) return@runOnUiThread
+            try {
+              val action = activity.packageName + ".oro.share." + java.util.UUID.randomUUID()
+              val receiver = object : BroadcastReceiver() {
+                override fun onReceive (context: Context, selected: Intent) {
+                  if (selected.action == action) finishShare(true)
+                }
+              }
+              ContextCompat.registerReceiver(activity, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
+              shareReceiver = receiver
+              val callback = PendingIntent.getBroadcast(activity, 0,
+                Intent(action).setPackage(activity.packageName),
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
+              shareIntent = callback
+              launcherForShare.launch(Intent.createChooser(intent, title ?: "Share", callback.intentSender))
+            } catch (_: Exception) {
+              shareActive = false
+              finishShare(false, "No share target is available")
+            }
+          }
+        } catch (_: Exception) {
+          activity.runOnUiThread {
+            if (sharePointer == pointer) {
+              shareActive = false
+              finishShare(false, "Unable to prepare share; check file names, size, type, and free space")
+            }
+          }
+        }
       }
     }
   }

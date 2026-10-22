@@ -45,6 +45,15 @@ test('literal public IPC calls have native route handlers', () => {
     for (const match of source.matchAll(routePattern)) {
       routes.add(match[1].toLowerCase())
     }
+    const conditional = /(?:router->|router\.)map\s*\(\s*\w+\s*\?\s*"([^"]+)"\s*:\s*"([^"]+)"/g
+    for (const match of source.matchAll(conditional)) {
+      routes.add(match[1].toLowerCase())
+      routes.add(match[2].toLowerCase())
+    }
+    const table = /for\s*\(const auto& (\w+)\s*:\s*\{([\s\S]*?)\}\s*\)\s*\{\s*router->map\(\1\.first/g
+    for (const match of source.matchAll(table)) {
+      for (const entry of match[2].matchAll(/std::pair\s*\{\s*"([^"]+)"/g)) routes.add(entry[1].toLowerCase())
+    }
   }
 
   const desktopMain = readFileSync(
@@ -67,7 +76,7 @@ test('literal public IPC calls have native route handlers', () => {
   assert.deepEqual(missing, [], `Missing native IPC routes:\n${missing.join('\n')}`)
 })
 
-test('queued IPC events preserve payload sources and dispatch on the UI loop', () => {
+test('queued IPC events preserve payload sources and use the configured dispatcher', () => {
   const routes = readFileSync(
     path.join(repoRoot, 'src', 'runtime', 'ipc', 'routes.cc'),
     'utf8'
@@ -83,9 +92,9 @@ test('queued IPC events preserve payload sources and dispatch on the UI loop', (
     'utf8'
   )
   assert.match(
-    router,
-    /if \(result\.seq == "-1"\) \{\s+bridge->dispatcher\.dispatch/,
-    'queued responses should enter the UI dispatcher before bridge delivery'
+    router.slice(router.indexOf('if (result.seq == "-1")')),
+    /if \(bridge->dispatchRouterCallbacksWithBridge\) \{\s+bridge->dispatch\(deliver\);\s+\} else \{\s+bridge->dispatcher\.dispatch\(deliver\);/,
+    'queued responses select the bridge dispatcher or its default UI dispatcher'
   )
 })
 

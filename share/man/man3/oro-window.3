@@ -179,6 +179,12 @@ Opens the Web Inspector for the window (desktop only).
 .br
 \fIPromise<object>\fR
 .TP
+\fBmarkReady()\fR
+Acknowledges that this window has a usable application screen. Call after mounting the UI and loading required styles. Android apps configured with `[webview] require_ready = true` retain native startup recovery until this acknowledgement. Only the current window can acknowledge its own readiness. This does not replay operations or establish application authorization.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
 \fBsetBackgroundColor(opts)\fR
 Sets the background color of the window
 \fBParameters:\fR
@@ -254,13 +260,46 @@ Shows a native directory dialog.
 \fIPromise<string[]>\fR an array of file paths
 .TP
 \fBshare(options)\fR
-Opens the platform share sheet for the current window.
+Opens the platform share sheet for the current window. New Android file opens expire after 24 hours. Recipients can retain copies. Resolution means a share target was selected, not that delivery completed.
 \fBParameters:\fR
 .br
-\fIoptions\fR ({ title?: string, text?: string, url?: string }; optional)
+\fIoptions\fR (ShareOptions; optional)
 \fBReturns:\fR
 .br
 \fIPromise<void>\fR
+.TP
+\fBsetSystemAppearance(options)\fR
+Sets Android 11+ system surfaces for this window. The foreground window owns appearance; `system` follows configuration changes. Insets/IME updates arrive as `windowinsetschange` CustomEvents. Earlier Android versions and other platforms reject with `ENOSYS`.
+\fBParameters:\fR
+.br
+\fIoptions\fR (SystemAppearanceOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBsetFullscreen(enabled)\fR
+Enters or exits Android 11+ native fullscreen for the current foreground window. First select explicit inset ownership with setSystemAppearance. A native Exit fullscreen control, Back, suspension, hiding, and renderer destruction exit presentation. Entry never captures a pointer or hides IME. Observe windowfullscreenchange for native exits. Browser DOM fullscreen is a separate capability. Other platforms reject with ENOSYS.
+\fBParameters:\fR
+.br
+\fIenabled\fR (boolean; required)
+\fBReturns:\fR
+.br
+\fIPromise<FullscreenState>\fR
+.TP
+\fBgetFullscreenState()\fR
+Reads Android native fullscreen state for the current foreground window. Other platforms reject with ENOSYS.
+\fBReturns:\fR
+.br
+\fIPromise<FullscreenState>\fR
+.TP
+\fBsetContentProtection(enabled)\fR
+Requests Android FLAG_SECURE while this window is visible. The whole native activity is protected, including recents previews and ordinary screenshots. This does not protect clipboard, shared files, external displays, or secrets already exported by the application. Custom native flag owners must coordinate with this runtime API. Other platforms reject with ENOSYS.
+\fBParameters:\fR
+.br
+\fIenabled\fR (boolean; required)
+\fBReturns:\fR
+.br
+\fIPromise<ContentProtectionState>\fR
 .TP
 \fBsend(options)\fR
 This is a high\-level API that you should use instead of `ipc.request` when you want to send a message to another window or to the backend.

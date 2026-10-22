@@ -142,7 +142,13 @@ This is an exported `FunctionDeclaration` named `inspect`, but it does not yet h
 This is an exported `FunctionDeclaration` named `format`, but it does not yet have a dedicated description in the generated reference.
 .TP
 \fBparseJSON(string)\fR
-This is an exported `FunctionDeclaration` named `parseJSON`, but it does not yet have a dedicated description in the generated reference.
+Parses JSON without modifying valid escape sequences. Invalid JSON containing unescaped backslashes retains the legacy path\-repair fallback.
+\fBParameters:\fR
+.br
+\fIstring\fR (unknown; required)
+\fBReturns:\fR
+.br
+\fIany \\| null\fR
 .TP
 \fBparseHeaders(headers)\fR
 This is an exported `FunctionDeclaration` named `parseHeaders`, but it does not yet have a dedicated description in the generated reference.

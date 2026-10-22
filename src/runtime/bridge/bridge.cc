@@ -157,6 +157,7 @@ export * from '{{url}}'
     auto& runtime = static_cast<runtime::Runtime&>(this->context);
 
     runtime.services.networkStatus.addObserver(this->networkStatusObserver, [this](auto json) {
+      this->emit("networkstatuschange", json.str());
       if (json.has("name")) {
         this->emit(json["name"].str(), json.str());
       }
@@ -265,7 +266,12 @@ export * from '{{url}}'
     const QueuedResponse& queuedResponse
   ) {
     if (queuedResponse.body != nullptr || seq == "-1") {
-      const auto script = this->context.createQueuedResponse(seq, data, queuedResponse);
+      const auto script = this->context.createQueuedResponse(
+        seq,
+        data,
+        queuedResponse,
+        ORO_RUNTIME_PLATFORM_LINUX && this->dispatchRouterCallbacksWithBridge
+      );
       return this->evaluateJavaScript(script);
     }
 

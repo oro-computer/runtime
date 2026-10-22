@@ -18,19 +18,23 @@ test('fs synchronous binary reads preserve every byte and native text transport'
   await fs.promises.writeFile(filename, bytes)
   try {
     t.same(fs.readFileSync(filename), bytes, 'synchronous read preserves all byte values')
-    const handle = await fs.promises.open(filename, 'r')
+    // Open and read through the same synchronous IPC transport.
+    const id = String(crypto.rand64())
+    const opened = ipc.sendSync('fs.open', { id, path: filename, flags: fs.constants.O_RDONLY, mode: 0o666 }, { useExtensionIPCIfAvailable: false })
+    if (opened.err) throw opened.err
     try {
       const result = ipc.sendSync('fs.read', {
-        id: handle.id,
+        id,
         size: bytes.length,
         offset: 0,
         __sync_binary__: 'true'
-      })
+      }, { useExtensionIPCIfAvailable: false })
       if (result.err) throw result.err
       t.same(Buffer.from(result.data, 'base64'), bytes, 'native base64 response preserves all byte values')
       t.equal(result.headers.get('x-oro-ipc-encoding'), 'base64', 'encoding header is exposed to JavaScript')
     } finally {
-      await handle.close()
+      const closed = ipc.sendSync('fs.close', { id }, { useExtensionIPCIfAvailable: false })
+      t.ifError(closed.err, 'synchronous fixture descriptor closes')
     }
     await fs.promises.writeFile(filename, '')
     t.equal(fs.readFileSync(filename).length, 0, 'empty binary files remain empty')
@@ -40,6 +44,21 @@ test('fs synchronous binary reads preserve every byte and native text transport'
     fs.appendFileSync(filename, ' world')
     t.equal(fs.readFileSync(filename, 'utf8'), 'hello world', 'synchronous append preserves the previous contents')
   } finally {
+    await fs.promises.unlink(filename)
+  }
+})
+
+test('fs descriptors preserve ownership across synchronous and asynchronous operations', async (t) => {
+  const filename = path.join(TMPDIR, `oro-descriptor-${crypto.rand64()}.bin`)
+  const handle = await fs.promises.open(filename, 'w+')
+  try {
+    t.ok(fs.fstatSync(handle.fd).isFile(), 'synchronous metadata reads an asynchronously opened descriptor')
+    const bytes = Buffer.from([0, 128, 255, 1])
+    const result = ipc.sendSync('fs.write', { id: handle.id, offset: 0 }, null, bytes)
+    if (result.err) throw result.err
+    t.same(await handle.readFile(), bytes, 'synchronous binary writes remain readable through the async handle')
+  } finally {
+    await handle.close()
     await fs.promises.unlink(filename)
   }
 })
@@ -64,9 +83,9 @@ test('fs.access', async (t) => {
   })
 
   await new Promise((resolve) => {
-    fs.access('.', W_OK, (err, access) => {
-      if (err) t.fail('(W_OK) ./ is not writable')
-      else t.ok(access, '(W_OK) ./ directory is writable')
+    fs.access(TMPDIR, W_OK, (err, access) => {
+      if (err) t.fail('(W_OK) temporary directory is not writable')
+      else t.ok(access, '(W_OK) temporary directory is writable')
       resolve()
     })
   })

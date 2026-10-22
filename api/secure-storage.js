@@ -88,11 +88,9 @@ export async function setItem (key, value, options = {}) {
     bytes = toBuffer(value)
   }
 
-  const result = await ipc.send(
-    'secureStorage.set',
-    params,
-    bytes ? { bytes } : null
-  )
+  const result = bytes
+    ? await ipc.write('secureStorage.set', params, bytes)
+    : await ipc.request('secureStorage.set', params)
   if (result.err) throw result.err
 }
 
@@ -122,9 +120,10 @@ export async function getItem (key, options = {}) {
 
   params.encoding = nativeEncoding
 
-  const result = await ipc.send('secureStorage.get', params)
+  const result = await ipc.request('secureStorage.get', params)
   if (result.err) {
-    if (result.err.type === 'NotFoundError') return null
+    if (result.err.type === 'NotFoundError' || result.err.name === 'NotFoundError' ||
+        result.err.code === 'NOT_FOUND_ERR') return null
     throw result.err
   }
 
@@ -152,7 +151,7 @@ export async function removeItem (key, options = {}) {
   const params = { key }
   if (scope) params.scope = scope
 
-  const result = await ipc.send('secureStorage.remove', params)
+  const result = await ipc.request('secureStorage.remove', params)
   if (result.err) throw result.err
 }
 
@@ -166,7 +165,7 @@ export async function clear (options = {}) {
   const params = {}
   if (scope) params.scope = scope
 
-  const result = await ipc.send('secureStorage.clear', params)
+  const result = await ipc.request('secureStorage.clear', params)
   if (result.err) throw result.err
 }
 
@@ -180,9 +179,31 @@ export async function keys (options = {}) {
   const params = {}
   if (scope) params.scope = scope
 
-  const result = await ipc.send('secureStorage.keys', params)
+  const result = await ipc.request('secureStorage.keys', params)
   if (result.err) throw result.err
   return Array.isArray(result.data?.keys) ? result.data.keys : []
+}
+
+/**
+ * @typedef {object} SecureStorageStatus
+ * @property {boolean} available Whether the Android Keystore metadata query succeeded.
+ * @property {boolean} keyPresent Whether an existing runtime key was found.
+ * @property {'unknown'|'not-created'|'key-missing'|'software'|'hardware'|'tee'|'strongbox'} protection
+ * @property {boolean} requiresRecovery Encrypted values exist without their key.
+ * @property {boolean|null} userAuthenticationRequired Existing key policy, or null when unknown.
+ * @property {'not-probed'} readability No encrypted values were decrypted by this inspection.
+ */
+
+/**
+ * Inspects existing Android Keystore protection without creating a key, exporting
+ * key material, or decrypting application values. A present key does not prove
+ * every stored value is readable. Other platforms reject with ENOSYS.
+ * @returns {Promise<SecureStorageStatus>}
+ */
+export async function getStatus () {
+  const { data, err } = await ipc.request('secureStorage.status')
+  if (err) throw err
+  return data
 }
 
 /**
@@ -192,6 +213,7 @@ export async function keys (options = {}) {
  * @property {typeof removeItem} removeItem
  * @property {typeof clear} clear
  * @property {typeof keys} keys
+ * @property {typeof getStatus} getStatus
  */
 
 /** @type {SecureStorageModule} */
@@ -200,7 +222,8 @@ const api = {
   getItem,
   removeItem,
   clear,
-  keys
+  keys,
+  getStatus
 }
 
 export default api

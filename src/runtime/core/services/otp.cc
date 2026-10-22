@@ -563,7 +563,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    const auto hostString = attachment.env->NewStringUTF(request.host.c_str());
+    const auto hostString = android::StringWrap(attachment.env, request.host).j_str();
     const jint timeout = request.timeoutMs > std::numeric_limits<jint>::max()
       ? std::numeric_limits<jint>::max()
       : static_cast<jint>(request.timeoutMs);

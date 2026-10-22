@@ -1,6 +1,103 @@
 import ipc from '../ipc.js'
 
 /**
+ * @typedef {object} AndroidStartupTiming
+ * @property {'native-library'|'native-allocation'|'native-extensions'|'process-lifecycle'} phase Fixed native startup phase.
+ * @property {number} durationMs Monotonic duration; excludes process launch and renderer startup.
+ */
+
+/**
+ * @typedef {object} AndroidLifecycleEvent
+ * @property {number} index Runtime window index.
+ * @property {'loading'|'ready'|'failed'|'renderer-lost'|'reload'} phase
+ * @property {number} elapsedMs Monotonic time since the first retained process event.
+ * @property {number} durationMs Startup elapsed time for ready/failure; zero otherwise.
+ */
+
+/**
+ * @typedef {object} AndroidBuildIdentity
+ * @property {string} nativeVersion Version compiled into the native runtime.
+ * @property {string} nativeRevision Source revision compiled into the native runtime.
+ * @property {string} cliVersion CLI that generated this application's init shim.
+ * @property {string} assetManifestSha256 SHA-256 of asset and build evidence bound into the native init shim; not the APK digest.
+ * @property {string|null} applicationInputSha256 Staged Android native files, normalized settings, SDK inventory and toolchain input fingerprint; null for older or unbound evidence. APK digest and signing certificate identify the exact compiled artifact.
+ * @property {number} androidBridgeProtocol Native bridge contract version.
+ * @property {string} abi Compiled architecture.
+ * @property {boolean} debug
+ * @property {number} sdk Device SDK.
+ * @property {number} targetSdk Application target SDK.
+ * @property {string|null} webViewVersion Installed WebView package version.
+ * @property {boolean} assetsVerified Whether native startup verified all packaged assets.
+ * @property {AndroidProcessExits} processExits Redacted, OS-retained exit summaries.
+ * @property {AndroidLifecycleEvent[]} lifecycleEvents At most 64 process-local timings; no URLs or application payloads.
+ * @property {AndroidStartupTiming[]} startupTimings At most four native startup phases; no application payloads.
+ */
+
+/**
+ * @typedef {object} AndroidProcessExit
+ * @property {boolean} buildIdentityKnown False; OS history may predate the running artifact.
+ * @property {number} reason Android ApplicationExitInfo reason code.
+ * @property {number} status Exit status code.
+ * @property {number} timestamp Unix milliseconds.
+ * @property {number} importance Android process importance.
+ * @property {number} pssKiB Last recorded proportional memory size.
+ * @property {number} rssKiB Last recorded resident memory size.
+ */
+
+/**
+ * @typedef {object} AndroidProcessExits
+ * @property {boolean} available API 30+ system query succeeded.
+ * @property {AndroidProcessExit[]} entries At most 16 summaries; no descriptions, traces, or process names.
+ */
+
+/**
+ * @typedef {object} RuntimeCapabilities
+ * @property {boolean} nativeFullscreen Requires Android 11+ and a live foreground window.
+ * @property {boolean} fullscreenRequiresManagedInsets
+ * @property {boolean} screenProtection Android FLAG_SECURE, not control of exported content.
+ * @property {boolean} documentMetadata
+ * @property {boolean} documentTreeQueries Existing user-selected tree grants only.
+ * @property {number} documentQueryWorkers
+ * @property {number} documentQueryDeadlineMs
+ * @property {boolean} nativeBackgroundCleanup Explicitly enabled native share-prune scheduling.
+ * @property {boolean} backgroundJavaScript False; arbitrary durable JS execution is unavailable.
+ * @property {boolean} push False until a native provider and authenticated backend are configured.
+ * @property {boolean} biometricSecretUnlock
+ * @property {boolean} namedLauncherDestinations
+ * @property {boolean} nativeDeferredReads Configured native read/reconciliation scheduler; query registered executors separately.
+ * @property {boolean} deferredWrites False; queued mutation replay is not supported.
+ * @property {boolean} webAuthentication Explicit WebAuthn app integration and WebView feature support. This does not establish relying-party/domain association or enrollment.
+ * @property {boolean} nativePasswordSelection Explicit Android 14+ framework password chooser; separate from Autofill and passkeys.
+ * @property {boolean} nativeNotificationPresentation Channel/group/public-version submission with shared response receipts.
+ * @property {boolean} nativeExtensions Configured compiled native extension lifecycle and document-owned operations.
+ * @property {boolean} pointerCapture
+ * @property {boolean} historicalProcessExits
+ */
+
+/**
+ * Reports implemented Android native contracts and explicit unavailable features.
+ * A supported contract still needs permission, active ownership, and application
+ * authorization. Other platforms reject with ENOSYS.
+ * @returns {Promise<RuntimeCapabilities>}
+ */
+export async function getCapabilities () {
+  const { data, err } = await ipc.request('diagnostics.capabilities')
+  if (err) throw err
+  return data
+}
+
+/**
+ * Reads Android build identity without URLs, account data, input values, or logs.
+ * Other platforms reject with `ENOSYS`. This is not proof of release signing.
+ * @returns {Promise<AndroidBuildIdentity>}
+ */
+export async function getBuildIdentity () {
+  const { data, err } = await ipc.request('diagnostics.buildIdentity')
+  if (err) throw err
+  return data
+}
+
+/**
  * A base container class for diagnostic information.
  */
 export class Diagnostic {
@@ -247,5 +344,7 @@ export async function query (type) {
 }
 
 export default {
+  getCapabilities,
+  getBuildIdentity,
   query
 }

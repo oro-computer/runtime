@@ -1,7 +1,6 @@
 // vim: set sw=2:
 package __BUNDLE_IDENTIFIER__
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,7 +17,6 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import androidx.core.content.ContextCompat
 import kotlin.jvm.Volatile
 import oro.runtime.usb.USBPlatform
 
@@ -82,14 +80,11 @@ open class UsbService : Service() {
       permissionFlags
     )
     registerUsbReceivers()
-    enumerateConnectedDevices()
     started = startForegroundIfNeeded()
     if (!started) {
-      USBPlatform.onServiceUnavailable()
       return
     }
 
-    USBPlatform.onServiceReady(this)
   }
 
   override fun onDestroy() {
@@ -97,7 +92,6 @@ open class UsbService : Service() {
     unregisterReceiver(permissionReceiver)
     unregisterReceiver(attachDetachReceiver)
     stopForeground(STOP_FOREGROUND_REMOVE)
-    USBPlatform.onServiceUnavailable()
     instance = null
     super.onDestroy()
   }
@@ -128,19 +122,11 @@ open class UsbService : Service() {
 
   protected open fun onDeviceAttached(device: UsbDevice) {
     Log.i(TAG, "Device attached: ${device.deviceName}")
-    requestPermission(device)
   }
 
   protected open fun onDeviceDetached(device: UsbDevice) {
     Log.i(TAG, "Device detached: ${device.deviceName}")
     // TODO: close connections and notify runtime.
-  }
-
-  private fun enumerateConnectedDevices() {
-    usbManager.deviceList.values.forEach { device ->
-      Log.i(TAG, "Enumerating previously attached device: ${device.deviceName}")
-      requestPermission(device)
-    }
   }
 
   private fun requestPermissionById(deviceId: String): Boolean {
@@ -155,18 +141,6 @@ open class UsbService : Service() {
   }
 
   private fun startForegroundIfNeeded(): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      val hasPermission = ContextCompat.checkSelfPermission(
-        this,
-        Manifest.permission.POST_NOTIFICATIONS
-      ) == PackageManager.PERMISSION_GRANTED
-      if (!hasPermission) {
-        Log.w(TAG, "Notification permission missing; USB service will stop to avoid SecurityException")
-        stopSelf()
-        return false
-      }
-    }
-
     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val channel = NotificationChannel(
@@ -182,7 +156,7 @@ open class UsbService : Service() {
     val notification = buildServiceNotification()
     try {
       startForeground(USB_NOTIFICATION_ID, notification)
-    } catch (err: SecurityException) {
+    } catch (err: RuntimeException) {
       Log.e(TAG, "Unable to start foreground service; USB session may be killed", err)
       stopSelf()
       return false
@@ -200,9 +174,16 @@ open class UsbService : Service() {
     builder
       .setContentTitle("USB service active")
       .setContentText("Listening for USB devices")
-      .setSmallIcon(android.R.drawable.ic_dialog_info)
+      .setSmallIcon(serviceSmallIcon())
       .setOngoing(true)
     return builder.build()
+  }
+
+  private fun serviceSmallIcon(): Int {
+    @Suppress("DEPRECATION")
+    val info = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+    val configured = info.metaData?.getInt("oro.runtime.usb.small_icon", 0) ?: 0
+    return if (configured != 0) configured else android.R.drawable.ic_dialog_info
   }
 
   private fun canPostNotifications(manager: NotificationManager): Boolean {

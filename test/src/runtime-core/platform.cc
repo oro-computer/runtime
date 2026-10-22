@@ -1,3 +1,5 @@
+#include "src/runtime/runtime.hh"
+#include <array>
 #include "tests.hh"
 #include "src/runtime/platform.hh"
 
@@ -6,7 +8,39 @@ namespace oro {
 }
 
 namespace oro::Tests {
+  #if ORO_RUNTIME_PLATFORM_LINUX && !ORO_RUNTIME_PLATFORM_ANDROID
+  std::array<size_t, 7> linuxExtensionLayout ();
+  #endif
+
   void platform (Harness& t) {
+  #if ORO_RUNTIME_PLATFORM_LINUX && !ORO_RUNTIME_PLATFORM_ANDROID
+    t.test("Linux core and WebProcess extension layouts agree", [](auto t) {
+      const auto extension = linuxExtensionLayout();
+      const std::array<size_t, 7> core = {
+        sizeof(runtime::webview::IBridge),
+        sizeof(runtime::window::IBridge),
+        sizeof(runtime::bridge::Bridge),
+        sizeof(runtime::context::RuntimeContext),
+        sizeof(runtime::Runtime),
+        sizeof(runtime::window::Window),
+        sizeof(runtime::loop::Loop)
+      };
+      for (size_t index = 0; index < core.size(); ++index) {
+        t.equals(core[index], extension[index], "shared class retains its core layout");
+      }
+    });
+  #endif
+
+    t.test("runtime loop policy reaches the base context", [](auto t) {
+      for (const auto dedicated : {false, true}) {
+        runtime::Runtime::Options options;
+        options.autoStart = false;
+        options.loop.dedicatedThread = dedicated;
+        runtime::Runtime instance(options);
+        t.equals(instance.loop.options.dedicatedThread, dedicated, "preserves the configured loop policy");
+      }
+    });
+
     t.test("oro::platform.arch", [](auto t) {
       t.assert(oro::platform.arch, "oro::platform.arch is not empty");
     #if defined(__x86_64__) || defined(_M_X64)

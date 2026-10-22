@@ -2,6 +2,16 @@ import util, { hasOwnProperty } from 'oro:util'
 import { test } from 'oro:test'
 import Buffer from 'oro:buffer'
 
+test('util.parseJSON preserves valid JSON escapes before path repair', (t) => {
+  const values = ['public\u0000fixture', 'line\nnext\tcolumn', 'quote"slash\\', 'literal\\u0000', 'public-🙂']
+  for (const value of values) {
+    const parsed = util.parseJSON(JSON.stringify({ value }))
+    t.equal(parsed.value, value, 'preserves serialized string data')
+  }
+  t.equal(util.parseJSON('{"path":"C:\\Users\\Public"}').path, 'C:\\Users\\Public', 'repairs invalid legacy path escapes')
+  t.equal(util.parseJSON('{invalid'), null, 'rejects invalid JSON')
+})
+
 test('util.hasOwnProperty', (t) => {
   const obj = { foo: 'bar' }
   t.ok(

@@ -1,5 +1,6 @@
 /* global File */
 import application from '../application.js'
+import { validateFiles } from './share-files.js'
 import { NotAllowedError, NotSupportedError } from '../errors.js'
 
 const SUPPORTED_PLATFORMS = new Set(['ios', 'macos', 'visionos', 'android'])
@@ -118,9 +119,9 @@ async function share (data = {}) {
     )
   }
 
-  if (normalized.files.length > 0) {
+  if (normalized.files.length > 0 && getRuntimePlatform() !== 'android') {
     throw new NotSupportedError(
-      'Sharing files is not supported by this runtime yet'
+      'File sharing is available only on Android'
     )
   }
 
@@ -133,7 +134,8 @@ async function share (data = {}) {
   await currentWindow.share({
     title: normalized.title,
     text: normalized.text,
-    url: normalized.url
+    url: normalized.url,
+    files: normalized.files
   })
 }
 
@@ -149,7 +151,12 @@ function canShare (data = {}) {
   }
 
   if (normalized.files.length > 0) {
-    return false
+    if (getRuntimePlatform() !== 'android') return false
+    try {
+      validateFiles(normalized.files)
+    } catch {
+      return false
+    }
   }
 
   return true

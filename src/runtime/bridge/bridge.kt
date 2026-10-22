@@ -6,11 +6,12 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslCertificate
 import android.net.http.SslError
-import android.util.Base64
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebResourceError
 
 import java.io.ByteArrayInputStream
 import java.security.MessageDigest
@@ -18,6 +19,7 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 
 import oro.runtime.app.App
+import oro.runtime.app.NativeTlsPolicy
 import oro.runtime.debug.console
 import oro.runtime.webview.Navigator
 import oro.runtime.webview.SchemeHandlers
@@ -54,331 +56,34 @@ open class Bridge (
   open val schemeHandlers = SchemeHandlers(this)
   open val navigator = Navigator(this)
   open val buffers = mutableMapOf<String, ByteArray>()
+  private val bufferTimes = mutableMapOf<String, Long>()
 
-  private fun normaliseTlsPinHost (rawHost: String?): String {
-    if (rawHost == null) {
-      return ""
+  fun storeBuffer (sequence: String, bytes: ByteArray): Boolean = synchronized(buffers) {
+    val now = android.os.SystemClock.elapsedRealtime()
+    for (key in bufferTimes.filterValues { now - it >= 60_000 }.keys.toList()) {
+      buffers.remove(key)
+      bufferTimes.remove(key)
     }
-
-    var host = rawHost.trim().lowercase()
-    if (host.isEmpty()) {
-      return ""
+    if (sequence.length > 512 || bytes.size > 8_388_608 ||
+        (!buffers.containsKey(sequence) && buffers.size >= 32) ||
+        buffers.values.sumOf { it.size.toLong() } - (buffers[sequence]?.size ?: 0) + bytes.size > 33_554_432) {
+      false
+    } else {
+      buffers[sequence] = bytes
+      bufferTimes[sequence] = now
+      true
     }
-
-    val schemeIndex = host.indexOf("://")
-    host = when {
-      schemeIndex >= 0 -> host.substring(schemeIndex + 3)
-      host.startsWith("//") -> host.substring(2)
-      else -> host
-    }
-
-    val cut = host.indexOfAny(charArrayOf('/', '?', '#'))
-    if (cut >= 0) {
-      host = host.substring(0, cut)
-    }
-
-    val at = host.lastIndexOf('@')
-    if (at >= 0) {
-      host = host.substring(at + 1)
-    }
-
-    host = host.trim()
-    if (host.isEmpty()) {
-      return ""
-    }
-
-    while (host.endsWith(".")) {
-      host = host.dropLast(1)
-    }
-
-    if (host.isEmpty()) {
-      return ""
-    }
-
-    if (host.startsWith("[")) {
-      val end = host.indexOf(']')
-      if (end <= 1) {
-        return ""
-      }
-
-      val inner = host.substring(1, end)
-      val suffix = host.substring(end + 1)
-
-      if (suffix.isEmpty()) {
-        return inner
-      }
-
-      if (!suffix.startsWith(":")) {
-        return ""
-      }
-
-      val port = suffix.substring(1)
-      if (port.isEmpty() || !port.all { it in '0'..'9' }) {
-        return ""
-      }
-
-      return inner
-    }
-
-    val colon = host.lastIndexOf(':')
-    if (colon >= 0) {
-      val prefix = host.substring(0, colon)
-      val suffix = if (colon + 1 < host.length) host.substring(colon + 1) else ""
-      if (!prefix.contains(':')) {
-        if (prefix.isEmpty() || suffix.isEmpty()) {
-          return ""
-        }
-
-        if (!suffix.all { it in '0'..'9' }) {
-          return ""
-        }
-
-        host = prefix
-        while (host.endsWith(".")) {
-          host = host.dropLast(1)
-        }
-
-        if (host.isEmpty()) {
-          return ""
-        }
-      }
-    }
-
-    return host
   }
 
-  private fun normaliseTlsPinEndpoint (rawHost: String?): String {
-    if (rawHost == null) {
-      return ""
-    }
-
-    var host = rawHost.trim().lowercase()
-    if (host.isEmpty()) {
-      return ""
-    }
-
-    val schemeIndex = host.indexOf("://")
-    host = when {
-      schemeIndex >= 0 -> host.substring(schemeIndex + 3)
-      host.startsWith("//") -> host.substring(2)
-      else -> host
-    }
-
-    val cut = host.indexOfAny(charArrayOf('/', '?', '#'))
-    if (cut >= 0) {
-      host = host.substring(0, cut)
-    }
-
-    val at = host.lastIndexOf('@')
-    if (at >= 0) {
-      host = host.substring(at + 1)
-    }
-
-    host = host.trim()
-    if (host.isEmpty()) {
-      return ""
-    }
-
-    while (host.endsWith(".")) {
-      host = host.dropLast(1)
-    }
-
-    if (host.isEmpty()) {
-      return ""
-    }
-
-    if (host.startsWith("[")) {
-      val end = host.indexOf(']')
-      if (end <= 1) {
-        return ""
-      }
-
-      val inner = host.substring(1, end)
-      val suffix = host.substring(end + 1)
-
-      if (suffix.isEmpty()) {
-        return inner
-      }
-
-      if (!suffix.startsWith(":")) {
-        return ""
-      }
-
-      val port = suffix.substring(1)
-      if (port.isEmpty() || !port.all { it in '0'..'9' }) {
-        return ""
-      }
-
-      return "[$inner]:$port"
-    }
-
-    val colon = host.lastIndexOf(':')
-    if (colon >= 0) {
-      val prefix = host.substring(0, colon)
-      val suffix = if (colon + 1 < host.length) host.substring(colon + 1) else ""
-      if (!prefix.contains(':')) {
-        if (prefix.isEmpty() || suffix.isEmpty()) {
-          return ""
-        }
-
-        if (!suffix.all { it in '0'..'9' }) {
-          return ""
-        }
-
-        var base = prefix
-        while (base.endsWith(".")) {
-          base = base.dropLast(1)
-        }
-
-        if (base.isEmpty()) {
-          return ""
-        }
-
-        return "$base:$suffix"
-      }
-    }
-
-    return host
+  fun takeBuffer (sequence: String): ByteArray? = synchronized(buffers) {
+    val storedAt = bufferTimes.remove(sequence) ?: return@synchronized null
+    val bytes = buffers.remove(sequence)
+    if (android.os.SystemClock.elapsedRealtime() - storedAt >= 60_000) null else bytes
   }
 
-  private fun normaliseTlsPinToken (rawToken: String?): String? {
-    if (rawToken == null) {
-      return null
-    }
-
-    var token = rawToken.trim()
-    if (token.isEmpty()) {
-      return null
-    }
-
-    if (token.startsWith("sha256/", ignoreCase = true)) {
-      token = token.substring("sha256/".length)
-    }
-
-    token = token.replace('-', '+').replace('_', '/')
-
-    val remainder = token.length % 4
-    if (remainder != 0) {
-      token += "=".repeat(4 - remainder)
-    }
-
-    val decoded = try {
-      Base64.decode(token, Base64.DEFAULT)
-    } catch (_: IllegalArgumentException) {
-      null
-    } ?: return null
-
-    if (decoded.size != 32) {
-      return null
-    }
-
-    return Base64.encodeToString(decoded, Base64.NO_WRAP)
-  }
-
-  private fun parseTlsPins (raw: String): Map<String, List<String>> {
-    val result = mutableMapOf<String, MutableList<String>>()
-
-    raw.lineSequence().forEach { original ->
-      var line = original.trim()
-      if (line.isEmpty()) return@forEach
-
-      val hashIndex = line.indexOf('#')
-      val semiIndex = line.indexOf(';')
-      val commentIndex = when {
-        hashIndex < 0 -> semiIndex
-        semiIndex < 0 -> hashIndex
-        else -> minOf(hashIndex, semiIndex)
-      }
-
-      if (commentIndex >= 0) {
-        line = line.substring(0, commentIndex).trim()
-        if (line.isEmpty()) return@forEach
-      }
-
-      val parts = line.split(Regex("\\s+")).filter { it.isNotEmpty() }
-      if (parts.isEmpty()) return@forEach
-
-      val firstToken = parts[0].trim()
-      // Guard against accidentally providing pin tokens where a host is expected.
-      if (
-        firstToken.startsWith("sha256/", ignoreCase = true) ||
-        normaliseTlsPinToken(firstToken) != null
-      ) {
-        return@forEach
-      }
-
-      val host = normaliseTlsPinEndpoint(parts[0])
-      if (host.isEmpty()) return@forEach
-
-      val pins = result.getOrPut(host) { mutableListOf() }
-
-      // Fail-closed semantics: a configured host with no valid pins should
-      // reject all certificates when evaluated.
-      if (parts.size < 2) return@forEach
-
-      parts.drop(1).forEach { rawPin ->
-        val pin = normaliseTlsPinToken(rawPin) ?: return@forEach
-        if (!pins.contains(pin)) {
-          pins.add(pin)
-        }
-      }
-    }
-
-    return result
-  }
-
-  private fun isCertificateAllowedForHost (
-    pins: Map<String, List<String>>,
-    host: String?,
-    certSha256: ByteArray
-  ): Boolean {
-    if (host == null || host.isEmpty()) {
-      return true
-    }
-
-    val endpointKey = normaliseTlsPinEndpoint(host)
-    if (endpointKey.isEmpty()) {
-      return true
-    }
-
-    val hostKey = normaliseTlsPinHost(host)
-    if (hostKey.isEmpty()) {
-      return true
-    }
-
-    val hostPins = pins[endpointKey] ?: pins[hostKey] ?: return true
-
-    if (certSha256.isEmpty()) {
-      return false
-    }
-
-    if (hostPins.isEmpty()) {
-      return false
-    }
-
-    val digestB64 = Base64.encodeToString(certSha256, Base64.NO_WRAP)
-    return hostPins.any { it == digestB64 }
-  }
-
-  private fun hasTlsPinsForHost (
-    pins: Map<String, List<String>>,
-    host: String?
-  ): Boolean {
-    if (host == null || host.isEmpty()) {
-      return false
-    }
-
-    val endpointKey = normaliseTlsPinEndpoint(host)
-    if (endpointKey.isEmpty()) {
-      return false
-    }
-
-    val hostKey = normaliseTlsPinHost(host)
-    if (hostKey.isEmpty()) {
-      return false
-    }
-
-    return pins.containsKey(endpointKey) || pins.containsKey(hostKey)
+  fun clearBuffers () = synchronized(buffers) {
+    buffers.clear()
+    bufferTimes.clear()
   }
 
   override fun shouldOverrideUrlLoading (
@@ -424,9 +129,8 @@ open class Bridge (
     try {
       this.activity.startActivity(intent)
     } catch (err: Exception) {
-      // TODO(jwerle): handle this error gracefully
-      console.error(err.toString())
-      return false
+      console.error("External navigation could not be opened")
+      return true
     }
 
     return true
@@ -436,6 +140,39 @@ open class Bridge (
     view: WebView,
     request: WebResourceRequest
   ): WebResourceResponse? {
+    val uri = request.url
+    val bundle = App.getInstance().getUserConfigValue("meta_bundle_identifier")
+    val internalResource = uri.scheme in setOf("oro", "node", "npm") ||
+      (uri.scheme in setOf("http", "https") && uri.host.equals(bundle, ignoreCase = true))
+    val resourceOrigin = request.requestHeaders.entries.firstOrNull { it.key.equals("Origin", true) }?.value
+    // HTML assets include per-process runtime configuration. A permissive CORS
+    // response must not disclose that preload to a foreign frame's fetch.
+    if (internalResource && resourceOrigin != null && !this.window.isTrustedOrigin(Uri.parse(resourceOrigin))) {
+      return WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(byteArrayOf()))
+    }
+    if (request.url.scheme == "ipc") {
+      // Preflight carries header names, never the document token. Answer it
+      // without routing a native command; the following request must authenticate.
+      if (request.method == "OPTIONS") {
+        val origin = request.requestHeaders.entries.firstOrNull { it.key.equals("Origin", true) }?.value
+        val headers = request.requestHeaders.entries.firstOrNull { it.key.equals("Access-Control-Request-Headers", true) }?.value ?: ""
+        if (origin != null && this.window.isTrustedOrigin(Uri.parse(origin)) && headers.length <= 4096 &&
+            (headers.isEmpty() || headers.split(',').all { Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+").matches(it.trim()) })) {
+          return WebResourceResponse("text/plain", "UTF-8", 204, "No Content", mapOf(
+            "Access-Control-Allow-Origin" to origin,
+            "Access-Control-Allow-Methods" to "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers" to headers,
+            "Access-Control-Max-Age" to "600",
+            "Vary" to "Origin"
+          ), ByteArrayInputStream(byteArrayOf()))
+        }
+        return WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(byteArrayOf()))
+      }
+      if (!this.window.acceptsIpcRequest(request)) {
+        return WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", emptyMap(),
+          ByteArrayInputStream("IPC origin is not authorized".toByteArray()))
+      }
+    }
     return this.schemeHandlers.handleRequest(request)
   }
 
@@ -444,24 +181,12 @@ open class Bridge (
     handler: SslErrorHandler,
     error: SslError
   ) {
-    val pinsRaw = try {
-      App.getInstance().getUserConfigValue("webview_tls_pins")
+    val pins = try {
+      NativeTlsPolicy.pins(App.getInstance())
     } catch (_: Exception) {
-      ""
-    }.ifBlank {
-      try {
-        App.getInstance().getUserConfigValue("webview.tls_pins")
-      } catch (_: Exception) {
-        ""
-      }
-    }
-
-    if (pinsRaw.isBlank()) {
-      super.onReceivedSslError(view, handler, error)
+      handler.cancel()
       return
     }
-
-    val pins = parseTlsPins(pinsRaw)
 
     val pinHost = try {
       val url = error.url
@@ -494,7 +219,7 @@ open class Bridge (
     }
 
     // Preserve the platform default behaviour when no pins apply to this host.
-    if (!hasTlsPinsForHost(pins, pinHost)) {
+    if (!NativeTlsPolicy.hasTlsPinsForHost(pins, pinHost)) {
       super.onReceivedSslError(view, handler, error)
       return
     }
@@ -531,7 +256,7 @@ open class Bridge (
       return
     }
 
-    if (isCertificateAllowedForHost(pins, pinHost, digest)) {
+    if (NativeTlsPolicy.isCertificateAllowedForHost(pins, pinHost, digest)) {
       handler.proceed()
     } else {
       handler.cancel()
@@ -543,8 +268,12 @@ open class Bridge (
     url: String,
     favicon: Bitmap?
   ) {
+    this.window.platformDocumentToken = ""
+    oro.runtime.app.PlatformOperations.cancelWindow(this.window)
+    this.window.activity.presentation.navigation(this.window)
+    this.window.fragment.beginStartup()
     val uri = Uri.parse(url)
-    if (uri.scheme != "about" && uri.authority != "__BUNDLE_IDENTIFIER__") {
+    if (this.window.isTrustedOrigin(uri) && uri.scheme != "about" && uri.authority != "__BUNDLE_IDENTIFIER__") {
       val preloadUserScript =
         try { this.window.getPreloadUserScript() } catch (_: Exception) { null }
 
@@ -554,6 +283,31 @@ open class Bridge (
     }
 
     super.onPageStarted(view, url, favicon)
+  }
+
+  override fun onPageFinished (view: WebView, url: String) {
+    super.onPageFinished(view, url)
+    // A document load alone does not establish that the runtime bridge initialized.
+    view.evaluateJavascript("typeof globalThis.__RUNTIME_INIT_NOW__ === 'number'") { result ->
+      if (result == "true" && this.window.userMessageHandler.active && this.window.fragment.hasWebView) {
+        this.window.fragment.markReady()
+      }
+    }
+  }
+
+  override fun onReceivedError (view: WebView, request: WebResourceRequest, error: WebResourceError) {
+    if (request.isForMainFrame && this.window.userMessageHandler.active) this.window.fragment.failStartup()
+  }
+
+  override fun onReceivedHttpError (view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+    if (request.isForMainFrame && response.statusCode >= 400 && this.window.userMessageHandler.active) {
+      this.window.fragment.failStartup()
+    }
+  }
+
+  override fun onRenderProcessGone (view: WebView, detail: RenderProcessGoneDetail): Boolean {
+    this.window.fragment.onRendererGone(view)
+    return true
   }
 
   fun emit (event: String, data: String): Boolean {

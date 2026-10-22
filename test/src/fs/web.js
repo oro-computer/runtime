@@ -2,6 +2,7 @@ import { compareBuffers } from 'oro:util'
 import { Buffer } from 'oro:buffer'
 import { test } from 'oro:test'
 import path from 'oro:path'
+import os from 'oro:os'
 import mime from 'oro:mime'
 import fs from 'oro:fs/promises'
 import fsCallbacks from 'oro:fs'
@@ -99,7 +100,7 @@ test('createFileSystemFileHandle', async (t) => {
   })
   t.equal(stats.size, file.size, 'fs.stat supports a FileSystemFileHandle')
 
-  const copyPath = `./web-copy-${Math.random().toString(16).slice(2)}.bin`
+  const copyPath = path.join(os.tmpdir(), `web-copy-${Math.random().toString(16).slice(2)}.bin`)
   try {
     await new Promise((resolve, reject) => {
       fsCallbacks.copyFile(handle, copyPath, (err) =>

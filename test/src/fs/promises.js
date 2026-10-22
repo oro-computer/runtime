@@ -40,8 +40,8 @@ test('fs.promises.access', async (t) => {
   access = await fs.access(FIXTURES, R_OK)
   t.equal(access, true, '(F_OK | R_OK) fixtures/ directory is readable')
 
-  access = await fs.access('.', W_OK)
-  t.equal(access, true, '(W_OK) ./ directory is writable')
+  access = await fs.access(TMPDIR, W_OK)
+  t.equal(access, true, '(W_OK) temporary directory is writable')
 
   access = await fs.access(FIXTURES, X_OK)
   t.equal(

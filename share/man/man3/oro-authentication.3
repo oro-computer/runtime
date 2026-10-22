@@ -1,0 +1,69 @@
+.TH ORO-AUTHENTICATION 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:authentication \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:authentication'
+.fi
+.SH DESCRIPTION
+.PP
+Android 11+ authentication\-gated Keystore operations. Enable `[permissions] allow_biometrics = true`. User authentication authorizes one cryptographic operation; account authority must still be verified by a server.
+.SH REFERENCE
+.TP
+\fBgetStatus(options)\fR
+Reads policy/enrollment availability without prompting or creating keys. Other platforms reject with ENOSYS.
+\fBParameters:\fR
+.br
+\fIoptions\fR (AuthenticationOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<AuthenticationStatus>\fR
+.TP
+\fBseal(value, options)\fR
+Encrypts at most 64 KiB after a native cryptographic authentication prompt. At most 64 protected keys are retained. Existing keys are never silently replaced after enrollment changes, removal or invalidation. Keep the returned sealed record and handle EKEYREVOKED/ENOENT through explicit app recovery.
+\fBParameters:\fR
+.br
+\fIvalue\fR (string \\| Uint8Array \\| ArrayBuffer; required)
+.br
+\fIoptions\fR (ProtectedKeyOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<ProtectedSecret>\fR
+.TP
+\fBopen(sealed, options)\fR
+Decrypts only through a user\-authenticated native Cipher operation. Returns bytes; decoding or restoring an application session remains app\-owned.
+\fBParameters:\fR
+.br
+\fIsealed\fR (ProtectedSecret; required)
+.br
+\fIoptions\fR (ProtectedKeyOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<Uint8Array>\fR
+.TP
+\fBcreateSigningKey(options)\fR
+Creates or reuses a non\-exportable P\-256 key and signs an enrollment challenge after cryptographic authentication. This does not enroll the key on a server.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ChallengeOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<ChallengeSignature>\fR
+.TP
+\fBsignChallenge(options)\fR
+Signs a fresh authority/account\-bound server challenge using an existing authentication\-gated key. No success boolean establishes server authority.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ChallengeOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<ChallengeSignature>\fR
+.TP
+\fBremoveKey(options)\fR
+Explicitly removes this app's protected secret or signing key. Ciphertext and server enrollment become unusable; revoke enrolled keys on the server too.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ProtectedKeyRemovalOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR

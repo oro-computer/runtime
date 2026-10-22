@@ -12,7 +12,8 @@ using oro::runtime::string::replace;
 
 namespace oro::runtime {
   Runtime::Runtime (const Options& options)
-    : windowManager(*this),
+    : context::RuntimeContext(options.loop),
+      windowManager(*this),
       bridgeManager(*this),
       serviceWorkerManager(*this, { .windowManager = this->windowManager }),
       dispatcher(*this),

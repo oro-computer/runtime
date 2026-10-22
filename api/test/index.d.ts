@@ -218,11 +218,11 @@ export class Test {
     ifError(err: Error | null | undefined, msg?: string): void;
     /**
      * @param {Function} fn
-     * @param {RegExp | any} [expected]
+     * @param {RegExp | ErrorConstructor} [expected]
      * @param {string} [message]
      * @returns {void}
      */
-    throws(fn: Function, expected?: RegExp | any, message?: string): void;
+    throws(fn: Function, expected?: RegExp | ErrorConstructor, message?: string): void;
     /**
      * Assert that a promise or async function rejects.
      * @param {PromiseLike<any>|(() => any)} input

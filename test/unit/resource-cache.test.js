@@ -157,8 +157,9 @@ test('Android resource reads handle empty, incomplete and unavailable files', {
     }
     void AAsset_close (AAsset* asset) { ++closes; delete asset; }
     struct ContentResolver {
-      int openFileDescriptor (const String&, off_t*, off_t*) { return -1; }
-      void closeFileDescriptor (int) {}
+      int openFileDescriptor (const String&, off_t* = nullptr, off_t* = nullptr) { return 0; }
+      bool closeFileDescriptor (int) { return true; }
+      int64_t getFileDescriptorLength (int) { return -1; }
     };
     struct Resource {
       struct Cache { std::shared_ptr<unsigned char[]> bytes; size_t size = 0; } cache;
@@ -172,6 +173,7 @@ test('Android resource reads handle empty, incomplete and unavailable files', {
       // Let the read reach the fallback even if the file disappeared after exists().
       bool exists () { return true; }
       bool isAndroidLocalAsset () { return !fs::exists(path); }
+      bool isAndroidContent () { return false; }
     };
     std::map<String, Resource::Cache> caches;
     ${size}
@@ -222,4 +224,58 @@ test('Android resource reads handle empty, incomplete and unavailable files', {
   assert.equal(compiled.status, 0, compiled.stderr)
   const result = spawnSync(executable, [], { cwd: directory, encoding: 'utf8', timeout: 15000 })
   assert.equal(result.status, 0, result.stderr || String(result.error || result.signal || ''))
+})
+
+test('native helpers can select an app resource root after executable-path caching without accepting invalid paths', {
+  skip: process.platform !== 'linux' || !compiler ? 'Requires Linux and a C++ compiler' : false
+}, () => {
+  const source = readFileSync(new URL('../../src/runtime/filesystem/resource.cc', import.meta.url), 'utf8')
+  const methods = source.slice(source.indexOf('  bool Resource::setResourcesPath ('), source.indexOf('  Path Resource::getResourcePath ('))
+  const directory = mkdtempSync(path.join(tmpdir(), 'oro-resource-root-'))
+  const filename = path.join(directory, 'root.cc')
+  const executable = path.join(directory, 'root')
+  writeFileSync(filename, `
+    #include <algorithm>
+    #include <cassert>
+    #include <filesystem>
+    #include <fstream>
+    #include <mutex>
+    #include <string>
+    #include <thread>
+    #include <vector>
+    #define ORO_RUNTIME_PLATFORM_LINUX 1
+    namespace fs = std::filesystem;
+    using Path = fs::path;
+    using String = std::string;
+    using Lock = std::lock_guard<std::recursive_mutex>;
+    std::recursive_mutex mutex;
+    Path configuredResourcesPath;
+    struct Resource {
+      static bool setResourcesPath(const Path&);
+      static Path getResourcesPath();
+    };
+    ${methods}
+    int main () {
+      const auto original = Resource::getResourcesPath();
+      const auto resources = original / "app resources";
+      fs::create_directory(resources);
+      std::ofstream(resources / "index.html") << "public resource";
+      assert(!Resource::setResourcesPath("relative"));
+      assert(Resource::getResourcesPath() == original);
+      assert(Resource::setResourcesPath(resources / "."));
+      assert(Resource::getResourcesPath() == fs::canonical(resources));
+      assert(!Resource::setResourcesPath(resources / "missing"));
+      assert(!Resource::setResourcesPath(resources / "index.html"));
+      assert(Resource::getResourcesPath() == fs::canonical(resources));
+      std::vector<std::thread> readers;
+      for (int index = 0; index < 8; ++index) readers.emplace_back([&] {
+        for (int request = 0; request < 1000; ++request) assert(Resource::getResourcesPath() == fs::canonical(resources));
+      });
+      for (auto& reader : readers) reader.join();
+    }
+  `)
+  const compiled = spawnSync(compiler, ['-std=c++20', '-pthread', filename, '-o', executable], { encoding: 'utf8' })
+  assert.equal(compiled.status, 0, compiled.stderr)
+  const result = spawnSync(executable, [], { encoding: 'utf8', timeout: 10000 })
+  assert.equal(result.status, 0, result.stderr)
 })

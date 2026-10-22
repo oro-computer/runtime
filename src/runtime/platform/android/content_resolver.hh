@@ -9,7 +9,7 @@ namespace oro::runtime::android {
     public:
       using FileDescriptor = jobject;
 
-      Activity activity;
+      Application application = nullptr;
       JVMEnvironment jvm;
       ContentResolver () = default;
       ContentResolver (const ContentResolver&);
@@ -30,21 +30,27 @@ namespace oro::runtime::android {
       String getPathnameFromURI (const String& uri);
       String getPathnameFromContentURI (
         const String& uri,
-        const String& id = nullptr
+        const String& id = ""
       );
 
       Vector<String> getPathnameEntriesFromContentURI (const String& uri);
 
-      bool hasAccess (const String& uri);
+      bool hasAccess (const String& uri, int* error = nullptr);
       FileDescriptor openFileDescriptor (
         const String& uri,
         off_t* offset = nullptr,
-        off_t* length = nullptr
+        off_t* length = nullptr,
+        const String& mode = "r",
+        int* error = nullptr
       );
 
+      // Reject provider modes whose semantics cannot preserve the requested flags.
+      static int getOpenMode (int flags, String& mode);
+      static int getReadRange (size_t offset, size_t size, off_t start, off_t length, int64_t& position, size_t& count);
+
       bool closeFileDescriptor (FileDescriptor fileDescriptor);
-      size_t getFileDescriptorLength (FileDescriptor fileDescriptor);
-      size_t getFileDescriptorOffset (FileDescriptor fileDescriptor);
+      off_t getFileDescriptorLength (FileDescriptor fileDescriptor);
+      off_t getFileDescriptorOffset (FileDescriptor fileDescriptor);
       int getFileDescriptorFD (FileDescriptor fileDescriptor);
   };
 }

@@ -139,24 +139,36 @@ namespace oro::runtime::window {
   }
 
   void Window::eval (const String& source, const EvalCallback callback) {
-    if (this->self == nullptr) return;
     const auto app = App::sharedApplication();
+    if (!app || !app->runtime.android.activity) return;
+    const auto managed = app->runtime.windowManager.getWindow(this->index);
+    if (!managed || managed.get() != this) return;
+    Lock lock(managed->mutex);
+    if (this->self == nullptr) return;
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
     const auto token = std::to_string(rand64());
+    if (callback != nullptr) {
+      this->evaluateJavaScriptCallbacks.insert_or_assign(token, callback);
+    }
 
-    // `activity.evaluateJavaScript(index, source): Boolean`
-    CallClassMethodFromAndroidEnvironment(
+    const auto sourceValue = android::StringWrap(attachment.env, source).j_str();
+    const auto tokenValue = android::StringWrap(attachment.env, token).j_str();
+    // Bind queued work to this Java window, never a later occupant of its index.
+    const auto scheduled = CallClassMethodFromAndroidEnvironment(
       attachment.env,
       Boolean,
-      app->runtime.android.activity,
+      this->self,
       "evaluateJavaScript",
-      "(ILjava/lang/String;Ljava/lang/String;)Z",
-      this->index,
-      attachment.env->NewStringUTF(source.c_str()),
-      attachment.env->NewStringUTF(token.c_str())
+      "(Ljava/lang/String;Ljava/lang/String;)Z",
+      sourceValue,
+      tokenValue
     );
-
-    this->evaluateJavaScriptCallbacks.insert_or_assign(token, callback);
+    attachment.env->DeleteLocalRef(sourceValue);
+    attachment.env->DeleteLocalRef(tokenValue);
+    if (attachment.env->ExceptionCheck() || !scheduled) {
+      attachment.env->ExceptionClear();
+      this->evaluateJavaScriptCallbacks.erase(token);
+    }
   }
 
   void Window::show () {
@@ -261,7 +273,7 @@ namespace oro::runtime::window {
       "navigateWindow",
       "(ILjava/lang/String;)Z",
       this->index,
-      attachment.env->NewStringUTF(url.c_str())
+      android::StringWrap(attachment.env, url).j_str()
     );
 
     if (!result) {
@@ -304,7 +316,7 @@ namespace oro::runtime::window {
       "setWindowTitle",
       "(ILjava/lang/String;)Z",
       this->index,
-      attachment.env->NewStringUTF(title.c_str())
+      android::StringWrap(attachment.env, title).j_str()
     );
   }
 
@@ -601,6 +613,10 @@ extern "C" {
       return ANDROID_THROW(env, "Invalid window index (%d) requested", index);
     }
 
+    Lock lock(window->mutex);
+    if (window->self) {
+      env->DeleteGlobalRef(window->self);
+    }
     window->self = env->NewGlobalRef(self);
 
     app->dispatch([window]() {
@@ -624,6 +640,29 @@ extern "C" {
         window->show();
       }
     });
+  }
+
+  void ANDROID_EXTERNAL(window, Window, onViewDestroyed) (
+    JNIEnv* env,
+    jobject self,
+    jint index
+  ) {
+    const auto app = App::sharedApplication();
+    if (!app) {
+      return;
+    }
+
+    const auto window = app->runtime.windowManager.getWindow(index);
+    if (!window) {
+      return;
+    }
+
+    Lock lock(window->mutex);
+    if (window->self && env->IsSameObject(window->self, self)) {
+      env->DeleteGlobalRef(window->self);
+      window->self = nullptr;
+      window->evaluateJavaScriptCallbacks.clear();
+    }
   }
 
   void ANDROID_EXTERNAL(window, Window, onClose) (
@@ -670,11 +709,13 @@ extern "C" {
 
     Lock lock(window->mutex);
 
+    if (!window->self || !env->IsSameObject(window->self, self)) return;
     if (!window->evaluateJavaScriptCallbacks.contains(token)) {
       return;
     }
 
     const auto callback = window->evaluateJavaScriptCallbacks.at(token);
+    window->evaluateJavaScriptCallbacks.erase(token);
 
     if (callback != nullptr) {
       if (result == "null" || result == "undefined") {
@@ -718,9 +759,11 @@ extern "C" {
     }
 
     const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
-    const auto pendingNavigationLocation = window->pendingNavigationLocation;
+    const auto pendingNavigationLocation = window->pendingNavigationLocation.empty()
+      ? window->bridge->navigator.location.str()
+      : window->pendingNavigationLocation;
     window->pendingNavigationLocation = "";
-    return attachment.env->NewStringUTF(pendingNavigationLocation.c_str());
+    return android::StringWrap(attachment.env, pendingNavigationLocation).j_str();
   }
 
   jstring ANDROID_EXTERNAL(window, Window, getBundleIdentifier) (
@@ -743,7 +786,7 @@ extern "C" {
     }
 
     auto userConfig = window->getOptions().userConfig;
-    return env->NewStringUTF(userConfig["meta_bundle_identifier"].c_str());
+    return android::StringWrap(env, userConfig["meta_bundle_identifier"]).j_str();
   }
 
   jstring ANDROID_EXTERNAL(window, Window, getPreloadUserScript) (
@@ -787,7 +830,7 @@ extern "C" {
       }
     });
 
-    return env->NewStringUTF(preloadUserScriptSource.compile().c_str());
+    return android::StringWrap(env, preloadUserScriptSource.compile()).j_str();
   }
 
   void ANDROID_EXTERNAL(window, Window, handleApplicationURL) (

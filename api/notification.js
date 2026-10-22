@@ -14,6 +14,113 @@ import hooks from './hooks.js'
 import URL from './url.js'
 import ipc from './ipc.js'
 import os from './os.js'
+import platformRequest from './internal/platform-request.js'
+
+/**
+ * @typedef {object} AndroidNotificationChannel
+ * @property {string} id Immutable channel identity; at most 128 characters.
+ * @property {string} name User-visible channel name.
+ * @property {string} [description]
+ * @property {'min'|'low'|'default'|'high'} [importance='default'] Initial default; user settings remain authoritative.
+ * @property {string} [sound='default'] 'default', 'none', or a packaged raw/name resource.
+ * @property {boolean} [vibration=false]
+ * @property {boolean} [badge=true]
+ */
+/**
+ * @typedef {object} AndroidNotificationChannelStatus
+ * @property {string} id
+ * @property {number} importance Current system importance.
+ * @property {boolean} sound
+ * @property {boolean} vibration
+ * @property {boolean} blocked
+ */
+/**
+ * @typedef {object} AndroidPublicNotification
+ * @property {string} title Redacted public lock-screen title; at most 160 characters.
+ * @property {string} [body] Redacted public body; at most 512 characters.
+ */
+/**
+ * @typedef {object} AndroidNotificationAction
+ * @property {string} action Opaque action identity.
+ * @property {string} title User-visible action label.
+ */
+/**
+ * @typedef {object} AndroidNotificationOptions
+ * @property {string} id Opaque application identity, returned by the existing response ledger.
+ * @property {string} title
+ * @property {string} channel Existing channel identity, or 'default' for the built-in channel.
+ * @property {string} [body]
+ * @property {string} [tag]
+ * @property {string} [category]
+ * @property {boolean} [silent=false]
+ * @property {boolean} [renotify=false]
+ * @property {boolean} [requireInteraction=false]
+ * @property {AndroidNotificationAction[]} [actions] At most three opaque routing actions.
+ * @property {string} [group] Application-defined group key.
+ * @property {boolean} [groupSummary=false] Submit a summary explicitly; summaries are not generated automatically.
+ * @property {'all'|'summary'|'children'} [groupAlertBehavior='all'] Apply consistently to group members.
+ * @property {string} [smallIcon] Packaged drawable resource name.
+ * @property {AndroidPublicNotification} [publicVersion] Redacted replacement; private visibility is always retained.
+ */
+/**
+ * @typedef {object} AndroidNotificationSubmission
+ * @property {string} id
+ * @property {boolean} submitted OS submission succeeded.
+ * @property {boolean} presentationObserved False; submission is not proof of display, sound or user attention.
+ */
+
+/**
+ * Registers at most 32 immutable named Android channels. Reusing an ID with
+ * changed defaults rejects EEXIST; choose a new versioned ID instead. Existing
+ * user changes are preserved. Requires notification capability; does not prompt.
+ * @param {AndroidNotificationChannel[]} channels
+ * @returns {Promise<AndroidNotificationChannelStatus[]>}
+ */
+export async function configureChannels (channels) {
+  if (!Array.isArray(channels) || channels.length < 1 || channels.length > 32) {
+    throw new TypeError('Expected between one and 32 notification channels')
+  }
+  return platformRequest('notifications', 'configureChannels', { channels })
+}
+
+/**
+ * Submits an Android notification with channel/group/public-version policy.
+ * Reads and acknowledgement use getResponses()/acknowledgeResponse(). This
+ * function does not establish account authority or deduplicate server events.
+ * Other platforms reject ENOSYS. Compiled native executors can use the same
+ * NativeNotifications.submit(Context, JSONObject) implementation without a WebView.
+ * @param {AndroidNotificationOptions} options
+ * @returns {Promise<AndroidNotificationSubmission>}
+ */
+export async function submit (options) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new TypeError('Expected notification submission options')
+  }
+  return platformRequest('notifications', 'submit', options)
+}
+
+/**
+ * @typedef {object} AndroidNotificationCancelOptions
+ * @property {string} [tag=''] Exact tag used for submission.
+ */
+
+/**
+ * Cancels an Android notification by its exact application ID/tag. Missing
+ * notifications are allowed. It does not create a dismissal receipt, revoke
+ * server state or acknowledge existing responses. Compiled receivers can use
+ * NativeNotifications.cancel(Context, id, tag) without an Activity or WebView.
+ * Other platforms reject with ENOSYS.
+ * @param {string} id
+ * @param {AndroidNotificationCancelOptions} [options]
+ * @returns {Promise<void>}
+ */
+export async function cancel (id, options = {}) {
+  const tag = options.tag ?? ''
+  if (typeof id !== 'string' || id.length < 1 || id.length > 256 || typeof tag !== 'string' || tag.length > 256) {
+    throw new TypeError('Invalid notification cancellation identity')
+  }
+  await platformRequest('notifications', 'cancel', { id, tag })
+}
 
 const isLinux = os.platform() === 'linux'
 const NativeNotification =
@@ -41,6 +148,88 @@ export const NOTIFICATION_PRESENTED_EVENT = 'notificationpresented'
  * @type {string}
  */
 export const NOTIFICATION_RESPONSE_EVENT = 'notificationresponse'
+
+/**
+ * @typedef {object} NotificationResponseReceipt
+ * @property {string} receiptId Opaque identity used to acknowledge this receipt.
+ * @property {string} id Application notification identity.
+ * @property {string} action Action identity, `default`, or `dismiss`.
+ * @property {number} receivedAt Unix timestamp in milliseconds.
+ */
+
+/**
+ * Reads Android notification responses retained across process restarts. Call
+ * after restoring authorization, resolve IDs against authorized application
+ * state, then acknowledge handled or obsolete receipts. Reading does not remove
+ * receipts. At most 64 responses are retained for seven days. Notification
+ * content and arbitrary `data` are not persisted. Other platforms reject with
+ * `ENOSYS`. A receipt does not establish authorization or verified presentation.
+ * @returns {Promise<NotificationResponseReceipt[]>}
+ */
+export async function getResponses () {
+  const { data, err } = await ipc.request('notification.getResponses')
+  if (err) throw err
+  return data
+}
+
+/**
+ * Removes an Android response after application reconciliation. Repeated
+ * acknowledgements are allowed. Other platforms reject with `ENOSYS`.
+ * @param {string} receiptId Opaque identity returned by `getResponses()`.
+ * @returns {Promise<void>}
+ */
+export async function acknowledgeResponse (receiptId) {
+  if (typeof receiptId !== 'string' || receiptId.length === 0 || receiptId.length > 256) {
+    throw new TypeError('receiptId must be a non-empty string of at most 256 characters')
+  }
+  const { err } = await ipc.request('notification.acknowledgeResponse', { receiptId })
+  if (err) throw err
+}
+
+/**
+ * @typedef {object} NotificationDeliveryStatus
+ * @property {boolean} enabled Application notifications and runtime capability are enabled.
+ * @property {string} channelId Native channel identity.
+ * @property {boolean} exists
+ * @property {boolean} blocked Channel importance is disabled.
+ * @property {number|null} importance Android importance, or null for a missing channel.
+ * @property {boolean} sound Whether the channel has a sound configured.
+ * @property {boolean} vibration Whether channel vibration is enabled.
+ * @property {boolean} canSubmit Current permission/channel state permits submission.
+ * @property {'submission-only'} deliveryBoundary Submission never proves presentation or delivery.
+ * @property {false} pushAvailable No unattended push transport is configured by this runtime.
+ */
+
+/**
+ * Reads Android application/channel policy without asking for consent. Refresh
+ * after resume because the user can change it in Settings. Other platforms
+ * reject with `ENOSYS`; a true `canSubmit` does not establish server authorization.
+ * @param {string} [channel='default'] Native channel ID, or the application's default.
+ * @returns {Promise<NotificationDeliveryStatus>}
+ */
+export async function getDeliveryStatus (channel = 'default') {
+  if (typeof channel !== 'string' || !channel || channel.length > 256) {
+    throw new TypeError('channel must be a string of at most 256 characters')
+  }
+  const { data, err } = await ipc.request('notification.deliveryStatus', { channel })
+  if (err) throw err
+  return data
+}
+
+/**
+ * Opens this Android application's channel controls in system Settings. Call
+ * from a user action. This never changes sound, DND, permission, or importance.
+ * Other platforms reject with `ENOSYS`.
+ * @param {string} [channel='default']
+ * @returns {Promise<void>}
+ */
+export async function openChannelSettings (channel = 'default') {
+  if (typeof channel !== 'string' || !channel || channel.length > 256) {
+    throw new TypeError('channel must be a string of at most 256 characters')
+  }
+  const { err } = await ipc.request('notification.openChannelSettings', { channel })
+  if (err) throw err
+}
 
 /**
  * A container to proxy native notification events to a runtime notication.
@@ -710,40 +899,30 @@ export class Notification extends EventTarget {
     // must be configured by the user unless the request is "forced"
     if (options?.force !== true && query.state === 'granted') {
       controller.abort()
-      return query.state
+      state.permission = query.state
+      return state.permission
     }
 
-    // request permission and resolve the normalized `state.permission` value
-    // when the query status changes
-    const request = await permissions.request(
-      { name: 'notifications' },
-      {
-        signal: controller.signal,
+    // The request resolves with the dialog outcome. Its change event may have
+    // already fired, so waiting for another event would strand a denied request.
+    try {
+      const request = await permissions.request(
+        { name: 'notifications' },
+        {
+          signal: controller.signal,
 
-        // macOS/iOS only options
-        alert: Boolean(options?.alert !== false), // (defaults to `true`)
-        badge: Boolean(options?.badge),
-        sound: Boolean(options?.sound)
-      }
-    )
+          // macOS/iOS only options
+          alert: Boolean(options?.alert !== false), // (defaults to `true`)
+          badge: Boolean(options?.badge),
+          sound: Boolean(options?.sound)
+        }
+      )
 
-    if (request.state === 'granted') {
+      state.permission = request.state.replace('prompt', 'default')
+      return state.permission
+    } finally {
       controller.abort()
-      state.permission = request.state
-      return request.state
     }
-
-    return new Promise((resolve) => {
-      request.onchange = () => {
-        controller.abort()
-        resolve(state.permission)
-      }
-
-      query.onchange = () => {
-        controller.abort()
-        resolve(state.permission)
-      }
-    })
   }
 
   #onclick = null
@@ -1296,7 +1475,7 @@ export class Notification extends EventTarget {
       return
     }
 
-    const result = await ipc.request('notification.close', { id: this.id })
+    const result = await ipc.request('notification.close', { id: this.id, tag: this.tag })
     if (result.err) {
       console.warn("Failed to close 'Notification': %s", result.err.message)
     }

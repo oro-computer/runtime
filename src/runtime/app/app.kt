@@ -18,12 +18,18 @@ import android.content.pm.PackageManager
 import android.content.res.AssetManager
 import android.content.res.AssetFileDescriptor
 import android.content.ContentResolver
+import android.content.BroadcastReceiver
 import android.database.Cursor
 import android.graphics.drawable.Icon
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.view.WindowManager
@@ -48,15 +54,161 @@ import oro.runtime.window.WindowManagerActivity
 
 private const val PRIMARY_RUNTIME_SCHEME = "oro"
 
+/** Process-local timings with fixed phase names and no application payloads. */
+internal object RuntimeLifecycleEvents {
+  private val events = java.util.ArrayDeque<JSONObject>()
+  private val started = android.os.SystemClock.elapsedRealtime()
+
+  @Synchronized
+  fun record (index: Int, phase: String, duration: Long = 0) {
+    require(phase in listOf("loading", "ready", "failed", "renderer-lost", "reload"))
+    if (events.size >= 64) events.removeFirst()
+    events.addLast(JSONObject().put("index", index).put("phase", phase)
+      .put("elapsedMs", android.os.SystemClock.elapsedRealtime() - started)
+      .put("durationMs", maxOf(0, duration)))
+  }
+
+  @Synchronized
+  fun list (): JSONArray = JSONArray(events.map { JSONObject(it.toString()) })
+}
+
+/** Fixed startup phases only; never records application data or wall-clock time. */
+internal object RuntimeStartupTimings {
+  private val phases = linkedMapOf<String, Long>()
+
+  fun <T> measure (phase: String, operation: () -> T): T {
+    require(phase in listOf("native-library", "native-allocation", "native-extensions", "process-lifecycle"))
+    val started = android.os.SystemClock.elapsedRealtimeNanos()
+    android.os.Trace.beginSection("oro.startup.$phase")
+    try {
+      return operation()
+    } finally {
+      android.os.Trace.endSection()
+      synchronized(phases) { phases[phase] = maxOf(0L, android.os.SystemClock.elapsedRealtimeNanos() - started) }
+    }
+  }
+
+  fun list (): JSONArray = synchronized(phases) {
+    JSONArray(phases.map { (phase, duration) -> JSONObject().put("phase", phase).put("durationMs", duration / 1000000.0) })
+  }
+}
+
+/** Stores opaque notification routing identity, never notification content. */
+internal object NotificationReceipts {
+  private const val MAX_PENDING = 256
+  private const val MAX_RESPONSES = 64
+  private const val TTL = 7 * 24 * 60 * 60 * 1000L
+
+  private fun preferences (context: Context) = context.getSharedPreferences(
+    "oro.notification.receipts", Context.MODE_PRIVATE
+  )
+
+  private fun read (context: Context): JSONObject {
+    return try {
+      JSONObject(preferences(context).getString("state", "{}") ?: "{}")
+    } catch (_: JSONException) {
+      JSONObject()
+    }
+  }
+
+  private fun fresh (timestamp: Long): Boolean {
+    val age = System.currentTimeMillis() - timestamp
+    return age in 0..TTL
+  }
+
+  @Synchronized
+  fun createIntent (context: Context, target: Intent, id: String, action: String): Intent? {
+    if (id.length !in 1..256 || action.length !in 1..256) return null
+    val state = read(context)
+    val previous = state.optJSONObject("pending") ?: JSONObject()
+    val pending = JSONObject()
+    val keys = previous.keys().asSequence().toList().takeLast(MAX_PENDING - 1)
+    for (key in keys) {
+      val record = previous.optJSONObject(key) ?: continue
+      if (fresh(record.optLong("createdAt"))) pending.put(key, record)
+    }
+    val token = java.util.UUID.randomUUID().toString()
+    pending.put(token, JSONObject().put("id", id).put("action", action)
+      .put("createdAt", System.currentTimeMillis()))
+    state.put("pending", pending)
+    if (!preferences(context).edit().putString("state", state.toString()).commit()) return null
+    return target.setData(Uri.Builder().scheme("oro-notification-receipt")
+      .authority(context.packageName).appendPath(token).build())
+  }
+
+  @Synchronized
+  fun consume (context: Context, intent: Intent): JSONObject? {
+    val uri = intent.data ?: return null
+    if (uri.scheme != "oro-notification-receipt" || uri.host != context.packageName) return null
+    val token = uri.pathSegments.singleOrNull() ?: return null
+    val state = read(context)
+    val pending = state.optJSONObject("pending") ?: return null
+    val record = pending.optJSONObject(token) ?: return null
+    if (!fresh(record.optLong("createdAt"))) return null
+    val id = record.opt("id") as? String ?: return null
+    val action = record.opt("action") as? String ?: return null
+    if (id.length !in 1..256 || action.length !in 1..256) return null
+    pending.remove(token)
+    val receipt = JSONObject().put("receiptId", token)
+      .put("id", id).put("action", action)
+      .put("receivedAt", System.currentTimeMillis())
+    val responses = responses(state)
+    val retained = JSONArray()
+    for (index in maxOf(0, responses.length() - MAX_RESPONSES + 1) until responses.length()) {
+      retained.put(responses.getJSONObject(index))
+    }
+    retained.put(receipt)
+    state.put("responses", retained)
+    if (!preferences(context).edit().putString("state", state.toString()).commit()) return null
+    return receipt
+  }
+
+  private fun responses (state: JSONObject): JSONArray {
+    val previous = state.optJSONArray("responses") ?: JSONArray()
+    val result = JSONArray()
+    for (index in maxOf(0, previous.length() - MAX_RESPONSES) until previous.length()) {
+      val receipt = previous.optJSONObject(index) ?: continue
+      if (fresh(receipt.optLong("receivedAt"))) result.put(receipt)
+    }
+    return result
+  }
+
+  @Synchronized
+  fun list (context: Context): String = responses(read(context)).toString()
+
+  @Synchronized
+  fun acknowledge (context: Context, receiptId: String): Boolean {
+    val state = read(context)
+    val previous = responses(state)
+    val retained = JSONArray()
+    for (index in 0 until previous.length()) {
+      val receipt = previous.getJSONObject(index)
+      if (receipt.optString("receiptId") != receiptId) retained.put(receipt)
+    }
+    state.put("responses", retained)
+    return preferences(context).edit().putString("state", state.toString()).commit()
+  }
+}
+
+/** Dismissal records a receipt without opening an activity. */
+class NotificationDismissReceiver : BroadcastReceiver() {
+  override fun onReceive (context: Context, intent: Intent) {
+    val receipt = NotificationReceipts.consume(context, intent) ?: return
+    App.getInstance().activity?.emitNotificationResponse(receipt, intent)
+  }
+}
+
 open class AppPermissionRequest (callback: (Boolean) -> Unit) {
   val id: Int = (0..16384).random().toInt()
   val callback = callback
 }
 
-open class AppPlatform (val activity: AppActivity) {
+open class AppPlatform (context: Context) {
+  private val context = context.applicationContext
+
   fun isDocumentURI (url: String): Boolean {
     return DocumentsContract.isDocumentUri(
-      this.activity.applicationContext,
+      this.context,
       Uri.parse(url)
     )
   }
@@ -75,11 +227,11 @@ open class AppPlatform (val activity: AppActivity) {
   }
 
   fun getContentMimeType (url: String): String {
-    return this.activity.applicationContext.contentResolver.getType(Uri.parse(url)) ?: ""
+    return this.context.contentResolver.getType(Uri.parse(url)) ?: ""
   }
 
   fun getPathnameEntriesFromContentURI (url: String): Array<String> {
-    val context = this.activity.applicationContext
+    val context = this.context
     val column = MediaStore.MediaColumns.DATA
     var cursor: Cursor? = null
     val uri = Uri.parse(url)
@@ -130,7 +282,7 @@ open class AppPlatform (val activity: AppActivity) {
     url: String,
     id: String
   ): String {
-    val context = this.activity.applicationContext
+    val context = this.context
     val column = MediaStore.MediaColumns.DATA
     var cursor: Cursor? = null
     var result: String? = null
@@ -199,22 +351,23 @@ open class AppPlatform (val activity: AppActivity) {
   }
 
   fun getContentResolver (): ContentResolver {
-    return this.activity.getContentResolver()
+    return this.context.contentResolver
   }
 
-  fun openContentResolverFileDescriptor (url: String): AssetFileDescriptor? {
-    val contentResolver = this.activity.applicationContext.contentResolver
-    console.log("url: $url")
-    try {
-      return contentResolver.openAssetFileDescriptor(Uri.parse(url), "r")
-    } catch (err: Exception) {
-      console.log("error: $err")
-      return null
-    }
+  @JvmOverloads
+  @Throws(java.io.IOException::class, SecurityException::class)
+  fun openContentResolverFileDescriptor (url: String, mode: String = "r"): AssetFileDescriptor? {
+    require(mode in setOf("r", "wt", "wa", "rw", "rwt"))
+    val uri = Uri.parse(url)
+    require(url.length in 1..4096 && uri.scheme in setOf("content", "android.resource"))
+    if (mode == "r") return this.context.contentResolver.openAssetFileDescriptor(uri, mode)
+    require(uri.scheme == "content") { "Application resources are read-only" }
+    val parcel = this.context.contentResolver.openFileDescriptor(uri, mode) ?: return null
+    return AssetFileDescriptor(parcel, 0, AssetFileDescriptor.UNKNOWN_LENGTH)
   }
 
   fun hasContentResolverAccess (url: String): Boolean {
-    val contentResolver = this.activity.applicationContext.contentResolver
+    val contentResolver = this.context.contentResolver
 
     try {
       val fd = contentResolver.openAssetFileDescriptor(Uri.parse(url), "r")
@@ -243,7 +396,7 @@ open class AppActivity : WindowManagerActivity() {
   open lateinit var notificationChannel: NotificationChannel
   open lateinit var notificationManager: NotificationManager
 
-  open val platform = AppPlatform(this)
+  open val platform: AppPlatform by lazy { AppPlatform(this) }
   open val permissionRequests = mutableListOf<AppPermissionRequest>()
 
   open fun getRootDirectory (): String {
@@ -294,7 +447,7 @@ open class AppActivity : WindowManagerActivity() {
           App.getInstance().onPermissionChange("local-network", state)
         }
       } catch (err: RuntimeException) {
-        console.error("Unable to request local network permission: $err")
+        console.error("Unable to request local network permission")
         App.getInstance().onPermissionChange("local-network", "denied")
       }
     }
@@ -330,6 +483,42 @@ open class AppActivity : WindowManagerActivity() {
     return NotificationManagerCompat.from(this).areNotificationsEnabled()
   }
 
+  fun getNotificationDeliveryStatus (channel: String): String {
+    val identity = if (channel == "default") notificationChannel.id else channel
+    require(identity.length in 1..256)
+    val native = notificationManager.getNotificationChannel(identity)
+    val enabled = App.getInstance().hasRuntimePermission("notifications") && isNotificationManagerEnabled()
+    val blocked = native?.importance == NotificationManager.IMPORTANCE_NONE
+    return JSONObject().put("enabled", enabled).put("channelId", identity)
+      .put("exists", native != null).put("blocked", blocked)
+      .put("importance", native?.importance ?: JSONObject.NULL)
+      .put("sound", native?.sound != null).put("vibration", native?.shouldVibrate() ?: false)
+      .put("canSubmit", enabled && native != null && !blocked)
+      .put("deliveryBoundary", "submission-only").put("pushAvailable", false).toString()
+  }
+
+  fun openNotificationChannelSettings (channel: String): Boolean {
+    val identity = if (channel == "default") notificationChannel.id else channel
+    if (identity.length !in 1..256) return false
+    return try {
+      startActivity(Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+        .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, identity))
+      true
+    } catch (_: Exception) {
+      false
+    }
+  }
+
+  fun emitNotificationResponse (receipt: JSONObject, intent: Intent) {
+    val payload = JSONObject(receipt.toString())
+    intent.getStringExtra("data")?.let { payload.put("data", it) }
+    for (fragment in this.windowFragmentManager.fragments) {
+      val bridge = fragment.window?.bridge ?: continue
+      bridge.emit("notificationresponse", payload.toString())
+    }
+  }
+
   fun showNotification (
     id: String,
     title: String,
@@ -346,164 +535,27 @@ open class AppActivity : WindowManagerActivity() {
     requireInteraction: Boolean,
     renotify: Boolean
   ): Boolean {
-    val identifier = id.toLongOrNull()?.toInt() ?: (0..16384).random().toInt()
-    val vibration = vibratePattern
-      .split(",")
-      .filter { it.isNotEmpty() }
-      .map { it.toLongOrNull() ?: 0L }
-      .toTypedArray()
-
-    val actions = mutableListOf<Pair<String, String>>()
-    if (actionsJSON.isNotEmpty()) {
-      try {
-        val array = JSONArray(actionsJSON)
-        for (index in 0 until array.length()) {
-          val entry = array.optJSONObject(index) ?: continue
-          val actionId = entry.optString("action")
-          val actionTitle = entry.optString("title")
-          if (actionId.isEmpty() || actionTitle.isEmpty()) continue
-          actions.add(Pair(actionId, actionTitle))
-        }
-      } catch (_: JSONException) {
-        // ignore malformed action payloads
-      }
-    }
-
-    val intentFlags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-
-    val contentIntent = Intent(this, __BUNDLE_IDENTIFIER__.MainActivity::class.java).apply {
-      addCategory(Intent.CATEGORY_LAUNCHER)
-      setAction("notification.response.default")
-      putExtra("id", id)
-      putExtra("action", "default")
-      if (dataJSON.isNotEmpty()) {
-        putExtra("data", dataJSON)
-      }
-      flags = intentFlags
-    }
-
-    val deleteIntent = Intent(this, __BUNDLE_IDENTIFIER__.MainActivity::class.java).apply {
-      setAction("notification.response.dismiss")
-      putExtra("id", id)
-      putExtra("action", "dismiss")
-      if (dataJSON.isNotEmpty()) {
-        putExtra("data", dataJSON)
-      }
-      flags = intentFlags
-    }
-
-    val pendingContentIntent = PendingIntent.getActivity(
-      this,
-      identifier,
-      contentIntent,
-      (
-        PendingIntent.FLAG_UPDATE_CURRENT or
-        PendingIntent.FLAG_IMMUTABLE or
-        PendingIntent.FLAG_ONE_SHOT
-      )
-    )
-
-    val pendingDeleteIntent = PendingIntent.getActivity(
-      this,
-      identifier,
-      deleteIntent,
-      (
-        PendingIntent.FLAG_UPDATE_CURRENT or
-        PendingIntent.FLAG_IMMUTABLE or
-        PendingIntent.FLAG_ONE_SHOT
-      )
-    )
-
-    val builder = NotificationCompat.Builder(this, channel).apply {
-      setPriority(NotificationCompat.PRIORITY_DEFAULT)
-      setContentTitle(title)
-      setContentIntent(pendingContentIntent)
-      setDeleteIntent(pendingDeleteIntent)
-      setAutoCancel(!requireInteraction)
-      setOngoing(requireInteraction)
-      setOnlyAlertOnce(!renotify)
-      setSilent(silent)
-      if (!silent && vibration.size > 0) {
-        setVibrate(vibration.toLongArray())
-      }
-
-      if (body.isNotEmpty()) {
-        setContentText(body)
-      }
-    }
-
-    if (iconURL.isNotEmpty()) {
-      val icon = IconCompat.createWithContentUri(iconURL)
-      builder.setSmallIcon(icon)
-    } else {
-      val applicationIcon = applicationInfo.icon
-      builder.setSmallIcon(
-        if (applicationIcon != 0) applicationIcon else android.R.drawable.ic_dialog_info
-      )
-    }
-
-    if (imageURL.isNotEmpty()) {
-      val icon = Icon.createWithContentUri(imageURL)
-      builder.setLargeIcon(icon)
-    }
-
-    if (category.isNotEmpty()) {
-      builder.setCategory(
-        category
-          .replace("msg", "message")
-          .replace("-", "_")
-      )
-    }
-
-    var actionRequestCode = identifier + 1
-    for ((actionId, actionTitle) in actions) {
-      val actionIntent = Intent(this, __BUNDLE_IDENTIFIER__.MainActivity::class.java).apply {
-        setAction("notification.response.action")
-        putExtra("id", id)
-        putExtra("action", actionId)
-        if (dataJSON.isNotEmpty()) {
-          putExtra("data", dataJSON)
-        }
-        flags = intentFlags
-      }
-
-      val pendingActionIntent = PendingIntent.getActivity(
-        this,
-        actionRequestCode++,
-        actionIntent,
-        (
-          PendingIntent.FLAG_UPDATE_CURRENT or
-          PendingIntent.FLAG_IMMUTABLE or
-          PendingIntent.FLAG_ONE_SHOT
-        )
-      )
-
-      builder.addAction(0, actionTitle, pendingActionIntent)
-    }
-
-    val notification = builder.build()
-    with(NotificationManagerCompat.from(this)) {
-      notify(
-        tag,
-        identifier,
-        notification
-      )
-    }
-
-    return true
+    return try {
+      NativeNotifications.submit(this, JSONObject().put("id", id).put("title", title).put("body", body)
+        .put("tag", tag).put("channel", channel).put("category", category).put("silent", silent)
+        .put("icon", iconURL).put("image", imageURL).put("vibratePattern", vibratePattern)
+        .put("actions", if (actionsJSON.isEmpty()) JSONArray() else JSONArray(actionsJSON))
+        .put("dataJSON", dataJSON).put("requireInteraction", requireInteraction).put("renotify", renotify))
+      true
+    } catch (_: Exception) { false }
   }
 
   fun closeNotification (id: String, tag: String): Boolean {
-    val identifier = id.toLongOrNull()?.toInt() ?: (0..16384).random().toInt()
-    with (NotificationManagerCompat.from(this)) {
-      cancel(tag, identifier)
-    }
-    return true
+    return NativeNotifications.cancel(this, id, tag)
   }
 
   override fun onCreate (savedInstanceState: Bundle?) {
+    if (App.getInstance().getUserConfigValue("window_content_protection") == "true") {
+      this.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
     this.supportActionBar?.hide()
     this.getWindow()?.statusBarColor = android.graphics.Color.TRANSPARENT
+    oro.runtime.window.SystemAppearance.applySaved(this)
 
     super.onCreate(savedInstanceState)
 
@@ -610,10 +662,7 @@ open class AppActivity : WindowManagerActivity() {
 
   override fun onStart () {
     super.onStart()
-    val action: String? = this.intent?.action
-    val data: android.net.Uri? = this.intent?.data
-
-    if (action != null && data != null) {
+    if (this.intent?.action != null) {
       this.onNewIntent(this.intent)
     }
   }
@@ -627,23 +676,31 @@ open class AppActivity : WindowManagerActivity() {
   }
 
   override fun onStop () {
+    PlatformOperations.cancelActivity(this)
     super.onStop()
   }
 
   override fun onDestroy () {
     super.onDestroy()
-    App.getInstance().activity = null
+    if (App.getInstance().activity === this) {
+      App.getInstance().activity = null
+    }
     App.getInstance().onDestroyAppActivity(this)
+  }
+
+  @Deprecated("Use registered Activity Result launchers for new extensions")
+  override fun onActivityResult (requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    NativeExtensions.dispatch { it.onActivityResult(this, requestCode, resultCode, data) }
   }
 
   override fun onNewIntent (intent: Intent) {
     super.onNewIntent(intent)
+    setIntent(intent)
+    LauncherDestinations.accept(this, intent)
+    NativeExtensions.dispatch { it.onNewIntent(this, intent) }
     val action = intent.action
     val data = intent.data
-    val id = intent.extras?.getCharSequence("id")?.toString()
-
-    val extras = intent.extras
-    val responseActionExtra = extras?.getString("action")
 
     when (action) {
       "android.intent.action.MAIN",
@@ -652,7 +709,7 @@ open class AppActivity : WindowManagerActivity() {
         val applicationProtocol = App.getInstance().getUserConfigValue("meta_application_protocol")
         if (
           applicationProtocol.length > 0 &&
-          scheme.startsWith(applicationProtocol)
+          scheme == applicationProtocol
         ) {
           for (fragment in this.windowFragmentManager.fragments) {
             val window = fragment.window ?: continue
@@ -663,27 +720,8 @@ open class AppActivity : WindowManagerActivity() {
 
       else -> {
         if (action != null && action.startsWith("notification.response.")) {
-          val resolvedAction = responseActionExtra ?: when (action) {
-            "notification.response.default" -> "default"
-            "notification.response.dismiss" -> "dismiss"
-            else -> action.removePrefix("notification.response.")
-          }
-
-          if (id != null) {
-            val payload = JSONObject()
-            payload.put("id", id)
-            payload.put("action", resolvedAction)
-
-            val dataJson = extras?.getString("data")
-            if (dataJson != null && dataJson.isNotEmpty()) {
-              payload.put("data", dataJson)
-            }
-
-            for (fragment in this.windowFragmentManager.fragments) {
-              val bridge = fragment.window?.bridge ?: continue
-              bridge.emit("notificationresponse", payload.toString())
-            }
-          }
+          val receipt = NotificationReceipts.consume(this, intent) ?: return
+          this.emitNotificationResponse(receipt, intent)
         }
       }
     }
@@ -776,8 +814,318 @@ open class AppLifecycleObserver : DefaultLifecycleObserver {
 }
 
 open class App : Application() {
-  val pointer = alloc()
+  private val platform by lazy { AppPlatform(this) }
+
+  fun getAppPlatform (): AppPlatform = platform
+
+  @Volatile private var packageCompatible: Boolean? = null
+
+  private val applicationInputSha256: String? by lazy {
+    try {
+      val expected = JSONObject(getNativeBuildIdentity()).getString("assetManifestSha256")
+      require(Regex("[a-f0-9]{64}").matches(expected))
+      val bytes = readBoundedAsset("oro-build-evidence.json", 16777216)
+      val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+        .joinToString("") { (it.toInt() and 255).toString(16).padStart(2, '0') }
+      require(digest == expected)
+      val evidence = JSONObject(String(bytes, Charsets.UTF_8)).getJSONObject("inputs")
+        .optJSONObject("applicationInputs")
+      evidence?.optString("sha256")?.takeIf { Regex("[a-f0-9]{64}").matches(it) }
+    } catch (_: Exception) { null
+    } catch (_: UnsatisfiedLinkError) { null }
+  }
+
+  private fun readBoundedAsset (path: String, limit: Int): ByteArray {
+    return assets.open(path).use { stream ->
+      val output = java.io.ByteArrayOutputStream()
+      val buffer = ByteArray(65536)
+      while (true) {
+        val count = stream.read(buffer)
+        if (count < 0) break
+        require(output.size() + count <= limit)
+        output.write(buffer, 0, count)
+      }
+      output.toByteArray()
+    }
+  }
+
+  /** Runs on the navigation worker before any application document is loaded. */
+  @Synchronized
+  fun verifyPackagedAssets (): Boolean {
+    packageCompatible?.let { return it }
+    var stage = "native-identity"
+    val compatible = try {
+      val identity = JSONObject(getNativeBuildIdentity())
+      val expected = identity.getString("assetManifestSha256")
+      require(Regex("[a-f0-9]{64}").matches(expected))
+      stage = "manifest-digest"
+      val manifestBytes = readBoundedAsset("oro-build-evidence.json", 16777216)
+      fun hex (bytes: ByteArray): String {
+        val digits = "0123456789abcdef"
+        val encoded = CharArray(bytes.size * 2)
+        for (index in bytes.indices) {
+          val value = bytes[index].toInt() and 255
+          encoded[index * 2] = digits[value ushr 4]
+          encoded[index * 2 + 1] = digits[value and 15]
+        }
+        return String(encoded)
+      }
+      fun digest (bytes: ByteArray) = hex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes))
+      require(digest(manifestBytes) == expected)
+      stage = "bridge-contract"
+      val manifest = JSONObject(String(manifestBytes, Charsets.UTF_8))
+      require(manifest.getInt("schema") == 1 && manifest.getInt("androidBridgeProtocol") == 5 &&
+        identity.getInt("androidBridgeProtocol") == 5)
+      val contract = JSONObject(String(readBoundedAsset("oro/internal/runtime-contract.json", 4096), Charsets.UTF_8))
+      require(contract.getInt("androidBridgeProtocol") == 5)
+      val entries = manifest.getJSONArray("assets")
+      require(entries.length() <= 100000)
+      val named = mutableSetOf<String>()
+      val buffer = ByteArray(65536)
+      stage = "asset-hash"
+      for (index in 0 until entries.length()) {
+        val entry = entries.getJSONObject(index)
+        val path = entry.getString("path")
+        require(path.length in 1..4096 && !path.startsWith("/") &&
+          path.split('/').none { it == "." || it == ".." || it.isEmpty() } && named.add(path))
+        val hash = java.security.MessageDigest.getInstance("SHA-256")
+        var size = 0L
+        assets.open(path).use { stream ->
+          while (true) {
+            val count = stream.read(buffer)
+            if (count < 0) break
+            size += count
+            require(size <= entry.getLong("size"))
+            hash.update(buffer, 0, count)
+          }
+        }
+        require(size == entry.getLong("size") && hex(hash.digest()) == entry.getString("sha256"))
+      }
+      // AssetManager merges framework assets into its listing. Inventory only
+      // this application's signed APKs, while hashing the resolved asset bytes.
+      stage = "asset-inventory"
+      val found = mutableSetOf<String>()
+      val generatedProfiles = mutableSetOf<String>()
+      var entryCount = 0
+      val packages = listOf(applicationInfo.sourceDir) + applicationInfo.splitSourceDirs.orEmpty().toList()
+      for (path in packages) {
+        java.util.zip.ZipFile(path).use { archive ->
+          val entries = archive.entries()
+          while (entries.hasMoreElements()) {
+            require(++entryCount <= 200000)
+            val entry = entries.nextElement()
+            if (entry.isDirectory || !entry.name.startsWith("assets/")) continue
+            val name = entry.name.removePrefix("assets/")
+            if (name == "oro-build-evidence.json") continue
+            // AGP generates ART profiles after the application inventory is bound.
+            if (!named.contains(name) &&
+              (name == "dexopt/baseline.prof" || name == "dexopt/baseline.profm")) {
+              require(entry.size in 0L..16777216L && generatedProfiles.add(name))
+              continue
+            }
+            require(named.contains(name) && found.add(name))
+          }
+        }
+      }
+      require(found == named)
+      true
+    } catch (_: Exception) {
+      console.error("Runtime package verification failed at $stage")
+      false
+    } catch (_: UnsatisfiedLinkError) {
+      console.error("Runtime package verification failed at native-identity")
+      false
+    }
+    packageCompatible = compatible
+    return compatible
+  }
+
+  fun backgroundOperation (action: String, options: String): String = BackgroundTasks.request(this, action, options)
+
+  fun startPlatformOperation (token: Long, index: Int, feature: String, action: String, options: String, id: String, documentToken: String) =
+    PlatformOperations.start(this, token, index, feature, action, options, id, documentToken)
+
+  external fun onPlatformOperationResult (token: Long, result: String)
+
+  fun getSecureStorageStatus (): String = oro.runtime.securestorage.SecureStorageManager.status(this)
+
+  fun getRuntimeCapabilities (): String = JSONObject()
+    .put("nativeFullscreen", Build.VERSION.SDK_INT >= 30).put("fullscreenRequiresManagedInsets", true)
+    .put("screenProtection", true).put("documentMetadata", true).put("documentTreeQueries", true)
+    .put("documentQueryWorkers", 2).put("documentQueryDeadlineMs", 5000)
+    .put("nativeBackgroundCleanup", BackgroundTasks.available(this))
+    .put("backgroundJavaScript", false).put("push", false)
+    .put("biometricSecretUnlock", ProtectedAuthentication.status(this).optBoolean("enabled"))
+    .put("namedLauncherDestinations", getUserConfigValue("launcher_enabled") == "true")
+    .put("nativeDeferredReads", DeferredSync.available(this)).put("deferredWrites", false)
+    .put("webAuthentication", getUserConfigValue("webview_webauthn_enabled") == "true" &&
+      androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_AUTHENTICATION))
+    .put("nativePasswordSelection", PasswordCredentials.available(this))
+    .put("nativeNotificationPresentation", true)
+    .put("nativeExtensions", getUserConfigValue("android_extensions").isNotBlank())
+    .put("pointerCapture", false)
+    .put("historicalProcessExits", Build.VERSION.SDK_INT >= 30).toString()
+
+  private fun getProcessExits (): JSONObject {
+    val result = JSONObject().put("available", false).put("entries", JSONArray())
+    if (Build.VERSION.SDK_INT < 30) return result
+    return try {
+      val manager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+      val entries = JSONArray()
+      for (exit in manager.getHistoricalProcessExitReasons(packageName, 0, 16).take(16)) {
+        entries.put(JSONObject().put("buildIdentityKnown", false).put("reason", exit.reason).put("status", exit.status)
+          .put("timestamp", exit.timestamp).put("importance", exit.importance)
+          .put("pssKiB", exit.pss).put("rssKiB", exit.rss))
+      }
+      result.put("available", true).put("entries", entries)
+    } catch (_: Exception) { result }
+  }
+
+  fun getBuildIdentity (): String {
+    val identity = JSONObject(getNativeBuildIdentity())
+    val provider = androidx.webkit.WebViewCompat.getCurrentWebViewPackage(this)
+    return identity.put("sdk", Build.VERSION.SDK_INT)
+      .put("applicationInputSha256", applicationInputSha256 ?: JSONObject.NULL)
+      .put("targetSdk", applicationInfo.targetSdkVersion)
+      .put("webViewVersion", provider?.versionName ?: JSONObject.NULL)
+      .put("assetsVerified", packageCompatible == true)
+      .put("lifecycleEvents", RuntimeLifecycleEvents.list())
+      .put("startupTimings", RuntimeStartupTimings.list())
+      .put("processExits", getProcessExits()).toString()
+  }
+
+  fun getNotificationResponses (): String = NotificationReceipts.list(this)
+
+  fun acknowledgeNotificationResponse (receiptId: String): Boolean =
+    NotificationReceipts.acknowledge(this, receiptId)
+
+  external fun getNativeBuildIdentity (): String
+
+  fun startDocumentQuery (token: Long, action: String, uri: String, options: String) =
+    ScopedDocuments.start(this, token, action, uri, options)
+
+  external fun onDocumentQueryResult (token: Long, result: String)
+
+  @Synchronized
+  @Throws(Exception::class)
+  fun documentAccess (action: String, value: String, flags: Int): String {
+    val resolver = contentResolver
+    if (action == "list") {
+      val grants = JSONArray()
+      for (grant in resolver.persistedUriPermissions.take(128)) {
+        grants.put(JSONObject().put("uri", grant.uri.toString()).put("read", grant.isReadPermission)
+          .put("write", grant.isWritePermission).put("persistedAt", grant.persistedTime))
+      }
+      return grants.toString()
+    }
+    require(value.length in 1..4096 && value.none { it.code < 32 || it.code == 127 } && flags in 1..3)
+    val uri = Uri.parse(value)
+    require(uri.scheme == "content" && !uri.authority.isNullOrBlank())
+    when (action) {
+      "persist" -> {
+        val grants = resolver.persistedUriPermissions
+        require(grants.any { it.uri == uri } || grants.size < 128) { "Persisted grant limit reached" }
+        resolver.takePersistableUriPermission(uri, flags)
+      }
+      "release" -> resolver.releasePersistableUriPermission(uri, flags)
+      else -> throw IllegalArgumentException("Unknown document access operation")
+    }
+    return "null"
+  }
+
+  val pointer = RuntimeStartupTimings.measure("native-allocation") { alloc() }
   var activity: AppActivity? = null
+  private val networkHandler = Handler(Looper.getMainLooper())
+  private var networkCallback: ConnectivityManager.NetworkCallback? = null
+  @Volatile private var networkGeneration = 0L
+  private var networkUpdate: Runnable? = null
+  private var lastNetworkStatus = ""
+
+  fun getNetworkStatus (): String {
+    val status = JSONObject().put("available", true).put("connected", false)
+      .put("validated", false).put("captivePortal", false).put("metered", false)
+      .put("transports", JSONArray()).put("name", "offline")
+    try {
+      val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+      val network = manager.activeNetwork
+      val capabilities = network?.let { manager.getNetworkCapabilities(it) }
+      val validated = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+      val transports = JSONArray()
+      val transportKinds = mapOf(
+        NetworkCapabilities.TRANSPORT_WIFI to "wifi",
+        NetworkCapabilities.TRANSPORT_CELLULAR to "cellular",
+        NetworkCapabilities.TRANSPORT_ETHERNET to "ethernet",
+        NetworkCapabilities.TRANSPORT_BLUETOOTH to "bluetooth",
+        NetworkCapabilities.TRANSPORT_VPN to "vpn"
+      )
+      for ((kind, name) in transportKinds) {
+        if (capabilities?.hasTransport(kind) == true) transports.put(name)
+      }
+      status.put("connected", network != null).put("validated", validated)
+        .put("captivePortal", capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL) == true)
+        .put("metered", network != null && manager.isActiveNetworkMetered)
+        .put("transports", transports).put("name", if (validated) "online" else "offline")
+    } catch (_: SecurityException) {
+      status.put("available", false)
+    }
+    return status.toString()
+  }
+
+  @Synchronized
+  fun startNetworkStatusMonitor (): Boolean {
+    if (this.networkCallback != null) return true
+    val generation = ++this.networkGeneration
+    val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val callback = object : ConnectivityManager.NetworkCallback() {
+      private fun changed () {
+        networkHandler.post {
+          if (networkGeneration != generation) return@post
+          networkUpdate?.let { networkHandler.removeCallbacks(it) }
+          networkUpdate = Runnable {
+            if (networkGeneration == generation) {
+              val status = getNetworkStatus()
+              if (status != lastNetworkStatus) {
+                lastNetworkStatus = status
+                onNetworkStatus(status)
+              }
+            }
+          }.also { networkHandler.post(it) }
+        }
+      }
+      override fun onAvailable (network: Network) = changed()
+      override fun onLost (network: Network) = changed()
+      override fun onCapabilitiesChanged (network: Network, capabilities: NetworkCapabilities) = changed()
+      override fun onBlockedStatusChanged (network: Network, blocked: Boolean) = changed()
+    }
+    this.networkCallback = callback
+    try {
+      manager.registerDefaultNetworkCallback(callback)
+      this.lastNetworkStatus = getNetworkStatus()
+      onNetworkStatus(this.lastNetworkStatus)
+    } catch (_: SecurityException) {
+      this.networkCallback = null
+      // Missing capability is observable without preventing application startup.
+      onNetworkStatus(getNetworkStatus())
+    }
+    return true
+  }
+
+  @Synchronized
+  fun stopNetworkStatusMonitor (): Boolean {
+    ++this.networkGeneration
+    this.networkUpdate?.let { this.networkHandler.removeCallbacks(it) }
+    this.networkUpdate = null
+    val callback = this.networkCallback ?: return true
+    this.networkCallback = null
+    val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    manager.unregisterNetworkCallback(callback)
+    this.lastNetworkStatus = ""
+    return true
+  }
+
+  external fun onNetworkStatus (status: String): Unit
+
+  external fun getDevelopmentOrigin (): String
 
   protected val lifecycleListener: AppLifecycleObserver by lazy {
     AppLifecycleObserver()
@@ -807,7 +1155,7 @@ open class App : Application() {
           return
         }
 
-        System.loadLibrary(runtimeLibraryCandidates.first())
+        RuntimeStartupTimings.measure("native-library") { System.loadLibrary(runtimeLibraryCandidates.first()) }
         runtimeLibraryLoaded = true
       }
     }
@@ -819,11 +1167,12 @@ open class App : Application() {
 
   override fun onCreate () {
     super.onCreate()
+    RuntimeStartupTimings.measure("native-extensions") { NativeExtensions.initialize(this) }
 
     val lifecycleListener = this.lifecycleListener
 
-    ProcessLifecycleOwner.get().lifecycle.apply {
-      addObserver(lifecycleListener)
+    RuntimeStartupTimings.measure("process-lifecycle") {
+      ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleListener)
     }
   }
 
@@ -875,6 +1224,14 @@ open class App : Application() {
     log: String = "",
     tmp: String = ""
   ): Unit
+
+  /** Shared foreground/native trust survives cold native service starts. */
+  fun getWebviewTlsPolicy (): String = NativeTlsPolicy.value(this)
+
+  fun setWebviewTlsPolicy (value: String): Boolean = try {
+    NativeTlsPolicy.replace(this, value)
+    true
+  } catch (_: Exception) { false }
 
   @Throws(Exception::class)
   external fun getUserConfigValue (key: String): String

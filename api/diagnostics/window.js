@@ -13,12 +13,29 @@ const dc = registry.group('window', [
   'requestAnimationFrame'
 ])
 
+/**
+ * @typedef {object} RequestAnimationFrameMetricOptions
+ * @property {number} [sampleSize=60] Rolling sample capacity, from 1 to 3600.
+ */
+
+/** Measures distinct animation frame timestamps using a bounded rolling buffer. */
 export class RequestAnimationFrameMetric extends Metric {
+  #sampleCount = 0
+  #totalDuration = 0
+  #lastTimestamp = null
+  #generation = 0
+  #wrappedRequestAnimationFrame = null
+  #onExit = () => this.destroy()
+
+  /** @param {RequestAnimationFrameMetricOptions} [options] */
   constructor (options) {
     super()
     this.originalRequestAnimationFrame = null
     this.requestAnimationFrame = this.requestAnimationFrame.bind(this)
-    this.sampleSize = options?.sampleSize || 60
+    this.sampleSize = options?.sampleSize ?? 60
+    if (!Number.isInteger(this.sampleSize) || this.sampleSize < 1 || this.sampleSize > 3600) {
+      throw new RangeError('sampleSize must be an integer between 1 and 3600')
+    }
     this.sampleTick = 0 // max(0, sampleSize)
     this.channel = dc.channel('requestAnimationFrame')
     this.value = null
@@ -26,11 +43,7 @@ export class RequestAnimationFrameMetric extends Metric {
   }
 
   requestAnimationFrame (callback) {
-    return this.originalRequestAnimationFrame.call(globalThis, (...args) => {
-      this.update(...args)
-      // eslint-disable-next-line n/no-callback-literal
-      callback(...args)
-    })
+    return this.#wrappedRequestAnimationFrame(callback)
   }
 
   init () {
@@ -38,61 +51,83 @@ export class RequestAnimationFrameMetric extends Metric {
       this.originalRequestAnimationFrame === null &&
       typeof globalThis.requestAnimationFrame === 'function'
     ) {
-      this.samples = new Uint8Array(this.sampleSize)
+      this.samples = new Float64Array(this.sampleSize)
+      this.sampleTick = 0
+      this.#sampleCount = 0
+      this.#totalDuration = 0
+      this.#lastTimestamp = null
+      const generation = ++this.#generation
+      const schedule = globalThis.requestAnimationFrame
       this.originalRequestAnimationFrame = globalThis.requestAnimationFrame
-      globalThis.requestAnimationFrame = this.requestAnimationFrame
-
-      process.once('exit', () => {
-        this.destroy()
+      // Each installed wrapper captures its scheduler. An outer wrapper may
+      // retain it after stop, so it must continue forwarding without sampling.
+      this.#wrappedRequestAnimationFrame = callback => schedule.call(globalThis, (...args) => {
+        if (generation === this.#generation) this.update(...args)
+        // eslint-disable-next-line n/no-callback-literal
+        callback(...args)
       })
+      globalThis.requestAnimationFrame = this.#wrappedRequestAnimationFrame
+
+      process.once('exit', this.#onExit)
     }
   }
 
-  update (_value) {
-    const then = this.now
-    const now = globalThis?.performance.now()
-
-    if (then > 0) {
-      const computed = 1 / (0.001 * (now - then))
-      const sample = Math.floor(computed)
-
-      if (this.samples) {
-        this.samples[this.sampleTick] = sample
-      }
-
-      this.sampleTick = (this.sampleTick + 1) % this.sampleSize
-
-      const tick = this.sampleTick
-      const sum = this.samples?.slice(0, tick).reduce((a, b) => a + b, 0)
-      const average = sum / tick
-      const rate = Math.round(average)
-      const metric = { rate, samples: tick - 1 }
-
-      this.value = metric
-
-      this.channel?.publish(metric)
+  /** @param {number} timestamp Animation frame timestamp in milliseconds. */
+  update (timestamp) {
+    if (!this.samples || !Number.isFinite(timestamp) || timestamp < 0) {
+      return
     }
 
-    this.now = now
+    const then = this.#lastTimestamp
+    // All callbacks for one frame share a timestamp and contribute one sample.
+    if (then !== null && timestamp <= then) {
+      return
+    }
+
+    this.#lastTimestamp = timestamp
+    this.now = timestamp
+    if (then === null) return
+
+    const duration = timestamp - then
+    if (this.#sampleCount === this.sampleSize) {
+      this.#totalDuration -= 1000 / this.samples[this.sampleTick]
+    } else {
+      this.#sampleCount++
+    }
+
+    this.samples[this.sampleTick] = 1000 / duration
+    this.#totalDuration += duration
+    this.sampleTick = (this.sampleTick + 1) % this.sampleSize
+    const metric = {
+      rate: Math.round(1000 * this.#sampleCount / this.#totalDuration),
+      samples: this.#sampleCount
+    }
+    this.value = metric
+    this.channel?.publish(metric)
   }
 
   destroy () {
+    this.#generation++
     this.channel.reset()
+    process.removeListener('exit', this.#onExit)
 
-    if (typeof this.originalRequestAnimationFrame === 'function') {
+    if (globalThis.requestAnimationFrame === this.#wrappedRequestAnimationFrame) {
       globalThis.requestAnimationFrame = this.originalRequestAnimationFrame
     }
 
     this.originalRequestAnimationFrame = null
     this.samples = null
     this.value = null
+    this.#lastTimestamp = null
+    this.#sampleCount = 0
+    this.#totalDuration = 0
   }
 
   toJSON () {
     return {
       sampleSize: this.sampleSize,
       sampleTick: this.sampleTick,
-      samples: Array.from(this.samples),
+      samples: Array.from(this.samples ?? []),
       rate: this.value?.rate ?? 0,
       now: this.now
     }

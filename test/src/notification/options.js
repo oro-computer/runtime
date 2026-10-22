@@ -1,6 +1,30 @@
 import test from 'oro:test'
 
-import { NotificationAction, NotificationOptions } from 'oro:notification'
+import { NotificationAction, NotificationOptions, getResponses, acknowledgeResponse } from 'oro:notification'
+import os from 'oro:os'
+
+test('notification receipt acknowledgements validate identity', async (t) => {
+  for (const id of ['', null, 42, 'x'.repeat(257)]) {
+    try {
+      await acknowledgeResponse(id)
+      t.fail('invalid receipt identity should reject')
+    } catch (err) {
+      t.ok(err instanceof TypeError, 'invalid receipt identity rejects before native access')
+    }
+  }
+})
+
+test('notification receipts report unsupported platforms', async (t) => {
+  if (os.platform() === 'android') return
+  for (const request of [() => getResponses(), () => acknowledgeResponse('opaque-receipt')]) {
+    try {
+      await request()
+      t.fail('unsupported receipt API should reject')
+    } catch (err) {
+      t.equal(err.code, 'ENOSYS', 'unsupported platforms reject explicitly')
+    }
+  }
+})
 
 test('NotificationAction toJSON serializes fields', (t) => {
   const action = new NotificationAction({
@@ -27,6 +51,7 @@ test('NotificationOptions toJSON maps actions and clamps vibration', (t) => {
       { action: 'later', title: 'Later' }
     ],
     vibrate: [100, -50, 20000],
+    tag: 'notification-options-regression',
     renotify: true,
     requireInteraction: true
   })
@@ -59,5 +84,6 @@ test('NotificationOptions toJSON maps actions and clamps vibration', (t) => {
     'vibrate sequence is clamped and normalized'
   )
   t.equal(json.renotify, true, 'renotify flag persists')
+  t.equal(json.tag, 'notification-options-regression', 'renotify tag persists')
   t.equal(json.requireInteraction, true, 'requireInteraction flag persists')
 })

@@ -70,15 +70,7 @@ open class SchemeHandlers (val bridge: Bridge) {
         val seq = this.getHeader("runtime-xhr-seq")
           ?: this.request.url.getQueryParameter("seq")
 
-        if (seq != null && this.bridge.buffers.contains(seq)) {
-          val buffer = this.bridge.buffers[seq]
-          if (request.method == "POST" || request.method == "PUT" || request.method == "PATCH") {
-            this.bridge.buffers.remove(seq)
-          }
-          buffer
-        } else {
-          null
-        }
+        if (seq != null) this.bridge.takeBuffer(seq) else null
       } catch (_: Exception) {
         null
       }
@@ -162,7 +154,7 @@ open class SchemeHandlers (val bridge: Bridge) {
     }
 
     fun getHeader (name: String): String? {
-      return request.requestHeaders.get(name)
+      return request.requestHeaders.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
     }
 
     fun getUrl (): String {
@@ -289,8 +281,8 @@ open class SchemeHandlers (val bridge: Bridge) {
         request.waitForFinishedResponse()
         return request.getWebResourceResponse()
       }
-    } catch (e: Exception) {
-      console.debug(e.toString())
+    } catch (_: Exception) {
+      console.error("Runtime resource request failed")
     }
 
     return null

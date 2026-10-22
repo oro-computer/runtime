@@ -6,15 +6,17 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.content.res.AssetManager
 import android.graphics.drawable.ColorDrawable
-import android.graphics.Insets
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.net.Uri
 import android.os.Bundle
 import android.util.DisplayMetrics
-import android.view.WindowInsets
 import android.view.WindowManager
 
 import androidx.activity.addCallback
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.BackEventCompat
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.commit
 import androidx.fragment.app.FragmentManager
@@ -69,8 +71,6 @@ open class WindowFragmentManager (
       add(R.id.window, fragment)
       if (options.headless) {
         hide(fragment)
-      } else {
-        addToBackStack("window#${options.index}")
       }
     }
   }
@@ -179,7 +179,7 @@ open class WindowFragmentManager (
     val fragment = this.fragments.find { it.index == index }
     val window = fragment?.window
 
-    if (window != null) {
+    if (window != null && fragment.hasWebView) {
       window.navigate(url)
       return true
     }
@@ -191,29 +191,7 @@ open class WindowFragmentManager (
    * Evaluates a JavaScript `source` string at a given window `index`.
    */
   fun evaluateJavaScriptInWindowFragmentView (index: Int, source: String, token: String): Boolean {
-    val fragments = this.fragments
-    if (this.hasWindowFragment(index)) {
-      kotlin.concurrent.thread {
-        activity.runOnUiThread {
-          val fragment = fragments.find { it.index == index }
-          fragment?.webview?.evaluateJavascript(source, { result ->
-            val window = fragment.window
-            if (window != null) {
-              if (this.hasWindowFragment(index)) {
-                try {
-                  window.onEvaluateJavascriptResult(index, token, result)
-                } catch (e: Exception) {
-                  console.debug("evaluateJavaScriptInWindowFragmentView: ${e.toString()}")
-                }
-              }
-            }
-          })
-        }
-      }
-      return true
-    }
-
-    return false
+    return this.getWindowFragment(index)?.window?.evaluateJavaScript(source, token) ?: false
   }
 
   /**
@@ -222,7 +200,7 @@ open class WindowFragmentManager (
   fun getWindowFragmentWidth (index: Int): Int {
     val fragment = this.fragments.find { it.index == index }
 
-    if (fragment != null) {
+    if (fragment != null && fragment.hasWebView) {
       return fragment.webview.measuredWidth
     }
 
@@ -235,7 +213,7 @@ open class WindowFragmentManager (
   fun getWindowFragmentHeight (index: Int): Int {
     val fragment = this.fragments.find { it.index == index }
 
-    if (fragment != null) {
+    if (fragment != null && fragment.hasWebView) {
       return fragment.webview.measuredHeight
     }
 
@@ -276,6 +254,7 @@ open class WindowFragmentManager (
    */
   fun setWindowFragmentViewBackgroundColor (index: Int, color: Long): Boolean {
     val fragment = this.fragments.find { it.index == index } ?: return false
+    if (!fragment.hasWebView) return false
     fragment.webview.setBackgroundColor(color.toInt())
     return true
   }
@@ -285,6 +264,7 @@ open class WindowFragmentManager (
    */
   fun getWindowFragmentBackgroundColor (index: Int): Int {
     val fragment = this.fragments.find { it.index == index } ?: return 0
+    if (!fragment.hasWebView) return 0
     val background = fragment.webview.background
     if (background == null) {
       return 0
@@ -299,6 +279,7 @@ open class WindowFragmentManager (
    */
   fun setWindowFragmentViewPosition(index: Int, x: Float, y: Float): Boolean {
     val fragment = this.fragments.find { it.index == index } ?: return false
+    if (!fragment.hasWebView) return false
     fragment.webview.setX(x)
     fragment.webview.setY(y)
     return true
@@ -310,8 +291,57 @@ open class WindowFragmentManager (
  * instances.
  */
 open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_view) {
+  companion object {
+    private const val PROCESS_STATE_KEY = "oro.runtime.process"
+    private val processToken = java.util.UUID.randomUUID().toString()
+  }
+
   open val windowFragmentManager = WindowFragmentManager(this)
   open val dialog = Dialog(this)
+  internal val systemAppearance by lazy { SystemAppearance(this) }
+  internal val presentation by lazy { SystemPresentation(this) }
+
+  fun setSystemAppearance (index: Int, options: String): Boolean = systemAppearance.apply(index, options)
+
+  fun emitBackGesture (phase: String, event: BackEventCompat? = null) {
+    val fragment = windowFragmentManager.fragments.lastOrNull {
+      it.isVisible && !it.options.headless && it.hasWebView
+    } ?: return
+    fragment.window?.bridge?.emit("backgesture", org.json.JSONObject().put("phase", phase)
+      .put("progress", event?.progress ?: if (phase == "commit") 1f else 0f)
+      .put("edge", event?.swipeEdge ?: org.json.JSONObject.NULL).toString())
+  }
+
+  override fun onConfigurationChanged (configuration: Configuration) {
+    super.onConfigurationChanged(configuration)
+    systemAppearance.refresh()
+  }
+  private var lastHapticTime = -100L
+
+  fun performHaptic (index: Int, kind: String): Boolean {
+    val fragment = windowFragmentManager.getWindowFragment(index) ?: return false
+    if (!fragment.hasWebView || !fragment.isVisible || isFinishing || isDestroyed) return false
+    val now = android.os.SystemClock.elapsedRealtime()
+    if (now - lastHapticTime < 100) return false
+    val feedback = when (kind) {
+      "selection" -> android.view.HapticFeedbackConstants.TEXT_HANDLE_MOVE
+      "confirmation" -> if (android.os.Build.VERSION.SDK_INT >= 30) android.view.HapticFeedbackConstants.CONFIRM
+        else android.view.HapticFeedbackConstants.VIRTUAL_KEY
+      "rejection" -> if (android.os.Build.VERSION.SDK_INT >= 30) android.view.HapticFeedbackConstants.REJECT
+        else android.view.HapticFeedbackConstants.LONG_PRESS
+      else -> return false
+    }
+    lastHapticTime = now
+    return fragment.webview.performHapticFeedback(feedback)
+  }
+
+  fun markWindowReady (index: Int, explicit: Boolean) {
+    val owner = this.windowFragmentManager.getWindowFragment(index)?.window ?: return
+    this.runOnUiThread {
+      val fragment = this.windowFragmentManager.getWindowFragment(index)
+      if (fragment?.window === owner && owner.userMessageHandler.active) fragment.markReady(explicit)
+    }
+  }
 
   override fun onActivityResult (
     requestCode: Int,
@@ -322,10 +352,27 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
   }
 
   override fun onCreate (savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+    // Fragment indices are valid only while their native windows still exist.
+    // A new process starts from configured windows without restoring WebView state.
+    val restorableState = savedInstanceState?.takeIf {
+      it.getString(PROCESS_STATE_KEY) == processToken
+    }
+    super.onCreate(restorableState)
     this.onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+      override fun handleOnBackStarted (backEvent: BackEventCompat) { emitBackGesture("start", backEvent) }
+      override fun handleOnBackProgressed (backEvent: BackEventCompat) { emitBackGesture("progress", backEvent) }
+      override fun handleOnBackCancelled () { emitBackGesture("cancel") }
       override fun handleOnBackPressed () {
-        val fragment = supportFragmentManager.findFragmentById(R.id.window)
+        emitBackGesture("commit")
+        val insets = ViewCompat.getRootWindowInsets(window.decorView)
+        if (insets?.isVisible(WindowInsetsCompat.Type.ime()) == true) {
+          androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).hide(WindowInsetsCompat.Type.ime())
+          return
+        }
+        if (presentation.exit("back")) return
+        val fragment = windowFragmentManager.fragments.lastOrNull {
+          it.isVisible && !it.options.headless
+        }
         if (fragment is IWindowFragment && fragment.onBackPressed()) {
           return
         }
@@ -345,6 +392,22 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
         addAll(existing)
       }
     }
+  }
+
+  override fun onPause () {
+    presentation.exit("suspended")
+    super.onPause()
+  }
+
+  override fun onDestroy () {
+    presentation.destroy()
+    dialog.close()
+    super.onDestroy()
+  }
+
+  override fun onSaveInstanceState (outState: Bundle) {
+    outState.putString(PROCESS_STATE_KEY, processToken)
+    super.onSaveInstanceState(outState)
   }
 
   /**
@@ -457,22 +520,16 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
    * Gets the current screen `Insets`.
    */
   fun getScreenInsets (): Insets {
-    val windowManager = this.applicationContext.getSystemService(
-      Context.WINDOW_SERVICE
-    ) as WindowManager
-    val metrics = windowManager.getCurrentWindowMetrics()
-    val windowInsets = metrics.windowInsets
-    return windowInsets.getInsetsIgnoringVisibility(
-      WindowInsets.Type.navigationBars() or
-      WindowInsets.Type.displayCutout()
-    )
+    return ViewCompat.getRootWindowInsets(window.decorView)?.getInsetsIgnoringVisibility(
+      WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+    ) ?: Insets.NONE
   }
 
   /**
    * Gets the current screen display metrics
    */
   fun getScreenDisplayMetrics (): DisplayMetrics {
-    return this.applicationContext.resources.displayMetrics
+    return this.resources.displayMetrics
   }
 
   /**
@@ -488,10 +545,15 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
    * Gets the screen width size.
    */
   fun getScreenSizeWidth (): Int {
-    val windowManager = this.applicationContext.getSystemService(
+    val windowManager = this.getSystemService(
       Context.WINDOW_SERVICE
     ) as WindowManager
-    val metrics = windowManager.getCurrentWindowMetrics()
+    if (android.os.Build.VERSION.SDK_INT < 30) {
+      val metrics = DisplayMetrics()
+      windowManager.defaultDisplay.getMetrics(metrics)
+      return metrics.widthPixels
+    }
+    val metrics = windowManager.currentWindowMetrics
     val insets = this.getScreenInsets()
     return metrics.bounds.width() - insets.left - insets.right
   }
@@ -500,10 +562,15 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
    * Gets the screen height size.
    */
   fun getScreenSizeHeight (): Int {
-    val windowManager = this.applicationContext.getSystemService(
+    val windowManager = this.getSystemService(
       Context.WINDOW_SERVICE
     ) as WindowManager
-    val metrics = windowManager.getCurrentWindowMetrics()
+    if (android.os.Build.VERSION.SDK_INT < 30) {
+      val metrics = DisplayMetrics()
+      windowManager.defaultDisplay.getMetrics(metrics)
+      return metrics.heightPixels
+    }
+    val metrics = windowManager.currentWindowMetrics
     val insets = this.getScreenInsets()
     return metrics.bounds.height() - insets.top - insets.bottom
   }

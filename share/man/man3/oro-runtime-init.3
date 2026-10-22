@@ -61,6 +61,20 @@ int oro_runtime_init_get_dev_port (void);
 .PP
 Get the development port configured for the embedded runtime, or `0` when unset.
 .TP
+\fBoro_runtime_init_get_asset_manifest_sha256\fR
+.nf
+const char* oro_runtime_init_get_asset_manifest_sha256 (void);
+.fi
+.PP
+SHA\-256 of the packaged Android asset manifest, or empty for older embedders.
+.TP
+\fBoro_runtime_init_get_cli_version\fR
+.nf
+const char* oro_runtime_init_get_cli_version (void);
+.fi
+.PP
+Version of the CLI that generated the embedded application, or empty.
+.TP
 \fBoro_runtime_init_get_user_config_format\fR
 .nf
 int oro_runtime_init_get_user_config_format (void);

@@ -1,0 +1,68 @@
+.TH ORO-BACKGROUND-DEFERRED 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:background/deferred \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:background/deferred'
+.fi
+.SH DESCRIPTION
+.PP
+Durable Android read/sync reconciliation through compiled native executors. Requires `[background] deferred_enabled = true` and native registration from Application.onCreate. Executors resolve references and recheck current server IAM at every attempt. No credentials, request bodies, JS closures or queued mutations are accepted. Private origins remain subject to LAN/VPN reachability.
+.SH REFERENCE
+.TP
+\fBgetSupport()\fR
+Documented function exposed by this module.
+\fBReturns:\fR
+.br
+\fIPromise<DeferredReadSupport>\fR
+.TP
+\fBenqueue(options)\fR
+Schedules an authorized native read/reconciliation. Reusing the same task ID with identical options returns its current state, without duplicate delivery. Changing an existing task returns EEXIST. Each attempt has a 60\-second result deadline; a blocked native executor can still occupy the single worker.
+\fBParameters:\fR
+.br
+\fIoptions\fR (DeferredReadOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<DeferredReadState>\fR
+.TP
+\fBlist()\fR
+Documented function exposed by this module.
+\fBReturns:\fR
+.br
+\fIPromise<DeferredReadState[]>\fR
+.TP
+\fBstatus(id)\fR
+Reads retained OS scheduling state and the durable last outcome. Interrupted state is explicit and is never silently rescheduled.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<DeferredReadState>\fR
+.TP
+\fBresume(id)\fR
+Explicitly resumes an interrupted task after app reconciliation. Preserves the five\-attempt budget and replaces its generation, so obsolete callbacks cannot complete the resumed task. The native executor reauthorizes it again.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<DeferredReadState>\fR
+.TP
+\fBcancel(id)\fR
+Cancels scheduling and signals a running native executor. An already\-running read can finish; its result cannot complete a cancelled or replaced task.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<DeferredReadState>\fR
+.TP
+\fBrelease(id)\fR
+Cancels and releases a retained task record. Preserve any required application receipt before releasing. A later enqueue of this ID starts a new generation.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<DeferredReadState>\fR

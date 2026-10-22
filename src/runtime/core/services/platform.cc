@@ -204,7 +204,7 @@ namespace oro::runtime::core::services {
       this->getRuntimeContext()->android.activity,
       "openExternal",
       "(Ljava/lang/String;)Z",
-      attachment.env->NewStringUTF(value.c_str())
+      android::StringWrap(attachment.env, value).j_str()
     );
 
     if (attachment.hasException()) {

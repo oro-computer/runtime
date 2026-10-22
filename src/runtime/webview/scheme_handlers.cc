@@ -2059,8 +2059,8 @@ namespace oro::runtime::webview {
     );
 
     for (const auto& header : this->headers) {
-      const auto name = attachment.env->NewStringUTF(toHeaderCase(header.name).c_str());
-      const auto value = attachment.env->NewStringUTF(header.value.c_str());
+      const auto name = android::StringWrap(attachment.env, toHeaderCase(header.name)).j_str();
+      const auto value = android::StringWrap(attachment.env, header.value.str()).j_str();
 
       CallVoidClassMethodFromAndroidEnvironment(
         attachment.env,
@@ -2075,7 +2075,7 @@ namespace oro::runtime::webview {
       attachment.env->DeleteLocalRef(value);
     }
 
-    const auto statusText = attachment.env->NewStringUTF(http::getStatusText(this->statusCode).c_str());
+    const auto statusText = android::StringWrap(attachment.env, http::getStatusText(this->statusCode)).j_str();
 
     CallVoidClassMethodFromAndroidEnvironment(
       attachment.env,

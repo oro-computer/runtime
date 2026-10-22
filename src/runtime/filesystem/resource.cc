@@ -16,6 +16,7 @@ namespace oro::runtime::filesystem {
   static Map<String, Resource::Cache> caches;
   static Mutex mutex;
   static Resource::WellKnownPaths defaultWellKnownPaths;
+  static Path configuredResourcesPath;
 
 #if ORO_RUNTIME_PLATFORM_ANDROID
   static android::AssetManager* sharedAndroidAssetManager = nullptr;
@@ -133,7 +134,8 @@ namespace oro::runtime::filesystem {
     }
   #endif
 
-    return fs::is_regular_file(resourcePath);
+    std::error_code error;
+    return fs::is_regular_file(resourcePath, error);
   }
 
   bool Resource::isDirectory (const String& resourcePath) {
@@ -173,7 +175,8 @@ namespace oro::runtime::filesystem {
     }
   #endif
 
-    return fs::is_directory(resourcePath);
+    std::error_code error;
+    return fs::is_directory(resourcePath, error);
   }
 
   bool Resource::isMountedPath (const Path& path) {
@@ -361,7 +364,27 @@ namespace oro::runtime::filesystem {
      return mounts;
   }
 
+  bool Resource::setResourcesPath (const Path& resourcePath) {
+    if (!resourcePath.is_absolute()) {
+      return false;
+    }
+    std::error_code error;
+    const auto resolved = fs::canonical(resourcePath, error);
+    if (error || !fs::is_directory(resolved, error) || error) {
+      return false;
+    }
+    Lock lock(mutex);
+    configuredResourcesPath = resolved;
+    return true;
+  }
+
   Path Resource::getResourcesPath () {
+    {
+      Lock lock(mutex);
+      if (!configuredResourcesPath.empty()) {
+        return configuredResourcesPath;
+      }
+    }
     static String value;
 
     if (value.size() > 0) {
@@ -828,6 +851,9 @@ namespace oro::runtime::filesystem {
       return true;
     }
   #elif ORO_RUNTIME_PLATFORM_ANDROID
+    if (this->isAndroidContent()) {
+      return this->options.contentResolver && this->options.contentResolver->hasAccess(this->url.str());
+    }
     if (sharedAndroidAssetManager) {
       const auto assetPath = getRelativeAndroidAssetManagerPath(this->path);
       const auto asset = AAssetManager_open(
@@ -850,7 +876,7 @@ namespace oro::runtime::filesystem {
   int Resource::access (int mode) const noexcept {
     if (this->accessing) {
     #if ORO_RUNTIME_PLATFORM_ANDROID
-      if (this->isAndroidLocalAsset() || this->isAndroidContent()) {
+      if (this->isAndroidLocalAsset()) {
         if (mode == F_OK || mode == R_OK) {
           return mode;
         }
@@ -1017,6 +1043,17 @@ namespace oro::runtime::filesystem {
     }
     this->cache.size = static_cast<size_t>(fileSize.QuadPart);
   #elif ORO_RUNTIME_PLATFORM_ANDROID
+    if (this->isAndroidContent()) {
+      const auto resolver = this->options.contentResolver;
+      if (!resolver) return 0;
+      const auto descriptor = resolver->openFileDescriptor(this->url.str());
+      if (!descriptor) return 0;
+      const auto length = resolver->getFileDescriptorLength(descriptor);
+      const bool closed = resolver->closeFileDescriptor(descriptor);
+      if (!closed || length < 0 || static_cast<uintmax_t>(length) > std::numeric_limits<size_t>::max()) return 0;
+      this->cache.size = static_cast<size_t>(length);
+      return this->cache.size;
+    }
     bool success = false;
     if (sharedAndroidAssetManager) {
       if (this->isAndroidLocalAsset()) {
@@ -1036,19 +1073,6 @@ namespace oro::runtime::filesystem {
           success = true;
         }
       }
-    } else if (this->url.scheme == "content" || this->url.scheme == "android.resource") {
-      if (this->options.contentResolver != nullptr) {
-        off_t offset = 0;
-        off_t length = 0;
-        auto fileDescriptor = this->options.contentResolver->openFileDescriptor (
-          this->url.str(),
-          &offset,
-          &length
-        );
-
-        this->options.contentResolver->closeFileDescriptor(fileDescriptor);
-        return length;
-      }
     }
 
     if (!success) {
@@ -1057,9 +1081,9 @@ namespace oro::runtime::filesystem {
       this->cache.size = error ? 0 : size;
     }
   #else
-    if (fs::exists(this->path)) {
-      this->cache.size = fs::file_size(this->path);
-    }
+    std::error_code error;
+    const auto size = fs::file_size(this->path, error);
+    this->cache.size = error ? 0 : size;
   #endif
 
     return this->cache.size;
@@ -1541,12 +1565,7 @@ namespace oro::runtime::filesystem {
   }
 
   bool Resource::isAndroidContent () const noexcept {
-    const auto uri = this->path.string();
-    if (this->options.contentResolver->isContentURI(uri)) {
-      const auto pathname = this->options.contentResolver->getPathnameFromURI(uri);
-      return pathname.size() > 0;
-    }
-    return false;
+    return this->url.scheme == "content" || this->url.scheme == "android.resource";
   }
 #endif
 }

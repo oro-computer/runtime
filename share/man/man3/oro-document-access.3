@@ -1,0 +1,59 @@
+.TH ORO-DOCUMENT-ACCESS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:document\-access \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:document\-access'
+.fi
+.SH DESCRIPTION
+.PP
+Persistent Android Storage Access Framework grants for user\-selected URIs. Providers can revoke grants or refuse persistence; callers must handle errors.
+.SH REFERENCE
+.TP
+\fBlist()\fR
+Lists persisted grants. This does not establish that the provider is reachable. Other platforms reject with `ENOSYS`.
+\fBReturns:\fR
+.br
+\fIPromise<DocumentGrant[]>\fR
+.TP
+\fBpersist(uri, options)\fR
+Retains an existing user\-selected document grant across process death/reboot. Android must have granted the requested persistable modes; this never opens a permission prompt or obtains access to an arbitrary URI. At most 128 grants.
+\fBParameters:\fR
+.br
+\fIuri\fR (string; required)
+.br
+\fIoptions\fR (DocumentGrantOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBrelease(uri, options)\fR
+Releases retained access. Close open files and stop using the URI first.
+\fBParameters:\fR
+.br
+\fIuri\fR (string; required)
+.br
+\fIoptions\fR (DocumentGrantOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBstat(uri)\fR
+Queries a selected document or tree root without resolving a filesystem path. Unknown provider sizes remain null. Queries have a five\-second result deadline; a timed\-out provider may still occupy one of the two bounded worker slots. Providers enforce existing grants. Other platforms reject with ENOSYS.
+\fBParameters:\fR
+.br
+\fIuri\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<DocumentMetadata>\fR
+.TP
+\fBreadDirectory(uri, options)\fR
+Lists children within an existing selected tree grant. Entries contain proper child document URIs. Pages follow provider cursor order, which is not a durable snapshot: after edits or process loss, restart and reconcile by URI. At most 128 entries and 1 MiB of metadata per response, with two concurrent queries. This does not broaden grants or emulate ordinary filesystem path traversal. Other platforms reject with ENOSYS.
+\fBParameters:\fR
+.br
+\fIuri\fR (string; required)
+.br
+\fIoptions\fR (DocumentChildrenOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<DocumentChildren>\fR

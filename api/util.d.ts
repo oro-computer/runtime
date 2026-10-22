@@ -51,7 +51,13 @@ export namespace inspect {
     let custom: symbol;
 }
 export function format(format: any, ...args: any[]): string;
-export function parseJSON(string: any): any;
+/**
+ * Parses JSON without modifying valid escape sequences. Invalid JSON containing
+ * unescaped backslashes retains the legacy path-repair fallback.
+ * @param {unknown} string
+ * @returns {any|null}
+ */
+export function parseJSON(string: unknown): any | null;
 export function parseHeaders(headers: any): string[][];
 export function noop(): void;
 export function isValidPercentageValue(input: any): boolean;

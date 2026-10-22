@@ -64,6 +64,28 @@ namespace oro::Tests {
       );
     });
 
+    t.test("oro::runtime::ipc::Message decodes transport escapes exactly once", [](auto t) {
+      using oro::runtime::ipc::Message;
+      const Vector<String> values = {
+        "public%2Fdata", "%20", "%2520", "%2B", "%00", "%25", "%", "%2", "%GG",
+        "a+b c", "{\"url\":\"https://public.example/a%2Fb?q=%2520\"}",
+        " line1\nline2 \xf0\x9f\x99\x82 ", String("a\0b", 3), ""
+      };
+      for (const auto decodeValues : { false, true }) {
+        for (const auto& value : values) {
+          const auto uri = "ipc://secureStorage.set?value=" + encodeURIComponent(value) +
+            "&key=" + encodeURIComponent(value);
+          const auto message = Message(uri, decodeValues);
+          t.equals(message.get("value"), value, "value payload preserves literal escapes and bytes");
+          t.equals(message.get("key"), value, "ordinary parameters preserve literal escapes and bytes");
+          t.equals(message.at("value"), value, "C accessor and get agree on value decoding");
+          t.equals(message.at("key"), value, "C accessor and get agree on key decoding");
+          const auto copy = Message(message);
+          t.equals(copy.get("value"), value, "copy preserves decoded payload");
+        }
+      }
+    });
+
     t.test("oro::runtime::javascript resolve payload is a safe string literal", [](auto t) {
       const auto source = oro::runtime::javascript::getResolveToRenderProcessJavaScript(
         "R1",

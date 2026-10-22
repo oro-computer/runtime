@@ -10,6 +10,68 @@ import * as module from 'oro:notification'
 The Notification modules provides an API to configure and display desktop and mobile notifications to the user. It also includes mechanisms for request permissions to use notifications on the user's device.
 .SH REFERENCE
 .TP
+\fBconfigureChannels(channels)\fR
+Registers at most 32 immutable named Android channels. Reusing an ID with changed defaults rejects EEXIST; choose a new versioned ID instead. Existing user changes are preserved. Requires notification capability; does not prompt.
+\fBParameters:\fR
+.br
+\fIchannels\fR (AndroidNotificationChannel[]; required)
+\fBReturns:\fR
+.br
+\fIPromise<AndroidNotificationChannelStatus[]>\fR
+.TP
+\fBsubmit(options)\fR
+Submits an Android notification with channel/group/public\-version policy. Reads and acknowledgement use getResponses()/acknowledgeResponse(). This function does not establish account authority or deduplicate server events. Other platforms reject ENOSYS. Compiled native executors can use the same NativeNotifications.submit(Context, JSONObject) implementation without a WebView.
+\fBParameters:\fR
+.br
+\fIoptions\fR (AndroidNotificationOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<AndroidNotificationSubmission>\fR
+.TP
+\fBcancel(id, options)\fR
+Cancels an Android notification by its exact application ID/tag. Missing notifications are allowed. It does not create a dismissal receipt, revoke server state or acknowledge existing responses. Compiled receivers can use NativeNotifications.cancel(Context, id, tag) without an Activity or WebView. Other platforms reject with ENOSYS.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+.br
+\fIoptions\fR (AndroidNotificationCancelOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBgetResponses()\fR
+Reads Android notification responses retained across process restarts. Call after restoring authorization, resolve IDs against authorized application state, then acknowledge handled or obsolete receipts. Reading does not remove receipts. At most 64 responses are retained for seven days. Notification content and arbitrary `data` are not persisted. Other platforms reject with `ENOSYS`. A receipt does not establish authorization or verified presentation.
+\fBReturns:\fR
+.br
+\fIPromise<NotificationResponseReceipt[]>\fR
+.TP
+\fBacknowledgeResponse(receiptId)\fR
+Removes an Android response after application reconciliation. Repeated acknowledgements are allowed. Other platforms reject with `ENOSYS`.
+\fBParameters:\fR
+.br
+\fIreceiptId\fR (string; required) Opaque identity returned by `getResponses()`.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBgetDeliveryStatus(channel)\fR
+Reads Android application/channel policy without asking for consent. Refresh after resume because the user can change it in Settings. Other platforms reject with `ENOSYS`; a true `canSubmit` does not establish server authorization.
+\fBParameters:\fR
+.br
+\fIchannel\fR (string; optional; default 'default') Native channel ID, or the application's default.
+\fBReturns:\fR
+.br
+\fIPromise<NotificationDeliveryStatus>\fR
+.TP
+\fBopenChannelSettings(channel)\fR
+Opens this Android application's channel controls in system Settings. Call from a user action. This never changes sound, DND, permission, or importance. Other platforms reject with `ENOSYS`.
+\fBParameters:\fR
+.br
+\fIchannel\fR (string; optional; default 'default')
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
 \fBaction()\fR
 A string identifying a user action to be displayed on the notification.
 .TP

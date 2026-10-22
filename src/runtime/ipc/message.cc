@@ -6,67 +6,6 @@
 using oro::runtime::url::decodeURIComponent;
 
 namespace oro::runtime::ipc {
-  namespace {
-    inline bool isHexDigit (char c) {
-      return (c >= '0' && c <= '9') ||
-        (c >= 'a' && c <= 'f') ||
-        (c >= 'A' && c <= 'F');
-    }
-
-    inline uint8_t hexValue (char c) {
-      if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
-      if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);
-      return static_cast<uint8_t>(c - 'A' + 10);
-    }
-
-    bool containsPercentEscapes (const String& value) {
-      if (value.size() < 3) {
-        return false;
-      }
-
-      for (size_t i = 0; i + 2 < value.size(); ++i) {
-        if (
-          value[i] == '%' &&
-          isHexDigit(value[i + 1]) &&
-          isHexDigit(value[i + 2])
-        ) {
-          return true;
-        }
-      }
-
-      return false;
-    }
-
-    // Decode percent escapes without treating '+' as a space. This is used as a
-    // compatibility pass for double-encoded query parameters.
-    String decodePercentEscapes (const String& input) {
-      if (input.empty() || input.find('%') == String::npos) {
-        return input;
-      }
-
-      String out;
-      out.reserve(input.size());
-
-      for (size_t i = 0; i < input.size(); ++i) {
-        if (
-          input[i] == '%' &&
-          i + 2 < input.size() &&
-          isHexDigit(input[i + 1]) &&
-          isHexDigit(input[i + 2])
-        ) {
-          const auto high = hexValue(input[i + 1]);
-          const auto low = hexValue(input[i + 2]);
-          out.push_back(static_cast<char>((high << 4) | low));
-          i += 2;
-        } else {
-          out.push_back(input[i]);
-        }
-      }
-
-      return out;
-    }
-  }
-
   Message::Message (const String& source, bool decodeValues)
     : uri(source, decodeValues) {
     this->seq = this->get("seq");
@@ -202,12 +141,8 @@ namespace oro::runtime::ipc {
       return fallback;
     }
 
-    auto decoded = decodeURIComponent(this->uri.searchParams.get(key).data);
-    if (containsPercentEscapes(decoded)) {
-      decoded = decodePercentEscapes(decoded);
-    }
-
-    return decoded;
+    // Query transport encoding is removed once; remaining escapes are payload.
+    return decodeURIComponent(this->uri.searchParams.get(key).data);
   }
 
   const Map<String, String> Message::dump () const {

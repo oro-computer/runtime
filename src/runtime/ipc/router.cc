@@ -90,11 +90,16 @@ namespace oro::runtime::ipc {
     const auto weak = this->bridge.weak_from_this();
     return this->invoke(uri, bytes, size, [weak](auto result) {
       if (const auto bridge = weak.lock()) {
-        bridge->dispatcher.dispatch([weak, result] () {
+        const auto deliver = [weak, result] () {
           if (const auto bridge = weak.lock()) {
             bridge->send(result.seq, result.str(), result.queuedResponse);
           }
-        });
+        };
+        if (bridge->dispatchRouterCallbacksWithBridge) {
+          bridge->dispatch(deliver);
+        } else {
+          bridge->dispatcher.dispatch(deliver);
+        }
       }
     });
   }
@@ -181,11 +186,16 @@ namespace oro::runtime::ipc {
       }
 
       if (result.seq == "-1") {
-        bridge->dispatcher.dispatch([weak, result] {
+        const auto deliver = [weak, result] {
           if (const auto bridge = weak.lock()) {
             bridge->send(result.seq, result.str(), result.queuedResponse);
           }
-        });
+        };
+        if (bridge->dispatchRouterCallbacksWithBridge) {
+          bridge->dispatch(deliver);
+        } else {
+          bridge->dispatcher.dispatch(deliver);
+        }
       } else {
         callback(result);
       }

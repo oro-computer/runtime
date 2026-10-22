@@ -11,6 +11,9 @@ import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
+import javax.crypto.SecretKeyFactory
+import android.security.keystore.KeyInfo
+import org.json.JSONObject
 import javax.crypto.spec.GCMParameterSpec
 
 import oro.runtime.debug.console
@@ -27,29 +30,62 @@ object SecureStorageManager {
   private const val IV_SIZE_BYTES = 12
   private const val TAG_LENGTH_BITS = 128
 
+  /** Inspect existing key metadata without generating a key or reading plaintext values. */
   @JvmStatic
+  @Synchronized
+  fun status (context: Context): String {
+    val result = JSONObject().put("available", false).put("keyPresent", false)
+      .put("protection", "unknown").put("requiresRecovery", false)
+      .put("userAuthenticationRequired", JSONObject.NULL).put("readability", "not-probed")
+    return try {
+      val key = getSecretKeyOrNull(PRIMARY_KEYSTORE_ALIAS)
+      val stored = primaryPreferences(context).all.isNotEmpty()
+      result.put("available", true).put("keyPresent", key != null).put("requiresRecovery", key == null && stored)
+      if (key == null) {
+        result.put("protection", if (stored) "key-missing" else "not-created")
+      } else {
+        val info = SecretKeyFactory.getInstance(key.algorithm, KEYSTORE).getKeySpec(key, KeyInfo::class.java) as KeyInfo
+        val protection = if (android.os.Build.VERSION.SDK_INT >= 31) {
+          when (info.securityLevel) {
+            KeyProperties.SECURITY_LEVEL_STRONGBOX -> "strongbox"
+            KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> "tee"
+            KeyProperties.SECURITY_LEVEL_SOFTWARE -> "software"
+            else -> "unknown"
+          }
+        } else if (info.isInsideSecureHardware) "hardware" else "software"
+        result.put("protection", protection).put("userAuthenticationRequired", info.isUserAuthenticationRequired)
+      }
+      result.toString()
+    } catch (_: Exception) {
+      result.put("available", false).put("protection", "unknown").toString()
+    }
+  }
+
+  @JvmStatic
+  @Synchronized
   fun set(context: Context, scope: String, key: String, value: ByteArray): Boolean {
     return try {
       val storageKey = storageKey(PRIMARY_PREFIX, scope, key)
-      val encoded = encrypt(value, PRIMARY_KEYSTORE_ALIAS)
-      primaryPreferences(context).edit().putString(storageKey, encoded).apply()
-      true
+      val encoded = encrypt(context, value, PRIMARY_KEYSTORE_ALIAS)
+      primaryPreferences(context).edit().putString(storageKey, encoded).commit()
     } catch (err: Exception) {
-      console.error("SecureStorageManager: failed to store value: ${err.message}")
+      console.error("SecureStorageManager: encrypted write failed")
       false
     }
   }
 
   @JvmStatic
+  @Synchronized
+  @Throws(IllegalStateException::class)
   fun get(context: Context, scope: String, key: String): ByteArray? {
     val primaryKey = storageKey(PRIMARY_PREFIX, scope, key)
 
     val primaryEncoded = primaryPreferences(context).getString(primaryKey, null)
-    if (!primaryEncoded.isNullOrEmpty()) {
+    if (primaryEncoded != null) {
       try {
         return decrypt(primaryEncoded, PRIMARY_KEYSTORE_ALIAS)
       } catch (err: Exception) {
-        console.error("SecureStorageManager: failed to read value: ${err.message}")
+        throw IllegalStateException("Secure storage is locked, invalidated, or corrupt")
       }
     }
 
@@ -57,38 +93,39 @@ object SecureStorageManager {
   }
 
   @JvmStatic
+  @Synchronized
   fun remove(context: Context, scope: String, key: String): Boolean {
     return try {
       val primaryKey = storageKey(PRIMARY_PREFIX, scope, key)
 
-      primaryPreferences(context).edit().remove(primaryKey).apply()
-      true
+      primaryPreferences(context).edit().remove(primaryKey).commit()
     } catch (err: Exception) {
-      console.error("SecureStorageManager: failed to remove value: ${err.message}")
+      console.error("SecureStorageManager: encrypted value removal failed")
       false
     }
   }
 
   @JvmStatic
+  @Synchronized
   fun clear(context: Context, scope: String): Boolean {
     return try {
       clearByPrefix(primaryPreferences(context), storagePrefix(PRIMARY_PREFIX, scope))
-      true
     } catch (err: Exception) {
-      console.error("SecureStorageManager: failed to clear values: ${err.message}")
+      console.error("SecureStorageManager: encrypted scope removal failed")
       false
     }
   }
 
   @JvmStatic
+  @Synchronized
+  @Throws(IllegalStateException::class)
   fun keys(context: Context, scope: String): Array<String> {
-    return try {
+    try {
       val keys = linkedSetOf<String>()
       collectKeys(primaryPreferences(context), storagePrefix(PRIMARY_PREFIX, scope), keys)
-      keys.toTypedArray()
+      return keys.toTypedArray()
     } catch (err: Exception) {
-      console.error("SecureStorageManager: failed to list keys: ${err.message}")
-      emptyArray()
+      throw IllegalStateException("Secure storage key listing is unavailable")
     }
   }
 
@@ -96,12 +133,12 @@ object SecureStorageManager {
     return context.getSharedPreferences(PRIMARY_STORE_NAME, Context.MODE_PRIVATE)
   }
 
-  private fun clearByPrefix(prefs: SharedPreferences, prefix: String) {
+  private fun clearByPrefix(prefs: SharedPreferences, prefix: String): Boolean {
     val editor = prefs.edit()
     prefs.all.keys
       .filter { it.startsWith(prefix) }
       .forEach { editor.remove(it) }
-    editor.apply()
+    return editor.commit()
   }
 
   private fun collectKeys(prefs: SharedPreferences, prefix: String, out: MutableSet<String>) {
@@ -135,9 +172,9 @@ object SecureStorageManager {
     }
   }
 
-  private fun encrypt(input: ByteArray, alias: String): String {
+  private fun encrypt(context: Context, input: ByteArray, alias: String): String {
     val cipher = Cipher.getInstance(TRANSFORMATION)
-    cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey(alias))
+    cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey(context, alias))
 
     val iv = cipher.iv ?: throw IllegalStateException("Cipher IV missing")
     val encrypted = cipher.doFinal(input)
@@ -171,20 +208,19 @@ object SecureStorageManager {
   }
 
   private fun getSecretKeyOrNull(alias: String): SecretKey? {
-    return try {
-      val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
-      keyStore.getKey(alias, null) as? SecretKey
-    } catch (_: Exception) {
-      null
-    }
+    val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+    return keyStore.getKey(alias, null) as? SecretKey
   }
 
-  private fun getOrCreateSecretKey(alias: String): SecretKey {
+  private fun getOrCreateSecretKey(context: Context, alias: String): SecretKey {
     val existing = getSecretKeyOrNull(alias)
     if (existing != null) {
       return existing
     }
 
+    check(primaryPreferences(context).all.isEmpty()) {
+      "Secure storage key is missing; clear inaccessible values before creating a new key"
+    }
     val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
     val spec = KeyGenParameterSpec.Builder(
       alias,

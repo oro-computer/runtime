@@ -10,6 +10,18 @@ import * as module from 'oro:diagnostics/runtime'
 oro:diagnostics/runtime is a JavaScript API module exposed by the Oro Runtime.
 .SH REFERENCE
 .TP
+\fBgetCapabilities()\fR
+Reports implemented Android native contracts and explicit unavailable features. A supported contract still needs permission, active ownership, and application authorization. Other platforms reject with ENOSYS.
+\fBReturns:\fR
+.br
+\fIPromise<RuntimeCapabilities>\fR
+.TP
+\fBgetBuildIdentity()\fR
+Reads Android build identity without URLs, account data, input values, or logs. Other platforms reject with `ENOSYS`. This is not proof of release signing.
+\fBReturns:\fR
+.br
+\fIPromise<AndroidBuildIdentity>\fR
+.TP
 \fBDiagnostic\fR
 A base container class for diagnostic information.
 .TP

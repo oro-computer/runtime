@@ -100,6 +100,17 @@ test('ipc constants', (t) => {
   t.equal(ipc.kDebugEnabled, Symbol.for('oro.runtime.ipc.debug.enabled'))
 })
 
+test('IPC namespaced sequence parsing preserves numeric counters', t => {
+  const sequence = new ipc.IPCSearchParams().get('seq')
+  t.ok(/^R[0-9]+-.+/.test(sequence), 'automatic sequences identify their document realm')
+  const counter = Number(sequence.slice(1, sequence.indexOf('-')))
+  t.equal(ipc.parseSeq(sequence), counter, 'numeric parsing ignores the realm suffix')
+  t.equal(ipc.parseSeq(sequence, { bigint: true }), BigInt(counter), 'BigInt parsing ignores the realm suffix')
+  t.equal(ipc.parseSeq('R42'), 42, 'legacy numeric sequences remain supported')
+  t.equal(ipc.parseSeq('R42n', { bigint: true }), 42n, 'legacy BigInt sequences remain supported')
+  t.equal(new ipc.IPCSearchParams({ seq: 'caller-owned' }).get('seq'), 'caller-owned', 'explicit caller sequences are preserved')
+})
+
 test('ipc.debug', (t) => {
   ipc.debug(true)
   t.equal(ipc.debug.enabled, true)

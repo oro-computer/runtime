@@ -1,4 +1,142 @@
 /**
+ * @typedef {object} AndroidNotificationChannel
+ * @property {string} id Immutable channel identity; at most 128 characters.
+ * @property {string} name User-visible channel name.
+ * @property {string} [description]
+ * @property {'min'|'low'|'default'|'high'} [importance='default'] Initial default; user settings remain authoritative.
+ * @property {string} [sound='default'] 'default', 'none', or a packaged raw/name resource.
+ * @property {boolean} [vibration=false]
+ * @property {boolean} [badge=true]
+ */
+/**
+ * @typedef {object} AndroidNotificationChannelStatus
+ * @property {string} id
+ * @property {number} importance Current system importance.
+ * @property {boolean} sound
+ * @property {boolean} vibration
+ * @property {boolean} blocked
+ */
+/**
+ * @typedef {object} AndroidPublicNotification
+ * @property {string} title Redacted public lock-screen title; at most 160 characters.
+ * @property {string} [body] Redacted public body; at most 512 characters.
+ */
+/**
+ * @typedef {object} AndroidNotificationAction
+ * @property {string} action Opaque action identity.
+ * @property {string} title User-visible action label.
+ */
+/**
+ * @typedef {object} AndroidNotificationOptions
+ * @property {string} id Opaque application identity, returned by the existing response ledger.
+ * @property {string} title
+ * @property {string} channel Existing channel identity, or 'default' for the built-in channel.
+ * @property {string} [body]
+ * @property {string} [tag]
+ * @property {string} [category]
+ * @property {boolean} [silent=false]
+ * @property {boolean} [renotify=false]
+ * @property {boolean} [requireInteraction=false]
+ * @property {AndroidNotificationAction[]} [actions] At most three opaque routing actions.
+ * @property {string} [group] Application-defined group key.
+ * @property {boolean} [groupSummary=false] Submit a summary explicitly; summaries are not generated automatically.
+ * @property {'all'|'summary'|'children'} [groupAlertBehavior='all'] Apply consistently to group members.
+ * @property {string} [smallIcon] Packaged drawable resource name.
+ * @property {AndroidPublicNotification} [publicVersion] Redacted replacement; private visibility is always retained.
+ */
+/**
+ * @typedef {object} AndroidNotificationSubmission
+ * @property {string} id
+ * @property {boolean} submitted OS submission succeeded.
+ * @property {boolean} presentationObserved False; submission is not proof of display, sound or user attention.
+ */
+/**
+ * Registers at most 32 immutable named Android channels. Reusing an ID with
+ * changed defaults rejects EEXIST; choose a new versioned ID instead. Existing
+ * user changes are preserved. Requires notification capability; does not prompt.
+ * @param {AndroidNotificationChannel[]} channels
+ * @returns {Promise<AndroidNotificationChannelStatus[]>}
+ */
+export function configureChannels(channels: AndroidNotificationChannel[]): Promise<AndroidNotificationChannelStatus[]>;
+/**
+ * Submits an Android notification with channel/group/public-version policy.
+ * Reads and acknowledgement use getResponses()/acknowledgeResponse(). This
+ * function does not establish account authority or deduplicate server events.
+ * Other platforms reject ENOSYS. Compiled native executors can use the same
+ * NativeNotifications.submit(Context, JSONObject) implementation without a WebView.
+ * @param {AndroidNotificationOptions} options
+ * @returns {Promise<AndroidNotificationSubmission>}
+ */
+export function submit(options: AndroidNotificationOptions): Promise<AndroidNotificationSubmission>;
+/**
+ * @typedef {object} AndroidNotificationCancelOptions
+ * @property {string} [tag=''] Exact tag used for submission.
+ */
+/**
+ * Cancels an Android notification by its exact application ID/tag. Missing
+ * notifications are allowed. It does not create a dismissal receipt, revoke
+ * server state or acknowledge existing responses. Compiled receivers can use
+ * NativeNotifications.cancel(Context, id, tag) without an Activity or WebView.
+ * Other platforms reject with ENOSYS.
+ * @param {string} id
+ * @param {AndroidNotificationCancelOptions} [options]
+ * @returns {Promise<void>}
+ */
+export function cancel(id: string, options?: AndroidNotificationCancelOptions): Promise<void>;
+/**
+ * @typedef {object} NotificationResponseReceipt
+ * @property {string} receiptId Opaque identity used to acknowledge this receipt.
+ * @property {string} id Application notification identity.
+ * @property {string} action Action identity, `default`, or `dismiss`.
+ * @property {number} receivedAt Unix timestamp in milliseconds.
+ */
+/**
+ * Reads Android notification responses retained across process restarts. Call
+ * after restoring authorization, resolve IDs against authorized application
+ * state, then acknowledge handled or obsolete receipts. Reading does not remove
+ * receipts. At most 64 responses are retained for seven days. Notification
+ * content and arbitrary `data` are not persisted. Other platforms reject with
+ * `ENOSYS`. A receipt does not establish authorization or verified presentation.
+ * @returns {Promise<NotificationResponseReceipt[]>}
+ */
+export function getResponses(): Promise<NotificationResponseReceipt[]>;
+/**
+ * Removes an Android response after application reconciliation. Repeated
+ * acknowledgements are allowed. Other platforms reject with `ENOSYS`.
+ * @param {string} receiptId Opaque identity returned by `getResponses()`.
+ * @returns {Promise<void>}
+ */
+export function acknowledgeResponse(receiptId: string): Promise<void>;
+/**
+ * @typedef {object} NotificationDeliveryStatus
+ * @property {boolean} enabled Application notifications and runtime capability are enabled.
+ * @property {string} channelId Native channel identity.
+ * @property {boolean} exists
+ * @property {boolean} blocked Channel importance is disabled.
+ * @property {number|null} importance Android importance, or null for a missing channel.
+ * @property {boolean} sound Whether the channel has a sound configured.
+ * @property {boolean} vibration Whether channel vibration is enabled.
+ * @property {boolean} canSubmit Current permission/channel state permits submission.
+ * @property {'submission-only'} deliveryBoundary Submission never proves presentation or delivery.
+ * @property {false} pushAvailable No unattended push transport is configured by this runtime.
+ */
+/**
+ * Reads Android application/channel policy without asking for consent. Refresh
+ * after resume because the user can change it in Settings. Other platforms
+ * reject with `ENOSYS`; a true `canSubmit` does not establish server authorization.
+ * @param {string} [channel='default'] Native channel ID, or the application's default.
+ * @returns {Promise<NotificationDeliveryStatus>}
+ */
+export function getDeliveryStatus(channel?: string): Promise<NotificationDeliveryStatus>;
+/**
+ * Opens this Android application's channel controls in system Settings. Call
+ * from a user action. This never changes sound, DND, permission, or importance.
+ * Other platforms reject with `ENOSYS`.
+ * @param {string} [channel='default']
+ * @returns {Promise<void>}
+ */
+export function openChannelSettings(channel?: string): Promise<void>;
+/**
  * Show a notification. Creates a `Notification` instance and displays
  * it to the user.
  * @param {string} title
@@ -407,5 +545,171 @@ export class Notification extends EventTarget {
     #private;
 }
 export default Notification;
+export type AndroidNotificationChannel = {
+    /**
+     * Immutable channel identity; at most 128 characters.
+     */
+    id: string;
+    /**
+     * User-visible channel name.
+     */
+    name: string;
+    description?: string;
+    /**
+     * Initial default; user settings remain authoritative.
+     */
+    importance?: "min" | "low" | "default" | "high";
+    /**
+     * 'default', 'none', or a packaged raw/name resource.
+     */
+    sound?: string;
+    vibration?: boolean;
+    badge?: boolean;
+};
+export type AndroidNotificationChannelStatus = {
+    id: string;
+    /**
+     * Current system importance.
+     */
+    importance: number;
+    sound: boolean;
+    vibration: boolean;
+    blocked: boolean;
+};
+export type AndroidPublicNotification = {
+    /**
+     * Redacted public lock-screen title; at most 160 characters.
+     */
+    title: string;
+    /**
+     * Redacted public body; at most 512 characters.
+     */
+    body?: string;
+};
+export type AndroidNotificationAction = {
+    /**
+     * Opaque action identity.
+     */
+    action: string;
+    /**
+     * User-visible action label.
+     */
+    title: string;
+};
+export type AndroidNotificationOptions = {
+    /**
+     * Opaque application identity, returned by the existing response ledger.
+     */
+    id: string;
+    title: string;
+    /**
+     * Existing channel identity, or 'default' for the built-in channel.
+     */
+    channel: string;
+    body?: string;
+    tag?: string;
+    category?: string;
+    silent?: boolean;
+    renotify?: boolean;
+    requireInteraction?: boolean;
+    /**
+     * At most three opaque routing actions.
+     */
+    actions?: AndroidNotificationAction[];
+    /**
+     * Application-defined group key.
+     */
+    group?: string;
+    /**
+     * Submit a summary explicitly; summaries are not generated automatically.
+     */
+    groupSummary?: boolean;
+    /**
+     * Apply consistently to group members.
+     */
+    groupAlertBehavior?: "all" | "summary" | "children";
+    /**
+     * Packaged drawable resource name.
+     */
+    smallIcon?: string;
+    /**
+     * Redacted replacement; private visibility is always retained.
+     */
+    publicVersion?: AndroidPublicNotification;
+};
+export type AndroidNotificationSubmission = {
+    id: string;
+    /**
+     * OS submission succeeded.
+     */
+    submitted: boolean;
+    /**
+     * False; submission is not proof of display, sound or user attention.
+     */
+    presentationObserved: boolean;
+};
+export type AndroidNotificationCancelOptions = {
+    /**
+     * Exact tag used for submission.
+     */
+    tag?: string;
+};
+export type NotificationResponseReceipt = {
+    /**
+     * Opaque identity used to acknowledge this receipt.
+     */
+    receiptId: string;
+    /**
+     * Application notification identity.
+     */
+    id: string;
+    /**
+     * Action identity, `default`, or `dismiss`.
+     */
+    action: string;
+    /**
+     * Unix timestamp in milliseconds.
+     */
+    receivedAt: number;
+};
+export type NotificationDeliveryStatus = {
+    /**
+     * Application notifications and runtime capability are enabled.
+     */
+    enabled: boolean;
+    /**
+     * Native channel identity.
+     */
+    channelId: string;
+    exists: boolean;
+    /**
+     * Channel importance is disabled.
+     */
+    blocked: boolean;
+    /**
+     * Android importance, or null for a missing channel.
+     */
+    importance: number | null;
+    /**
+     * Whether the channel has a sound configured.
+     */
+    sound: boolean;
+    /**
+     * Whether channel vibration is enabled.
+     */
+    vibration: boolean;
+    /**
+     * Current permission/channel state permits submission.
+     */
+    canSubmit: boolean;
+    /**
+     * Submission never proves presentation or delivery.
+     */
+    deliveryBoundary: "submission-only";
+    /**
+     * No unattended push transport is configured by this runtime.
+     */
+    pushAvailable: false;
+};
 import { Enumeration } from './enumeration.js';
 import URL from './url.js';

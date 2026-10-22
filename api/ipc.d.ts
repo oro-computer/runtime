@@ -15,13 +15,19 @@ export function maybeMakeError(error: Error | {
     [key: string]: any;
 } | null | undefined, caller?: Function | undefined): Error | null;
 /**
- * Parses `seq` as integer value
+ * @typedef {object} ParseSeqOptions
+ * @property {boolean} [bigint=false] Return the counter as a BigInt.
+ */
+/**
+ * Parses the numeric sequence counter, ignoring a document/worker namespace
+ * suffix. Use the complete string to correlate replies: a counter alone is
+ * not unique across document lifetimes.
  * @param {string|number} seq
- * @param {object=} [options]
- * @param {boolean} [options.bigint = false]
+ * @param {ParseSeqOptions} [options]
+ * @returns {number|bigint}
  * @ignore
  */
-export function parseSeq(seq: string | number, options?: object | undefined): number | bigint;
+export function parseSeq(seq: string | number, options?: ParseSeqOptions): number | bigint;
 /**
  * If `debug.enabled === true`, then debug output will be printed to console.
  * @param {boolean} [enable]
@@ -57,8 +63,9 @@ export function postMessage(message: any, ...args: any[]): any;
  */
 export function ready(): Promise<void>;
 /**
- * Sends a synchronous IPC command over XHR returning a `Result`
- * upon success or error.
+ * Sends a synchronous IPC command returning a `Result` upon success or error.
+ * Descriptor operations retain the transport that opened the handle across sync
+ * and async calls. `useExtensionIPCIfAvailable` explicitly selects a transport.
  * @param {string} command
  * @param {any?} [value]
  * @param {(object|null|Buffer|Uint8Array|ArrayBuffer|string|Array)=} [options]
@@ -628,6 +635,12 @@ export class IPCBroadcastChannel extends EventTarget {
     #private;
 }
 export default exports;
+export type ParseSeqOptions = {
+    /**
+     * Return the counter as a BigInt.
+     */
+    bigint?: boolean;
+};
 import { Buffer } from './buffer.js';
 import { URL } from './url.js';
 import * as exports from './ipc.js';
