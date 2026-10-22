@@ -329,6 +329,13 @@ not capture mouse input or emulate document.fullscreenElement. Custom activities
 must preserve runtime Back and lifecycle forwarding and coordinate their own
 inset/flag owners.
 
+On Android, `window.focus()` shows the requested interactive window, raises its
+view and requests WebView focus after the fragment transaction commits. Back,
+insets, fullscreen and credential delivery then use the same foreground window
+order. Queued focus is discarded if the window is replaced or closed, its
+WebView is detached, the activity loses focus, or fragment state is already saved.
+Headless windows cannot take interactive focus. Focusing does not open the IME.
+
 For protection before activity views are created, opt in with:
 
 ```toml

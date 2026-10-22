@@ -5,7 +5,7 @@ import os from 'oro:os'
 import { NotAllowedError, NotSupportedError } from 'oro:errors'
 import { validateFiles, MAX_SHARE_BYTES } from 'oro:internal/share-files'
 
-const { normalizeShareData, platformSupportsShare } = webShare
+const { canShare, share, normalizeShareData, platformSupportsShare } = webShare
 
 const supported = platformSupportsShare()
 
@@ -22,17 +22,17 @@ test('navigator.share polyfill exposes methods', (t) => {
   )
 })
 
-test('navigator.canShare validation', (t) => {
-  t.equal(navigator.canShare('nope'), false, 'invalid input cannot be shared')
+test('web share fallback validates platform capabilities', (t) => {
+  t.equal(canShare({}), false, 'empty input cannot be shared')
 
   const expected = supported
   t.equal(
-    navigator.canShare({ text: 'hello world' }),
+    canShare({ text: 'hello world' }),
     expected,
     'text-only payload matches platform capability'
   )
   t.equal(
-    navigator.canShare({ title: 'hello', url: 'https://example.com' }),
+    canShare({ title: 'hello', url: 'https://example.com' }),
     expected,
     'url payload matches platform capability'
   )
@@ -40,13 +40,13 @@ test('navigator.canShare validation', (t) => {
   if (typeof File === 'function') {
     const file = new File(['hello'], 'hello.txt', { type: 'text/plain' })
     t.equal(
-      navigator.canShare({ files: [file] }),
+      canShare({ files: [file] }),
       os.platform() === 'android',
       'files match Android capability'
     )
   } else {
     t.equal(
-      navigator.canShare({ files: ['placeholder'] }),
+      canShare({ files: ['placeholder'] }),
       false,
       'files array is unsupported without File'
     )
@@ -95,7 +95,12 @@ test('normalizeShareData handles valid input', (t) => {
   }
 })
 
-test('normalizeShareData validates url', (t) => {
+test('normalizeShareData validates input and url', (t) => {
+  t.throws(
+    () => normalizeShareData('nope'),
+    TypeError,
+    'non-object input throws TypeError'
+  )
   t.throws(
     () => normalizeShareData({ url: 'https://[invalid' }),
     TypeError,
@@ -103,7 +108,7 @@ test('normalizeShareData validates url', (t) => {
   )
 })
 
-test('navigator.share rejects when unsupported', async (t) => {
+test('web share fallback rejects when unsupported', async (t) => {
   if (supported) {
     t.ok(
       true,
@@ -114,7 +119,7 @@ test('navigator.share rejects when unsupported', async (t) => {
 
   const ExpectedError = navigator.userActivation?.isActive === false ? NotAllowedError : NotSupportedError
   await t.rejects(
-    navigator.share({ text: 'hello world' }),
+    share({ text: 'hello world' }),
     error => error instanceof ExpectedError,
     'share rejects according to activation and platform policy without opening native UI'
   )

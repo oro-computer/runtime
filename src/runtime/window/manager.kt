@@ -94,6 +94,33 @@ open class WindowFragmentManager (
     return false
   }
 
+  /** Shows and focuses a live interactive window after its show transaction. */
+  fun focusWindowFragment (index: Int): Boolean {
+    val fragment = this.fragments.find { it.index == index } ?: return false
+    val owner = fragment.window ?: return false
+    if (fragment.options.headless || !fragment.hasWebView) return false
+    this.activity.runOnUiThread {
+      if (this.activity.isFinishing || this.activity.isDestroyed || this.manager.isStateSaved ||
+          this.manager.isDestroyed || !fragment.isAdded || !this.fragments.contains(fragment) ||
+          fragment.window !== owner || !owner.userMessageHandler.active || fragment.options.headless ||
+          !fragment.hasWebView) return@runOnUiThread
+      this.manager.beginTransaction().show(fragment).runOnCommit {
+        if (this.activity.isFinishing || this.activity.isDestroyed || !this.activity.hasWindowFocus() ||
+            this.manager.isDestroyed || this.manager.isStateSaved || !fragment.isAdded ||
+            !this.fragments.contains(fragment) || fragment.window !== owner ||
+            !owner.userMessageHandler.active || fragment.options.headless || !fragment.isVisible ||
+            !fragment.hasWebView || !fragment.webview.isAttachedToWindow) return@runOnCommit
+        fragment.view?.bringToFront()
+        this.fragments.remove(fragment)
+        this.fragments.add(fragment)
+        this.activity.presentation.refresh()
+        this.activity.systemAppearance.refresh()
+        fragment.webview.requestFocus()
+      }.commit()
+    }
+    return true
+  }
+
   /**
    * Hides a `WindowFragment` for a given `index`.
    * This function returns `true` if the `WindowFragment` exists and was hidden,
@@ -430,6 +457,11 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
    */
   fun showWindow (index: Int): Boolean {
     return this.windowFragmentManager.showWindowFragment(index)
+  }
+
+  /** Brings an interactive window to the front and focuses its WebView. */
+  fun focusWindow (index: Int): Boolean {
+    return this.windowFragmentManager.focusWindowFragment(index)
   }
 
   /**

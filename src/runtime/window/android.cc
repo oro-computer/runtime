@@ -425,7 +425,18 @@ namespace oro::runtime::window {
   }
 
   void Window::focus () {
-    this->show();
+    if (this->self == nullptr) return;
+    const auto app = App::sharedApplication();
+    const auto attachment = android::JNIEnvironmentAttachment(app->runtime.android.jvm);
+
+    CallClassMethodFromAndroidEnvironment(
+      attachment.env,
+      Boolean,
+      app->runtime.android.activity,
+      "focusWindow",
+      "(I)Z",
+      this->index
+    );
   }
 
   void Window::blur () {

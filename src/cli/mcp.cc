@@ -442,6 +442,7 @@ namespace oro::cli::mcp {
         "config",
         "env",
         "install-app",
+        "install",
         "print-build-dir",
         "run",
         "update-bundle",

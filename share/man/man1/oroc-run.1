@@ -27,6 +27,9 @@ platform target to run application on (defaults to host):
 \fB\-\-config=<path>\fR
 use an explicit oro.toml/oro.ini file
 .TP
+\fB\-\-device=<serial>\fR
+Android device to install and run on
+.TP
 \fB\-\-port=<port>\fR
 load "index.html" from a specific port (if host is not specified, defaults to localhost)
 .TP
@@ -66,6 +69,9 @@ enable debug mode (like \-D)
 .TP
 \fBORO_VERBOSE\fR
 enable verbose logs (like \-V)
+.SH NOTES
+.PP
+Android targets use \-\-device, then ANDROID_SERIAL, then the first ready device listed by `adb devices`. The android\-emulator target selects the first ready emulator.
 .SH COMMON ERRORS
 .PP
 For CI/Linux headless, install `xvfb\-run` or set a custom headless runner in your config. Use `\-\-test=path` to run tests bundled with your app.

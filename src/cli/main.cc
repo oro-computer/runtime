@@ -3437,7 +3437,7 @@ static const Vector<CliHelpDoc>& getCliHelpDocs () {
       "install-app",
       "install-app",
       "Install app to the device.",
-      { "install app", "deploy", "device install" },
+      { "install", "install app", "deploy", "device install" },
       gHelpTextInstallApp
     },
     {
@@ -5563,6 +5563,7 @@ void runIOSSimulator (const Path& path, Map<>& settings) {
 
 struct AndroidCliState {
   StringStream adb;
+  String device;
   String androidHome;
   // android, android-emulator
   String targetPlatform;
@@ -5596,6 +5597,67 @@ struct Paths {
 };
 
 // Android build / run functions
+Vector<String> parseAndroidDevices (const String& output) {
+  Vector<String> devices;
+  StringStream stream(output);
+  String line;
+  while (std::getline(stream, line)) {
+    line = trim(line);
+    if (line.empty() || line == "List of devices attached" ||
+        line.starts_with("* daemon ") || line.starts_with("adb server ")) {
+      continue;
+    }
+
+    const auto separator = line.find_first_of(" \t");
+    if (separator == String::npos) {
+      continue;
+    }
+
+    const auto serial = trim(line.substr(0, separator));
+    const auto status = trim(line.substr(separator + 1));
+    if (!serial.empty() && status == "device") {
+      devices.push_back(serial);
+    }
+  }
+  return devices;
+}
+
+String androidAdbCommand (const AndroidCliState& state) {
+  const auto quoteArgument = [](const String& value) -> String {
+    return platform.win ? "\"" + value + "\"" : shellQuote(value);
+  };
+  auto command = quoteArgument(state.adb.str());
+  if (!state.device.empty()) {
+    command += " -s " + quoteArgument(state.device);
+  }
+  return command;
+}
+
+bool selectAndroidDevice (AndroidCliState& state) {
+  if (state.device.empty()) {
+    state.device = env::get("ANDROID_SERIAL");
+  }
+  if (!state.device.empty()) {
+    return true;
+  }
+
+  const auto result = exec(androidAdbCommand(state) + " devices");
+  if (result.exitCode != 0) {
+    logError("Unable to list Android devices: " + result.output);
+    return false;
+  }
+  for (const auto& serial : parseAndroidDevices(result.output)) {
+    if (state.targetPlatform != "android-emulator" || serial.starts_with("emulator-")) {
+      state.device = serial;
+      return true;
+    }
+  }
+
+  logError("No ready Android " + String(state.targetPlatform == "android-emulator" ? "emulators" : "devices") +
+    " found. Check 'adb devices' and authorize your device.");
+  return false;
+}
+
 bool getAdbPath (AndroidCliState &state) {
   // check that stream is empty, otherwise don't rebuild
   if (state.adb.tellp() == 0) {
@@ -5613,8 +5675,8 @@ bool getAdbPath (AndroidCliState &state) {
     return false;
   }
 
-  if (state.verbose) logVerbose((state.adb.str() + (" --version ") + state.devNull));
-  if (std::system((state.adb.str() + (" --version ") + state.devNull).c_str()) != 0) {
+  if (state.verbose) logVerbose(androidAdbCommand(state) + " --version " + state.devNull);
+  if (std::system((androidAdbCommand(state) + " --version " + state.devNull).c_str()) != 0) {
     logWarn("Failed to run adb at " + state.adb.str());
     return false;
   }
@@ -5623,9 +5685,19 @@ bool getAdbPath (AndroidCliState &state) {
   // run adb from androidHome to prevent file lock issues in app build folder on windows
   auto cwd = fs::current_path();
   fs::current_path(state.androidHome);
-  auto deviceQuery = exec(state.adb.str() + " devices");
-  state.emulatorRunning = (deviceQuery.output.find("emulator") != String::npos);
+  auto deviceQuery = exec(androidAdbCommand(state) + " devices");
+  for (const auto& serial : parseAndroidDevices(deviceQuery.output)) {
+    if (serial.starts_with("emulator-")) {
+      state.emulatorRunning = true;
+      break;
+    }
+  }
   fs::current_path(cwd);
+
+  if (deviceQuery.exitCode != 0) {
+    logError("Unable to list Android devices: " + deviceQuery.output);
+    return false;
+  }
 
   if (env::get("ORO_ANDROID_TIMEOUT").size() > 0) {
     const auto value = env::get("ORO_ANDROID_TIMEOUT");
@@ -5759,9 +5831,9 @@ bool locateAndroidEmulator (AndroidCliState& state) {
 }
 
 void setupAndroidStartCommands (AndroidCliState& state, bool flagDebugMode) {
-  state.adbInstall << state.adb.str() << " ";
+  state.adbInstall << androidAdbCommand(state) << " ";
   state.adbInstall << "install ";
-  state.adbShellStart << state.adb.str() << " ";
+  state.adbShellStart << androidAdbCommand(state) << " ";
 
   state.apkPath = state.appPath / "build" / "outputs" / "apk" / (flagDebugMode ? "dev" : "live") / "debug" / (String("app-") + (flagDebugMode ? "dev" : "live") + String("-debug.apk"));
   state.adbInstall << state.apkPath.string();
@@ -5799,7 +5871,18 @@ bool startAndroidEmulator (AndroidCliState& state) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     emulatorStartWaited += state.androidTaskSleepTime;
 
-    if (std::system((state.adb.str() + " shell getprop sys.boot_completed" + state.devNull).c_str()) == 0) {
+    if (state.device.empty()) {
+      const auto devices = exec(androidAdbCommand(state) + " devices");
+      for (const auto& serial : parseAndroidDevices(devices.output)) {
+        if (serial.starts_with("emulator-")) {
+          state.device = serial;
+          break;
+        }
+      }
+    }
+
+    if (!state.device.empty() &&
+        std::system((androidAdbCommand(state) + " shell getprop sys.boot_completed" + state.devNull).c_str()) == 0) {
       logInfo("OK.");
       return true;
     } else if (state.androidEmulatorProcess->closed) {
@@ -5931,6 +6014,9 @@ bool initAndStartAndroidEmulator (AndroidCliState& state) {
 }
 
 bool initAndStartAndroidApp (AndroidCliState& state, bool flagDebugMode) {
+  if (!selectAndroidDevice(state)) {
+    return false;
+  }
   setupAndroidStartCommands(state, flagDebugMode);
 
   logInfo("Installing app...");
@@ -6150,7 +6236,8 @@ void run (const String& targetPlatform, Map<>& settings, const Paths& paths, con
       exit(1);
     }
 
-    if (targetPlatform == "android-emulator" && !androidState.emulatorRunning) {
+    if (targetPlatform == "android-emulator" && !androidState.emulatorRunning &&
+        androidState.device.empty() && env::get("ANDROID_SERIAL").empty()) {
       if (!initAndStartAndroidEmulator(androidState)) {
         exit(1);
       }
@@ -6750,6 +6837,12 @@ int main (int argc, char* argv[]) {
     String rawSubcommand = argv[1];
     String effectiveSubcommand = rawSubcommand;
     int firstOptionIndex = 2;
+
+    if (equal(rawSubcommand, "devices")) {
+      effectiveSubcommand = "list-devices";
+    } else if (equal(rawSubcommand, "install")) {
+      effectiveSubcommand = "install-app";
+    }
 
     if (rawSubcommand.rfind("update-", 0) == 0 && !equal(rawSubcommand, "update")) {
       logError(
@@ -7569,33 +7662,7 @@ int main (int argc, char* argv[]) {
         exit(r.exitCode);
       }
 
-      std::stringstream stream(r.output);
-      String line;
-
-      while (std::getline(stream, line)) {
-        line = trim(line);
-
-        if (
-          line.empty() ||
-          line == "List of devices attached" ||
-          line.starts_with("* daemon ") ||
-          line.starts_with("adb server ")
-        ) {
-          continue;
-        }
-
-        const auto separator = line.find_first_of(" \t");
-        if (separator == String::npos) {
-          continue;
-        }
-
-        const auto serial = trim(line.substr(0, separator));
-        const auto status = trim(line.substr(separator + 1));
-
-        if (serial.empty() || status != "device") {
-          continue;
-        }
-
+      for (const auto& serial : parseAndroidDevices(r.output)) {
         if (jsonOutput) {
           devicesJson.push(JSON::Object::Entries {
             { "platform", "android" },
@@ -7822,12 +7889,8 @@ int main (int argc, char* argv[]) {
     }
 
     auto device = optionsWithValue["--device"];
-    if (device.size() > 0) {
-      if (targetPlatform == "ios") {
-        commandOptions += " --ecid " + device + " ";
-      } else if (targetPlatform == "android") {
-        commandOptions += " -s " + device;
-      }
+    if (!device.empty() && targetPlatform == "ios") {
+      commandOptions += " --ecid " + device + " ";
     }
 
     if (targetPlatform == "ios") {
@@ -7867,15 +7930,16 @@ int main (int argc, char* argv[]) {
       auto paths = getPaths(targetPlatform);
       auto output = paths.platformSpecificOutputPath;
       auto app = output / "app";
-      StringStream adb;
-
-      if (!platform.win) {
-        adb << androidHome << "/platform-tools/";
-      } else {
-        adb << androidHome << "\\platform-tools\\";
+      AndroidCliState androidState;
+      androidState.adb << (Path(androidHome) / "platform-tools" / (platform.win ? "adb.exe" : "adb")).string();
+      androidState.device = device;
+      androidState.targetPlatform = optionsWithValue["--platform"];
+      if (!selectAndroidDevice(androidState)) {
+        exit(1);
       }
 
-      adb << "adb" << commandOptions << " install ";
+      StringStream adb;
+      adb << androidAdbCommand(androidState) << " install ";
 
       if (flagDebugMode) {
         adb << (app / "build" / "outputs" / "apk" / "dev" / "debug" / "app-dev-debug.apk").string();
@@ -8037,6 +8101,7 @@ int main (int argc, char* argv[]) {
   // second flag indicating whether option should be followed by a value
   CommandLineOptions runOptions = {
     { { "--config" }, true, true },
+    { { "--device" }, true, true },
     { { "--platform" }, true, true },
     { { "--prod", "-P" }, true, false },
     { { "--test", "-t" }, true, true },
@@ -8238,6 +8303,7 @@ int main (int argc, char* argv[]) {
 
     AndroidCliState androidState;
     androidState.targetPlatform = targetPlatform;
+    androidState.device = optionsWithValue["--device"];
 
     const bool debugEnv = (
       env::get("ORO_DEBUG").size() > 0 ||
@@ -13619,6 +13685,7 @@ int main (int argc, char* argv[]) {
 
     auto androidPlatform = "android-37.0";
     AndroidCliState androidState;
+    androidState.device = optionsWithValue["--device"];
     androidState.androidHome = getAndroidHome();
     androidState.verbose = flagVerboseMode || debugEnv || verboseEnv;
     androidState.devNull = devNull;

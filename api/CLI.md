@@ -17,8 +17,10 @@ oroc help [query...]
 | help | search commands, options, and platform notes |
 | build | build project |
 | list-devices | get the list of connected devices |
+| devices | alias for list-devices |
 | init | create a new project (in the current directory) |
 | install-app | install app to the device |
+| install | alias for install-app |
 | print-build-dir | print build path to stdout |
 | run | run application |
 | config | inspect configuration values and docs |
@@ -499,6 +501,7 @@ oroc build [options] [<project-or-source>]
 | --- | --- |
 | --platform=<platform> | platform target to build application for (defaults to host):<br>- android<br>- android-emulator<br>- ios<br>- ios-simulator |
 | --config=<path> | use an explicit oro.toml/oro.ini file |
+| --device=<serial> | Android device to install and run on |
 | --copy=<source:dest> | extra copy mapping (like [build] copy; can be repeated) |
 | --port=<port> | load "index.html" from a specific port (if host is not specified, defaults to localhost) |
 | --host=<host> | load "index.html" from a specific host (if port is not specified, defaults to 80) |
@@ -528,6 +531,8 @@ Relative paths are resolved from the project root or from the directory containi
 `--prod` controls packaging/debug defaults; `--package` controls whether a distributable artifact
 is produced in addition to the build output directory.
 Use `--copy` for one-off extra bundle mappings without modifying `oro.toml`.
+Android run targets use --device, then ANDROID_SERIAL, then the first ready device
+listed by `adb devices`. The android-emulator target selects the first ready emulator.
 NO_ANDROID and NO_IOS do not control this application build command. They are independent,
 presence-based exclusions for runtime source bootstrap (`bin/install.sh` / `npm run relink`).
 
@@ -592,6 +597,7 @@ oroc run [options] [<project-or-source>]
 | --headless | run application in headless mode (without frame or window) |
 | --platform=<platform> | platform target to run application on (defaults to host):<br>- android<br>- android-emulator<br>- ios<br>- ios-simulator |
 | --config=<path> | use an explicit oro.toml/oro.ini file |
+| --device=<serial> | Android device to install and run on |
 | --port=<port> | load "index.html" from a specific port (if host is not specified, defaults to localhost) |
 | --host=<host> | load "index.html" from a specific host (if port is not specified, defaults to 80) |
 | --prod | build for production (disables debugging info, inspector, etc.) |
@@ -607,6 +613,10 @@ oroc run [options] [<project-or-source>]
 ### environment
 ORO_DEBUG                            enable debug mode (like -D)
 ORO_VERBOSE                          enable verbose logs (like -V)
+
+### notes
+Android targets use --device, then ANDROID_SERIAL, then the first ready device
+listed by `adb devices`. The android-emulator target selects the first ready emulator.
 
 ### common errors
 For CI/Linux headless, install `xvfb-run` or set a custom headless runner in your config.
@@ -628,6 +638,7 @@ Get the list of connected devices.
 ### Usage
 ```bash
 oroc list-devices [options] --platform=<platform>
+oroc devices [options] --platform=<platform>
 ```
 
 ### options
@@ -780,13 +791,14 @@ Install the app to the device or host target.
 ### Usage
 ```bash
 oroc install-app [--platform=<platform>] [--device=<identifier>] [options]
+oroc install [--platform=<platform>] [--device=<identifier>] [options]
 ```
 
 ### options
 | Option | Description |
 | --- | --- |
 | -D, --debug | enable debug output |
-| --device[=identifier] | identifier (ecid, ID) of the device to install to<br>if not specified, tries to run on the current device |
+| --device[=identifier] | identifier (ecid, ID) of the device to install to<br>Android defaults to ANDROID_SERIAL or the first ready device |
 | --platform=<platform> | platform to install application to device (defaults to host)::<br>- android<br>- ios |
 | --prod | install production application |
 | -V, --verbose | enable verbose output |
@@ -795,6 +807,11 @@ oroc install-app [--platform=<platform>] [--device=<identifier>] [options]
 | Option | Description |
 | --- | --- |
 | --target=<target> | installation target for macOS application (defaults to '/')<br>the application is installed into '$target/Applications' |
+
+### notes
+Android installs use the first ready device listed by `adb devices` when neither
+--device nor ANDROID_SERIAL is set. Offline and unauthorized devices are skipped.
+The android-emulator target selects the first ready emulator.
 
 ### common errors
 Android: list devices with `adb devices` or pass `--device`.
