@@ -12,22 +12,24 @@ export const PREFIX = ORO_HOME
 export const platform = os.platform()
 export const arch = os.arch()
 
+const envFilename = process.env.ORO_ENV_FILENAME || '.oro.env'
+const configHome = process.env.ORO_CONFIG_HOME || (
+  platform === 'win32'
+    ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'oro')
+    : platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support', 'oro')
+      : path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'oro')
+)
+const userEnvPath = path.resolve(configHome, path.basename(envFilename))
+const legacyEnvPath = path.resolve(ORO_HOME, envFilename)
+const selectedEnvPath = process.env.ORO_ENV_FILE
+  ? path.resolve(process.env.ORO_ENV_FILE)
+  : userEnvPath
+
 export const env = {
   ORO_HOME,
-  PREFIX
-}
-
-const envFilenames = [process.env.ORO_ENV_FILENAME || '.oro.env']
-const preferredEnvFilename = envFilenames[0]
-
-function resolveEnvFile (dir) {
-  for (const filename of envFilenames) {
-    const candidate = path.join(dir, filename)
-    if (fs.existsSync(candidate)) {
-      return candidate
-    }
-  }
-  return null
+  PREFIX,
+  ORO_ENV_FILE: selectedEnvPath
 }
 
 const binaryName = os.platform() === 'win32' ? 'oroc.exe' : 'oroc'
@@ -40,7 +42,7 @@ export const bin = {
 // Modifying this function requires full FTE testing (From fresh install) on all build OS's before signing off (Individual arch testing not required)
 export const firstTimeExperienceSetup = async () => {
   const installPath = path.dirname(path.dirname(bin.oroc))
-  if (resolveEnvFile(installPath)) {
+  if (fs.existsSync(env.ORO_ENV_FILE) || (!process.env.ORO_ENV_FILE && fs.existsSync(legacyEnvPath))) {
     return true
   }
 
@@ -82,7 +84,7 @@ export const firstTimeExperienceSetup = async () => {
   }
 
   const startInfo = {
-    env: { ...env, ...process.env },
+    env: { ...env, ...process.env, ORO_ENV_FILE: env.ORO_ENV_FILE },
     cwd: installPath,
     stdio: [process.stdin, process.stdout, process.stderr]
   }
@@ -121,7 +123,8 @@ export const firstTimeExperienceSetup = async () => {
     console.log('# Checking build dependencies...')
   }
 
-  const preferredEnvPath = path.join(installPath, preferredEnvFilename)
+  const preferredEnvPath = env.ORO_ENV_FILE
+  fs.mkdirSync(path.dirname(preferredEnvPath), { recursive: true, mode: 0o700 })
 
   // @ts-ignore
   const child = spawn(...spawnArgs)
@@ -143,7 +146,11 @@ export const firstTimeExperienceSetup = async () => {
   // If fte didn't create a configuration file, make an empty one to prevent
   // user being prompted again
   if (!fs.existsSync(preferredEnvPath)) {
-    fs.writeFileSync(preferredEnvPath, '')
+    try {
+      fs.writeFileSync(preferredEnvPath, '', { flag: 'wx', mode: 0o600 })
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err
+    }
   }
 
   return !isSetupCall

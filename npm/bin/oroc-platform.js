@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process'
 let exiting = false
 
 const child = spawn(installation.bin.oroc, process.argv.slice(2), {
-  env: { ...installation.env, ...process.env },
+  env: { ...installation.env, ...process.env, ORO_ENV_FILE: installation.env.ORO_ENV_FILE },
   stdio: 'inherit',
   windowsHide: true
 })

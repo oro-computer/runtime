@@ -1807,7 +1807,7 @@ function _install {
       fi
     done
 
-    if [[ -f "$root/$ORO_ENV_FILENAME" ]]; then
+    if [[ -z "$ORO_ENV_FILE" ]] && [[ -f "$root/$ORO_ENV_FILENAME" ]]; then
       echo "# copying $ORO_ENV_FILENAME to $ORO_HOME"
       cp -fp "$root/$ORO_ENV_FILENAME" "$ORO_HOME/$ORO_ENV_FILENAME"
     fi
@@ -1818,10 +1818,12 @@ function _install {
     if (( do_link == 1 )); then
       ln -sf "$root/bin/functions.sh" "$ORO_HOME/bin"
       ln -sf "$root/bin/android-functions.sh" "$ORO_HOME/bin"
+      ln -sf "$root/bin/runtime-artifacts.sh" "$ORO_HOME/bin"
     else
       # Required for FTE setup
       cp -ap "$root/bin/functions.sh" "$ORO_HOME/bin"
       cp -ap "$root/bin/android-functions.sh" "$ORO_HOME/bin"
+      cp -ap "$root/bin/runtime-artifacts.sh" "$ORO_HOME/bin"
     fi
 
     if [[ "$(uname -s)" == *"_NT"* ]]; then

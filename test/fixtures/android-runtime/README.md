@@ -1,5 +1,16 @@
 # Native Android qualification fixtures
 
+The native integration guide is [Android native integration](../../../docs/ANDROID_NATIVE_INTEGRATION.md).
+`deferred/Periodic.kt` adds recurring-read and restricted maintenance cases to
+the deterministic deferred fixture. The host Back and RFC 8291 interoperability
+regressions are `test/unit/android-back-handling.test.js` and
+`test/unit/android-push-crypto.test.js`; they compile the production algorithms
+with public fixtures when a Kotlin/JVM toolchain and JSON library are provided.
+These regressions do not qualify OS periodic timing, real distributor delivery,
+Keystore recovery, cold receiver startup or main-app navigation. Those require
+an isolated Android app and the intended device/provider matrix. Automated
+suites remain subject to the workspace's execution restrictions.
+
 `DocumentsProvider.kt` supplies fixed public test content for an isolated
 qualification APK. It is excluded from the production CLI source catalog and
 must never be declared in a production manifest. No account, server credentials,
@@ -118,6 +129,26 @@ The fixed action prefix is `oro.runtime.qualification.FAILURE.`:
 - `PROFILE` returns the native startup durations and bound build identity.
   Collect cold process launches separately from repeated broadcasts within the
   same process.
+- `ENQUEUE_AUTONOMOUS` uses the same fixed public task, with a 30-second minimum
+  delay and an executor that completes a public in-memory read. Observe `STATUS`
+  without forcing the job through shell commands, then `RELEASE` the terminal
+  record. Network availability and ordinary OS quotas still apply; elapsed time
+  alone does not establish completion. A completed record, one attempt and the
+  matching running/closed markers establish that the OS dispatched this fixture.
+  In a debuggable isolated APK, host reads through `run-as` can observe the two
+  fixed preference files without launching the application. A `STATUS` broadcast
+  can wake the process; record that distinction when checking cold dispatch.
+  This does not establish backend authorization, alarm delivery or physical
+  vendor behavior. Do not enqueue while another fixture task is retained.
+
+For native-only foreground qualification, declare the fixture's
+`oro.runtime.qualification.extensions.PublicNativeActivity` as an exported
+Activity protected by `android.permission.DUMP`. It displays only fixed public
+text, and creates no WebView. Start it once before an autonomous scheduling check
+and leave it through Home. This establishes ordinary foreground use; do not
+replace it with a standby-bucket override. A newly installed package in the
+`never` bucket can legitimately retain a waiting job. Record the actual bucket
+and constraints rather than treating a waiting job as a runtime failure.
 
 All fixture operations use public data in their own package. `FailedCommitContext`
 injects refusal before applying a preference write; this is not physical disk
@@ -154,3 +185,12 @@ verify old approval fails and explicit new approval succeeds. `CLEAR` removes
 this package's public approval. Verify the redirect receiver saw no request or
 Authorization header. These checks qualify the runtime transport, not an app's
 approval UI, grants, endpoint protocol, natural OS scheduling or main APK.
+
+`extensions/TextScaleQualification.kt` supplies a DUMP-protected
+`TextScaleReceiver` for an isolated package. Declare the receiver in its
+qualification manifest and broadcast `oro.runtime.qualification.TEXT_SCALE`.
+It runs six fixed public policy checks and reports the current Android font
+scale and resolved system zoom. It does not create a WebView. This can check
+the compiled policy even when an emulator's plain WebView control cannot start;
+first-frame rendering, configuration callbacks, duplicate CSS scaling and
+assistive behavior still require the interactive window matrix.

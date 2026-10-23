@@ -10,9 +10,11 @@
  * @property {boolean} [requiresCharging=false]
  * @property {boolean} [requiresBatteryNotLow=true]
  * @property {number} [delayMs=0] Minimum delay, at most seven days. Timing is controlled by Android.
+ * @property {number} [intervalMs=0] Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
+ * @property {number} [flexMs] Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
  */
 /**
- * @typedef {DeferredReadOptions & { schema: number, generation: string, jobId: number, phase: string, attempts: number, updatedAt: number }} DeferredReadState
+ * @typedef {DeferredReadOptions & { schema: number, generation: string, jobId: number, mode?: 'read'|'maintenance', phase: string, attempts: number, updatedAt: number, lastOutcome?: string, completedRuns?: number }} DeferredReadState
  */
 /**
  * @typedef {object} DeferredReadSupport
@@ -20,10 +22,15 @@
  * @property {string[]} registeredKinds
  * @property {number} maximumTasks 32, including terminal records until explicitly released.
  * @property {number} maximumAttempts 5 with Android exponential backoff starting at 30 seconds.
- * @property {boolean} readOnly True. Queued writes need a separate approved/idempotent application executor contract.
+ * @property {boolean} readOnly True for enqueue. Maintenance uses a separate explicitly registered contract.
  * @property {boolean} queuedWrites False.
  * @property {boolean} backgroundJavaScript False.
  * @property {boolean} survivesForceStop False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
+ * @property {boolean} periodicReads True. Successful cycles reset their attempt budget; terminal failures suspend recurrence.
+ * @property {number} minimumIntervalMs 900000.
+ * @property {number} minimumFlexMs 300000.
+ * @property {string[]} registeredMaintenanceKinds Explicitly registered native maintenance executors.
+ * @property {Object<string, string[]>} maintenanceOperations Allowed cleanup/revoke operations per maintenance kind.
  */
 /** @returns {Promise<DeferredReadSupport>} */
 export function getSupport(): Promise<DeferredReadSupport>;
@@ -36,6 +43,19 @@ export function getSupport(): Promise<DeferredReadSupport>;
  * @returns {Promise<DeferredReadState>}
  */
 export function enqueue(options: DeferredReadOptions): Promise<DeferredReadState>;
+/**
+ * @typedef {Omit<DeferredReadOptions, 'operationRef'|'intervalMs'|'flexMs'> & { operationRef: 'cleanup'|'revoke' }} DeferredMaintenanceOptions
+ */
+/**
+ * Schedules one registered cleanup/revocation task. Registration must explicitly
+ * assert retry safety in native code. The executor reauthorizes every attempt
+ * and owns idempotency, prerequisites and uncertain-outcome reconciliation.
+ * General mutations, credentials, request bodies and periodic maintenance are
+ * rejected. Uses the same journal, five-attempt budget and cancellation rules.
+ * @param {DeferredMaintenanceOptions} options
+ * @returns {Promise<DeferredReadState>}
+ */
+export function enqueueMaintenance(options: DeferredMaintenanceOptions): Promise<DeferredReadState>;
 /** @returns {Promise<DeferredReadState[]>} */
 export function list(): Promise<DeferredReadState[]>;
 /**
@@ -70,6 +90,7 @@ export function release(id: string): Promise<DeferredReadState>;
 declare namespace _default {
     export { getSupport };
     export { enqueue };
+    export { enqueueMaintenance };
     export { list };
     export { status };
     export { resume };
@@ -112,14 +133,25 @@ export type DeferredReadOptions = {
      * Minimum delay, at most seven days. Timing is controlled by Android.
      */
     delayMs?: number;
+    /**
+     * Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
+     */
+    intervalMs?: number;
+    /**
+     * Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
+     */
+    flexMs?: number;
 };
 export type DeferredReadState = DeferredReadOptions & {
     schema: number;
     generation: string;
     jobId: number;
+    mode?: "read" | "maintenance";
     phase: string;
     attempts: number;
     updatedAt: number;
+    lastOutcome?: string;
+    completedRuns?: number;
 };
 export type DeferredReadSupport = {
     available: boolean;
@@ -133,7 +165,7 @@ export type DeferredReadSupport = {
      */
     maximumAttempts: number;
     /**
-     * True. Queued writes need a separate approved/idempotent application executor contract.
+     * True for enqueue. Maintenance uses a separate explicitly registered contract.
      */
     readOnly: boolean;
     /**
@@ -148,4 +180,29 @@ export type DeferredReadSupport = {
      * False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
      */
     survivesForceStop: boolean;
+    /**
+     * True. Successful cycles reset their attempt budget; terminal failures suspend recurrence.
+     */
+    periodicReads: boolean;
+    /**
+     * 900000.
+     */
+    minimumIntervalMs: number;
+    /**
+     * 300000.
+     */
+    minimumFlexMs: number;
+    /**
+     * Explicitly registered native maintenance executors.
+     */
+    registeredMaintenanceKinds: string[];
+    /**
+     * Allowed cleanup/revoke operations per maintenance kind.
+     */
+    maintenanceOperations: {
+        [x: string]: string[];
+    };
+};
+export type DeferredMaintenanceOptions = Omit<DeferredReadOptions, "operationRef" | "intervalMs" | "flexMs"> & {
+    operationRef: "cleanup" | "revoke";
 };

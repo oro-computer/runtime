@@ -5,6 +5,10 @@ Application delivery plans and deployment-specific qualification records belong
 with their owning applications. Source implementation and successful builds do
 not establish production release or supported-device acceptance.
 
+For configuration, code examples and migration boundaries for application Back,
+periodic reads, restricted maintenance and optional encrypted UnifiedPush, see
+[Android native integration](./ANDROID_NATIVE_INTEGRATION.md).
+
 ## Protocol-4 native contracts
 
 The current source adds `oro:authentication`, `oro:launcher` and
@@ -65,8 +69,9 @@ cancellation is cooperative, with independently bounded cancellation workers.
 Android controls scheduling, including Doze/reboot restrictions. Force-stop can
 remove jobs; status reports interruption and only explicit `resume` recreates
 supported work. Cancellation/replacement prevents an obsolete callback from
-completing the new record. Queued writes remain unsupported until the application
-provides an explicitly approved, idempotent server/application contract.
+completing the new record. Periodic reads and separately registered retry-safe
+cleanup/revocation use this scheduler; general queued writes remain unsupported.
+See the native integration guide for their distinct executor contracts.
 
 Native requests, job start and completion share one journal monitor, including
 calls through the Java static entry point. Cancellation persists the terminal
@@ -108,7 +113,9 @@ the deployment's authenticated registration/revocation protocol. Existing downst
 infrastructure can host that logic, including private IP deployments; an extra
 hosted backend is not inherently required. Network reachability and OS wake-up
 transport remain separate requirements. Capability reporting continues to state
-that push and arbitrary background JavaScript are unavailable.
+that arbitrary background JavaScript is unavailable. Optional UnifiedPush
+transport is available only when explicitly configured; its compiled handlers
+and authenticated server enrollment remain separate prerequisites.
 
 ## Recovery and window sizing
 
@@ -123,6 +130,30 @@ windows close independently. Android dimensions that fill or exceed their
 container use MATCH_PARENT so they follow rotation, insets, keyboard resizing
 and multi-window bounds. Smaller explicit dimensions remain fixed. Layout
 updates run on the UI thread and ignore detached WebViews.
+
+Interactive Android WebViews apply the current OS font scale as an absolute
+`WebSettings.textZoom` percentage before their first navigation and again when
+their fragment receives a configuration change. New secondary windows and
+explicit renderer replacements use the same policy. Headless windows are not
+scaled. `(await getCapabilities()).systemTextScaling` from
+`oro:diagnostics/runtime` reports
+support for this contract; it does not certify accessibility of an application.
+
+`[webview] text_zoom = "system"` is the default. Set `text_zoom = 100` to select
+a fixed percentage independent of OS font scale, or `text_zoom = "manual"` when
+compiled application code owns text zoom. Fixed values must be integers from
+1 through 1000. System percentages are rounded and bounded to the same range;
+an unavailable or invalid OS font scale uses 100%. Invalid configuration values
+fail the Android build. This uniform WebView zoom is linear, including on
+Android 14+: it does not reproduce Android's nonlinear native `sp` conversion.
+It changes HTML text rather than the viewport, canvas resolution or guest DPI.
+
+Adopting applications should remove their native font-scale hook once they
+verify this capability in their rebuilt APK, or explicitly select `manual`
+ownership. Applying the same absolute `textZoom` twice does not multiply it;
+combining native zoom with CSS or application font multiplication can. Do not
+add another CSS multiplier for this native policy. First-frame rendering,
+large-text layouts, TalkBack and switch access require application acceptance.
 
 ## Application integration
 
@@ -252,8 +283,9 @@ platform and payload support before opening native UI.
 
 `oro:notification.getDeliveryStatus(channel)` reads channel policy;
 `openChannelSettings(channel)` opens system controls after a user action.
-Status explicitly reports `pushAvailable: false` and a submission-only delivery
-boundary. Runtime channels do not establish server/account authorization.
+Status reports whether the optional push transport is configured, and retains a
+submission-only delivery boundary. Runtime channels and transport availability
+do not establish server/account authorization or observed presentation.
 
 `ApplicationWindow.setSystemAppearance({ theme, color, insets })` requires Android 11+ and all
 three fields. `theme` controls system-bar icon contrast; `color` is `#rrggbb`; the primary surface is saved for the next native activity frame;
@@ -390,7 +422,9 @@ process names, descriptions, state summaries and traces are omitted. Each exit
 explicitly reports that its artifact identity is unknown; OS history can predate
 the currently running build. A reviewed
 diagnostics export remains application-owned. Native capability reporting keeps
-push, arbitrary background JS, queued writes and pointer capture explicitly false.
+arbitrary background JS, general queued writes and pointer capture explicitly false.
+Optional push transport, application Back, periodic reads and restricted native
+maintenance have separate capability fields.
 Biometric, launcher, native deferred-read and Web Authentication support are now
 reported separately using explicit configuration and platform capability checks.
 
@@ -619,7 +653,7 @@ Both references are bounded and validated; missing resources fail Android
 resource linking. These settings do not grant permissions or start USB services.
 
 Compiled receivers and executors can call
-`DeferredSync.request(Context, action, JSONObject)` for `support`, `enqueue`,
+`DeferredSync.request(Context, action, JSONObject)` for `support`, `enqueue`, `enqueueMaintenance`,
 `list`, `status`, `resume`, `cancel` and `release`, without an Activity or WebView.
 This uses the same validation, journal, capacity and generation checks as
 `oro:background/deferred`. `support` and `list` return a JSONObject and JSONArray,
@@ -627,8 +661,9 @@ respectively; the other operations return a task JSONObject. Use the existing
 opaque reference fields for enqueue; credentials and request bodies are rejected.
 Register the native executor from Application startup so it is available in a
 cold service process. Authorization is checked by that executor at execution,
-including native-originated enqueue. Native access does not add periodic policy,
-queued writes or generic background JavaScript.
+including native-originated enqueue. Periodic reads accept interval/flex
+constraints; cleanup/revocation requires separate retry-safe native registration.
+Native access does not add general queued writes or background JavaScript.
 
 The CLI generates direct constructor references to configured extension classes,
 so missing classes and interface/constructor mismatches fail compilation. Startup

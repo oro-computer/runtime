@@ -7,6 +7,7 @@ import kotlin.concurrent.thread
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +29,7 @@ import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
 import android.webkit.JsPromptResult
 import android.util.Base64
+import kotlin.math.roundToInt
 
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.os.bundleOf
@@ -73,6 +75,25 @@ data class WindowOptions (
   var shouldExitApplicationOnClose: Boolean = false,
   var headless: Boolean = false
 )
+
+/** Absolute WebView zoom has one owner and never compounds earlier scaling. */
+internal object SystemTextScaling {
+  fun zoom (fontScale: Float, policy: String): Int? {
+    if (policy == "manual") return null
+    if (policy.isBlank() || policy == "system") {
+      val scale = if (fontScale.isFinite() && fontScale > 0) fontScale else 1f
+      return (scale.coerceIn(0.01f, 10f) * 100).roundToInt().coerceIn(1, 1000)
+    }
+    return policy.toIntOrNull()?.takeIf { it in 1..1000 && it.toString() == policy }
+      ?: throw IllegalArgumentException("webview.text_zoom must be system, manual, or an integer from 1 to 1000")
+  }
+
+  fun apply (webview: WebView, headless: Boolean, policy: String, fontScale: Float) {
+    if (headless) return
+    val zoom = zoom(fontScale, policy) ?: return
+    if (webview.settings.textZoom != zoom) webview.settings.textZoom = zoom
+  }
+}
 
 /**
  * External JavaScript interface attached to the webview at
@@ -611,6 +632,17 @@ open class WindowFragment : Fragment(R.layout.web_view), IWindowFragment {
   val hasWebView: Boolean
     get () = this.currentWebView != null
 
+  private fun applySystemTextScale (configuration: Configuration) {
+    val webview = this.currentWebView ?: return
+    SystemTextScaling.apply(webview, options.headless,
+      App.getInstance().getUserConfigValue("webview_text_zoom"), configuration.fontScale)
+  }
+
+  override fun onConfigurationChanged (configuration: Configuration) {
+    super.onConfigurationChanged(configuration)
+    applySystemTextScale(configuration)
+  }
+
   private var content: FrameLayout? = null
   private var recovery: LinearLayout? = null
   private var startupLocation: String? = null
@@ -861,6 +893,7 @@ open class WindowFragment : Fragment(R.layout.web_view), IWindowFragment {
     val fragment = this
     val app = App.getInstance()
     this.currentWebView = webview
+    this.applySystemTextScale(webview.resources.configuration)
     this.beginStartup()
     this.webview.apply {
       // features

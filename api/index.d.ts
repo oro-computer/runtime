@@ -5412,7 +5412,10 @@ declare module "oro:diagnostics/runtime" {
      * @property {number} documentQueryDeadlineMs
      * @property {boolean} nativeBackgroundCleanup Explicitly enabled native share-prune scheduling.
      * @property {boolean} backgroundJavaScript False; arbitrary durable JS execution is unavailable.
-     * @property {boolean} push False until a native provider and authenticated backend are configured.
+     * @property {boolean} push Configured optional UnifiedPush transport. Query oro:push for selection and registered handlers; this does not prove server enrollment or delivery.
+     * @property {boolean} applicationBackHandling Document-owned Back handler with native fallback.
+     * @property {boolean} periodicDeferredReads Configured periodic native read scheduling.
+     * @property {boolean} nativeDeferredMaintenance Registered retry-safe cleanup/revocation scheduling; general queued writes remain unavailable.
      * @property {boolean} biometricSecretUnlock
      * @property {boolean} namedLauncherDestinations
      * @property {boolean} nativeDeferredReads Configured native read/reconciliation scheduler; query registered executors separately.
@@ -5420,6 +5423,7 @@ declare module "oro:diagnostics/runtime" {
      * @property {boolean} webAuthentication Explicit WebAuthn app integration and WebView feature support. This does not establish relying-party/domain association or enrollment.
      * @property {boolean} nativePasswordSelection Explicit Android 14+ framework password chooser; separate from Autofill and passkeys.
      * @property {boolean} nativeNotificationPresentation Channel/group/public-version submission with shared response receipts.
+     * @property {boolean} systemTextScaling Android interactive WebViews apply absolute system text zoom before navigation and on configuration changes; webview.text_zoom can select fixed or manual ownership. Linear WebView zoom is not Android nonlinear native text scaling.
      * @property {boolean} nativeExtensions Configured compiled native extension lifecycle and document-owned operations.
      * @property {boolean} pointerCapture
      * @property {boolean} historicalProcessExits
@@ -6248,9 +6252,21 @@ declare module "oro:diagnostics/runtime" {
          */
         backgroundJavaScript: boolean;
         /**
-         * False until a native provider and authenticated backend are configured.
+         * Configured optional UnifiedPush transport. Query oro:push for selection and registered handlers; this does not prove server enrollment or delivery.
          */
         push: boolean;
+        /**
+         * Document-owned Back handler with native fallback.
+         */
+        applicationBackHandling: boolean;
+        /**
+         * Configured periodic native read scheduling.
+         */
+        periodicDeferredReads: boolean;
+        /**
+         * Registered retry-safe cleanup/revocation scheduling; general queued writes remain unavailable.
+         */
+        nativeDeferredMaintenance: boolean;
         biometricSecretUnlock: boolean;
         namedLauncherDestinations: boolean;
         /**
@@ -6273,6 +6289,10 @@ declare module "oro:diagnostics/runtime" {
          * Channel/group/public-version submission with shared response receipts.
          */
         nativeNotificationPresentation: boolean;
+        /**
+         * Android interactive WebViews apply absolute system text zoom before navigation and on configuration changes; webview.text_zoom can select fixed or manual ownership. Linear WebView zoom is not Android nonlinear native text scaling.
+         */
+        systemTextScaling: boolean;
         /**
          * Configured compiled native extension lifecycle and document-owned operations.
          */
@@ -21783,6 +21803,236 @@ declare module "oro:protocol-handlers" {
     };
 }
 
+declare module "oro:push" {
+    /**
+     * @typedef {object} PushSupport
+     * @property {boolean} available Whether the compiled transport is enabled.
+     * @property {string} provider unifiedpush.
+     * @property {string} selectedDistributor Selected Android package, or an empty string.
+     * @property {string[]} registeredKinds Compiled native handler names.
+     * @property {number} maximumRegistrations 16.
+     * @property {number} maximumPendingMessages 64 across all registrations.
+     * @property {number} maximumMessageBytes 4096 encrypted bytes.
+     * @property {boolean} backgroundJavaScript False.
+     * @property {boolean} survivesForceStop False.
+     */
+    /**
+     * @typedef {object} PushRegistrationOptions
+     * @property {string} id Stable application registration identity, 1..128 letters/digits/underscores/hyphens.
+     * @property {string} kind Registered compiled NativePushHandler name.
+     * @property {string} authorityRef Opaque configured server identity, never a URL or credential.
+     * @property {string} accountRef Opaque account identity.
+     * @property {string} targetRef Opaque native application state identity.
+     * @property {string} applicationServerKey Base64url uncompressed P-256 VAPID public key.
+     * @property {string} [description] Short public registration label, at most 128 UTF-8 bytes.
+     */
+    /**
+     * @typedef {object} PushEnrollmentKeys
+     * @property {string} p256dh Base64url P-256 public key.
+     * @property {string} auth Base64url authentication secret. Send only to the authenticated enrollment server.
+     */
+    /**
+     * @typedef {object} PushRegistration
+     * @property {string} id
+     * @property {string} kind
+     * @property {string} phase registering, registered, registration-failed, unregistered or temporarily-unavailable.
+     * @property {string} endpoint HTTPS push endpoint, empty until registration succeeds.
+     * @property {string} distributor Selected Android package.
+     * @property {string} applicationServerKey
+     * @property {string} generation Endpoint generation used to acknowledge server enrollment.
+     * @property {boolean} enrollmentPending Whether this endpoint still needs application server enrollment.
+     * @property {PushEnrollmentKeys} keys Enrollment material. Never include in logs, assistant arguments or diagnostics.
+     * @property {number} pendingMessages Retained messages awaiting native handling.
+     * @property {number} exhaustedMessages Retained messages that reached their five-attempt budget.
+     */
+    /**
+     * @typedef {object} PushSubmission
+     * @property {boolean} submitted Native processing or chooser launch was submitted, not completed.
+     */
+    /** @returns {Promise<PushSupport>} */
+    export function getSupport(): Promise<PushSupport>;
+    /**
+     * Opens the system distributor chooser. Existing registrations must first be
+     * unregistered. Returns after launch; listen for pushchange and reread support
+     * when the activity resumes. Selection is bound to the originating document and
+     * expires after 90 seconds. Cancellation leaves the previous selection intact.
+     * @returns {Promise<PushSubmission>}
+     */
+    export function selectDistributor(): Promise<PushSubmission>;
+    /**
+     * Begins or renews transport registration. An endpoint arrives asynchronously;
+     * read getRegistration after foreground resume or pushchange. Identical IDs and
+     * references reuse keys. Different references reject EEXIST. Private decryption
+     * keys and connection tokens never leave native storage. Authenticate enrollment
+     * with your server before enabling unattended product delivery.
+     * @param {PushRegistrationOptions} options
+     * @returns {Promise<PushRegistration>}
+     */
+    export function register(options: PushRegistrationOptions): Promise<PushRegistration>;
+    /**
+     * Returns sensitive server enrollment material and bounded inbox counts.
+     * @param {string} id
+     * @returns {Promise<PushRegistration>}
+     */
+    export function getRegistration(id: string): Promise<PushRegistration>;
+    /**
+     * Marks the current endpoint enrolled after an authenticated server confirmation.
+     * A changed endpoint generation rejects EAGAIN and must be reconciled again.
+     * Native handlers may instead implement onRegistrationChanged and return true
+     * after confirming enrollment, including when a receiver starts a cold process.
+     * @param {string} id
+     * @param {string} generation From the enrollment result sent to your server.
+     * @returns {Promise<void>}
+     */
+    export function acknowledgeRegistration(id: string, generation: string): Promise<void>;
+    /**
+     * Stops future local delivery and signals in-flight handling before notifying
+     * the distributor. A running handler may already have produced application
+     * effects and must cooperate with cancellation. Revoke server grants separately
+     * through an application-authorized maintenance executor.
+     * @param {string} id
+     * @returns {Promise<void>}
+     */
+    export function unregister(id: string): Promise<void>;
+    /**
+     * Explicitly retries retained messages, resetting exhausted attempt budgets.
+     * Automatic drains occur on application startup and new transport input.
+     * @returns {Promise<PushSubmission>}
+     */
+    export function retryPending(): Promise<PushSubmission>;
+    namespace _default {
+        export { getSupport };
+        export { selectDistributor };
+        export { register };
+        export { getRegistration };
+        export { acknowledgeRegistration };
+        export { unregister };
+        export { retryPending };
+    }
+    export default _default;
+    export type PushSupport = {
+        /**
+         * Whether the compiled transport is enabled.
+         */
+        available: boolean;
+        /**
+         * unifiedpush.
+         */
+        provider: string;
+        /**
+         * Selected Android package, or an empty string.
+         */
+        selectedDistributor: string;
+        /**
+         * Compiled native handler names.
+         */
+        registeredKinds: string[];
+        /**
+         * 16.
+         */
+        maximumRegistrations: number;
+        /**
+         * 64 across all registrations.
+         */
+        maximumPendingMessages: number;
+        /**
+         * 4096 encrypted bytes.
+         */
+        maximumMessageBytes: number;
+        /**
+         * False.
+         */
+        backgroundJavaScript: boolean;
+        /**
+         * False.
+         */
+        survivesForceStop: boolean;
+    };
+    export type PushRegistrationOptions = {
+        /**
+         * Stable application registration identity, 1..128 letters/digits/underscores/hyphens.
+         */
+        id: string;
+        /**
+         * Registered compiled NativePushHandler name.
+         */
+        kind: string;
+        /**
+         * Opaque configured server identity, never a URL or credential.
+         */
+        authorityRef: string;
+        /**
+         * Opaque account identity.
+         */
+        accountRef: string;
+        /**
+         * Opaque native application state identity.
+         */
+        targetRef: string;
+        /**
+         * Base64url uncompressed P-256 VAPID public key.
+         */
+        applicationServerKey: string;
+        /**
+         * Short public registration label, at most 128 UTF-8 bytes.
+         */
+        description?: string;
+    };
+    export type PushEnrollmentKeys = {
+        /**
+         * Base64url P-256 public key.
+         */
+        p256dh: string;
+        /**
+         * Base64url authentication secret. Send only to the authenticated enrollment server.
+         */
+        auth: string;
+    };
+    export type PushRegistration = {
+        id: string;
+        kind: string;
+        /**
+         * registering, registered, registration-failed, unregistered or temporarily-unavailable.
+         */
+        phase: string;
+        /**
+         * HTTPS push endpoint, empty until registration succeeds.
+         */
+        endpoint: string;
+        /**
+         * Selected Android package.
+         */
+        distributor: string;
+        applicationServerKey: string;
+        /**
+         * Endpoint generation used to acknowledge server enrollment.
+         */
+        generation: string;
+        /**
+         * Whether this endpoint still needs application server enrollment.
+         */
+        enrollmentPending: boolean;
+        /**
+         * Enrollment material. Never include in logs, assistant arguments or diagnostics.
+         */
+        keys: PushEnrollmentKeys;
+        /**
+         * Retained messages awaiting native handling.
+         */
+        pendingMessages: number;
+        /**
+         * Retained messages that reached their five-attempt budget.
+         */
+        exhaustedMessages: number;
+    };
+    export type PushSubmission = {
+        /**
+         * Native processing or chooser launch was submitted, not completed.
+         */
+        submitted: boolean;
+    };
+}
+
 declare module "oro:secure-storage" {
     /**
      * Stores a value inside secure storage for the given key.
@@ -23911,9 +24161,11 @@ declare module "oro:background/deferred" {
      * @property {boolean} [requiresCharging=false]
      * @property {boolean} [requiresBatteryNotLow=true]
      * @property {number} [delayMs=0] Minimum delay, at most seven days. Timing is controlled by Android.
+     * @property {number} [intervalMs=0] Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
+     * @property {number} [flexMs] Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
      */
     /**
-     * @typedef {DeferredReadOptions & { schema: number, generation: string, jobId: number, phase: string, attempts: number, updatedAt: number }} DeferredReadState
+     * @typedef {DeferredReadOptions & { schema: number, generation: string, jobId: number, mode?: 'read'|'maintenance', phase: string, attempts: number, updatedAt: number, lastOutcome?: string, completedRuns?: number }} DeferredReadState
      */
     /**
      * @typedef {object} DeferredReadSupport
@@ -23921,10 +24173,15 @@ declare module "oro:background/deferred" {
      * @property {string[]} registeredKinds
      * @property {number} maximumTasks 32, including terminal records until explicitly released.
      * @property {number} maximumAttempts 5 with Android exponential backoff starting at 30 seconds.
-     * @property {boolean} readOnly True. Queued writes need a separate approved/idempotent application executor contract.
+     * @property {boolean} readOnly True for enqueue. Maintenance uses a separate explicitly registered contract.
      * @property {boolean} queuedWrites False.
      * @property {boolean} backgroundJavaScript False.
      * @property {boolean} survivesForceStop False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
+     * @property {boolean} periodicReads True. Successful cycles reset their attempt budget; terminal failures suspend recurrence.
+     * @property {number} minimumIntervalMs 900000.
+     * @property {number} minimumFlexMs 300000.
+     * @property {string[]} registeredMaintenanceKinds Explicitly registered native maintenance executors.
+     * @property {Object<string, string[]>} maintenanceOperations Allowed cleanup/revoke operations per maintenance kind.
      */
     /** @returns {Promise<DeferredReadSupport>} */
     export function getSupport(): Promise<DeferredReadSupport>;
@@ -23937,6 +24194,19 @@ declare module "oro:background/deferred" {
      * @returns {Promise<DeferredReadState>}
      */
     export function enqueue(options: DeferredReadOptions): Promise<DeferredReadState>;
+    /**
+     * @typedef {Omit<DeferredReadOptions, 'operationRef'|'intervalMs'|'flexMs'> & { operationRef: 'cleanup'|'revoke' }} DeferredMaintenanceOptions
+     */
+    /**
+     * Schedules one registered cleanup/revocation task. Registration must explicitly
+     * assert retry safety in native code. The executor reauthorizes every attempt
+     * and owns idempotency, prerequisites and uncertain-outcome reconciliation.
+     * General mutations, credentials, request bodies and periodic maintenance are
+     * rejected. Uses the same journal, five-attempt budget and cancellation rules.
+     * @param {DeferredMaintenanceOptions} options
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function enqueueMaintenance(options: DeferredMaintenanceOptions): Promise<DeferredReadState>;
     /** @returns {Promise<DeferredReadState[]>} */
     export function list(): Promise<DeferredReadState[]>;
     /**
@@ -23971,6 +24241,7 @@ declare module "oro:background/deferred" {
     namespace _default {
         export { getSupport };
         export { enqueue };
+        export { enqueueMaintenance };
         export { list };
         export { status };
         export { resume };
@@ -24013,14 +24284,25 @@ declare module "oro:background/deferred" {
          * Minimum delay, at most seven days. Timing is controlled by Android.
          */
         delayMs?: number;
+        /**
+         * Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
+         */
+        intervalMs?: number;
+        /**
+         * Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
+         */
+        flexMs?: number;
     };
     export type DeferredReadState = DeferredReadOptions & {
         schema: number;
         generation: string;
         jobId: number;
+        mode?: "read" | "maintenance";
         phase: string;
         attempts: number;
         updatedAt: number;
+        lastOutcome?: string;
+        completedRuns?: number;
     };
     export type DeferredReadSupport = {
         available: boolean;
@@ -24034,7 +24316,7 @@ declare module "oro:background/deferred" {
          */
         maximumAttempts: number;
         /**
-         * True. Queued writes need a separate approved/idempotent application executor contract.
+         * True for enqueue. Maintenance uses a separate explicitly registered contract.
          */
         readOnly: boolean;
         /**
@@ -24049,6 +24331,31 @@ declare module "oro:background/deferred" {
          * False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
          */
         survivesForceStop: boolean;
+        /**
+         * True. Successful cycles reset their attempt budget; terminal failures suspend recurrence.
+         */
+        periodicReads: boolean;
+        /**
+         * 900000.
+         */
+        minimumIntervalMs: number;
+        /**
+         * 300000.
+         */
+        minimumFlexMs: number;
+        /**
+         * Explicitly registered native maintenance executors.
+         */
+        registeredMaintenanceKinds: string[];
+        /**
+         * Allowed cleanup/revoke operations per maintenance kind.
+         */
+        maintenanceOperations: {
+            [x: string]: string[];
+        };
+    };
+    export type DeferredMaintenanceOptions = Omit<DeferredReadOptions, "operationRef" | "intervalMs" | "flexMs"> & {
+        operationRef: "cleanup" | "revoke";
     };
 }
 
@@ -25999,6 +26306,45 @@ declare module "oro:window/appearance" {
          * Android swipe edge; null for non-gesture Back.
          */
         edge: number | null;
+    };
+}
+
+declare module "oro:window/back" {
+    /**
+     * @typedef {object} BackRequest
+     * @property {number} deadlineMs Native fallback deadline, 750 milliseconds.
+     */
+    /**
+     * @typedef {object} BackHandlerOptions
+     * @property {AbortSignal} [signal] Removes the handler when aborted.
+     */
+    /**
+     * Installs one handler for this document. Return true to consume Back, or false
+     * to use native navigation. Promise results are accepted within 750 ms. Throws,
+     * missing replies and stalled renderers use native navigation. Navigation or
+     * renderer replacement invalidates registration; install again in the new page.
+     * Application code decides modal, drawer and router priority. Gesture progress
+     * remains available through the existing backgesture event.
+     * @param {(request: BackRequest) => boolean|Promise<boolean>} handler
+     * @param {BackHandlerOptions} [options]
+     * @returns {Promise<() => Promise<void>>} Idempotent handler removal.
+     */
+    export function setHandler(handler: (request: BackRequest) => boolean | Promise<boolean>, options?: BackHandlerOptions): Promise<() => Promise<void>>;
+    namespace _default {
+        export { setHandler };
+    }
+    export default _default;
+    export type BackRequest = {
+        /**
+         * Native fallback deadline, 750 milliseconds.
+         */
+        deadlineMs: number;
+    };
+    export type BackHandlerOptions = {
+        /**
+         * Removes the handler when aborted.
+         */
+        signal?: AbortSignal;
     };
 }
 type MenuItemSelection = {

@@ -8625,7 +8625,7 @@ static void mapIPCRoutes (Router *router) {
     if (!app || !app->runtime.android.self || message.index < 0 || id.empty() || id.size() > 80 ||
         options.size() > 196608 || action.empty() || action.size() > 64 || documentToken.size() > 32 ||
         (feature != "authentication" && feature != "launcher" && feature != "deferred" && feature != "cancel" &&
-         feature != "credentials" && feature != "notifications" && feature != "extension")) {
+         feature != "credentials" && feature != "notifications" && feature != "extension" && feature != "back" && feature != "push")) {
       return reply(Result::Err { message, JSON::Object::Entries {
         {"code", "EINVAL"}, {"message", "Invalid native platform operation"}
       }});

@@ -77,7 +77,8 @@ export async function run () {
   const args = process.argv.slice(2)
   const env = {
     ...installation.env,
-    ...process.env
+    ...process.env,
+    ORO_ENV_FILE: installation.env.ORO_ENV_FILE
   }
 
   const runtimeApiDir = path.dirname(dirname)

@@ -132,14 +132,15 @@ that target. Read the [source-build guide](docs/BUILD_ENVIRONMENT.md) for platfo
 
 ## Explore further
 
-| Resource                                     | What you will find                                            |
-| -------------------------------------------- | ------------------------------------------------------------- |
-| [JavaScript APIs](api/README.md)             | Modules, methods, examples, and types                         |
-| [CLI reference](api/CLI.md)                  | Build, run, package, update, and inspection commands          |
-| [Configuration](api/CONFIG.md)               | `oro.toml` settings and their behavior                        |
-| [Examples](examples)                         | Applications and focused integrations                         |
-| [Architecture](docs/RUNTIME_ARCHITECTURE.md) | How the WebView, IPC bridge, and native services fit together |
-| [Changelog](CHANGELOG.md)                    | Release notes and compatibility changes                       |
+| Resource                                                         | What you will find                                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------- |
+| [JavaScript APIs](api/README.md)                                 | Modules, methods, examples, and types                         |
+| [CLI reference](api/CLI.md)                                      | Build, run, package, update, and inspection commands          |
+| [Configuration](api/CONFIG.md)                                   | `oro.toml` settings and their behavior                        |
+| [Examples](examples)                                             | Applications and focused integrations                         |
+| [Architecture](docs/RUNTIME_ARCHITECTURE.md)                     | How the WebView, IPC bridge, and native services fit together |
+| [Android native integration](docs/ANDROID_NATIVE_INTEGRATION.md) | Back handling, periodic work, maintenance and encrypted push  |
+| [Changelog](CHANGELOG.md)                                        | Release notes and compatibility changes                       |
 
 Questions or a reproducible bug? Start with [Support](SUPPORT.md).
 Contributions are welcome; see [Contributing](CONTRIBUTING.md) and the

@@ -118,6 +118,34 @@ while an `android` device build does not.
 - `ORO_HOME=<path>` chooses the staged runtime home.
 - `PREFIX=<path>` chooses the installation/link prefix.
 
+## Installed CLI configuration
+
+The npm CLI keeps new first-run toolchain configuration outside the installed
+SDK. `ORO_ENV_FILE` selects an explicit configuration file; relative values are
+resolved against the invoking directory. Otherwise `ORO_CONFIG_HOME` selects
+its directory. The default directory is `$XDG_CONFIG_HOME/oro` (or
+`~/.config/oro`) on Linux, `~/Library/Application Support/oro` on macOS, and
+`%LOCALAPPDATA%\oro` (or `~/AppData/Local/oro`) on Windows. The default filename
+is `.oro.env`; `ORO_ENV_FILENAME` can choose a different name.
+
+The launcher passes the selected absolute `ORO_ENV_FILE` to dependency setup and
+the native CLI. Setup creates a private user directory/file when required and
+never needs to create `.oro.env` inside a read-only SDK. An existing user file
+wins over a legacy SDK-local configuration. If there is no user file and no
+explicit override, an existing SDK-local file remains readable for compatibility;
+it is not copied or rewritten by first-run setup. Inspection commands such as
+`--version` and `--help` do not create configuration or run setup.
+Setup logs also use the selected configuration directory unless
+`ORO_INSTALL_SH_LOGFILE` explicitly selects another path.
+
+The native CLI fills unset variables from the project's `.oro.env`, then the
+selected `ORO_ENV_FILE`, then legacy SDK defaults. Existing process environment
+variables take precedence. A directly invoked native binary can use
+`ORO_ENV_FILE` too. Source bootstrap retains the source-local `.oro.env` default
+unless that override is set. An external configuration is not copied into the
+SDK by the source installer. SDK/NDK/JDK installations and user caches still need
+writable locations; read-only SDK support does not install missing host tools.
+
 ## Build storage and cleanup
 
 The source build separates disposable staging from caches that shorten later

@@ -43,12 +43,31 @@ fun interface DeferredReadExecutor {
   fun authorize (context: Context, task: DeferredReadTask, cancellation: CancellationSignal): AuthorizedDeferredRead?
 }
 
+/** References for explicitly registered cleanup/revocation, never arbitrary queued writes. */
+data class DeferredMaintenanceTask (
+  val id: String, val kind: String, val authorityRef: String,
+  val accountRef: String, val targetRef: String, val operationRef: String
+)
+
+enum class DeferredMaintenanceOutcome { COMPLETED, RETRY, UNAUTHORIZED, UNKNOWN }
+
+/** The application guarantees an idempotent/resumable operation and rechecks authorization. */
+interface AuthorizedDeferredMaintenance : AutoCloseable {
+  fun perform (cancellation: CancellationSignal): DeferredMaintenanceOutcome
+}
+
+fun interface DeferredMaintenanceExecutor {
+  fun authorize (context: Context, task: DeferredMaintenanceTask, cancellation: CancellationSignal): AuthorizedDeferredMaintenance?
+}
+
 /** Register compiled native executors from Application.onCreate, including cold service starts. */
 object DeferredSync {
   private const val STORE = "oro.deferred.reads.v1"
   private const val JOB_BASE = 0x4f530000
   private const val MAXIMUM = 32
   private val executors = mutableMapOf<String, DeferredReadExecutor>()
+  private data class Maintenance (val operations: Set<String>, val executor: DeferredMaintenanceExecutor)
+  private val maintenance = mutableMapOf<String, Maintenance>()
   private val terminal = setOf("completed", "cancelled", "conflict", "unauthorized", "unknown", "failed", "rejected", "unavailable")
 
   // @JvmStatic @Synchronized locks the Java class, unlike instance methods.
@@ -60,6 +79,38 @@ object DeferredSync {
     require(Regex("[a-z][a-z0-9.-]{0,63}").matches(kind))
     require(!executors.containsKey(kind) && executors.size < 16)
     executors[kind] = executor
+  }
+
+  /** Only cleanup/revoke can be registered; retries require an explicit native safety assertion. */
+  @Synchronized
+  fun registerMaintenanceExecutor (kind: String, operations: Set<String>, retrySafe: Boolean,
+    executor: DeferredMaintenanceExecutor) {
+    require(Regex("[a-z][a-z0-9.-]{0,63}").matches(kind))
+    require(retrySafe && operations.isNotEmpty() && operations.all { it in setOf("cleanup", "revoke") })
+    require(!maintenance.containsKey(kind) && maintenance.size < 16)
+    maintenance[kind] = Maintenance(operations.toSet(), executor)
+  }
+
+  private fun executor (record: JSONObject): DeferredReadExecutor? {
+    if (record.optString("mode", "read") == "read") return executors[record.getString("kind")]
+    if (record.optString("mode") != "maintenance") return null
+    val registration = maintenance[record.getString("kind")] ?: return null
+    if (record.getString("operationRef") !in registration.operations) return null
+    return DeferredReadExecutor { context, task, signal ->
+      val authorized = registration.executor.authorize(context, DeferredMaintenanceTask(task.id, task.kind,
+        task.authorityRef, task.accountRef, task.targetRef, task.operationRef), signal)
+      authorized?.let {
+        object : AuthorizedDeferredRead {
+          override fun reconcile (cancellation: CancellationSignal): DeferredReadOutcome = when (it.perform(cancellation)) {
+            DeferredMaintenanceOutcome.COMPLETED -> DeferredReadOutcome.COMPLETED
+            DeferredMaintenanceOutcome.RETRY -> DeferredReadOutcome.RETRY
+            DeferredMaintenanceOutcome.UNAUTHORIZED -> DeferredReadOutcome.UNAUTHORIZED
+            DeferredMaintenanceOutcome.UNKNOWN -> DeferredReadOutcome.UNKNOWN
+          }
+          override fun close () = it.close()
+        }
+      }
+    }
   }
 
   private fun scheduler (context: Context): JobScheduler {
@@ -84,11 +135,14 @@ object DeferredSync {
     val extras = PersistableBundle().apply {
       putString("id", record.getString("id")); putString("generation", record.getString("generation"))
     }
-    return JobInfo.Builder(record.getInt("jobId"), ComponentName(context, RuntimeDeferredJob::class.java))
-      .setPersisted(true).setMinimumLatency(delay)
+    val builder = JobInfo.Builder(record.getInt("jobId"), ComponentName(context, RuntimeDeferredJob::class.java))
+      .setPersisted(true)
       .setRequiredNetworkType(if (record.getString("network") == "unmetered") JobInfo.NETWORK_TYPE_UNMETERED else JobInfo.NETWORK_TYPE_ANY)
       .setRequiresCharging(record.getBoolean("requiresCharging")).setRequiresBatteryNotLow(record.getBoolean("requiresBatteryNotLow"))
-      .setBackoffCriteria(30000, JobInfo.BACKOFF_POLICY_EXPONENTIAL).setExtras(extras).build()
+      .setBackoffCriteria(30000, JobInfo.BACKOFF_POLICY_EXPONENTIAL).setExtras(extras)
+    if (record.optLong("intervalMs") > 0) builder.setPeriodic(record.getLong("intervalMs"), record.getLong("flexMs"))
+    else builder.setMinimumLatency(delay)
+    return builder.build()
   }
 
   fun available (context: Context): Boolean {
@@ -108,13 +162,17 @@ object DeferredSync {
   /** Shared durable read operations for compiled receivers/executors, without an Activity or WebView. */
   @JvmStatic
   fun request (context: Context, action: String, options: JSONObject = JSONObject()): Any = synchronized(this) {
-    if (action !in setOf("support", "list", "enqueue", "status", "resume", "cancel", "release")) {
+    if (action !in setOf("support", "list", "enqueue", "enqueueMaintenance", "status", "resume", "cancel", "release")) {
       throw PlatformFailure("EINVAL")
     }
     if (action in setOf("support", "list")) require(options.length() == 0)
-    else if (action != "enqueue") require(options.keys().asSequence().all { it == "id" })
+    else if (action !in setOf("enqueue", "enqueueMaintenance")) require(options.keys().asSequence().all { it == "id" })
     if (action == "support") {
       return JSONObject().put("available", available(context)).put("registeredKinds", JSONArray(executors.keys.sorted()))
+        .put("periodicReads", true).put("minimumIntervalMs", 900000).put("minimumFlexMs", 300000)
+        .put("registeredMaintenanceKinds", JSONArray(maintenance.keys.sorted())).put("maintenanceOperations", JSONObject().also {
+          for ((kind, value) in maintenance) it.put(kind, JSONArray(value.operations.sorted()))
+        })
         .put("maximumTasks", MAXIMUM).put("maximumAttempts", 5).put("readOnly", true)
         .put("queuedWrites", false).put("backgroundJavaScript", false).put("survivesForceStop", false)
     }
@@ -126,24 +184,38 @@ object DeferredSync {
     }
     val id = identifier(options.getString("id"))
     val existing = find(rows, id)
-    if (action == "enqueue") {
+    if (action in setOf("enqueue", "enqueueMaintenance")) {
+      val mode = if (action == "enqueueMaintenance") "maintenance" else "read"
       require(options.keys().asSequence().all { it in listOf("id", "kind", "authorityRef", "accountRef", "targetRef",
-        "operationRef", "network", "requiresCharging", "requiresBatteryNotLow", "delayMs") })
+        "operationRef", "network", "requiresCharging", "requiresBatteryNotLow", "delayMs", "intervalMs", "flexMs") })
       val kind = options.getString("kind")
-      if (!executors.containsKey(kind)) throw PlatformFailure("ENOTSUP")
+      if (mode == "read" && !executors.containsKey(kind)) throw PlatformFailure("ENOTSUP")
+      if (mode == "maintenance" && options.getString("operationRef") !in
+          (maintenance[kind]?.operations ?: emptySet())) throw PlatformFailure("ENOTSUP")
       for (field in listOf("authorityRef", "accountRef", "targetRef", "operationRef")) identifier(options.getString(field))
       val network = options.optString("network", "unmetered")
       require(network in listOf("any", "unmetered"))
       val delay = options.opt("delayMs") ?: 0L
       require(delay is Number && delay.toDouble() == delay.toLong().toDouble() && delay.toLong() in 0..604800000L)
+      val interval = options.opt("intervalMs") ?: 0L
+      require(interval is Number && interval.toDouble() == interval.toLong().toDouble())
+      require(interval.toLong() == 0L || interval.toLong() in 900000..604800000L)
+      val minimumFlex = if (interval.toLong() > 0) maxOf(300000L, (interval.toLong() + 19) / 20) else 0L
+      val flex = options.opt("flexMs") ?: minimumFlex
+      require(flex is Number && flex.toDouble() == flex.toLong().toDouble())
+      if (interval.toLong() == 0L) require(flex.toLong() == 0L)
+      else require(mode == "read" && delay.toLong() == 0L && flex.toLong() in minimumFlex..interval.toLong())
       for (field in listOf("requiresCharging", "requiresBatteryNotLow")) require(!options.has(field) || options.opt(field) is Boolean)
       val normalized = JSONObject(options.toString()).put("network", network).put("delayMs", delay.toLong())
+        .put("mode", mode).put("intervalMs", interval.toLong()).put("flexMs", flex.toLong())
         .put("requiresCharging", options.optBoolean("requiresCharging", false))
         .put("requiresBatteryNotLow", options.optBoolean("requiresBatteryNotLow", true))
       if (existing != null) {
         for (field in listOf("kind", "authorityRef", "accountRef", "targetRef", "operationRef", "network",
-            "delayMs", "requiresCharging", "requiresBatteryNotLow")) {
-          val matches = if (field == "delayMs") existing.getLong(field) == normalized.getLong(field)
+            "delayMs", "requiresCharging", "requiresBatteryNotLow", "mode", "intervalMs", "flexMs")) {
+          val matches = if (field in listOf("intervalMs", "flexMs")) existing.optLong(field) == normalized.getLong(field)
+            else if (field == "mode") existing.optString(field, "read") == mode
+            else if (field == "delayMs") existing.getLong(field) == normalized.getLong(field)
             else existing.opt(field) == normalized.opt(field)
           if (!matches) throw PlatformFailure("EEXIST")
         }
@@ -177,7 +249,7 @@ object DeferredSync {
         refresh(context, record)
         if (record.optString("phase") !in setOf("interrupted", "unavailable") ||
             record.optInt("attempts") >= 5) throw PlatformFailure("EAGAIN")
-        if (!executors.containsKey(record.getString("kind"))) throw PlatformFailure("ENOTSUP")
+        if (executor(record) == null) throw PlatformFailure("ENOTSUP")
         record.put("phase", "scheduling").put("generation", UUID.randomUUID().toString())
           .put("updatedAt", System.currentTimeMillis())
         save(context, rows)
@@ -220,12 +292,16 @@ object DeferredSync {
     if (!available(context)) return null
     val rows = read(context)
     val record = find(rows, parameters.extras.getString("id") ?: "") ?: return null
-    if (record.optString("generation") != parameters.extras.getString("generation") || record.optString("phase") in terminal ||
-        record.optInt("attempts") >= 5) return null
-    val executor = executors[record.getString("kind")]
+    if (record.optString("generation") != parameters.extras.getString("generation")) return null
+    if (record.optString("phase") in terminal || record.optInt("attempts") >= 5) {
+      if (record.optLong("intervalMs") > 0) scheduler(context).cancel(record.getInt("jobId"))
+      return null
+    }
+    val executor = executor(record)
     if (executor == null) {
       record.put("phase", "unavailable").put("updatedAt", System.currentTimeMillis())
       save(context, rows)
+      if (record.optLong("intervalMs") > 0) scheduler(context).cancel(record.getInt("jobId"))
       return null
     }
     record.put("phase", "running").put("attempts", record.optInt("attempts") + 1).put("updatedAt", System.currentTimeMillis())
@@ -239,8 +315,14 @@ object DeferredSync {
     val record = find(rows, parameters.extras.getString("id") ?: "") ?: return false
     if (record.optString("generation") != parameters.extras.getString("generation") || record.optString("phase") != "running") return false
     val retry = phase == "retry" && record.optInt("attempts") < 5
-    record.put("phase", if (phase == "retry" && !retry) "failed" else phase).put("updatedAt", System.currentTimeMillis())
+    val periodic = record.optLong("intervalMs") > 0
+    val next = if (periodic && phase == "completed") "scheduled" else if (phase == "retry" && !retry) "failed" else phase
+    record.put("phase", next).put("lastOutcome", phase).put("updatedAt", System.currentTimeMillis())
+    if (periodic && phase == "completed") {
+      record.put("attempts", 0).put("completedRuns", record.optLong("completedRuns") + 1)
+    }
     save(context, rows)
+    if (periodic && next in terminal) scheduler(context).cancel(record.getInt("jobId"))
     return retry
   }
 
@@ -252,7 +334,7 @@ object DeferredSync {
   }
 }
 
-/** Bounded native execution. No JS closures, serialized credentials or write replay. */
+/** Bounded execution of registered reads and explicitly retry-safe cleanup/revocation. */
 class RuntimeDeferredJob : JobService() {
   private class Run (val parameters: JobParameters, val owner: RuntimeDeferredJob) {
     val signal = CancellationSignal()

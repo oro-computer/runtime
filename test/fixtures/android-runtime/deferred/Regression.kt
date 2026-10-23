@@ -130,4 +130,5 @@ fun main() {
   check((request("list") as JSONArray).length() == 3)
   service.onDestroy()
   deferredRaceRegressions()
+  periodicAndMaintenanceRegressions()
 }

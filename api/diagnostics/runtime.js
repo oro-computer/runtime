@@ -61,7 +61,10 @@ import ipc from '../ipc.js'
  * @property {number} documentQueryDeadlineMs
  * @property {boolean} nativeBackgroundCleanup Explicitly enabled native share-prune scheduling.
  * @property {boolean} backgroundJavaScript False; arbitrary durable JS execution is unavailable.
- * @property {boolean} push False until a native provider and authenticated backend are configured.
+ * @property {boolean} push Configured optional UnifiedPush transport. Query oro:push for selection and registered handlers; this does not prove server enrollment or delivery.
+ * @property {boolean} applicationBackHandling Document-owned Back handler with native fallback.
+ * @property {boolean} periodicDeferredReads Configured periodic native read scheduling.
+ * @property {boolean} nativeDeferredMaintenance Registered retry-safe cleanup/revocation scheduling; general queued writes remain unavailable.
  * @property {boolean} biometricSecretUnlock
  * @property {boolean} namedLauncherDestinations
  * @property {boolean} nativeDeferredReads Configured native read/reconciliation scheduler; query registered executors separately.
@@ -69,6 +72,7 @@ import ipc from '../ipc.js'
  * @property {boolean} webAuthentication Explicit WebAuthn app integration and WebView feature support. This does not establish relying-party/domain association or enrollment.
  * @property {boolean} nativePasswordSelection Explicit Android 14+ framework password chooser; separate from Autofill and passkeys.
  * @property {boolean} nativeNotificationPresentation Channel/group/public-version submission with shared response receipts.
+ * @property {boolean} systemTextScaling Android interactive WebViews apply absolute system text zoom before navigation and on configuration changes; webview.text_zoom can select fixed or manual ownership. Linear WebView zoom is not Android nonlinear native text scaling.
  * @property {boolean} nativeExtensions Configured compiled native extension lifecycle and document-owned operations.
  * @property {boolean} pointerCapture
  * @property {boolean} historicalProcessExits

@@ -75,7 +75,7 @@ constexpr auto gAndroidManifest = R"XML(${manifest})XML";
     return { path: filename, sha256: hash(value) }
   })
   const apis = [
-    'authentication.js', 'launcher.js', 'background/deferred.js', 'credentials.js', 'native.js',
+    'authentication.js', 'launcher.js', 'background/deferred.js', 'credentials.js', 'native.js', 'push.js', 'window/back.js',
     'notification.js', 'internal/platform-request.js', 'internal/credentials.js', 'internal/runtime-contract.json'
   ].map(name => {
     const filename = path.join(root, 'api', name)

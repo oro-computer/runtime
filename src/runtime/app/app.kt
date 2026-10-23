@@ -494,7 +494,7 @@ open class AppActivity : WindowManagerActivity() {
       .put("importance", native?.importance ?: JSONObject.NULL)
       .put("sound", native?.sound != null).put("vibration", native?.shouldVibrate() ?: false)
       .put("canSubmit", enabled && native != null && !blocked)
-      .put("deliveryBoundary", "submission-only").put("pushAvailable", false).toString()
+      .put("deliveryBoundary", "submission-only").put("pushAvailable", NativePush.available(this)).toString()
   }
 
   fun openNotificationChannelSettings (channel: String): Boolean {
@@ -691,6 +691,8 @@ open class AppActivity : WindowManagerActivity() {
   @Deprecated("Use registered Activity Result launchers for new extensions")
   override fun onActivityResult (requestCode: Int, resultCode: Int, data: Intent?) {
     super.onActivityResult(requestCode, resultCode, data)
+    try { NativePush.onActivityResult(this, requestCode, resultCode, data)
+    } catch (_: Exception) { console.error("Push distributor selection failed") }
     NativeExtensions.dispatch { it.onActivityResult(this, requestCode, resultCode, data) }
   }
 
@@ -954,7 +956,9 @@ open class App : Application() {
     .put("screenProtection", true).put("documentMetadata", true).put("documentTreeQueries", true)
     .put("documentQueryWorkers", 2).put("documentQueryDeadlineMs", 5000)
     .put("nativeBackgroundCleanup", BackgroundTasks.available(this))
-    .put("backgroundJavaScript", false).put("push", false)
+    .put("backgroundJavaScript", false).put("push", NativePush.available(this))
+    .put("applicationBackHandling", true).put("periodicDeferredReads", DeferredSync.available(this))
+    .put("nativeDeferredMaintenance", DeferredSync.available(this))
     .put("biometricSecretUnlock", ProtectedAuthentication.status(this).optBoolean("enabled"))
     .put("namedLauncherDestinations", getUserConfigValue("launcher_enabled") == "true")
     .put("nativeDeferredReads", DeferredSync.available(this)).put("deferredWrites", false)
@@ -962,6 +966,7 @@ open class App : Application() {
       androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_AUTHENTICATION))
     .put("nativePasswordSelection", PasswordCredentials.available(this))
     .put("nativeNotificationPresentation", true)
+    .put("systemTextScaling", true)
     .put("nativeExtensions", getUserConfigValue("android_extensions").isNotBlank())
     .put("pointerCapture", false)
     .put("historicalProcessExits", Build.VERSION.SDK_INT >= 30).toString()
@@ -1168,6 +1173,7 @@ open class App : Application() {
   override fun onCreate () {
     super.onCreate()
     RuntimeStartupTimings.measure("native-extensions") { NativeExtensions.initialize(this) }
+    NativePush.start(this)
 
     val lifecycleListener = this.lifecycleListener
 

@@ -7,7 +7,7 @@ import * as module from 'oro:background/deferred'
 .fi
 .SH DESCRIPTION
 .PP
-Durable Android read/sync reconciliation through compiled native executors. Requires `[background] deferred_enabled = true` and native registration from Application.onCreate. Executors resolve references and recheck current server IAM at every attempt. No credentials, request bodies, JS closures or queued mutations are accepted. Private origins remain subject to LAN/VPN reachability.
+Durable Android reads and registered cleanup/revocation through native executors. Requires `[background] deferred_enabled = true` and native registration from Application.onCreate. Executors resolve references and recheck current server IAM at every attempt. No credentials, request bodies, JS closures or queued arbitrary mutations are accepted. Private origins remain subject to LAN/VPN reachability.
 .SH REFERENCE
 .TP
 \fBgetSupport()\fR
@@ -21,6 +21,15 @@ Schedules an authorized native read/reconciliation. Reusing the same task ID wit
 \fBParameters:\fR
 .br
 \fIoptions\fR (DeferredReadOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<DeferredReadState>\fR
+.TP
+\fBenqueueMaintenance(options)\fR
+Schedules one registered cleanup/revocation task. Registration must explicitly assert retry safety in native code. The executor reauthorizes every attempt and owns idempotency, prerequisites and uncertain\-outcome reconciliation. General mutations, credentials, request bodies and periodic maintenance are rejected. Uses the same journal, five\-attempt budget and cancellation rules.
+\fBParameters:\fR
+.br
+\fIoptions\fR (DeferredMaintenanceOptions; required)
 \fBReturns:\fR
 .br
 \fIPromise<DeferredReadState>\fR

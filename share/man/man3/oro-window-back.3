@@ -1,0 +1,22 @@
+.TH ORO-WINDOW-BACK 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:window/back \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:window/back'
+.fi
+.SH DESCRIPTION
+.PP
+Android application Back interception for the current interactive document. Native IME dismissal and fullscreen exit take priority. An unhandled request follows WebView history, closes a secondary window or backgrounds the root.
+.SH REFERENCE
+.TP
+\fBsetHandler(handler, options)\fR
+Installs one handler for this document. Return true to consume Back, or false to use native navigation. Promise results are accepted within 750 ms. Throws, missing replies and stalled renderers use native navigation. Navigation or renderer replacement invalidates registration; install again in the new page. Application code decides modal, drawer and router priority. Gesture progress remains available through the existing backgesture event.
+\fBParameters:\fR
+.br
+\fIhandler\fR ((request: BackRequest) => boolean \\| Promise<boolean>; required)
+.br
+\fIoptions\fR (BackHandlerOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<() => Promise<void>>\fR Idempotent handler removal.

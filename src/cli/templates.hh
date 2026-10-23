@@ -1265,6 +1265,7 @@ constexpr auto gAndroidManifest = R"XML(
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   {{android_manifest_xml_permissions}}
+  {{android_push_queries}}
 
   <uses-feature
     android:name="android.hardware.usb.host"
@@ -1323,6 +1324,7 @@ constexpr auto gAndroidManifest = R"XML(
       android:stopWithTask="false"
     />
     {{android_background_service}}
+    {{android_push_components}}
     <receiver
       android:name="oro.runtime.app.NotificationDismissReceiver"
       android:exported="false"
@@ -2673,6 +2675,7 @@ constexpr auto gAndroidValuesStrings = R"XML(
   <string name="runtime_package_mismatch">App files do not match this runtime. Install a matching app update, then reopen the app.</string>
   <string name="runtime_webview_update_required">This app requires a newer Android System WebView. Update WebView or your browser provider, then reopen the app.</string>
   <string name="runtime_fullscreen_exit">Exit fullscreen</string>
+  <string name="runtime_push_distributor">Choose push distributor</string>
   <string name="runtime_reload">Reload app</string>
 {{android_shortcut_strings}}
 </resources>

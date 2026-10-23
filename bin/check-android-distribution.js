@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const requiredApis = [
-  'authentication.js', 'launcher.js', 'background/deferred.js', 'credentials.js', 'native.js',
+  'authentication.js', 'launcher.js', 'background/deferred.js', 'credentials.js', 'native.js', 'push.js', 'window/back.js',
   'notification.js', 'internal/platform-request.js', 'internal/credentials.js', 'internal/runtime-contract.json'
 ]
 
@@ -108,7 +108,7 @@ function main () {
     assert(archives.includes('liboro-runtime.a'), `Missing runtime archive: ${target}`)
     for (const name of archives) files[`lib/${target}/${name}`] = digestFile(path.join(nativeRoot, target, name))
   }
-  for (const name of ['internal/runtime-contract.json', 'authentication.js', 'launcher.js', 'background/deferred.js', 'credentials.js', 'native.js', 'notification.js']) {
+  for (const name of ['internal/runtime-contract.json', 'authentication.js', 'launcher.js', 'background/deferred.js', 'credentials.js', 'native.js', 'notification.js', 'push.js', 'window/back.js']) {
     const bytes = fs.readFileSync(path.join(api, name))
     assert.equal(digest(bytes), digest(fs.readFileSync(path.join(source, 'api', name))), `Packaged API differs: ${name}`)
     files[`api/${name}`] = digest(bytes)

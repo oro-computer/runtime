@@ -4224,6 +4224,9 @@ static Vector<String> androidRuntimeSourceCatalog () {
     "src/runtime/app/credentials.kt",
     "src/runtime/app/notifications.kt",
     "src/runtime/app/extensions.kt",
+    "src/runtime/window/back.kt",
+    "src/runtime/app/push.kt",
+    "src/runtime/app/push_crypto.kt",
     "src/runtime/bridge/bridge.kt",
     "src/runtime/debug/console.kt",
     "src/runtime/ipc/message.kt",
@@ -4284,7 +4287,7 @@ static JSON::Object androidDistributionContract () {
   const auto apiRoot = api.empty() ? prefixPath("api") : Path(api);
   JSON::Array apis;
   for (const auto& name : Vector<String> {
-    "authentication.js", "launcher.js", "background/deferred.js", "credentials.js", "native.js",
+    "authentication.js", "launcher.js", "background/deferred.js", "credentials.js", "native.js", "push.js", "window/back.js",
     "notification.js", "internal/platform-request.js", "internal/credentials.js", "internal/runtime-contract.json"
   }) {
     const auto path = apiRoot / name;
@@ -6093,17 +6096,53 @@ inline String getCfgUtilPath () {
   exit(1);
 }
 
-void initializeEnv (Path targetPath, bool allowMirror = false) {
-  (void) allowMirror;
-  static const auto envFileName = []() {
-    auto preferred = env::get("ORO_ENV_FILENAME");
-    if (preferred.size() == 0) {
-      preferred = DEFAULT_ORO_ENV_FILENAME;
+// Staging owns its permissions; installed SDK inputs can remain read-only.
+static void copyWritableTree (const Path& source, const Path& destination, bool excludeNodeModules = false) {
+  const auto input = fs::canonical(source);
+  const auto output = fs::weakly_canonical(destination);
+  const auto relative = output.lexically_relative(fs::canonical(input));
+  if (relative == "." || (!relative.empty() && *relative.begin() != "..")) {
+    throw std::runtime_error("SDK staging destination must be outside its input tree");
+  }
+  if (fs::is_symlink(destination)) throw std::runtime_error("SDK staging destination must not be a symlink");
+  fs::create_directories(destination);
+  fs::permissions(destination, fs::perms::owner_all, fs::perm_options::add);
+  for (auto iterator = fs::recursive_directory_iterator(input, fs::directory_options::follow_directory_symlink);
+       iterator != fs::recursive_directory_iterator(); ++iterator) {
+    const auto& entry = *iterator;
+    const auto path = entry.path().lexically_relative(input);
+    if (excludeNodeModules && *path.begin() == "node_modules") {
+      iterator.disable_recursion_pending();
+      continue;
     }
-    return preferred;
-  }();
+    const auto target = destination / path;
+    if (fs::is_symlink(target)) throw std::runtime_error("SDK staging destination must not contain symlinks");
+    if (entry.is_directory()) {
+      const auto resolved = fs::canonical(entry.path());
+      const auto inside = output.lexically_relative(resolved);
+      if (inside == "." || (!inside.empty() && *inside.begin() != "..")) {
+        throw std::runtime_error("SDK staging destination must be outside directory aliases");
+      }
+      for (auto ancestor = entry.path().parent_path();; ancestor = ancestor.parent_path()) {
+        if (fs::canonical(ancestor) == resolved) throw std::runtime_error("SDK staging inputs contain a directory cycle");
+        if (ancestor == input) break;
+      }
+      fs::create_directories(target);
+      fs::permissions(target, fs::perms::owner_all, fs::perm_options::add);
+    } else if (entry.is_regular_file()) {
+      if (fs::exists(target) && fs::equivalent(entry.path(), target)) {
+        throw std::runtime_error("SDK staging output aliases an input file");
+      }
+      if (fs::exists(target)) fs::permissions(target, fs::perms::owner_write, fs::perm_options::add);
+      fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing);
+      fs::permissions(target, fs::perms::owner_write, fs::perm_options::add);
+    } else {
+      throw std::runtime_error("SDK staging inputs must contain regular files and directories");
+    }
+  }
+}
 
-  const auto pathToRead = targetPath / envFileName;
+void initializeEnvFile (const Path& pathToRead) {
   if (!dotfileExists(pathToRead)) {
     return;
   }
@@ -6114,7 +6153,6 @@ void initializeEnv (Path targetPath, bool allowMirror = false) {
     auto value = tuple.second;
     auto valueAsPath = Path(value).make_preferred();
 
-    // convert env value to normalized path if it exists
     if (fs::exists(fs::status(valueAsPath))) {
       value = valueAsPath.string();
     }
@@ -6123,6 +6161,19 @@ void initializeEnv (Path targetPath, bool allowMirror = false) {
       env::set(key, value);
     }
   }
+}
+
+void initializeEnv (Path targetPath, bool allowMirror = false) {
+  (void) allowMirror;
+  static const auto envFileName = []() {
+    auto preferred = env::get("ORO_ENV_FILENAME");
+    if (preferred.size() == 0) {
+      preferred = DEFAULT_ORO_ENV_FILENAME;
+    }
+    return preferred;
+  }();
+
+  initializeEnvFile(targetPath / envFileName);
 }
 
 void initializeRC (Path targetPath, bool allowMirror = false) {
@@ -7056,10 +7107,12 @@ int main (int argc, char* argv[]) {
   // `$PWD/.ororc` (local)
   initializeRC(targetPath);
 
-  // `$ORO_HOME/.oro.env` (global/user)
+  // Existing process variables win; project settings precede user/legacy defaults.
+  initializeEnv(targetPath);
+  if (!env::get("ORO_ENV_FILE").empty()) {
+    initializeEnvFile(Path(env::get("ORO_ENV_FILE")));
+  }
   initializeEnv(prefixFile());
-  // `$PWD/.oro.env` (local)
-  initializeEnv(targetPath); // overrides global config with local
 
   auto getPaths = [&](String platform) -> Paths {
     Paths paths;
@@ -9134,11 +9187,7 @@ int main (int argc, char* argv[]) {
 
       fs::copy(prefixPath("src/init.cc"), jni, fs::copy_options::overwrite_existing);
 
-      fs::copy(
-        prefixPath("include"),
-        jni / "include",
-        fs::copy_options::overwrite_existing | fs::copy_options::recursive
-      );
+      copyWritableTree(prefixPath("include"), jni / "include");
 
       writeFile(jni / "include" / "oro" / "_user-config-bytes.hh", settings["ini_code"]);
 
@@ -9232,6 +9281,28 @@ int main (int argc, char* argv[]) {
       }
 
       manifestContext["android_background_service"] = "";
+      manifestContext["android_push_queries"] = "";
+      manifestContext["android_push_components"] = "";
+      if (settings["push_enabled"] == "true") {
+        if (settings["push_provider"] != "unifiedpush") {
+          logError("push.provider must be unifiedpush when push.enabled is true");
+          exit(1);
+        }
+        manifestContext["android_push_queries"] =
+          "<queries><intent><action android:name=\"android.intent.action.VIEW\" />"
+          "<data android:scheme=\"unifiedpush\" android:host=\"link\" /></intent></queries>";
+        manifestContext["android_push_components"] =
+          "<receiver android:name=\"oro.runtime.app.RuntimePushReceiver\" android:exported=\"true\"><intent-filter>"
+          "<action android:name=\"org.unifiedpush.android.connector.NEW_ENDPOINT\" />"
+          "<action android:name=\"org.unifiedpush.android.connector.MESSAGE\" />"
+          "<action android:name=\"org.unifiedpush.android.connector.UNREGISTERED\" />"
+          "<action android:name=\"org.unifiedpush.android.connector.REGISTRATION_FAILED\" />"
+          "<action android:name=\"org.unifiedpush.android.connector.TEMP_UNAVAILABLE\" />"
+          "</intent-filter></receiver>"
+          "<service android:name=\"oro.runtime.app.RuntimePushImportance\" android:exported=\"true\"><intent-filter>"
+          "<action android:name=\"org.unifiedpush.android.connector.RAISE_TO_FOREGROUND\" />"
+          "</intent-filter></service>";
+      }
       if (settings["background_enabled"] == "true") {
         manifestContext["android_manifest_xml_permissions"] += "  <uses-permission android:name=\"android.permission.RECEIVE_BOOT_COMPLETED\" />\n";
         manifestContext["android_background_service"] =
@@ -9444,6 +9515,12 @@ int main (int argc, char* argv[]) {
       settings["android_credentials_dependencies"] = settings["webview_webauthn_enabled"] == "true"
         ? "implementation 'androidx.credentials:credentials:1.6.0'\n  implementation 'androidx.credentials:credentials-play-services-auth:1.6.0'"
         : "";
+      const auto textZoom = settings["webview_text_zoom"];
+      if (!textZoom.empty() && textZoom != "system" && textZoom != "manual" &&
+          !std::regex_match(textZoom, std::regex("([1-9][0-9]{0,2}|1000)"))) {
+        logError("webview.text_zoom must be system, manual, or an integer from 1 to 1000");
+        exit(1);
+      }
       if (!settings["android_runtime_protocol"].empty() && settings["android_runtime_protocol"] != "5") {
         logError("Configured Android runtime protocol is unsupported by this CLI");
         exit(1);
@@ -10221,23 +10298,9 @@ int main (int argc, char* argv[]) {
         exit(1);
       }
 
-      fs::copy(
-        deviceLibs,
-        paths.platformSpecificOutputPath / "lib",
-        fs::copy_options::overwrite_existing | fs::copy_options::recursive
-      );
-
-      fs::copy(
-        deviceObjects,
-        paths.platformSpecificOutputPath / "objects",
-        fs::copy_options::overwrite_existing | fs::copy_options::recursive
-      );
-
-      fs::copy(
-        prefixPath("include"),
-        paths.platformSpecificOutputPath / "include",
-        fs::copy_options::overwrite_existing | fs::copy_options::recursive
-      );
+      copyWritableTree(deviceLibs, paths.platformSpecificOutputPath / "lib");
+      copyWritableTree(deviceObjects, paths.platformSpecificOutputPath / "objects");
+      copyWritableTree(prefixPath("include"), paths.platformSpecificOutputPath / "include");
 
       writeFile(
         paths.platformSpecificOutputPath / "include" / "oro" / "_user-config-bytes.hh",
@@ -11305,15 +11368,7 @@ int main (int argc, char* argv[]) {
 
     if (fs::exists(fs::status(runtimeHomeApi))) {
       fs::create_directories(pathResources);
-      fs::copy(
-        runtimeHomeApi,
-        pathResources / "oro",
-        fs::copy_options::update_existing | fs::copy_options::recursive
-      );
-
-      // XXX(@jwerle): 'node_modules/' sometimes can be found in the
-      // runtimeHomeApi directory if distributed with npm
-      fs::remove_all(pathResources / "oro" / "node_modules");
+      copyWritableTree(runtimeHomeApi, pathResources / "oro", true);
     }
 
     if (flagBuildForAndroid) {
@@ -11323,7 +11378,7 @@ int main (int argc, char* argv[]) {
       for (const auto& entry : fs::directory_iterator(prefixPath("lib"))) {
         if (!entry.is_directory() || !entry.path().filename().string().ends_with("-android")) continue;
         const auto abi = replace(entry.path().filename().string(), "-android", "");
-        fs::copy(entry.path(), libraries / abi, fs::copy_options::overwrite_existing | fs::copy_options::recursive);
+        copyWritableTree(entry.path(), libraries / abi);
         ++copied;
       }
       if (copied == 0) {
@@ -14565,6 +14620,8 @@ int main (int argc, char* argv[]) {
     envs["ORO_RC"] = env::get("ORO_RC");
     envs["ORO_RC_FILENAME"] = env::get("ORO_RC_FILENAME");
     envs["ORO_ENV_FILENAME"] = env::get("ORO_ENV_FILENAME");
+    envs["ORO_ENV_FILE"] = env::get("ORO_ENV_FILE");
+    envs["ORO_CONFIG_HOME"] = env::get("ORO_CONFIG_HOME");
     envs["ORO_UPDATE_MANIFEST_FILENAME"] = env::get("ORO_UPDATE_MANIFEST_FILENAME");
     envs["ORO_ALLOW_EXEC"] = env::get("ORO_ALLOW_EXEC");
     envs["ORO_ENABLE_SANITIZERS"] = env::get("ORO_ENABLE_SANITIZERS");

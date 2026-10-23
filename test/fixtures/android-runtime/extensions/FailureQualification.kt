@@ -25,6 +25,14 @@ import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+/** A public foreground surface for native-only scheduling checks. */
+class PublicNativeActivity : android.app.Activity() {
+  override fun onCreate (savedInstanceState: android.os.Bundle?) {
+    super.onCreate(savedInstanceState)
+    setContentView(android.widget.TextView(this).apply { text = "Public native runtime checks" })
+  }
+}
+
 /** Public, isolated native failure checks; never include in a production APK. */
 class FailureExtension : NativeExtension {
   override val name = "qualification.failures"
@@ -34,6 +42,10 @@ class FailureExtension : NativeExtension {
       if (store.getString("mode", "revoked") == "revoked") null else object : AuthorizedDeferredRead {
         override fun reconcile (cancellation: CancellationSignal): DeferredReadOutcome {
           check(store.edit().putString("running", task.id).commit())
+          if (store.getString("mode", "revoked") == "complete") {
+            cancellation.throwIfCanceled()
+            return DeferredReadOutcome.COMPLETED
+          }
           val until = SystemClock.elapsedRealtime() + 55000
           while (SystemClock.elapsedRealtime() < until) {
             cancellation.throwIfCanceled()
@@ -184,11 +196,14 @@ class FailureReceiver : BroadcastReceiver() {
         result.put("checks", JSONArray(listOf("encrypted-roundtrip", "failed-write-preserves", "failed-remove-preserves",
           "failed-clear-preserves", "corrupt-envelope-errors", "corrupt-envelope-preserved", "restored-envelope-readable")))
       }
-      "ENQUEUE" -> {
-        check(store.edit().putString("mode", "wait").remove("running").remove("closed").commit())
+      "ENQUEUE", "ENQUEUE_AUTONOMOUS" -> {
+        val autonomous = operation == "ENQUEUE_AUTONOMOUS"
+        check(store.edit().putString("mode", if (autonomous) "complete" else "wait")
+          .remove("running").remove("closed").commit())
         DeferredSync.request(context, "enqueue", JSONObject().put("id", "public-interruption").put("kind", "public.failure")
           .put("authorityRef", "public-authority").put("accountRef", "public-account").put("targetRef", "public-target")
-          .put("operationRef", "public-read").put("network", "any").put("requiresBatteryNotLow", false).put("delayMs", 604800000))
+          .put("operationRef", "public-read").put("network", "any").put("requiresBatteryNotLow", false)
+          .put("delayMs", if (autonomous) 30000 else 604800000))
         result.put("record", record())
       }
       "STATUS" -> result.put("record", record()).put("running", store.getString("running", ""))

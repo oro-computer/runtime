@@ -166,18 +166,10 @@ function test_gradle_version() {
   return 0
 }
 
-function validate_sdkmanager_jar() {
+function validate_sdkmanager() {
   local sdkmanager_path="$1"
-  # Currently sdkmanager as shipped with Android Studio is broken
-  local set=""
-  [[ "$(host_os)" == "Win32" ]] && set="set "
-  local pattern="^""$set""CLASSPATH\="
-  local classpath_line="$(grep "$pattern" "$sdkmanager_path")"
-  # This indicates a cmdline-tools version of sdkmanager
-  if [[ "$classpath_line" == *"sdkmanager-classpath.jar"* ]]; then
-    return 0
-  fi
-  return 1;
+  JAVA_OPTS="${JAVA_OPTS:-}${ANDROID_SDK_MANAGER_JAVA_OPTS:+ $ANDROID_SDK_MANAGER_JAVA_OPTS}" \
+    "$sdkmanager_path" --version >/dev/null 2>&1
 }
 
 function get_android_paths() {
@@ -193,24 +185,6 @@ function get_android_paths() {
   local bat="$(use_bin_ext ".bat")"
   local exe="$(use_bin_ext ".exe")"
   local sdkmanager_path
-
-  for android_home_test in "${ANDROID_HOME_SEARCH_PATHS[@]}"; do
-    for sdk_man_test in "${ANDROID_SDK_MANAGER_SEARCH_PATHS[@]}"; do
-      sdkmanager_path="$android_home_test/$sdk_man_test/sdkmanager$bat"
-      write_log "v" "# Checking $sdkmanager_path"
-      if [[ -f "$sdkmanager_path" ]]; then
-        if validate_sdkmanager_jar "$sdkmanager_path"; then
-          if [[ -z "$_ah" ]]; then
-            _ah="$android_home_test"
-          fi
-          _sdk="$sdk_man_test/sdkmanager$bat"
-          break
-        else
-          echo "warn - can't use $sdkmanager_path: Android Studio's SDK manager script is inoperable."
-        fi
-      fi
-    done
-  done
 
   local temp
   local java_home_test
@@ -305,6 +279,24 @@ function get_android_paths() {
     unset GRADLE_HOME
   fi
 
+  # Resolve Java before probing Java-based SDK managers. Newer managers can
+  # delegate to the Android CLI without declaring a Java classpath.
+  for android_home_test in "${ANDROID_HOME_SEARCH_PATHS[@]}"; do
+    for sdk_man_test in "${ANDROID_SDK_MANAGER_SEARCH_PATHS[@]}"; do
+      sdkmanager_path="$android_home_test/$sdk_man_test/sdkmanager$bat"
+      write_log "v" "# Checking $sdkmanager_path"
+      if [[ -f "$sdkmanager_path" ]]; then
+        if validate_sdkmanager "$sdkmanager_path"; then
+          _ah="$android_home_test"
+          _sdk="$sdk_man_test/sdkmanager$bat"
+          break 2
+        else
+          echo "warn - can't use $sdkmanager_path: sdkmanager --version failed."
+        fi
+      fi
+    done
+  done
+
   if [[ -n "$_ah" ]]; then
     ANDROID_HOME="$(native_path "$_ah")"
     write_log "v" "ok - Found ANDROID_HOME ($ANDROID_HOME)"
@@ -315,6 +307,8 @@ function get_android_paths() {
     ANDROID_SDK_MANAGER="$(native_path "$_sdk")"
     write_log "v" "ok - Found sdkmanager ($ANDROID_SDK_MANAGER)"
     export ANDROID_SDK_MANAGER
+  else
+    unset ANDROID_SDK_MANAGER
   fi
 }
 
@@ -636,7 +630,7 @@ function clear_android_settings() {
 }
 
 function android_install_sdk_manager() {
-  if [[ -n "$ANDROID_SDK_MANAGER" && -f "$ANDROID_SDK_MANAGER" ]]; then
+  if [[ -n "$ANDROID_SDK_MANAGER" && -f "$ANDROID_HOME/$ANDROID_SDK_MANAGER" ]]; then
     return 0
   fi
 

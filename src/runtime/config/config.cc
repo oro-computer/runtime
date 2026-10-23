@@ -1874,6 +1874,22 @@ namespace oro::runtime::config {
         false
       },
       {
+        "push_enabled",
+        "push.enabled",
+        "Enable optional native Android push transport; compiled handlers and authenticated server enrollment are separate requirements.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "push_provider",
+        "push.provider",
+        "Native push provider. Set unifiedpush explicitly when push.enabled is true.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
         "permissions_allow_fullscreen",
         "permissions.allow_fullscreen",
         "Allow WebView fullscreen requests.",

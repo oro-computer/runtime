@@ -93,6 +93,8 @@ internal object PlatformOperations {
   }
 
   fun cancelWindow (window: Window) {
+    if (Looper.myLooper() == Looper.getMainLooper()) window.activity.applicationBack.invalidate(window)
+    else main.post { window.activity.applicationBack.invalidateStale(window) }
     val calls = synchronized(this) { pending.values.filter { it.window === window } }
     calls.forEach { it.failure("ABORT_ERR") }
   }
@@ -144,6 +146,8 @@ internal object PlatformOperations {
           "credentials" -> PasswordCredentials.request(call, action, options)
           "extension" -> NativeExtensions.request(call, action, options)
           "notifications" -> NativeNotifications.request(call, action, options)
+          "back" -> call.foreground().activity.applicationBack.request(call, action, options)
+          "push" -> NativePush.request(call, action, options)
           else -> call.failure("ENOSYS")
         }
       } catch (error: PlatformFailure) { call.failure(error.code)

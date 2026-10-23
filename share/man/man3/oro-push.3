@@ -1,0 +1,67 @@
+.TH ORO-PUSH 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:push \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:push'
+.fi
+.SH DESCRIPTION
+.PP
+Optional Android UnifiedPush transport. Requires `[push] enabled = true`, `provider = "unifiedpush"` and a compiled NativePushHandler registered at Application startup. Native handlers authorize and process encrypted payloads without a WebView. Server enrollment, IAM and notification policy are app\-owned.
+.SH REFERENCE
+.TP
+\fBgetSupport()\fR
+Documented function exposed by this module.
+\fBReturns:\fR
+.br
+\fIPromise<PushSupport>\fR
+.TP
+\fBselectDistributor()\fR
+Opens the system distributor chooser. Existing registrations must first be unregistered. Returns after launch; listen for pushchange and reread support when the activity resumes. Selection is bound to the originating document and expires after 90 seconds. Cancellation leaves the previous selection intact.
+\fBReturns:\fR
+.br
+\fIPromise<PushSubmission>\fR
+.TP
+\fBregister(options)\fR
+Begins or renews transport registration. An endpoint arrives asynchronously; read getRegistration after foreground resume or pushchange. Identical IDs and references reuse keys. Different references reject EEXIST. Private decryption keys and connection tokens never leave native storage. Authenticate enrollment with your server before enabling unattended product delivery.
+\fBParameters:\fR
+.br
+\fIoptions\fR (PushRegistrationOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<PushRegistration>\fR
+.TP
+\fBgetRegistration(id)\fR
+Returns sensitive server enrollment material and bounded inbox counts.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<PushRegistration>\fR
+.TP
+\fBacknowledgeRegistration(id, generation)\fR
+Marks the current endpoint enrolled after an authenticated server confirmation. A changed endpoint generation rejects EAGAIN and must be reconciled again. Native handlers may instead implement onRegistrationChanged and return true after confirming enrollment, including when a receiver starts a cold process.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+.br
+\fIgeneration\fR (string; required) From the enrollment result sent to your server.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBunregister(id)\fR
+Stops future local delivery and signals in\-flight handling before notifying the distributor. A running handler may already have produced application effects and must cooperate with cancellation. Revoke server grants separately through an application\-authorized maintenance executor.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBretryPending()\fR
+Explicitly retries retained messages, resetting exhausted attempt budgets. Automatic drains occur on application startup and new transport input.
+\fBReturns:\fR
+.br
+\fIPromise<PushSubmission>\fR

@@ -9,14 +9,17 @@ import { fileURLToPath } from 'node:url'
 const source = fs.readFileSync(new URL('../../npm/src/index.js', import.meta.url), 'utf8')
 
 function checkSetup (host, args, expectedTarget) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oro npm setup '))
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'oro npm setup '))
+  const root = path.join(directory, 'read only SDK')
   const filename = path.join(root, 'src', 'index.mjs')
   fs.mkdirSync(path.dirname(filename), { recursive: true })
   fs.writeFileSync(filename, source)
   const env = { ...process.env }
   for (const key of Object.keys(env)) {
-    if (/^(ORO_HOME|PREFIX|ORO_ENV_FILENAME)$/i.test(key)) delete env[key]
+    if (/^(ORO_HOME|PREFIX|ORO_ENV_FILENAME|ORO_ENV_FILE|ORO_CONFIG_HOME)$/i.test(key)) delete env[key]
   }
+  env.ORO_CONFIG_HOME = path.join(directory, 'user configuration')
+  fs.chmodSync(root, 0o555)
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
     import assert from 'node:assert/strict'
     import os from 'node:os'
@@ -38,7 +41,7 @@ function checkSetup (host, args, expectedTarget) {
     }
     syncBuiltinESMExports()
     process.argv = [process.execPath, filename, ...JSON.parse(argsJson)]
-    const { firstTimeExperienceSetup } = await import(pathToFileURL(filename).href)
+    const { firstTimeExperienceSetup, env } = await import(pathToFileURL(filename).href)
     const shouldRun = await firstTimeExperienceSetup()
     if (!target) {
       assert.equal(calls.length, 0)
@@ -50,10 +53,14 @@ function checkSetup (host, args, expectedTarget) {
       assert.equal(call.options.cwd, root)
       assert.equal(call.options.env.ORO_HOME, root)
       assert.equal(call.options.env.PREFIX, root)
+      assert.equal(call.options.env.ORO_ENV_FILE, env.ORO_ENV_FILE)
+      assert.equal(env.ORO_ENV_FILE, path.join(process.env.ORO_CONFIG_HOME, '.oro.env'))
       assert.equal(call.command, host === 'win32' ? 'powershell.exe' : './bin/functions.sh')
       assert.equal(call.args.at(-1), host === 'win32' ? '-fte:' + target : target)
       assert.equal(shouldRun, !process.argv.includes('setup'))
-      assert.equal(fs.existsSync(path.join(root, '.oro.env')), true)
+      assert.equal(fs.existsSync(path.join(root, '.oro.env')), false)
+      assert.equal(fs.existsSync(env.ORO_ENV_FILE), true)
+      if (host !== 'win32') assert.equal(fs.statSync(env.ORO_ENV_FILE).mode & 0o777, 0o600)
     }
   `, filename, host, JSON.stringify(args), expectedTarget || ''], {
     env,

@@ -327,6 +327,7 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
   open val dialog = Dialog(this)
   internal val systemAppearance by lazy { SystemAppearance(this) }
   internal val presentation by lazy { SystemPresentation(this) }
+  internal val applicationBack by lazy { ApplicationBackNavigation(this) }
 
   fun setSystemAppearance (index: Int, options: String): Boolean = systemAppearance.apply(index, options)
 
@@ -397,6 +398,11 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
           return
         }
         if (presentation.exit("back")) return
+        if (applicationBack.dispatch { performDefaultBack() }) return
+        performDefaultBack()
+      }
+
+      private fun performDefaultBack () {
         val fragment = windowFragmentManager.fragments.lastOrNull {
           it.isVisible && !it.options.headless
         }
@@ -422,11 +428,13 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
   }
 
   override fun onPause () {
+    applicationBack.pause()
     presentation.exit("suspended")
     super.onPause()
   }
 
   override fun onDestroy () {
+    applicationBack.destroy()
     presentation.destroy()
     dialog.close()
     super.onDestroy()

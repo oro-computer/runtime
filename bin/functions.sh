@@ -282,41 +282,48 @@ function update_env_data() {
   done
 
   write_env_data
-  return 0
+  return $?
 }
 
 function _resolve_env_file_for_read() {
-  if [[ -f "$root/$ORO_ENV_FILENAME" ]]; then
-    echo "$ORO_ENV_FILENAME"
-    return
+  if [[ -n "$ORO_ENV_FILE" ]]; then
+    if [[ "$(host_os)" == "Win32" ]] && command -v cygpath >/dev/null 2>&1; then
+      cygpath -u "$ORO_ENV_FILE"
+    else
+      printf '%s\n' "$ORO_ENV_FILE"
+    fi
+  else
+    printf '%s\n' "$root/$ORO_ENV_FILENAME"
   fi
-
-  echo "$ORO_ENV_FILENAME"
 }
 
 function read_env_data() {
   local file="$(_resolve_env_file_for_read)"
-  if [[ -f "$root/$file" ]]; then
+  if [[ -f "$file" ]]; then
     # shellcheck disable=SC1090
-    source "$root/$file"
+    source "$file"
   fi
 }
 
 function write_env_data() {
   # Maintain mtime on $ORO_ENV_FILENAME, only update if changed
-  local temp=$(mktemp)
+  local file
+  file="$(_resolve_env_file_for_read)" || return $?
+  mkdir -p -m 700 "$(dirname "$file")" || return $?
+  local temp
+  temp=$(mktemp "$(dirname "$file")/.oro-env.XXXXXX") || return $?
   local new_hash
   local old_hash
-  build_env_data > "$temp"
+  build_env_data > "$temp" || return $?
 
-  if [[ ! -f "$root/$ORO_ENV_FILENAME" ]]; then
-    mv "$temp" "$root/$ORO_ENV_FILENAME"
+  if [[ ! -f "$file" ]]; then
+    mv "$temp" "$file"
   else
-    old_hash=$(sha512sum "$root/$ORO_ENV_FILENAME")
-    new_hash=$(sha512sum "$temp")
+    old_hash=$(sha512sum "$file") || return $?
+    new_hash=$(sha512sum "$temp") || return $?
 
     if [[ "$old_hash" != "$new_hash" ]]; then
-      mv "$temp" "$root/$ORO_ENV_FILENAME"
+      mv "$temp" "$file"
     else
       rm -f "$temp"
     fi
@@ -546,6 +553,11 @@ fi
 
 if [ -n "$ORO_INSTALL_SH_LOGFILE" ]; then
   logfile="$ORO_INSTALL_SH_LOGFILE"
+elif [ -n "$ORO_ENV_FILE" ]; then
+  logfile="$(dirname "$(_resolve_env_file_for_read)")/oro_install_sh.log"
+  if ! mkdir -p -m 700 "$(dirname "$logfile")" || ! ( : >> "$logfile" ) 2>/dev/null; then
+    logfile=""
+  fi
 else
   logfile="$_loghome/oro_install_sh.log"
 
@@ -666,8 +678,8 @@ function determine_cxx () {
   export CC
   # win32 has partically escaping requirements, this is handled by install.ps1
   if [[ "$host" != "Win32" ]]; then
-    update_env_data "CXX=$CXX"
-    update_env_data "CC=$CC"
+    update_env_data "CXX=$CXX" || return $?
+    update_env_data "CC=$CC" || return $?
   fi
 }
 
