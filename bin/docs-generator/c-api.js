@@ -117,7 +117,7 @@ const HEADER_MANIFEST = {
     }
   },
   'include/oro/platform.h': {
-    pageName: 'oro-platform',
+    pageName: 'oro-platform-c',
     summary: 'compile-time platform and architecture feature macros',
     description: [
       'The oro/platform.h header defines the compile-time platform, operating system, and architecture macros used by the public runtime and extension APIs.',

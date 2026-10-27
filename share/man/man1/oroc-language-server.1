@@ -1,0 +1,72 @@
+.TH OROC-LANGUAGE-SERVER 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-language\-server \- Oro Language Server: editor\-independent build models and language adapters.
+.SH SYNOPSIS
+.nf
+oroc language\-server \-\-language <name> [options] [<project\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Oro Language Server: editor\-independent build models and language adapters.
+.SH OPTIONS
+.TP
+\fB\-\-language=<name>\fR
+required: kotlin, typescript, cpp, c, objc, objcpp, swift, or configured language
+.TP
+\fB\-\-variant=<name>\fR
+Android variant (default devDebug)
+.TP
+\fB\-\-server=<path>\fR
+override the configured language server executable
+.TP
+\fB\-\-prepare\fR
+prepare native dependencies before launch (Kotlin prepares SDK classes automatically)
+.TP
+\fB\-\-startup\-timeout=<ms>\fR
+preparation and startup deadline (300000)
+.TP
+\fB\-\-refresh\fR
+regenerate the selected editor model
+.TP
+\fB\-\-offline\fR
+use installed dependencies only
+.TP
+\fB\-\-platform=<name>\fR
+native target platform
+.TP
+\fB\-\-arch=<name>\fR
+native target architecture
+.TP
+\fB\-\-prod\fR
+release compiler flags for native models
+.TP
+\fB\-\-config=<path>\fR
+explicit oro.toml or oro.ini
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Language selection is required; there is no default language.
+.PP
+Run one wrapper process per language or language family to use several servers together.
+.PP
+Requires Node.js 22+ and the selected language server on PATH.
+.PP
+The directory containing oro.toml is the recommended project root (oro.ini is also supported).
+.PP
+Root discovery uses the editor's initialize workspace roots, falling back to cwd only if absent.
+.PP
+An explicit \-\-config or project directory overrides editor root discovery.
+.PP
+Configure [language_server.<language>] command and args in oro.toml.
+.PP
+Defaults: kotlin\-language\-server; typescript\-language\-server \-\-stdio; clangd; sourcekit\-lsp.
+.PP
+Kotlin Android uses the fwcd adapter; adapter="stdio" delegates discovery to another backend.
+.PP
+Stdout is reserved for LSP. Build and adapter messages go to stderr.
+.PP
+See docs/LANGUAGE_SERVER.md for Coc, VS Code, preparation and compatibility.
+.SH SEE ALSO
+oroc(1)

@@ -133,7 +133,7 @@ This call:
 - **Windows (WebView2)**  
   - Pins are evaluated when WebView2 reports server certificate failures via `ServerCertificateErrorDetected`.
   - If the failing certificate’s digest matches a configured pin for the host, the runtime overrides the error and allows navigation; otherwise the navigation is cancelled.
-  - Note: WebView2’s “always allow” decision may persist for the lifetime of the profile/user data folder; clearing pins does not necessarily revoke previously allowed certificates without clearing that profile state.
+  - Note: WebView2’s "always allow” decision may persist for the lifetime of the profile/user data folder; clearing pins does not necessarily revoke previously allowed certificates without clearing that profile state.
   - As with Linux/Android, this is currently an error‑path hook and cannot reject otherwise‑valid certificates that are not pinned.
 
 When enabling pins, start with a single host in a controlled environment, verify behaviour on your target platforms, and only then roll out more broadly.

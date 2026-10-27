@@ -4,6 +4,7 @@ import android.app.job.JobParameters
 import android.app.job.JobScheduler
 import android.os.CancellationSignal
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Public native fixture for recurrence, operation restrictions and terminal outcomes. */
 fun periodicAndMaintenanceRegressions () {
@@ -38,6 +39,46 @@ fun periodicAndMaintenanceRegressions () {
   check(status("public-recurring").getInt("attempts") == 0)
   check(status("public-recurring").getLong("completedRuns") == 1L)
   request("release", JSONObject().put("id", "public-recurring"))
+  val cycles = AtomicInteger()
+  DeferredSync.registerReadExecutor("public.cycle", DeferredReadExecutor { _, _, _ ->
+    object : AuthorizedDeferredRead {
+      override fun reconcile(cancellation: CancellationSignal) =
+        if (cycles.incrementAndGet() % 2 == 1) DeferredReadOutcome.RETRY else DeferredReadOutcome.COMPLETED
+      override fun close() {}
+    }
+  })
+  val cycle = request("enqueue", options("public-cycle").put("kind", "public.cycle").put("intervalMs", 900000))
+  val cycleParameters = parameters(cycle)
+  for (attempt in 1..4) {
+    awaitDeferredWorkerIdle()
+    check(service.onStartJob(cycleParameters))
+    val expected = if (attempt % 2 == 1) "retry" else "scheduled"
+    val deadline = System.nanoTime() + 2_000_000_000L
+    while (System.nanoTime() < deadline && status("public-cycle").getString("phase") != expected) Thread.sleep(5)
+    val state = status("public-cycle")
+    check(state.getString("phase") == expected)
+    check(state.getInt("attempts") == if (expected == "retry") 1 else 0)
+    check(JobScheduler.instance.getPendingJob(cycle.getInt("jobId"))!!.interval == 900000L)
+    check(state.optLong("completedRuns") == attempt / 2L)
+  }
+  check(cycles.get() == 4)
+  request("release", JSONObject().put("id", "public-cycle"))
+  DeferredSync.registerReadExecutor("public.unknown", DeferredReadExecutor { _, _, _ ->
+    object : AuthorizedDeferredRead {
+      override fun reconcile(cancellation: CancellationSignal) = DeferredReadOutcome.UNKNOWN
+      override fun close() {}
+    }
+  })
+  val unknown = request("enqueue", options("public-unknown").put("kind", "public.unknown").put("intervalMs", 900000))
+  val unknownParameters = parameters(unknown)
+  awaitDeferredWorkerIdle()
+  check(service.onStartJob(unknownParameters))
+  awaitOutcome("public-unknown", "unknown")
+  check(status("public-unknown").getString("phase") == "unknown")
+  check(JobScheduler.instance.getPendingJob(unknown.getInt("jobId")) == null)
+  check(!service.onStartJob(unknownParameters))
+  check(runCatching { request("resume", JSONObject().put("id", "public-unknown")) }.isFailure)
+  request("release", JSONObject().put("id", "public-unknown"))
   val maintenance = DeferredMaintenanceExecutor { _, task, _ ->
     check(task.operationRef == "revoke")
     object : AuthorizedDeferredMaintenance {
@@ -52,6 +93,7 @@ fun periodicAndMaintenanceRegressions () {
   check(runCatching { request("enqueue", task) }.isFailure)
   check(runCatching { request("enqueueMaintenance", JSONObject(task.toString()).put("intervalMs", 900000)) }.isFailure)
   val queued = request("enqueueMaintenance", task)
+  awaitDeferredWorkerIdle()
   check(service.onStartJob(parameters(queued)))
   awaitOutcome("public-revoke", "completed")
   check(status("public-revoke").getString("phase") == "completed")

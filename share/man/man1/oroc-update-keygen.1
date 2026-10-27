@@ -18,9 +18,14 @@ optional key identifier to embed in the keypair (default: "pk\-1")
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-The generated JSON includes "keyId", "publicKey", and "privateKey" fields (hex\-encoded). Keep the private key secret; distribute only the public key with your application.
+The generated JSON includes "keyId", "publicKey", and "privateKey" fields (hex\-encoded).
+.PP
+Keep the private key secret; distribute only the public key with your application.
 .SH EXAMPLES
 .TP
 \fBoroc update keygen > key.json\fR

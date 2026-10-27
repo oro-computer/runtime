@@ -7,7 +7,7 @@ import * as module from 'oro:push'
 .fi
 .SH DESCRIPTION
 .PP
-Optional Android UnifiedPush transport. Requires `[push] enabled = true`, `provider = "unifiedpush"` and a compiled NativePushHandler registered at Application startup. Native handlers authorize and process encrypted payloads without a WebView. Server enrollment, IAM and notification policy are app\-owned.
+Optional Android and Linux UnifiedPush transport. Requires `[push] enabled = true`, `provider = "unifiedpush"` and a compiled NativePushHandler registered at Application startup. Native handlers authorize and process encrypted payloads without a WebView. Server enrollment, IAM and notification policy are app\-owned. A Linux native session host can supply cold D\-Bus activation. Actual installed activation, distributor retries and user\-session hosting require qualification. iOS/iPadOS, macOS and Windows backends for this API are not implemented. `getSupport()` reports unavailable with a platform/reason; operations reject ENOSYS. Registration and transport receipts do not prove server enrollment, trusted delivery, notification presentation or successful remote processing.
 .SH REFERENCE
 .TP
 \fBgetSupport()\fR
@@ -16,8 +16,17 @@ Documented function exposed by this module.
 .br
 \fIPromise<PushSupport>\fR
 .TP
-\fBselectDistributor()\fR
-Opens the system distributor chooser. Existing registrations must first be unregistered. Returns after launch; listen for pushchange and reread support when the activity resumes. Selection is bound to the originating document and expires after 90 seconds. Cancellation leaves the previous selection intact.
+\fBgetDistributors()\fR
+Lists Linux UnifiedPush distributor service names, including activatable services. Other platforms reject with ENOSYS. This does not select or register a provider.
+\fBReturns:\fR
+.br
+\fIPromise<string[]>\fR
+.TP
+\fBselectDistributor(options)\fR
+Opens the system distributor chooser. Existing registrations must first be unregistered. Returns after launch; listen for pushchange and reread support when the activity resumes. Selection is bound to the originating document and expires after 90 seconds. Cancellation leaves the previous selection intact. On Linux, pass a name from getDistributors(), configure push.distributor, or select the only installed distributor. Multiple unselected providers reject EAGAIN.
+\fBParameters:\fR
+.br
+\fIoptions\fR (DistributorSelectionOptions; optional)
 \fBReturns:\fR
 .br
 \fIPromise<PushSubmission>\fR

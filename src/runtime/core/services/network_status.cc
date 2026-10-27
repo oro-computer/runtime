@@ -24,7 +24,7 @@ namespace oro::runtime::core::services {
   }
 
   NetworkStatus::~NetworkStatus () {
-  #if ORO_RUNTIME_PLATFORM_ANDROID
+  #if ORO_RUNTIME_PLATFORM_ANDROID || ORO_RUNTIME_PLATFORM_LINUX
     this->stop();
   #endif
   #if ORO_RUNTIME_PLATFORM_APPLE
@@ -92,16 +92,17 @@ namespace oro::runtime::core::services {
       G_CALLBACK((+[](GNetworkMonitor* monitor, gboolean networkAvailable, gpointer userData) {
         auto coreNetworkStatus = reinterpret_cast<NetworkStatus*>(userData);
         if (coreNetworkStatus) {
-          const auto json = JSON::Object::Entries {
-            {"name", networkAvailable ? "online" : "offline"},
-            {"message", networkAvailable ? "Network is usable" : "Network is not usable"}
-          };
-
-          coreNetworkStatus->observers.dispatch(json);
+          coreNetworkStatus->observers.dispatch(coreNetworkStatus->snapshot());
         }
       })),
       this
     );
+    for (const auto name : {"notify::network-metered", "notify::connectivity"}) {
+      g_signal_connect(this->monitor, name, G_CALLBACK(+[](GObject*, GParamSpec*, gpointer pointer) {
+        const auto service = static_cast<NetworkStatus*>(pointer);
+        service->observers.dispatch(service->snapshot());
+      }), this);
+    }
     return true;
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     this->monitoring = true;
@@ -127,10 +128,10 @@ namespace oro::runtime::core::services {
     return true;
   #elif ORO_RUNTIME_PLATFORM_LINUX
     if (this->signal) {
-      g_signal_handler_disconnect(this->monitor, this->signal);
+      g_signal_handlers_disconnect_by_data(this->monitor, this);
       this->signal = 0;
-      return true;
     }
+    return true;
   #elif ORO_RUNTIME_PLATFORM_ANDROID
     this->monitoring = false;
     const auto& androidContext = this->context.android;
@@ -144,6 +145,22 @@ namespace oro::runtime::core::services {
   #endif
     return false;
   }
+
+#if ORO_RUNTIME_PLATFORM_LINUX
+  JSON::Object NetworkStatus::snapshot () const {
+    const bool available = this->enabled && this->monitor;
+    const bool connected = available && g_network_monitor_get_network_available(this->monitor);
+    const auto connectivity = available ? g_network_monitor_get_connectivity(this->monitor) : G_NETWORK_CONNECTIVITY_LOCAL;
+    const bool validated = connected && connectivity == G_NETWORK_CONNECTIVITY_FULL;
+    return JSON::Object::Entries {
+      {"platform", "linux"}, {"available", available}, {"connected", connected}, {"validated", validated},
+      {"captivePortal", connected && connectivity == G_NETWORK_CONNECTIVITY_PORTAL},
+      {"metered", available && g_network_monitor_get_network_metered(this->monitor)},
+      {"transports", JSON::Array {}}, {"name", validated ? "online" : "offline"},
+      {"transportDetailsAvailable", false}, {"serverReachabilityKnown", false}
+    };
+  }
+#endif
 
   bool NetworkStatus::addObserver (const Observer& observer, const Observer::Callback callback) {
     return this->observers.add(observer, callback);

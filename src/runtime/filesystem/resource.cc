@@ -4,6 +4,8 @@
 #include "../string.hh"
 #include "../filesystem.hh"
 
+#include <optional>
+
 #if ORO_RUNTIME_PLATFORM_ANDROID
 #include <fstream>
 #include <limits>
@@ -15,7 +17,8 @@ using oro::runtime::config::getUserConfig;
 namespace oro::runtime::filesystem {
   static Map<String, Resource::Cache> caches;
   static Mutex mutex;
-  static Resource::WellKnownPaths defaultWellKnownPaths;
+  // Defaults are populated by the app after runtime globals are initialized.
+  static std::optional<Resource::WellKnownPaths> defaultWellKnownPaths;
   static Path configuredResourcesPath;
 
 #if ORO_RUNTIME_PLATFORM_ANDROID
@@ -464,18 +467,9 @@ namespace oro::runtime::filesystem {
     static auto bundleIdentifier = userConfig["meta_bundle_identifier"];
 
     // initialize default values
-    this->resources = defaultWellKnownPaths.resources;
-    this->downloads = defaultWellKnownPaths.downloads;
-    this->documents = defaultWellKnownPaths.documents;
-    this->pictures = defaultWellKnownPaths.pictures;
-    this->desktop = defaultWellKnownPaths.desktop;
-    this->videos = defaultWellKnownPaths.videos;
-    this->music = defaultWellKnownPaths.music;
-    this->config = defaultWellKnownPaths.config;
-    this->home = defaultWellKnownPaths.home;
-    this->data = defaultWellKnownPaths.data;
-    this->log = defaultWellKnownPaths.log;
-    this->tmp = defaultWellKnownPaths.tmp;
+    if (defaultWellKnownPaths) {
+      *this = *defaultWellKnownPaths;
+    }
 
     this->resources = Resource::getResourcesPath();
   #if !ORO_RUNTIME_PLATFORM_ANDROID

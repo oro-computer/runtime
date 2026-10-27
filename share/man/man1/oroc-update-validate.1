@@ -24,9 +24,18 @@ print a machine\-readable JSON result object (for CI)
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-This command parses the manifest and performs lightweight structural validation aligned with 'schemas/update\-manifest.schema.json' (required fields, types, and key relationships). It does not attempt full JSON Schema validation, but is suitable for fast local checks and CI. When '\-\-strict' is provided, additional consistency rules are enforced. When '\-\-json' is provided, stdout is reserved for the result object only.
+This command parses the manifest and performs lightweight structural validation aligned with 'schemas/update\-manifest.schema.json' (required fields, types, and key relationships).
+.PP
+It does not attempt full JSON Schema validation, but is suitable for fast local checks and CI.
+.PP
+When '\-\-strict' is provided, additional consistency rules are enforced.
+.PP
+When '\-\-json' is provided, stdout is reserved for the result object only.
 .SH EXAMPLES
 .TP
 \fBoroc update validate \-\-manifest manifest.json\fR

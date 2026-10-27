@@ -336,7 +336,7 @@ class RuntimeWorker extends GlobalWorker {
 
     if (
       typeof filename === 'string' &&
-      !URL.canParse(filename, location.href)
+      !URL.canParse(filename, location.url.href)
     ) {
       const blob = new Blob([filename], { type: 'text/javascript' })
       filename = URL.createObjectURL(blob).toString()
@@ -354,7 +354,9 @@ class RuntimeWorker extends GlobalWorker {
 
     const workerType =
       options[Symbol.for('oro.runtime.internal.worker.type')] ?? 'worker'
-    const url = encodeURIComponent(new URL(filename, location.href).toString())
+    const url = encodeURIComponent(new URL(filename, location.url.href).toString())
+    // Bootstrap from this module's served URL so Android workers retain HTTPS.
+    const runtimeURL = new URL('../', import.meta.url)
     const id = String(rand64())
 
     let topClient = globalThis.__args.client
@@ -438,14 +440,14 @@ class RuntimeWorker extends GlobalWorker {
     }
 
     try {
-      await import('${location.origin}/oro/internal/init.js')
-      const hooks = await import('${location.origin}/oro/hooks.js')
+      await import('${runtimeURL}internal/init.js')
+      const hooks = await import('${runtimeURL}hooks.js')
 
       hooks.onReady(() => {
         globalThis.removeEventListener('message', onInitialWorkerMessages)
       })
 
-      await import('${location.origin}/oro/internal/worker.js?source=${url}')
+      await import('${runtimeURL}internal/worker.js?source=${url}')
     } catch (err) {
       globalThis.reportError(err)
     }

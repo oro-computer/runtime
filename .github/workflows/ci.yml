@@ -49,10 +49,11 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           CURRENT_SHA: ${{ github.sha }}
           REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           run_ci=true
-          if [[ "$EVENT_NAME" == 'push' && "$REF_NAME" != 'master' && "$REF_NAME" != 'dev' ]]; then
+          if [[ "$EVENT_NAME" == 'push' && "$REF_TYPE" != 'tag' && "$REF_NAME" != 'master' && "$REF_NAME" != 'dev' ]]; then
             if pull_count="$(gh api "/repos/$GITHUB_REPOSITORY/commits/$CURRENT_SHA/pulls" --jq '[.[] | select(.state == "open")] | length')" && (( pull_count > 0 )); then
               run_ci=false
             fi
@@ -75,7 +76,7 @@ jobs:
               fi
               ;;
             push)
-              if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+              if [[ "$REF_TYPE" == 'tag' || -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
                 printf '*\n' > "$changed_files"
               else
                 if comparison="$(gh api "/repos/$GITHUB_REPOSITORY/compare/$BEFORE_SHA...$CURRENT_SHA")"; then
@@ -169,6 +170,18 @@ jobs:
         run: |
           npm run gen:docs
           git diff --exit-code
+
+  native-parity:
+    name: Native backend regression coverage
+    needs: [changes, lint]
+    if: needs.changes.outputs.runtime_changed == 'true'
+    uses: ./.github/workflows/native-parity.yml
+
+  language-server:
+    name: Language server lifecycle coverage
+    needs: [changes, lint]
+    if: needs.changes.outputs.runtime_changed == 'true'
+    uses: ./.github/workflows/language-server.yml
 
   node-compatibility:
     name: Tooling unit tests / Node 22
@@ -370,6 +383,14 @@ jobs:
         if: ${{ always() && steps.smoke-test.outcome == 'success' }}
         timeout-minutes: 20
         run: dbus-run-session -- npm test
+
+      - name: Run Linux WebKit extension lifecycle tests
+        if: ${{ always() && steps.smoke-test.outcome == 'success' }}
+        timeout-minutes: 5
+        env:
+          ORO_TEST_SKIP_DESKTOP_EXTENSION: '0'
+          ORO_TEST_SKIP_TEST_EXTENSIONS: '1'
+        run: dbus-run-session -- node test/scripts/run.js desktop --entry android-capabilities.js --quick --strict --headless
 
       - name: Run child process integration tests
         if: ${{ always() && steps.smoke-test.outcome == 'success' }}

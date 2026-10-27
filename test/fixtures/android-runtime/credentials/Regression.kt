@@ -19,8 +19,15 @@ class App {
 internal object ProtectedAuthentication { fun request(c: PlatformCall, a: String, o: JSONObject) { c.success() } }
 internal object LauncherDestinations { fun request(c: PlatformCall, a: String, o: JSONObject) { c.success() } }
 internal object DeferredSync { fun request(c: PlatformCall, a: String, o: JSONObject) { c.success() } }
+internal object ForegroundTasks { fun request(c: PlatformCall, a: String, o: JSONObject) { c.success() } }
+internal object NativeGestures {
+  fun request(c: PlatformCall, a: String, o: JSONObject) { c.success() }
+  fun invalidate(window: oro.runtime.window.Window) {}
+}
+class NativeStateException(val code: String) : Exception(code)
 internal object NativeExtensions { fun request(c: PlatformCall, a: String, o: JSONObject) { c.success() } }
 internal object NativeNotifications { fun request(c: PlatformCall, a: String, o: JSONObject) { c.success() } }
+internal object NativePush { fun request(c: PlatformCall, a: String, o: JSONObject) { c.success() } }
 
 private class Fixture {
   val app = App()
@@ -130,3 +137,5 @@ fun main () {
   check((field.get(PlatformOperations) as java.util.concurrent.ScheduledThreadPoolExecutor).queue.isEmpty())
   println("credential return ordering, cancellation, ownership, timeout and validation checks passed")
 }
+
+internal object NativeWorkflows { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }

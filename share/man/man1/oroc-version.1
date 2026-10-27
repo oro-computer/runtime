@@ -11,17 +11,20 @@ oroc version <new\-version | release> [options]
 Inspect or bump the project version defined in your configuration file.
 .SH OPTIONS
 .TP
-\fB\-\-config=<path>\fR
+\fB\-C, \-\-config=<path>\fR
 explicit oro.toml/oro.ini to update
 .TP
 \fB\-\-preid=<id>\fR
 pre\-release identifier for pre* / prerelease bumps (default: "rc")
 .TP
-\fB\-\-verbose, \-V\fR
+\fB\-V, \-\-verbose\fR
 enable verbose output
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .IP \(bu 2
 With no arguments, 'version' prints the current semantic version from the [meta] section.

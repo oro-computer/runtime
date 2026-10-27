@@ -33,7 +33,7 @@ internal class ApplicationBackNavigation (private val activity: WindowManagerAct
       }?.window === window
 
   fun request (call: PlatformCall, action: String, options: JSONObject) {
-    val window = call.foreground()
+    val window = if (action == "disable") call.document() else call.foreground()
     when (action) {
       "enable" -> {
         require(options.length() == 0)

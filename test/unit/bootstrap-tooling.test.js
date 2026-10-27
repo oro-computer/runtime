@@ -726,7 +726,7 @@ test('runtime library rebuilds first-party objects after header changes', () => 
   )
   assert.match(
     script,
-    /archive_inputs="\$\(printf '%s\\n' "\$\{objects\[@\]\}"\)"[\s\S]*cat "\$archive_inputs_file"[\s\S]*build_static=1[\s\S]*printf '%s\\n' "\$archive_inputs" > "\$archive_inputs_file"/,
+    /archive_inputs="\$\(printf '%s\\n' "\$\{objects\[@\]\}" "\$\{runtime_metadata_cflags\[@\]\}"\)"[\s\S]*cat "\$archive_inputs_file"[\s\S]*build_static=1[\s\S]*printf '%s\\n' "\$archive_inputs" > "\$archive_inputs_file"/,
     'the static archive should be rebuilt when its selected object surface changes'
   )
 })
@@ -1322,7 +1322,7 @@ test('Windows runtime builds avoid incompatible headers and archives', () => {
   }
   assert.match(
     cli,
-    /auto compiler = trim\(env::get\("CXX"\)\);[\s\S]*compiler\.front\(\) == '"'[\s\S]*compiler = compiler\.substr\(1, compiler\.size\(\) - 2\);[\s\S]*const auto compilerCommand = platform\.win[\s\S]*String\("[\\]""\) \+ compiler \+ "[\\]""[\s\S]*compileCommand[\s\S]*<< compilerCommand[\s\S]*ORO_RUNTIME_VERSION_HASH=.*VERSION_HASH_STRING;/,
+    /auto compiler = trim\(env::get\("CXX"\)\);[\s\S]*compiler\.front\(\) == '"'[\s\S]*compiler = compiler\.substr\(1, compiler\.size\(\) - 2\);[\s\S]*const auto compilerCommand = platform\.win[\s\S]*String\("[\\]""\) \+ compiler \+ "[\\]""[\s\S]*ORO_RUNTIME_VERSION_HASH=.*VERSION_HASH_STRING;[\s\S]*compileCommand\s*<< compilerCommand[\s\S]*<< definitions\.str\(\);/,
     'Windows builds should quote only the compiler path, not the entire command'
   )
   assert.match(
@@ -2783,18 +2783,23 @@ test('Android bootstrap separates build packages from emulator packages', () => 
   )
 
   const buildPackages = bootstrap.match(
-    /SDK_OPTIONS=""([\s\S]*?)local yes=/
+    /local -a sdk_packages=\(\)([\s\S]*?)local yes=/
   )?.[1]
   assert.ok(buildPackages, 'Android build package selection should exist')
   assert.match(
     buildPackages,
-    /cmdline-tools;\$ANDROID_COMMAND_LINE_TOOLS_PACKAGE_VERSION[\s\S]*ndk;\$NDK_VERSION[\s\S]*platforms;android-\$ANDROID_SDK_PLATFORM[\s\S]*build-tools;\$ANDROID_BUILD_TOOLS_VERSION/,
+    /ndk;\$NDK_VERSION[\s\S]*platforms;android-\$ANDROID_SDK_PLATFORM[\s\S]*build-tools;\$ANDROID_BUILD_TOOLS_VERSION/,
     'source builds should install only the pinned build SDK packages'
   )
   assert.doesNotMatch(
     buildPackages,
     /system-images|"emulator"/,
     'source builds should not install test-only emulator packages'
+  )
+  assert.match(
+    bootstrap,
+    /missing_sdk_packages\[@\].* > 0[\s\S]*sdkmanager_version[\s\S]*missing_sdk_packages=\("cmdline-tools;\$ANDROID_COMMAND_LINE_TOOLS_PACKAGE_VERSION"/,
+    'command-line tools should be upgraded only while provisioning missing build packages'
   )
 
   for (const source of [generatedGradle, cliTemplates]) {

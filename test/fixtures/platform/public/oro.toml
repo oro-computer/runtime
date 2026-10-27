@@ -1,0 +1,12 @@
+[meta]
+bundle_identifier = "oro.runtime.qualification.platform"
+title = "Public platform check"
+version = "1.0.0"
+
+[build]
+name = "runtime_platform_check"
+output = ".cache/out"
+copy_map = "copy-map.toml"
+
+[webview]
+require_ready = true

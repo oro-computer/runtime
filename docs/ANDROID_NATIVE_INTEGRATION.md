@@ -1,9 +1,15 @@
 # Android native integration
 
-Use the standard runtime Activity and a compiled `NativeExtension` for product
-behavior. Oro owns document cancellation, Android navigation, scheduling,
-transport, encryption and notification presentation. Your extension owns account
-authorization, server enrollment, payload interpretation and product policy.
+Use the standard runtime Activity and JavaScript APIs for runtime features.
+[Declarative workflows](DECLARATIVE_WORKFLOWS.md) provide bounded background
+reads, push hints, encrypted checkpoints and notifications without application
+Kotlin, C++, JNI, receiver classes or service implementations. Use a compiled
+`NativeExtension` only for custom protocols or behavior outside the supported
+runtime features. Missing platform backends belong in the runtime.
+
+Oro owns document cancellation, Android navigation, scheduling, transport,
+encryption and notification presentation. The application owns account
+authorization, server enrollment, schema mapping and product policy.
 
 These APIs are additive to Android bridge protocol 5. Rebuild and distribute
 the CLI, native sources and JavaScript API together. Inspect
@@ -11,17 +17,64 @@ the CLI, native sources and JavaScript API together. Inspect
 before offering the corresponding workflow. Capability support does not prove
 server enrollment, OS execution or delivery.
 
+Native-only transactional records and conditional coordination, plus explicit
+user-started `oro:foreground` execution, are documented in
+[Native state and foreground execution](ANDROID_NATIVE_STATE.md). They provide
+shared local atomicity and execution plumbing; application authorization,
+protocol receipts and migration decisions remain application code.
+
 | Requirement | Runtime API | Application supplies |
 | --- | --- | --- |
 | Modal/router Back | `oro:window/back.setHandler()` | Which modal, drawer or route consumes Back |
-| Recurring catch-up | `oro:background/deferred.enqueue()` with `intervalMs` | Compiled read executor and fresh authorization |
+| Recurring catch-up | `oro:background/deferred.enqueue()` with `intervalMs` | Bundled workflow, or custom executor for an unsupported protocol; fresh authorization |
 | Revocation/cleanup | `enqueueMaintenance()` | Explicit retry-safe native executor and durable reconciliation |
-| Encrypted push | `oro:push` and `NativePushHandler` | Authenticated server enrollment, account binding and payload policy |
+| Encrypted push | `oro:push` and `NativePushHandler` | Authenticated server enrollment, account binding and bundled workflow/payload policy |
 | Notification presentation | `oro:notification` / `NativeNotifications` | Severity, channels, public text, groups and authorized destinations |
 | Saved credentials | `oro:authentication`, `oro:credentials`, `oro:secure-storage` | Record formats, account context and historical migration |
 | Appearance/layout | `setSystemAppearance()` and `webview.text_zoom` | Theme choice, one inset owner and responsive application layouts |
+| Styled startup | Current window's `markPresented()`, then `markReady()` | Inline styled startup UI, inert application controls and usable-screen readiness |
+
+## Startup presentation and readiness
+
+With `[webview] require_ready = true`, Android initially covers the WebView with
+native loading UI. Once your bundled document has installed its inline startup
+styles and screen, call `(await application.getCurrentWindow()).markPresented()`.
+The runtime waits for a native WebView visual-state fence before removing that
+cover. This call does not mark the application ready, extend the 30-second startup
+deadline, enable fullscreen, or request focus for a hidden window.
+
+Keep unfinished application controls inert and announce progress accessibly.
+Call `markReady()` only after essential styles and a usable screen are ready.
+Until then, a timeout or load failure restores native recovery and its Reload
+control. New navigation covers the new document again. Missing/corrupt package
+assets, renderer loss and a WebView that cannot produce a frame retain native
+recovery. Android's initial system launch splash is unchanged.
+
+Presentation requires the current verified bundled HTTPS document, its live
+native document token and the top-level bridge. Foreign approved origins,
+subframes, headless windows, replaced renderers and stale requests cannot dismiss
+the cover. Other platforms reject with `ENOSYS`. Gate adoption on
+`nativeStartupPresentation` in the awaited `oro:diagnostics/runtime.getCapabilities()` result and rebuild
+both native archives and the application; copying JavaScript or Kotlin alone
+does not add the native IPC route. Qualify first frames, delayed/failed assets,
+explicit reload, both themes, large text and keyboard/TalkBack focus on devices.
 
 ## Configuration
+
+Products with C++ policy can use [compiled callbacks and cold startup](#compiled-c-callbacks-and-cold-startup)
+without an application Kotlin adapter. [Scoped push recovery](#scoped-push-recovery-from-compiled-policy)
+provides native-only discovery and conditional cleanup after product authorization
+and explicit user consent.
+
+For Kotlin editor diagnostics, hover and navigation against original application
+sources, use [Oro Language Server](LANGUAGE_SERVER.md). It documents `oro.toml`
+project-root selection, server program overrides, Coc/VS Code setup and
+`oroc tooling kotlin --prepare` for Android dependencies.
+
+For foreground service status icons, configure `[foreground] notification_icon`
+as a packaged drawable resource. See the [foreground configuration example and
+icon rules](ANDROID_NATIVE_STATE.md#public-notification-artwork). This resource belongs
+to the application; the shared controller owns service admission and lifecycle.
 
 Paths below are relative to the application project root (`.`):
 
@@ -53,6 +106,29 @@ Do not select a Service Worker mode merely to use these native contracts.
 
 ## Application Back
 
+`oro:window/appearance.setGestureExclusion(regions)` requests Android 10+ edge
+priority for a small visible handle in the current trusted top-level foreground
+document. A region is `{ edge: 'left' | 'right', top, height }`, with top/height
+fractions of the native WebView client height. Map the visible handle after
+layout; do not assume CSS pixels equal native pixels or apply text scaling again.
+The strip is at most 24dp wide and a quarter of the view. At most four regions
+share a 200dp combined-height limit per edge, additionally capped at half the
+view height. Oversized requests reject without replacing the current request.
+Mandatory system gestures are clipped out. Android retains final admission;
+`active` means a current view request, not guaranteed OS acceptance. See
+[Android gesture navigation](https://developer.android.com/develop/ui/views/touch-and-input/gestures/gesturenav).
+
+Pass `[]` to clear. Native navigation, hiding, pause, focus loss, detachment,
+geometry/configuration change or document replacement clears the request and
+its listeners. It does not return automatically on resume. Only reapply after
+layout for a visible handle. This API owns the WebView's exclusion list; do not
+mix it with custom native writes to that same list. Drawer design, swipe/scroll
+arbitration, animation, accessibility and reduced motion remain app code. Keep
+a reachable button and preserve system Back outside the handle. Other platforms
+return ENOSYS; nonempty requests below Android 10 return ENOTSUP. Regression
+coverage uses `test/unit/android-gesture-exclusion.test.js`; real edge arbitration
+still requires Android navigation-mode/device qualification.
+
 ```js
 import { setHandler } from 'oro:window/back'
 
@@ -80,6 +156,11 @@ in a replacement document. An AbortSignal can remove the handler; the returned
 removal function is idempotent. `backgesture` remains the progress/cancel signal
 for predictive gesture presentation. Handling commit does not change the app's
 responsibility for gesture animation or reduced-motion accessibility.
+
+Removal is permitted for the same live trusted document after its window is
+hidden or its Activity pauses. Enabling a handler and responding to Back still
+require foreground ownership. A stale document cannot remove a replacement
+document's registration; cleanup does not relax prompt or credential guards.
 
 A custom Activity's own Back callback can intercept the gesture before Oro sees
 it. Retire that callback or delegate to the runtime dispatcher before adopting
@@ -172,6 +253,89 @@ contract, not server idempotency supplied by the runtime. General queued writes
 remain unavailable.
 
 ## UnifiedPush enrollment and native delivery
+
+For a local development transport, run `oroc push server`. The CLI downloads a
+pinned, SHA-256-verified ntfy release and starts it in the foreground at
+`http://127.0.0.1:8787`. Tools and the twelve-hour message cache live in the user's
+writable Oro data directory, outside the SDK. `--data-dir` selects an isolated
+workspace; `--offline` requires the verified cached release, and
+`--ntfy-bin=/path/to/ntfy` uses an explicitly supplied executable. Node.js 22 or
+later is required. Stop it with Ctrl-C.
+Automatic server installation supports Linux x64/arm64 and Windows x64. The
+upstream macOS release is client-only; on macOS, pass a server-enabled ntfy
+development build through `--ntfy-bin` as described in the
+[upstream installation notes](https://docs.ntfy.sh/install/#macos).
+
+For an Android device, use the Oro Kotlin development distributor or an existing
+[ntfy distributor](https://unifiedpush.org/users/distributors/). Both connect to
+the same server and use the standard `oro:push` distributor selection flow.
+To build and optionally install Oro Push Dev:
+
+```sh
+oroc push distributor --server=https://push.dev.example:8787 \
+  --ca-cert=./dev-ca.pem --install --device=emulator-5554
+```
+
+The command uses the normal Android Gradle toolchain, built-in Kotlin support,
+and an installed SDK platform 34 or newer. `--offline` requires cached build
+dependencies. It retains a development signing key in writable user state so
+updates preserve registrations. `--ca-cert` embeds only public certificates and
+adds trust only inside this development APK; hostname verification remains
+enabled. Open **Oro Push Dev**, review the HTTPS server and tap **Save and start**.
+The distributor appears in `unifiedpush://link` only after it is configured.
+Stop its connection explicitly from its settings when finished.
+
+Oro Push Dev uses a visible foreground service, reconnects after socket/network
+loss, retains ciphertext and the receive cursor atomically, retries delivery
+until the receiving app acknowledges it, and binds the app's foreground-raise
+service before broadcasting. It validates registration caller identity and
+binds each token to the app's UID and signing certificate. Its private inbox is
+bounded to 256 ciphertexts of at most 4096 bytes; 32 registrations and 512 recent
+acknowledgement identities are retained. Intake pauses when the inbox is full.
+It does not decrypt application payloads. Endpoint URLs contain 160 random bits.
+Changing the server or resetting registrations unregisters the affected apps.
+
+An enabled service requests restart after process loss or boot when Android
+permits it. Force-stop requires reopening the distributor; a force-stopped
+receiving app must also be reopened. A foreground service does not guarantee
+delivery through Doze, network outages or device-vendor battery policies.
+Reboot/Doze and distributor selection still need qualification on the intended
+Android versions. This APK is for local development, not a production push
+service. Application native handlers and authenticated backend enrollment are
+still required; `oro:push` APIs and existing ntfy distributor support are unchanged.
+
+Configure the selected distributor with a reachable HTTPS origin. For example:
+
+```sh
+oroc push server --host=0.0.0.0 --port=8787 \
+  --base-url=https://push.dev.example:8787 \
+  --cert-file=./cert.pem --key-file=./key.pem
+```
+
+Use a certificate trusted by the distributor, with the correct host/IP subject
+alternative name. Alternatively, keep the default loopback HTTP listener behind
+a local HTTPS reverse proxy and pass its origin as `--base-url`. LAN binding
+requires an explicit HTTPS base URL; it does not configure DNS, firewall rules,
+certificate trust or a reverse proxy. The host-only HTTP check does not qualify
+Android delivery. Oro continues to require HTTPS push endpoints.
+Both the distributor and the application server sending Web Push must reach and
+trust the published HTTPS origin. Configure the sender's CA trust separately from
+`--ca-cert`. The fixture's adb loopback mapping assumes the sender runs on the
+adb host; a downstream sender needs a shared LAN address or DNS name.
+
+This server allows anonymous development topic access. Use public test data on a
+private development network. It uses its own configuration, strips inherited
+`NTFY_*` overrides and configures no Firebase or upstream relay. A second server
+should use a different `--data-dir` and port. See `oroc push server --help` for all
+options and the [ntfy server documentation](https://docs.ntfy.sh/config/) for the
+underlying transport. The cached release archive retains ntfy's license notices.
+
+Local transport still needs an application server to authenticate the user,
+enroll endpoint/key material and send RFC 8291 encrypted messages. Register the
+native handler below before requesting a subscription. An HTTP publish response
+establishes server acceptance; verify receipt and durable processing separately
+in the application. The CLI server does not establish account authorization,
+trusted backend enrollment, reboot/Doze delivery or notification display.
 
 Register a `NativePushHandler` through `NativePush.registerHandler("product.events",
 handler)` from the extension's `onCreate`. Implement:
@@ -281,3 +445,203 @@ migrations pass. Runtime APIs do not migrate another implementation's stores.
 Remove duplicate system-font-scale hooks after verifying `systemTextScaling`,
 and keep exactly one native/CSS inset owner. Product assets, IAM, server grant
 formats, alarm severity, target routing and group-summary policy remain app-owned.
+
+
+For user-started native work, see [native state and foreground execution](./ANDROID_NATIVE_STATE.md).
+Finite `oro:foreground` dataSync and continuous `oro:foreground/continuous`
+specialUse work have separate compiled-executor registries, execution slots and
+service declarations. Configure them in the project's `oro.toml`; the guide
+covers project-root resolution, public notification/Stop, cancellation, process
+loss, authorization boundaries and service-retirement acceptance.
+
+## Compiled C++ callbacks and cold startup
+
+Keep `oro.toml` at the project root. The opt-in C++ facade uses the same Android
+foreground, continuous, deferred, push and extension controllers as Kotlin:
+
+```toml
+[android.native]
+callbacks_enabled = true
+callback_sources = "native/startup.cc native/product-policy.cc"
+initializers = "initialize_product_native"
+```
+
+These paths are relative to the project root. The CLI rejects absolute paths,
+traversal, symlink escapes, duplicate sources and malformed initializer names.
+Each source compiles as a separate translation unit, preserving local includes
+and anonymous namespaces. At most 16 sources and 16 initializer names are
+accepted. This is separate from the older `[android] native_sources` setting.
+The CLI captures source bytes and recursively referenced quoted project headers
+into the JNI input inventory before compiling. Use quoted includes for project
+headers; SDK/toolchain includes retain their ordinary include paths. Source and
+local-header edits require rebuilding the APK.
+
+```cpp
+#include "runtime/native/android_platform.hh"
+
+extern "C" void initialize_product_native(oro::runtime::Runtime* runtime) {
+  using namespace oro::runtime::native;
+  const auto backend = AndroidPlatform::fromRuntime(*runtime);
+  backend->registerExecution(CallbackType::Continuous, "product.monitor", authorizeProductMonitor);
+  backend->registerExecution(CallbackType::DeferredRead, "product.reconcile", authorizeProductRead);
+  backend->registerExecution(CallbackType::Maintenance, "product.cleanup", authorizeProductCleanup, {"cleanup", "revoke"}, true);
+  backend->registerPush("product.alert", productPushHandler);
+  backend->registerExtension("product.settings", productSettingsHandler);
+}
+```
+
+The example refers to application-provided functions and handlers. Initializers
+register compiled code only; they must not open accounts, start work or perform
+network operations. The `Runtime*` is opaque to this public facade. It does not
+require internal Runtime headers or a custom Activity/Application. Initialization
+runs once per Application process, before native receiver/job dispatch, including
+cold starts. Registrations then freeze. Duplicate Kotlin/C++ registrations fail
+startup; do not install both implementations for the same kind during handover.
+
+`CallbackRegistry::Authorizer` resolves the exact task identity and returns an
+owned `CallbackExecution`, or null for refusal. Its `run` observes the supplied
+`ExecutionCancellation`; its destructor releases native credentials/connections.
+It must recheck current server authorization and establish the remote outcome.
+Deferred maintenance permits only registered cleanup/revoke operations with an
+explicit retry-safety assertion. Push authorization runs with cancellation, and
+message/enrollment handlers still establish their own trust and authorization.
+Extension payloads/results are bounded JSON text; exceptions expose only fixed
+codes. Raw exception messages never become extension responses.
+
+Android continues to own service admission, notifications, deadlines and worker
+capacity. The shared native registry additionally bounds active handles to 64,
+requires authorization before execution and refuses a second run of an invocation.
+Cancelling signals an owned callback; it never destroys code/resources that are
+still executing. Uncooperative work retains its worker until it and cleanup
+return. Activity/WebView backgrounding does not shut down native service callbacks.
+Actual runtime destruction cancels and drains them before releasing runtime
+resources. Callbacks own their non-UI connections; renderer-facing runtime services
+may pause and must not be treated as independent background connections.
+
+`AndroidPlatform::openRecords("product.name", identity)` supplies the shared C++
+v2 encrypted/CAS store and coordinator primitives. It uses Application-owned
+no-backup storage and Android Keystore wrapping, without an Activity or WebView.
+Returned stores refuse key access after facade shutdown/drain. This is distinct
+from Kotlin v1 `NativeRecords`; migration must preserve original ciphertext and
+aliases and use an explicit authenticated handover. No implicit conversion or
+missing-key regeneration occurs. Native build identity advertises
+`nativeCallbacksProtocol: 1` and `nativeRecordsProtocol: 2`; the adapter refuses
+an older native library when C++ callbacks are enabled. Rebuild the CLI, SDK and
+both native ABIs together before adoption.
+
+The `product.` prefix is mandatory for `AndroidPlatform::openRecords` and
+`LinuxPlatform::openRecords`. Other prefixes return `EINVAL`. The entire name,
+including that prefix, must match `[a-z][a-z0-9_.-]{0,63}`. For example,
+`product.credentials` is valid; `credentials` and `public.credentials` are not.
+This facade restriction is separate from the lower-level `RecordStore` naming
+rules. It does not grant access to an older Kotlin namespace or migrate it.
+
+`withApplication(callback)` supplies a scoped `JNIEnv*` and Application context
+only during an owned callback or its cleanup. It rejects unrelated threads with
+`EACCES`. Never retain either local reference or use an Activity. This supports
+calling an existing runtime Kotlin API during an explicit native product
+migration; it does not perform that migration or establish account trust.
+
+Record scopes include the installed bundle ID. Provider names and record names
+select storage inside that application identity; they do not grant another
+bundle access to these records.
+
+## Scoped push recovery from compiled policy
+
+Android and Linux facades expose `discoverPushRegistrations(scope)` and
+`unregisterPushIfCurrent(scope, id, revision)` to compiled native code. Android's
+Kotlin `NativePush` exposes equivalent native-only methods. There is no general
+renderer/diagnostic enumeration route.
+
+A `PushRecoveryScope` requires exact authority, account and handler kind; it
+cannot enumerate every account. Invoke it only after the product authenticates
+the current account and obtains explicit recovery consent. Discovery returns at
+most 16 records containing only `id`, `kind`, `phase` and an opaque `revision`.
+It returns no endpoint, transport token, encryption/enrollment keys, grants or
+account/target references. It does not reset a lost product registry or destroy
+its historical originals. Legacy runtime records acquire separate revision
+metadata without rewriting their encrypted registration values.
+
+Conditional cleanup atomically verifies that scope and revision still match.
+Renewal, endpoint/lifecycle changes, enrollment updates and ID reuse invalidate
+old snapshots (`EAGAIN`). An already absent ID returns false. Local delivery and
+retained inbox entries stop before the distributor is notified; a later transport
+failure returns `EUNKNOWN` and does not restore local delivery. Server grant
+revocation and reconciliation remain product/backend responsibilities. Discovery
+fails if the original native registry key is unavailable; do not create new keys
+or reset storage to make discovery succeed.
+
+The isolated public fixture is in `test/fixtures/android-runtime/callbacks`.
+Portable registry and compiled Kotlin recovery regressions are in
+`test/unit/native-callbacks.test.js` and `test/unit/native-push-recovery.test.js`.
+Software/host tests do not qualify OS service admission or physical key hardware.
+
+Product adoption tests can retire a shim for registry discovery and revision
+fencing. They do not retire account consent, authenticated server enrollment,
+historical migration, revocation reconciliation or push payload authorization.
+Linux discovery runs in compiled host policy, not a GUI-side remote-host client.
+
+## Unreadable push journal recovery
+
+`AndroidPlatform::inspectPushJournalRecovery()` and
+`quarantineUnreadablePushJournal(consent)` are installation-wide native policy
+operations. `LinuxPlatform` exposes the same methods in its compiled host. They
+address an unreadable runtime transport journal, independently of a lost product
+registry. They are not exposed as renderer enumeration or reset routes.
+
+Inspection returns only `revision`, `reason`, `readable` and `recoverable`. It
+does not provision a key or return endpoints, grants, tokens or decrypted values.
+Recoverable reasons are `missing-key`, `invalidated-key`, `ciphertext-corrupt`,
+`journal-format` and `uncertain-write`. Provider unavailability and a readable
+journal cannot be quarantined. An unavailable/corrupt recovery selector fails
+closed; the runtime does not infer an earlier journal or replace its keys.
+
+Before calling quarantine, the application must obtain explicit consent covering
+**every account's local push delivery in this installation**. An authenticated
+single-account cleanup must instead use scoped discovery/conditional cleanup.
+Both `installationScopeConfirmed` and
+`archiveAndStopLocalDeliveryConfirmed` must be true. Pass the inspected
+`expectedRevision` and a persisted, opaque `recoveryId` (1–128 ASCII letters,
+digits, `_` or `-`). Keep that ID and revision for retries:
+
+```cpp
+const auto inspected = backend->inspectPushJournalRecovery();
+// Set these flags only after the product's explicit installation-wide consent.
+PushJournalConsent consent{inspected.revision, persistedRecoveryId,
+                           installationScopeConfirmed,
+                           archiveAndStopLocalDeliveryConfirmed};
+const auto receipt = backend->quarantineUnreadablePushJournal(consent);
+```
+
+Quarantine copies the bounded encrypted snapshot into a private SQLite archive
+and selects a fresh journal in the same durable transaction. It preserves the
+original files and key aliases. Android captures the raw preference XML and
+backup without asking SharedPreferences to repair malformed originals; after a
+failed preference commit it also captures cached ciphertext. Fresh state has no
+registrations, distributor selection or keys until explicitly configured again.
+Old queued work is fenced by its journal identity. Running work is cancelled and
+returns `EBUSY`; switching waits until it actually exits. An uncooperative handler
+therefore keeps recovery busy. A stale inspection returns `EAGAIN`.
+
+A receipt contains `recoveryId`, the selected `epoch`, and `changed`. Retrying the
+same ID/revision after a committed switch returns `changed: false` and preserves
+later fresh registrations. Reusing that receipt after a subsequent switch returns
+`EAGAIN`. `EUNKNOWN` means the commit outcome requires reconciliation with the
+same ID/revision; do not choose a new recovery ID on that error. The runtime never
+prunes archives: at most 16 snapshots of 4 MiB each are accepted (`ENOSPC` beyond
+those bounds). Recovery-control loss, whole-container corruption and removal of
+the application installation remain separate support cases.
+
+This operation sends **no remote unregister** and confirms **no server
+revocation**. Private transport tokens may be unrecoverable; access may remain
+until a server lease expires. The application/backend owns fresh authorization,
+revocation reconciliation and explicit enrollment for each account. Do not import
+old grants or claim that historical deliveries/transfers completed.
+
+Android requires matching CLI/SDK/native archives advertising
+`nativePushJournalRecoveryProtocol: 1`. The public fault-injection fixture is
+`test/fixtures/android-runtime/push-journal`; its driver records exact APK/device
+scope. Host coverage is in `test/unit/native-push-journal.test.js` and
+`test/unit/android-push-journal.test.js`. Linux adapter acceptance is
+`test/scripts/test-native-push-journal-linux.js`. These checks use public data
+and do not prove deployed distributor/backend recovery or historical upgrades.

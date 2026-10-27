@@ -9,7 +9,7 @@ const compiler = ['clang++', 'c++'].find(command =>
   spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0)
 const source = readFileSync(new URL('../../src/cli/main.cc', import.meta.url), 'utf8')
 const start = source.indexOf('      // Generate the wrapper without evaluating')
-const end = source.indexOf('      fs::copy(prefixPath("src/init.cc")', start)
+const end = source.indexOf('      copyWritableFile(prefixPath("src/init.cc")', start)
 const shellQuote = source.match(/inline String shellQuote \(const String& value\) \{[\s\S]*?\n\}/)?.[0]
 assert.ok(start >= 0 && end > start && shellQuote)
 
@@ -17,6 +17,7 @@ test('Android wrapper generation isolates stale plugins and upgrades existing wr
   skip: process.platform === 'win32' || !compiler ? 'Requires a POSIX C++ compiler' : false
 }, () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'oro-gradle-bootstrap-'))
+  writeFileSync(path.join(directory, 'package.json'), '{"type":"commonjs"}\n')
   const output = path.join(directory, "android project's output")
   const gradleHome = path.join(directory, "Gradle installation's home")
   mkdirSync(path.join(gradleHome, 'bin'), { recursive: true })

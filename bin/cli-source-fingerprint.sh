@@ -19,11 +19,15 @@ cli_digest() {
 }
 
 {
-  for cli_input in "$cli_source_root"/src/cli/*; do
-    case "$cli_input" in
-      *.cc|*.hh)
-        printf '%s:%s\n' "${cli_input#"$cli_source_root"/}" "$(cli_digest "$cli_input")"
-        ;;
-    esac
-  done
+  while IFS= read -r cli_input; do
+    if [[ ! -f "$cli_input" ]]; then
+      printf >&2 'Missing CLI distribution input: %s\n' "$cli_input"
+      exit 1
+    fi
+    printf '%s:%s\n' "${cli_input#"$cli_source_root"/}" "$(cli_digest "$cli_input")"
+  done < <({ find "$cli_source_root/src/cli/" -type f \( \
+    -name '*.cc' -o -name '*.hh' -o -name '*.cjs' -o -name '*.kt' -o \
+    -name '*.xml' -o -name '*.gradle' -o -name '*.java' \) -print
+    printf '%s\n' "$cli_source_root/bin/functions.sh" "$cli_source_root/bin/android-functions.sh" "$cli_source_root/bin/runtime-artifacts.sh"
+  } | sort)
 } | cli_digest

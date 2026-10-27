@@ -1,0 +1,37 @@
+.TH OROC-TOOLING 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-tooling \- Export and prepare editor compilation models.
+.SH SYNOPSIS
+.nf
+oroc tooling <command> [options]
+.fi
+.SH DESCRIPTION
+.PP
+Export and prepare editor compilation models.
+.SH COMMANDS
+.TP
+\fBkotlin\fR
+export or prepare a Kotlin model
+.TP
+\fBcpp\fR
+export C\-family compiler commands
+.TP
+\fBtypescript\fR
+export web sources and Oro SDK typings
+.TP
+\fBswift\fR
+export commands and prepare Swift modules
+.TP
+\fBdoctor\fR
+inspect editor setup and model freshness
+.SH OPTIONS
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Use 'oroc tooling <command> \-\-help' for model export and preparation options.
+.PP
+Tooling models are JSON. Doctor defaults to readable text and also accepts \-\-json.
+.SH SEE ALSO
+oroc(1)

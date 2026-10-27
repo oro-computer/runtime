@@ -16,16 +16,25 @@ emit structured search results for automation and editor tooling
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-With no query, this subcommand prints the top\-level CLI help. Exact command matches print the full subcommand page (for example, 'oroc help build' or 'oroc help update validate'). Free\-form queries search command names, descriptions, options, notes, and examples, then rank the closest matches. Use this for discovery topics such as 'oroc help tls', 'oroc help ios signing', 'oroc help json logs', or 'oroc help agent tooling'. 'oroc help \-\-json <query>' returns a machine\-readable result list with ranked matches and exact\-help payloads.
+With no query, this subcommand prints the top\-level CLI help.
+.PP
+Exact command matches print concise command help (for example, 'oroc help build' or 'oroc help update validate').
+.PP
+Free\-form queries search command names, descriptions, options, notes, and examples, then rank the closest matches.
+.PP
+Use this for discovery topics such as 'oroc help tls', 'oroc help ios signing', 'oroc help json logs', or 'oroc help agent tooling'. 'oroc help \-\-json <query>' returns a machine\-readable result list with ranked matches and exact\-help payloads.
 .SH EXAMPLES
 .TP
 \fBoroc help build\fR
-print the full help page for the build command
+print usage and options for the build command
 .TP
 \fBoroc help update validate\fR
-print the full help page for the nested update validate command
+print usage and options for the nested update validate command
 .TP
 \fBoroc help ios signing\fR
 search for commands and notes related to iOS signing and provisioning

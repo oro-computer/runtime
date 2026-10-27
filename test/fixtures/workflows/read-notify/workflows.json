@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "workflows": [
+    {
+      "id": "public-read",
+      "request": {
+        "url": "https://example.invalid/public/alerts",
+        "timeoutMs": 5000,
+        "maximumResponseBytes": 65536,
+        "cursorParameter": "after",
+        "pollIntervalMs": 5000
+      },
+      "response": {
+        "items": "/alerts",
+        "eventId": "/id",
+        "checks": [
+          {
+            "pointer": "/accountRef",
+            "equalsRef": "accountRef"
+          },
+          {
+            "pointer": "/targetRef",
+            "equalsRef": "targetRef"
+          }
+        ],
+        "cursor": "/cursor"
+      },
+      "notification": {
+        "title": "/title",
+        "body": "/body",
+        "channel": "public.workflow",
+        "publicVersion": {
+          "title": "Public workflow check",
+          "body": "Public test data"
+        }
+      },
+      "channels": [
+        {
+          "id": "public.workflow",
+          "name": "Public workflow checks",
+          "importance": "low",
+          "sound": "none"
+        }
+      ]
+    },
+    {
+      "id": "public-authorized",
+      "request": {
+        "url": "https://example.invalid/public/alerts",
+        "timeoutMs": 5000,
+        "maximumResponseBytes": 65536,
+        "cursorParameter": "after",
+        "pollIntervalMs": 5000
+      },
+      "authentication": {
+        "type": "bearer",
+        "key": "public-workflow-bearer"
+      },
+      "response": {
+        "items": "/alerts",
+        "eventId": "/id",
+        "checks": [
+          {
+            "pointer": "/accountRef",
+            "equalsRef": "accountRef"
+          },
+          {
+            "pointer": "/targetRef",
+            "equalsRef": "targetRef"
+          }
+        ],
+        "cursor": "/cursor"
+      },
+      "notification": {
+        "title": "/title",
+        "body": "/body",
+        "channel": "public.workflow",
+        "publicVersion": {
+          "title": "Public workflow check",
+          "body": "Public test data"
+        }
+      },
+      "channels": [
+        {
+          "id": "public.workflow",
+          "name": "Public workflow checks",
+          "importance": "low",
+          "sound": "none"
+        }
+      ]
+    },
+    {
+      "id": "public-self-hosted",
+      "request": {
+        "timeoutMs": 5000,
+        "maximumResponseBytes": 65536,
+        "cursorParameter": "after",
+        "pollIntervalMs": 5000,
+        "authority": "approved",
+        "path": "/public/alerts"
+      },
+      "authentication": {
+        "type": "bearer",
+        "key": "public-workflow-bearer"
+      },
+      "response": {
+        "items": "/alerts",
+        "eventId": "/id",
+        "checks": [
+          {
+            "pointer": "/accountRef",
+            "equalsRef": "accountRef"
+          },
+          {
+            "pointer": "/targetRef",
+            "equalsRef": "targetRef"
+          }
+        ],
+        "cursor": "/cursor"
+      },
+      "notification": {
+        "title": "/title",
+        "body": "/body",
+        "channel": "public.workflow",
+        "publicVersion": {
+          "title": "Public workflow check",
+          "body": "Public test data"
+        }
+      },
+      "channels": [
+        {
+          "id": "public.workflow",
+          "name": "Public workflow checks",
+          "importance": "low",
+          "sound": "none"
+        }
+      ]
+    }
+  ]
+}

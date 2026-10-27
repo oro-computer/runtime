@@ -6,6 +6,90 @@ a patch release.
 
 ## [Unreleased]
 
+### Added
+
+- Expose platform extension requests and backend support discovery through
+  `oro:platform`.
+- Add authentication-bound encryption and signing keys, explicit password-provider
+  selection, and document-owned cancellation with bounded native requests.
+- Add Android finite and continuous foreground execution, deferred native work,
+  and bundled declarative read/checkpoint/notification workflows with bounded
+  retry. Applications retain server authorization, enrollment and outcome
+  reconciliation responsibilities; these APIs do not run arbitrary background
+  JavaScript.
+- Add allowlisted historical protected imports, retained Android components,
+  provenance-checked selection between AES and native-record histories, and an
+  explicit bridge build before generated-adapter adoption. Originals and
+  uncertain outcomes are preserved.
+- Add native encrypted records, compare-and-swap updates and durable operation
+  coordination. The shared C++ v2 format is separate from Android Kotlin v1;
+  migration is explicit.
+- Add UnifiedPush development tools through `oroc push server` and
+  `oroc push distributor`, including Oro development distributors and support
+  for existing distributors such as ntfy. Add bounded push journals, recovery
+  inspection and native notification/response correlation.
+- Add native launcher destinations, persisted document-provider grants,
+  notification/channel inspection, Back handling and bounded Android system
+  gesture exclusion.
+- Add Linux native execution, scheduling, UnifiedPush D-Bus integration, desktop
+  actions, explicit Secret Service password selection and protected-key providers
+  for TPM2 and hardware PKCS#11.
+- Add project-aware language-server tooling rooted at `oro.toml`, backend process
+  lifecycle and cancellation handling, editor qualification and a VS Code client.
+- Document that deprecation requires an API from a previous published release;
+  unreleased API experiments are renamed or removed directly.
+
+### Fixed
+
+- Correct Android full-view rotation and managed-window attachment, apply OS text
+  scaling without duplicate application hooks, and strengthen Activity, focus,
+  keyboard, inset and renderer-recovery handling.
+- Retain work submitted to paused native loops until resume, prevent Linux GLib
+  pumping from bypassing the pause, preserve UDP handles/endpoints across repeated
+  pause/resume, and restart TCP readers that were active before pause. Forward
+  Linux lifecycle changes to the compiled WebKit extension's filesystem runtime.
+- Preserve request ownership through cancellation and document/process changes,
+  settle native worker callbacks on the correct thread, and stream IPC responses
+  before producers finish.
+- Share fail-closed TLS pin and authority checks with native unattended HTTPS
+  reads; reject missing keys, malformed state and stale generations without
+  silently replacing retained data.
+- Support read-only SDK inputs with writable application staging and per-user
+  CLI configuration. Bind compiled CLI/templates and Android API/source inputs
+  to distribution metadata, including correctly quoted source fingerprints.
+- Harden Windows Unicode window handling, CRT selection and native archive
+  consumer linkage.
+
+### Build and release
+
+- Publish Linux source-development SDKs as immutable, verified generations with
+  atomic activation, active-command leases, rollback retention and automatic
+  collection of unused generations and interrupted staging. This local linking
+  path remains separate from npm registry publication.
+- Verify exact npm tarballs, read-only installations, first-run configuration,
+  consumer builds and editor backends without using workspace API symlinks.
+- Require native backend, Android Kotlin/JVM and language-server regression
+  workflows through the reusable release source gate. Release tags always run
+  validation even if their commit also belongs to an open pull request.
+- Install checksum-pinned JVM test fixtures in CI so Android storage, migration,
+  lifecycle, trust and cancellation checks execute instead of silently skipping.
+- Keep native test source paths intact in copied desktop projects, explicitly
+  expose the strict lifecycle flag, and run the pause/resume checks under the
+  intended root-level lifecycle configuration.
+- Stop npm staging on copy failures and avoid copying read-only Android library
+  directories twice.
+
+### Platform scope
+
+The new high-level workflow and historical migration executors are Android-only.
+Their Linux, macOS, iOS/iPadOS and Windows backends remain unimplemented and
+report unavailable support or `ENOSYS`. Lower-level shared storage or native
+Linux services do not imply those executors are available. Other new backend
+limits and required runtime probes are documented in
+[Native platform parity](docs/NATIVE_PLATFORM_PARITY.md) and each JavaScript
+module's JSDoc. Public fixture and host coverage does not establish production
+signing, private historical data, OEM behavior or complete device qualification.
+
 ## [0.1.8] - 2026-10-20
 
 ### Fixed

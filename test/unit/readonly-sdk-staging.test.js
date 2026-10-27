@@ -12,7 +12,7 @@ test('SDK API/header/archive staging leaves read-only inputs intact and produces
   skip: !compiler || process.platform === 'win32' ? 'Requires a POSIX C++ compiler and permissions' : false
 }, () => {
   const source = readFileSync(new URL('../../src/cli/main.cc', import.meta.url), 'utf8')
-  const start = source.indexOf('static void copyWritableTree (')
+  const start = source.indexOf('static void copyWritableFile (')
   const end = source.indexOf('\nvoid initializeEnvFile (', start)
   assert.ok(start >= 0 && end > start)
   const directory = mkdtempSync(path.join(tmpdir(), 'oro-readonly-staging-'))
@@ -52,6 +52,11 @@ test('SDK API/header/archive staging leaves read-only inputs intact and produces
       fs::permissions("generated/api/nested", fs::perms::owner_read | fs::perms::owner_exec);
       copyWritableTree("sdk", "generated/api", true);
       assert((fs::status("generated/api/nested/api.js").permissions() & fs::perms::owner_write) != fs::perms::none);
+      copyWritableFile("sdk/nested/api.js", "generated/jni/init.cc");
+      fs::permissions("generated/jni/init.cc", fs::perms::owner_read);
+      copyWritableFile("sdk/nested/api.js", "generated/jni/init.cc");
+      assert((fs::status("generated/jni/init.cc").permissions() & fs::perms::owner_write) != fs::perms::none);
+      assert((fs::status("sdk/nested/api.js").permissions() & fs::perms::owner_write) == fs::perms::none);
       bool rejected = false;
       try { copyWritableTree("sdk", "sdk/nested/output"); } catch (const std::runtime_error&) { rejected = true; }
       assert(rejected && !fs::exists("sdk/nested/output"));

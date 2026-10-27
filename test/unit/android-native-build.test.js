@@ -45,6 +45,7 @@ exit "\${NDK_PROBE_STATUS:-0}"
       auto app_mk = _main / "jni" / "Application.mk";
       auto jniLibs = _main / "jniLibs";
       String androidNativePlatform = "android-26";
+      String compilerCacheLauncher;
       ${nativeBuild}
     }
   `)

@@ -14,6 +14,10 @@
 #include "../json.hh"
 #include "../url.hh"
 #include "../scheme.hh"
+#include "../native_support.hh"
+#if ORO_RUNTIME_PLATFORM_LINUX
+#include "../native/desktop_back.hh"
+#endif
 #include "../core/services/usb.hh"
 #include "../core/services/bluetooth.hh"
 #include "../core/services/dbus.hh"
@@ -560,6 +564,26 @@ static inline void replyConduitAware (
   if (!trySendResultOverConduit(router, result)) {
     reply(std::move(result));
   }
+}
+
+
+// Call on the Activity thread, immediately before changing native window state.
+static bool rejectUnavailableWindowActivity (
+  const SharedPointer<App>& app,
+  const Message& message,
+  const Router::ReplyCallback& reply
+) {
+#if ORO_RUNTIME_PLATFORM_ANDROID
+  if (!app->runtime.windowManager.canMutateWindows()) {
+    reply(Result::Err { message, JSON::Object::Entries {
+      {"type", "InvalidStateError"},
+      {"code", "ENOTREADY"},
+      {"message", "Window changes require a live Activity with unsaved state"}
+    }});
+    return true;
+  }
+#endif
+  return false;
 }
 
 static JSON::Any validateMessageParameters (
@@ -8614,6 +8638,33 @@ static void mapIPCRoutes (Router *router) {
   #endif
   });
 
+  router->map("runtime.platform.support", [](auto message, auto router, auto reply) {
+    const auto requested = message.get("feature");
+    const auto platform = native::currentPlatform();
+    if (!requested.empty() && !native::knownFeature(requested)) {
+      return reply(Result::Err { message, JSON::Object::Entries {
+        {"code", "EINVAL"}, {"message", "Unknown native feature"}
+      }});
+    }
+    const auto describe = [platform](std::string_view feature) {
+      const auto support = native::describe(platform, feature);
+      const auto implementation = support.implementation == native::Implementation::Implemented
+        ? "implemented" : support.implementation == native::Implementation::Restricted ? "restricted" : "missing";
+      return JSON::Object(JSON::Object::Entries {
+        {"schema", 1}, {"platform", String(native::platformName(platform))},
+        {"feature", String(feature)}, {"implementation", implementation},
+        {"backend", String(support.backend)}, {"reason", String(support.reason)},
+        {"requiresRuntimeCheck", support.implementation == native::Implementation::Implemented}
+      });
+    };
+    if (!requested.empty()) return reply(Result::Data { message, describe(requested) });
+    JSON::Object features;
+    for (const auto feature : native::features) features[String(feature)] = describe(feature);
+    return reply(Result::Data { message, JSON::Object::Entries {
+      {"schema", 1}, {"platform", String(native::platformName(platform))}, {"features", features}
+    }});
+  });
+
   router->map("runtime.platform", [](auto message, auto router, auto reply) {
   #if ORO_RUNTIME_PLATFORM_ANDROID
     const auto app = App::sharedApplication();
@@ -8625,10 +8676,20 @@ static void mapIPCRoutes (Router *router) {
     if (!app || !app->runtime.android.self || message.index < 0 || id.empty() || id.size() > 80 ||
         options.size() > 196608 || action.empty() || action.size() > 64 || documentToken.size() > 32 ||
         (feature != "authentication" && feature != "launcher" && feature != "deferred" && feature != "cancel" &&
-         feature != "credentials" && feature != "notifications" && feature != "extension" && feature != "back" && feature != "push")) {
+         feature != "credentials" && feature != "notifications" && feature != "extension" && feature != "back" &&
+         feature != "push" && feature != "startup" && feature != "foreground" && feature != "gestures" &&
+         feature != "workflows")) {
       return reply(Result::Err { message, JSON::Object::Entries {
         {"code", "EINVAL"}, {"message", "Invalid native platform operation"}
       }});
+    }
+    if (feature == "startup" || feature == "gestures") {
+      const auto owner = app->runtime.windowManager.getWindowForBridge(&router->bridge);
+      if (!owner || owner->index != message.index || message.get("runtime-frame-type") != "top-level") {
+        return reply(Result::Err { message, JSON::Object::Entries {
+          {"code", "EACCES"}, {"message", "Native presentation requires its top-level application document"}
+        }});
+      }
     }
     const auto token = nextPlatformOperation.fetch_add(1);
     {
@@ -8667,6 +8728,73 @@ static void mapIPCRoutes (Router *router) {
     env->ExceptionClear();
     env->PopLocalFrame(nullptr);
     if (failed) finishPlatformOperation(token, "{\"err\":{\"code\":\"EIO\",\"message\":\"Native platform unavailable\"}}");
+  #elif ORO_RUNTIME_PLATFORM_LINUX
+    const auto bridge = router->bridge.shared_from_this();
+    const auto owner = bridge->getRuntime()->windowManager.getWindowForBridge(bridge.get());
+    const auto feature = message.get("feature");
+    const auto action = message.get("action");
+    const auto id = message.get("id");
+    const auto document = message.get("documentToken");
+    const auto source = message.get("options", "{}");
+    const auto reject = [&](const String& code) {
+      reply(Result::Err { message, JSON::Object::Entries {{"code", code}, {"message", "Native platform request rejected"}} });
+    };
+    if (!owner || owner->index != message.index || !owner->webview || !owner->window ||
+        message.get("runtime-frame-type") != "top-level" || document.empty() ||
+        document != bridge->nativeDocumentToken || id.empty() || id.size() > 80 || source.size() > 196608) {
+      return reject("ABORT_ERR");
+    }
+    const auto currentUri = webkit_web_view_get_uri(owner->webview);
+    const url::URL location(currentUri ? currentUri : "");
+    const auto bundle = bridge->getRuntime()->userConfig.find("meta_bundle_identifier");
+    if (bundle == bridge->getRuntime()->userConfig.end() || location.scheme != "oro" ||
+        string::toLowerCase(location.hostname) != string::toLowerCase(bundle->second)) return reject("EACCES");
+    const auto backend = bridge->getRuntime()->services.platform.nativeLinux();
+    const auto prefix = std::to_string(bridge->client.id) + ":" + document + ":";
+    JSON::Object options;
+    try {
+      const auto parsed = JSON::parse(source);
+      if (parsed.type != JSON::Type::Object) return reject("EINVAL");
+      options = parsed.template as<JSON::Object>();
+    } catch (...) { return reject("EINVAL"); }
+    if (feature == "cancel" && action == "cancel") {
+      if (!options.has("id") || options.get("id").type != JSON::Type::String) return reject("EINVAL");
+      try { backend->cancelRequest(prefix + options.get("id").template as<JSON::String>().value());
+      } catch (const native::StateError& error) { return reject(error.code);
+      } catch (...) { return reject("EIO"); }
+      return reply(Result::Data { message, nullptr });
+    }
+    const bool support = action == "support" || action == "continuous.support" ||
+      (action == "status" && (feature == "authentication" || feature == "credentials" || feature == "launcher"));
+    if (!support && (!gtk_widget_get_visible(owner->window) || !gtk_window_is_active(GTK_WINDOW(owner->window)))) {
+      return reject("ENOTREADY");
+    }
+    if (owner->options.headless) return reject("EACCES");
+    if (feature == "back") {
+      try { return reply(Result::Data { message, native::DesktopBack::request(*owner, action, options) });
+      } catch (const native::StateError& error) { return reject(error.code);
+      } catch (...) { return reject("EIO"); }
+    }
+    const auto generation = bridge->nativeDocumentGeneration.load();
+    const auto weak = bridge->weak_from_this();
+    const auto key = prefix + id;
+    try {
+      backend->request(key, feature, action, options, [weak, message, reply, document, generation, support](auto value, auto error) {
+        if (const auto bridge = weak.lock()) bridge->dispatch([weak, message, reply, document, generation, support, value, error] {
+          const auto bridge = weak.lock();
+          if (!bridge) return;
+          const auto owner = bridge->getRuntime()->windowManager.getWindowForBridge(bridge.get());
+          if (!owner || !owner->webview || !owner->window || document != bridge->nativeDocumentToken ||
+              bridge->nativeDocumentGeneration.load() != generation ||
+              (!support && (!gtk_widget_get_visible(owner->window) || !gtk_window_is_active(GTK_WINDOW(owner->window))))) {
+            return reply(Result::Err { message, JSON::Object::Entries {{"code", "ABORT_ERR"}, {"message", "Native document ownership changed"}} });
+          }
+          if (!error.empty()) return reply(Result::Err { message, JSON::Object::Entries {{"code", error}, {"message", "Native operation did not complete"}} });
+          reply(Result::Data { message, value });
+        });
+      }, GTK_WINDOW(owner->window));
+    } catch (const native::StateError& error) { reject(error.code);
+    } catch (...) { reject("EIO"); }
   #else
     reply(Result::Err { message, JSON::Object::Entries {
       {"code", "ENOSYS"}, {"message", "Native platform operations are available only on Android"}
@@ -8958,9 +9086,15 @@ static void mapIPCRoutes (Router *router) {
     const auto json = android::StringWrap(attachment.env, result).str();
     attachment.env->DeleteLocalRef(result);
     reply(Result::Data { message, JSON::parse(json) });
+  #elif ORO_RUNTIME_PLATFORM_LINUX
+    auto& service = router->bridge.getRuntime()->services.networkStatus;
+    if (!service.enabled) return reply(Result::Err { message, JSON::Object::Entries {
+      {"code", "ENOSYS"}, {"message", "Network status monitoring is disabled"}
+    }});
+    reply(Result::Data { message, service.snapshot() });
   #else
     reply(Result::Err { message, JSON::Object::Entries {
-      {"code", "ENOSYS"}, {"message", "Detailed network status is available only on Android"}
+      {"code", "ENOSYS"}, {"message", "Detailed network status is unavailable on this platform"}
     }});
   #endif
   });
@@ -12734,6 +12868,7 @@ static void mapIPCRoutes (Router *router) {
 
     auto data = window->json();
     app->dispatch([=]() mutable {
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
       app->runtime.windowManager.destroyWindow(targetWindowIndex);
       data["status"] = window::Manager::WindowStatus::WINDOW_CLOSED;
       reply(Result::Data { message, data });
@@ -12920,6 +13055,7 @@ static void mapIPCRoutes (Router *router) {
         options.features.useGlobalNodeJS = false;
       }
 
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
       auto createdWindow = app->runtime.windowManager.createWindow(options);
       if (createdWindow != nullptr) {
         if (message.has("title")) {
@@ -13091,6 +13227,7 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
       auto options = window->options;
       if (options.userConfig["build_headless"] != "true") {
         window->hide();
@@ -13132,6 +13269,7 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
       window->focus();
       reply(Result::Data { message, window->json() });
     });
@@ -13170,6 +13308,7 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
       window->blur();
       reply(Result::Data { message, window->json() });
     });
@@ -13209,6 +13348,7 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
       auto options = window->options;
       if (options.userConfig["build_headless"] != "true") {
       #if ORO_RUNTIME_PLATFORM_DESKTOP
@@ -13258,6 +13398,7 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
     #if ORO_RUNTIME_PLATFORM_DESKTOP
       window->minimize();
     #else
@@ -13350,6 +13491,7 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
     #if ORO_RUNTIME_PLATFORM_DESKTOP
       window->restore();
     #else
@@ -14942,6 +15084,7 @@ static void mapIPCRoutes (Router *router) {
     }
 
     app->dispatch([=]() {
+      if (rejectUnavailableWindowActivity(app, message, reply)) return;
       auto options = window->options;
       if (options.userConfig["build_headless"] != "true") {
         window->show();

@@ -1783,7 +1783,7 @@ export * from '{{url}}'
           url.search = request->query;
 
           const auto moduleImportProxy = tmpl(
-            String(reinterpret_cast<const char*>(resource.read())).find("export default") != String::npos
+            resource.str().find("export default") != String::npos
               ? ESM_IMPORT_PROXY_TEMPLATE_WITH_DEFAULT_EXPORT
               : ESM_IMPORT_PROXY_TEMPLATE_WITHOUT_DEFAULT_EXPORT,
             Map<String, String> {
@@ -1924,7 +1924,7 @@ export * from '{{url}}'
           url.pathname = contentLocation;
           url.search = request->query;
           const auto moduleImportProxy = tmpl(
-            String(reinterpret_cast<const char*>(resource.read())).find("export default") != String::npos
+            resource.str().find("export default") != String::npos
               ? ESM_IMPORT_PROXY_TEMPLATE_WITH_DEFAULT_EXPORT
               : ESM_IMPORT_PROXY_TEMPLATE_WITHOUT_DEFAULT_EXPORT,
             Map<String, String> {

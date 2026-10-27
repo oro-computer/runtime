@@ -11,6 +11,66 @@ using oro::runtime::process::exec;
 #endif
 
 namespace oro::runtime::core::services {
+  Platform::~Platform () { this->stop(); }
+
+  bool Platform::start () {
+#if ORO_RUNTIME_PLATFORM_LINUX
+    std::lock_guard lock(this->nativeMutex);
+    if (this->linuxPlatform) {
+      try { this->linuxPlatform->restart(); } catch (...) { return false; }
+    }
+#endif
+    return true;
+  }
+
+  bool Platform::stop () {
+#if ORO_RUNTIME_PLATFORM_LINUX
+    std::shared_ptr<native::LinuxPlatform> backend;
+    {
+      std::lock_guard lock(this->nativeMutex);
+      backend = this->linuxPlatform;
+    }
+    if (backend) {
+      try { backend->shutdown(); } catch (...) { return false; }
+    }
+#endif
+    return true;
+  }
+
+#if ORO_RUNTIME_PLATFORM_LINUX
+  std::shared_ptr<native::LinuxPlatform> Platform::nativeLinux () {
+    std::lock_guard lock(this->nativeMutex);
+    if (!this->linuxPlatform) this->linuxPlatform = std::make_shared<native::LinuxPlatform>(*this);
+    return this->linuxPlatform;
+  }
+#endif
+
+#if ORO_RUNTIME_PLATFORM_ANDROID
+  std::shared_ptr<native::AndroidPlatform> Platform::nativeAndroid () {
+    // The runtime owns callback storage through Application lifetime, including Activity pauses.
+    std::lock_guard lock(this->nativeMutex);
+    if (!this->androidPlatform)
+      this->androidPlatform = std::make_shared<native::AndroidPlatform>(*this->context.getRuntime());
+    return this->androidPlatform;
+  }
+  bool Platform::shutdownNativeCallbacks () {
+    std::shared_ptr<native::AndroidPlatform> backend;
+    {
+      std::lock_guard lock(this->nativeMutex);
+      backend = this->androidPlatform;
+    }
+    if (backend) {
+      try {
+        backend->shutdown();
+        backend->drain();
+      } catch (...) {
+        return false;
+      }
+    }
+    return true;
+  }
+#endif
+
   void Platform::event (
     const String& seq,
     const String& event,

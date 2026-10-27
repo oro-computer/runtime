@@ -21,9 +21,18 @@ enable verbose output
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-With no dependency name, prints the full version map for the CLI, runtime, and linked libraries. Passing a dependency name filters to a single entry (for example: oro, oroc, uv, sqlite, iroh). Use '\-\-json' or '\-\-format=json' when you need stable machine\-readable output on stdout. Use '\-\-log\-file=<path>' if you also need logs; the global 'oroc \-\-json ...' form is reserved for JSON log streaming.
+With no dependency name, prints the full version map for the CLI, runtime, and linked libraries.
+.PP
+Passing a dependency name filters to a single entry (for example: oro, oroc, uv, sqlite, iroh).
+.PP
+Use '\-\-json' or '\-\-format=json' when you need stable machine\-readable output on stdout.
+.PP
+Use '\-\-log\-file=<path>' if you also need logs; the global 'oroc \-\-json ...' form is reserved for JSON log streaming.
 .SH EXAMPLES
 .TP
 \fBoroc versions\fR

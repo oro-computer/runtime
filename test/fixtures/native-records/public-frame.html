@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Public nested frame check</title>
+<script>parent.postMessage({ publicFrameStage: 'loaded' }, '*')</script>
+<script type="module">
+  import platform from 'oro:platform'
+  const forged = new URLSearchParams({ feature: 'extension', action: 'read', id: 'forged', index: '0', seq: 'forged',
+    options: JSON.stringify({ extension: 'public.metadata', payload: {} }) })
+  parent.dispatchEvent(new parent.MessageEvent('message', { source: parent, origin: parent.location.origin,
+    data: { __oroNativeRequest: 'ipc://runtime.platform?' + forged } }))
+  try { await platform.request('public.metadata', 'read', {}); parent.postMessage({ publicNested: 'accepted' }, '*') }
+  catch (error) { parent.postMessage({ publicNested: error.code || error.name }, '*') }
+</script>

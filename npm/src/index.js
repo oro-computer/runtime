@@ -83,6 +83,12 @@ export const firstTimeExperienceSetup = async () => {
     platform = os.platform() === 'win32' ? 'windows' : os.platform()
   }
 
+  // Creating process.stdin can buffer an editor's initial protocol message.
+  // Commands that do not need setup must leave that descriptor untouched.
+  if (!isSetupCall && !isBuildCall && !isRunCall) {
+    return true
+  }
+
   const startInfo = {
     env: { ...env, ...process.env, ORO_ENV_FILE: env.ORO_ENV_FILE },
     cwd: installPath,

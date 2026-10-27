@@ -1,8 +1,15 @@
 /**
  * @module authentication
- * Android 11+ authentication-gated Keystore operations. Enable
- * `[permissions] allow_biometrics = true`. User authentication authorizes one
- * cryptographic operation; account authority must still be verified by a server.
+ * Authentication-gated Android 11+ Keystore and Linux hardware PKCS#11 operations.
+ * Enable `[permissions] allow_biometrics = true`. Linux supports explicit
+ * `biometric-or-device` policy through a provider PIN or protected device path;
+ * this does not attest biometrics or use the desktop login password. Defaults
+ * remain biometric-only and reject on Linux. Account authority still requires
+ * server verification. See the Linux native integration guide for provider setup.
+ * iOS/iPadOS, macOS and Windows backends for this API are not implemented.
+ * `getStatus()` reports unavailable with platform/implementation/reason metadata;
+ * operational calls reject ENOSYS. Hardware, enrollment and provider-policy
+ * failures are separate admission errors and must not be reported as success.
  */
 import { Buffer } from './buffer.js'
 import request from './internal/platform-request.js'
@@ -12,7 +19,7 @@ import request from './internal/platform-request.js'
  */
 /**
  * @typedef {object} AuthenticationOptions
- * @property {AuthenticationPolicy} [policy='biometric'] Strong biometric, optionally device credential fallback. The fallback policy does not invalidate on biometric enrollment changes.
+ * @property {AuthenticationPolicy} [policy='biometric'] Strong biometric; Android optionally allows device credentials. Linux requires explicit biometric-or-device and a key-provider PIN/protected path. That policy does not invalidate on biometric enrollment changes.
  * @property {AbortSignal} [signal] Aborting, navigation, renderer loss or backgrounding cancels the prompt.
  */
 /**
@@ -28,17 +35,33 @@ import request from './internal/platform-request.js'
  * @property {AuthenticationPolicy} policy
  * @property {string} iv Base64 AES-GCM IV.
  * @property {string} ciphertext Base64 ciphertext and authentication tag. Store this sealed record, not plaintext.
+ * @property {string} [wrappedKey] Linux schema 2: RSA-OAEP-SHA256 wrapped ephemeral AES key. Preserve the whole record.
+ * @property {string} [binding] Linux schema 2: application, key and provider binding.
+ * @property {number} [wrappingKeyBits] Linux schema 2: hardware RSA key size. Records are platform-specific.
  */
 /**
  * @typedef {object} AuthenticationStatus
- * @property {boolean} supported Android API 30+.
+ * @property {string} [platform] Present on an unavailable cross-platform support result.
+ * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform restriction; not a permission denial.
+ * @property {string} [reason] Stable unavailable reason.
+ * @property {boolean} supported Platform implements this policy; Android requires API 30+.
  * @property {boolean} enabled Explicit capability and manifest permission.
  * @property {boolean} canAuthenticate Current enrollment/hardware/policy result, not authenticated identity.
  * @property {number} statusCode Native BiometricManager result or -1 when unavailable.
  * @property {AuthenticationPolicy} policy
  * @property {boolean} cryptographicOperationsOnly
+ * @property {number} [historicalMigrationProtocol] 1 when the Android historical migration endpoints are compiled in; query oro:migration.getSupport for project configuration.
  * @property {boolean} serverVerificationRequired
  * @property {boolean} busy At most one native prompt per process.
+ * @property {boolean} [biometricOnlySupported] Linux reports false; a provider PIN is not biometric attestation.
+ * @property {string} [credentialType] Linux reports key-provider-pin, including providers with a protected authentication path.
+ * @property {string[]} [providers] Available Linux provider families: tpm2 or pkcs11. Discovery does not authenticate.
+ * @property {string} [providerPreference] Linux auto preference is tpm2-then-hardware-pkcs11. Saved keys never switch providers automatically.
+ * @property {boolean} [hardwareAttestationProvided] Linux reports false; trusted modules declare hardware slot support.
+ * @property {boolean} [signingAvailable] Provider advertises supported signing mechanisms; actual key policy is checked at use.
+ * @property {boolean} [sealingAvailable] Provider advertises supported wrapping mechanisms; actual key policy is checked at use.
+ * @property {number} [newWrappingKeyBits] Configured RSA size for newly created Linux secret keys.
+ * @property {string} [providerStatusCode] Stable native discovery error when no eligible Linux provider is available.
  */
 /**
  * @typedef {ProtectedKeyOptions & { authority: string, accountRef: string, challenge: string, expiresAt: number }} ChallengeOptions
@@ -66,12 +89,14 @@ function parameters (options) {
 
 /**
  * Reads policy/enrollment availability without prompting or creating keys.
- * Other platforms reject with ENOSYS.
+ * Missing or platform-restricted backends return unavailable status; operational calls still reject with ENOSYS.
  * @param {AuthenticationOptions} [options]
  * @returns {Promise<AuthenticationStatus>}
  */
 export async function getStatus (options = {}) {
-  return request('authentication', 'status', { policy: options.policy ?? 'biometric' }, options.signal)
+  const policy = options.policy ?? 'biometric'
+  if (!['biometric', 'biometric-or-device'].includes(policy)) throw new TypeError('Unsupported authentication policy')
+  return request('authentication', 'status', { policy }, options.signal)
 }
 
 /**
@@ -90,8 +115,10 @@ export async function seal (value, options) {
 }
 
 /**
- * Decrypts only through a user-authenticated native Cipher operation. Returns
- * bytes; decoding or restoring an application session remains app-owned.
+ * Decrypts through an Android authenticated Cipher or Linux authenticated hardware
+ * unwrap followed by native AES-GCM. Linux ephemeral AES keys exist briefly in
+ * native memory and are erased after use; long-lived private keys stay in the
+ * provider. Returns bytes; application session recovery remains app-owned.
  * @param {ProtectedSecret} sealed
  * @param {ProtectedKeyOptions} options
  * @returns {Promise<Uint8Array>}

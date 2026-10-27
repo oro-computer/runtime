@@ -192,6 +192,8 @@ Returns the current window index
 
 
 Creates a new window and returns an instance of ApplicationWindow.
+Android rejects with `ENOTREADY` after Activity state is saved or while the
+Activity is unavailable. Retry the intended creation after application resume.
 | Argument | Type | Default | Optional | Description |
 | :---     | :--- | :---:   | :---:    | :---        |
 | opts | object |  | false | an options object |
@@ -2742,6 +2744,61 @@ Converts this `Path` instance to a string.
 | Not specified | string |  |
 
 
+# platform
+
+Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fplatform
+
+Inspects platform backend availability and calls explicitly
+configured compiled Android and Linux extensions through document-owned IPC. No
+JavaScript module or executable path is loaded natively.
+Compiled extension request backends for iOS/iPadOS, macOS and Windows are not
+implemented and reject ENOSYS. `getSupport(feature)` returns the native inventory's
+missing/restricted reason; an implemented descriptor is not OS/hardware or
+deployment qualification. Shared encrypted-record support is a separate API.
+## `request(extension, action, payload, options)`
+
+
+Invokes a narrowly named native operation with a JSON object payload. Requests
+require a foreground interactive document, expire after 90 seconds and share
+native capacity limits. Results are limited to 512 KiB. The extension must
+implement its own feature authorization; trusted origin is not server IAM.
+Unregistered extensions and unimplemented platforms reject with ENOSYS.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| extension | string |  | false | Configured extension name. |
+| action | string |  | false | Operation name. |
+| payload | object |  | true |  |
+| options | PlatformRequestOptions |  | true |  |
+
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<any> |  |
+
+## `getCapabilities()`
+
+
+Reads the compiled backend inventory on every platform without prompting,
+loading extensions or accessing saved data. An implemented backend is not
+proof of hardware, OS admission, current permission or device qualification.
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<PlatformCapabilities> |  |
+
+## `getSupport(feature)`
+
+
+Reads one compiled native feature descriptor without prompting. Query the
+feature's own support/status API before starting an operation. Missing and
+OS-restricted features are separate results; operational calls still reject.
+| Argument | Type | Default | Optional | Description |
+| :---     | :--- | :---:   | :---:    | :---        |
+| feature | PlatformFeature |  | false |  |
+
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<PlatformFeatureSupport> |  |
+
+
 # process
 
 Web docs: https://oro.computer/runtime/docs/?p=javascript%2Fprocess
@@ -3500,6 +3557,7 @@ Get the status of the window
 
 
 Close the window
+Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 | Return Value | Type | Description |
 | :---         | :--- | :---        |
 | Not specified | Promise<object> | the options of the window |
@@ -3508,6 +3566,7 @@ Close the window
 
 
 Shows the window
+Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 | Return Value | Type | Description |
 | :---         | :--- | :---        |
 | Not specified | Promise<ipc.Result> |  |
@@ -3516,6 +3575,7 @@ Shows the window
 
 
 Hides the window
+Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 | Return Value | Type | Description |
 | :---         | :--- | :---        |
 | Not specified | Promise<ipc.Result> |  |
@@ -3625,9 +3685,24 @@ Opens the Web Inspector for the window (desktop only).
 
 Acknowledges that this window has a usable application screen. Call after
 mounting the UI and loading required styles. Android apps configured with
-`[webview] require_ready = true` retain native startup recovery until this
+`[webview] require_ready = true` keep native startup recovery armed until this
 acknowledgement. Only the current window can acknowledge its own readiness.
 This does not replay operations or establish application authorization.
+| Return Value | Type | Description |
+| :---         | :--- | :---        |
+| Not specified | Promise<void> |  |
+
+### `markPresented()`
+
+
+Reveals this Android window's verified bundled startup screen after a native
+visual-state fence. Call after installing its inline styles and startup UI.
+This does not acknowledge application readiness or stop the 30-second native
+watchdog. Keep application controls inert until the usable screen calls
+markReady(). Failed startup restores native recovery and its Reload control.
+Requires the current trusted top-level document; foreign origins, headless
+windows and stale documents cannot reveal a startup screen. Other platforms
+reject with ENOSYS. Hidden windows do not gain focus from this call.
 | Return Value | Type | Description |
 | :---         | :--- | :---        |
 | Not specified | Promise<void> |  |

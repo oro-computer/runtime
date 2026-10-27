@@ -1,6 +1,31 @@
 # Native Android qualification fixtures
 
 The native integration guide is [Android native integration](../../../docs/ANDROID_NATIVE_INTEGRATION.md).
+
+The separate Kotlin UnifiedPush connector fixture is
+[`android-push-distributor`](../android-push-distributor). Build it with
+`node test/scripts/build-push-distributor-fixture.js --output=/path/to/public-check.apk`
+after exporting the normal `ANDROID_HOME`, `JAVA_HOME` and `GRADLE_HOME` settings.
+It compiles the runtime's unchanged `PushCryptography` with public test data.
+No private key is returned in its host-readable result file.
+
+`node test/scripts/test-push-distributor.js` qualifies an explicitly selected
+`ANDROID_SERIAL` using `ORO_TEST_DISTRIBUTOR_APK`, `ORO_TEST_PUSH_CONNECTOR_APK`,
+`ORO_TEST_PUSH_CA`, `ORO_TEST_PUSH_ORIGIN` (default `https://127.0.0.1:18881`) and
+optional `ORO_TEST_PUSH_REPORT`. Start the local CLI server with that certificate
+and build Oro Push Dev with the matching `--server` and `--ca-cert`. The runner
+installs only `dev.oro.push` and `dev.oro.push.qualification`, enables the public
+distributor settings with signed test instrumentation, and removes its own adb
+reverse mapping when finished. `ORO_TEST_PUSH_DEBUG_SETUP=1` provides a narrower
+transport-only mode without activity transitions. That mode explicitly leaves
+settings interaction, link selection and uninstrumented service startup unverified.
+Use an isolated test device/emulator: changing the distributor's configured
+server resets its development registrations. The receiving fixture's APK and
+results remain available for review. This check covers real selection identity,
+two registrations, RFC 8291 delivery, ACK rejection, explicit reopen after
+force-stop and unregistration. It does not qualify reboot, Doze, vendor battery
+policies, a production native handler or authenticated backend enrollment.
+
 `deferred/Periodic.kt` adds recurring-read and restricted maintenance cases to
 the deterministic deferred fixture. The host Back and RFC 8291 interoperability
 regressions are `test/unit/android-back-handling.test.js` and
@@ -10,6 +35,22 @@ These regressions do not qualify OS periodic timing, real distributor delivery,
 Keystore recovery, cold receiver startup or main-app navigation. Those require
 an isolated Android app and the intended device/provider matrix. Automated
 suites remain subject to the workspace's execution restrictions.
+
+`extensions/WindowQualification.kt` observes only an isolated public package's
+native window sizes, text zoom, focus, lifecycle and Android `FrameMetrics`.
+Configure `WindowQualificationExtension` and its DUMP-protected receiver only
+in a package beginning `oro.runtime.qualification.`. The fixed `WINDOWS.SNAPSHOT`,
+`WINDOWS.RESET_METRICS` and `WINDOWS.RECREATE` action suffixes use the
+`oro.runtime.qualification.` prefix. Draw observations are bounded to 128 and
+frame samples to 2,048. They contain no page text, input values or URLs.
+`WINDOWS.PORTRAIT`, `WINDOWS.LANDSCAPE` and `WINDOWS.RELEASE_ORIENTATION` change
+only this fixture Activity's requested orientation; release it after the check.
+Snapshots include native client location and registered gesture-exclusion
+rectangles. Those rectangles prove view registration, not OS gesture acceptance.
+The first observed draw after instrumentation attaches does not prove the
+earliest displayed pixel. Native Window metrics include loading/recovery UI;
+measure warmed idle and interaction phases separately. This fixture does not
+establish application performance budgets or production leak/soak acceptance.
 
 `DocumentsProvider.kt` supplies fixed public test content for an isolated
 qualification APK. It is excluded from the production CLI source catalog and
@@ -194,3 +235,89 @@ scale and resolved system zoom. It does not create a WebView. This can check
 the compiled policy even when an emulator's plain WebView control cannot start;
 first-frame rendering, configuration callbacks, duplicate CSS scaling and
 assistive behavior still require the interactive window matrix.
+
+`extensions/StateQualification.kt` exercises native encrypted records and
+coordination in an isolated `oro.runtime.qualification.` package. Its receiver
+must be protected by `android.permission.DUMP`. The fixed
+`oro.runtime.qualification.STATE.` prefix supports `RUN`, `SEED`, `RECOVER`,
+`FOREGROUND` and `STOP`. `RUN` uses only this fixture's public scopes, injects a
+failed SQLite write, temporarily corrupts and restores its own ciphertext,
+deletes one public fixture key and explicitly resets only that identity. `SEED`,
+followed by stopping only this package's process and invoking `RECOVER`, checks
+durable executing/unknown outcomes without replay. `FOREGROUND` returns public
+executor counters and redacted task statuses; `STOP` sends this app's actual
+generation-bound notification PendingIntent. Enable `[foreground] enabled = true`
+and notifications only in the isolated APK for the foreground checks. Neither
+the extension nor its receiver belongs in a production source catalog/manifest.
+
+`test/unit/android-native-state.test.js` compiles the production records,
+coordinator and foreground controller with the host fixtures in `state/`.
+Provide `kotlinc` and `java` on PATH, and set `ORO_KOTLIN_STDLIB`,
+`ORO_TEST_JSON_JAR`, `ORO_TEST_SQLITE_JAR` (Xerial SQLite JDBC) and
+`ORO_TEST_SLF4J_JAR` (SLF4J API) to existing local JARs. The tests never download
+dependencies. They use real SQLite transactions and AES-GCM, with a host-only
+fake Keystore and foreground-service OS facade. Separate JVMs test process
+restart. Host tests do not establish Android admission, hardware key protection,
+notification presentation, OS scheduling, reboot or device durability; qualify
+those on Android against the exact APK and paired SDK inputs. The native
+contracts and application adoption requirements are in
+[native state and foreground execution](../../../docs/ANDROID_NATIVE_STATE.md).
+
+`test/unit/android-gesture-exclusion.test.js` compiles production `gestures.kt`
+with the host facades in `gestures/`. It checks bounds, mandatory-region clipping,
+ownership loss, stale documents, rejected replacement and listener removal.
+It requires Kotlin/JVM, `ORO_KOTLIN_STDLIB` and `ORO_TEST_JSON_JAR`. Real Android
+edge arbitration needs an isolated app, the actual OS gesture-navigation mode
+and public touch counters. Verify the handle receives an edge swipe while Back
+still works outside it. Also check pause, hide, rotation, recreation and renderer
+loss without returning stale exclusions. Do not use private screens for input.
+
+### Continuous foreground fixture
+
+Build `continuous/oro.toml` with a paired SDK that includes
+`oro:foreground/continuous`. From the repository root:
+
+```sh
+oroc build --platform android --config ./test/fixtures/android-runtime/continuous/oro.toml
+adb -s "$ANDROID_SERIAL" install -r ./test/fixtures/android-runtime/continuous/build/android/app/build/outputs/apk/dev/debug/app-dev-debug.apk
+ANDROID_SERIAL="$ANDROID_SERIAL" \
+ORO_TEST_CONTINUOUS_APK=./test/fixtures/android-runtime/continuous/build/android/app/build/outputs/apk/dev/debug/app-dev-debug.apk \
+ORO_TEST_CONTINUOUS_REPORT=/tmp/oro-continuous-report.json \
+node test/scripts/test-continuous-foreground.js
+```
+
+Use a dedicated, unlocked, explicitly selected Android test device. The runner
+checks installed APK bytes before granting that public fixture notification
+permission, starting its public executors, sending its protected receiver
+commands, stopping its process and revoking/regranting its notification
+permission. It attaches only to that package's WebView, removes only a task
+verified to contain that package alone, and releases its own ADB forward. It
+leaves the fixture stopped with notification permission granted. It does not
+change screen timeout, lock credentials, global Doze policy or other applications.
+Its fixed native test executor performs no network/account operation. The shared
+`StateQualificationExtension` must never be declared by a production application.
+
+The six qualification groups cover specialUse admission, finite/continuous
+concurrency, Home, the notification's actual PendingIntent Stop, resource cleanup,
+stale API generations, OS task removal, process-loss UNKNOWN without replay and
+POST_NOTIFICATIONS revocation. These are programmatic controls; physical touches,
+Doze/reboot, other Android versions/vendors and product authorization/receipts
+require their own acceptance. See [the native execution lifecycle guide](../../../docs/ANDROID_NATIVE_STATE.md).
+
+### Unreadable push journal fixture
+
+Build `push-journal/oro.toml` with the paired recovery-protocol-1 SDK, then run
+`ANDROID_SERIAL=<explicit-device> node test/scripts/test-native-push-journal-android.js <apk>`.
+Use a fresh public `oro.runtime.qualification.pushjournal` installation: this is
+a one-shot fault-injection fixture, and intentionally retained archives prevent
+reusing its original IDs. Preserve earlier installations and evidence when
+repeating with a new public bundle. The runner refuses other APK bundle IDs.
+
+The fixture creates only public ciphertext and test aliases. It simulates a
+missing runtime alias using ciphertext from a separate test alias; it deletes no
+keys. It checks denied consent, stale snapshots, worker cancellation/drain,
+malformed XML, exact retained original bytes, unchanged original key availability,
+idempotent retry and process restart. The simulated local distributor counts
+unexpected unregisters but has no remote endpoint. Thus zero unregisters does
+not prove server revocation, delivery, Doze, reboot or historical migration.
+The driver stops its own public app when finished.

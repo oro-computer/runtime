@@ -1,0 +1,93 @@
+.TH OROC-PUSH-DISTRIBUTOR 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-push\-distributor \- Build or install Oro Push Dev, the Kotlin Android UnifiedPush development distributor.
+.SH SYNOPSIS
+.nf
+oroc push distributor [options]
+.fi
+.SH DESCRIPTION
+.PP
+Build or install Oro Push Dev, the Kotlin Android UnifiedPush development distributor.
+.PP
+On Linux, '\-\-platform=linux' runs a native Distributor2 service instead of building an APK. It needs a session D\-Bus, an unlocked Secret Service and an ntfy\-compatible server. It runs until interrupted; it does not install or enable a login service. No Node.js, Gradle or Android SDK is required by this Linux distributor command.
+.PP
+Linux transport uses bounded polling every two seconds, reconnects with two\-to\-thirty second delays and retains ciphertext in an OS\-key\-encrypted journal. Limits are 32 registrations, 32 pending messages of at most 4096 bytes, 1024 boundary\-second deduplication IDs and seven days of pending retention. The encrypted journal has a 256 KiB aggregate limit. Storage or deduplication\-window saturation pauses intake. An acknowledged connector message means durable local receipt, not completed application work.
+.PP
+Linux HTTPS uses system trust, or only the explicitly supplied PEM CA database with '\-\-ca\-cert'. Redirects are rejected. '\-\-allow\-loopback\-http' permits literal loopback addresses only; it never permits LAN HTTP or DNS names. Apps must separately opt into '[push] development_allow_loopback_http = true' to accept these development endpoints. Use HTTPS for phone distributors. Neither anonymous topics nor this local transport establish trusted enrollment, server authentication or remote revocation.
+.SH OPTIONS
+.TP
+\fB\-\-platform=<android|linux>\fR
+Android APK build (default), or Linux service
+.TP
+\fB\-\-allow\-loopback\-http\fR
+Linux only: allow literal loopback HTTP
+.TP
+\fB\-\-android\-home=<path>\fR
+Android SDK (defaults to ANDROID_HOME or ANDROID_SDK_ROOT)
+.TP
+\fB\-\-gradle\-home=<path>\fR
+Gradle 9 installation (defaults to GRADLE_HOME)
+.TP
+\fB\-\-java\-home=<path>\fR
+JDK installation (defaults to JAVA_HOME)
+.TP
+\fB\-\-data\-dir=<path>\fR
+writable build state and persistent development signing key
+.TP
+\fB\-\-output=<path>\fR
+APK destination (default: data directory/oro\-push\-dev.apk)
+.TP
+\fB\-\-server=<origin>\fR
+prefill an HTTPS server in the app; user taps Save and start
+.TP
+\fB\-\-ca\-cert=<path>\fR
+embed a development PEM CA, trusted only by this APK
+.TP
+\fB\-\-offline\fR
+build with cached Gradle/Android dependencies only
+.TP
+\fB\-\-install\fR
+install APK and open its settings on the selected device
+.TP
+\fB\-\-device=<serial>\fR
+explicit adb serial for installation (or ANDROID_SERIAL)
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Requires Node.js 22+, JDK 17+, Gradle 9, an installed Android platform 34 or newer, and build tools.
+.PP
+Run 'oroc setup \-\-platform=android' to provision the normal Android toolchain first.
+.PP
+Uses the runtime's Android Gradle plugin with built\-in Kotlin support. First build may download Android/Kotlin dependencies; \-\-offline requires those dependencies to be cached.
+.PP
+A debug signing key is retained outside the SDK so updates preserve the app's state.
+.PP
+Oro Push Dev is a separate sideloaded development APK. Your app still registers its native push handler.
+.PP
+It connects to 'push server' or an ntfy\-compatible HTTPS server and implements UnifiedPush registration, selection, unregistration and acknowledged delivery. Existing ntfy distributors continue to work with the same server and oro:push APIs; apps choose one distributor.
+.PP
+The user must enable its visible foreground connection in its settings. Optional CA trust is confined to this APK; hostname verification and Oro's HTTPS endpoint requirement remain.
+.PP
+Limits: 32 registrations, 256 pending ciphertexts (4096 bytes each), 512 recent ACK identities.
+.PP
+Unacknowledged ciphertext persists across process loss; a full inbox pauses further intake.
+.PP
+Reboot resumes an enabled service when Android permits it. Force\-stop requires reopening it.
+.PP
+Doze, network reachability and Android background policy still require device qualification.
+.PP
+This is for public development data, not production server authentication or trusted enrollment.
+.SH EXAMPLES
+.TP
+\fBoroc push distributor \-\-platform=linux \-\-server=http://127.0.0.1:8787 \-\-allow\-loopback\-http\fR
+run alongside a local 'push server'
+.TP
+\fBoroc push distributor \-\-offline\fR
+build from the cached Android/Kotlin toolchain
+.TP
+\fBoroc push distributor \-\-server=https://push.dev.example:8787 \-\-ca\-cert=./dev\-ca.pem \-\-install \-\-device=emulator\-5554\fR
+build, install, then review and start Oro Push Dev
+.SH SEE ALSO
+oroc(1), oroc\-push(1)

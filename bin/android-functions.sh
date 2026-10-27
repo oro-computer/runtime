@@ -887,13 +887,39 @@ function _android_setup_required() {
 
 export android_fte
 
+function android_sdk_package_installed() {
+  local package="$1"
+  local directory="$ANDROID_HOME/${package//;/\/}"
+  local exe="$(use_bin_ext ".exe")"
+  local bat="$(use_bin_ext ".bat")"
+  local -a required_files=(package.xml source.properties)
+  case "$package" in
+    ndk\;*) required_files+=("ndk-build$(use_bin_ext ".cmd")") ;;
+    platform-tools) required_files+=("adb$exe") ;;
+    platforms\;*) required_files+=(android.jar) ;;
+    build-tools\;*)
+      required_files+=("aapt2$exe" "zipalign$exe" "apksigner$bat" "d8$bat"
+        lib/apksigner.jar lib/d8.jar)
+      ;;
+    *) return 1 ;;
+  esac
+  local file=""
+  for file in "${required_files[@]}"; do
+    [[ -s "$directory/$file" ]] || return 1
+  done
+  # Only a matching installed package can avoid SDK manager provisioning.
+  grep -Eq '<([[:alnum:]_]+:)?localPackage[[:space:]]' "$directory/package.xml" &&
+    grep -Fq "path=\"$package\"" "$directory/package.xml"
+}
+
 function android_fte() {
   pass_yes_deps=""
   # use 'exit' instead of return
   # fixes "not ok - Android setup failed." when setup is valid
   local set_exit_code=""
 
-  [[ -n "$android_fte" ]] && return 0
+  [[ -n "$android_fte" && -z "$ANDROID_DEPS_ERROR" ]] && return 0
+  unset -v android_fte ANDROID_DEPS_ERROR
 
   while (( $# > 0 )); do
     declare arg="$1"; shift
@@ -901,12 +927,13 @@ function android_fte() {
     [[ "$arg" == "--exit-code" ]] && set_exit_code="1"
   done
 
-  android_fte=1
-
   if (( BUILD_ANDROID )); then
     read_env_data
     get_android_paths
-    write_env_data
+    if ! write_env_data; then
+      ANDROID_DEPS_ERROR=1
+      return 1
+    fi
 
     android_first_time_experience_setup; rc=$?
 
@@ -916,33 +943,45 @@ function android_fte() {
       unset BUILD_ANDROID
       return $rc
     fi
+    if (( rc != 0 )); then
+      ANDROID_DEPS_ERROR=1
+      return "$rc"
+    fi
 
     if (( rc == 0 )); then
       # Move ANDROID_SDK_MANAGER_JAVA_OPTS into JAVA_OPTS temporarily. We can't store JAVA_OPTS in .oro.env because it doesn't work with gradle
       OLD_JAVA_OPTS="$JAVA_OPTS"
       [[ -n "$ANDROID_SDK_MANAGER_JAVA_OPTS" ]] && JAVA_OPTS="$OLD_JAVA_OPTS $ANDROID_SDK_MANAGER_JAVA_OPTS"
 
-      SDK_OPTIONS=""
+      local -a sdk_packages=()
       local sdkmanager_binary="$(unix_path "$ANDROID_HOME/$ANDROID_SDK_MANAGER")"
-      local sdkmanager_version="$("$sdkmanager_binary" --version 2>/dev/null | tail -n 1)"
-      if [[ "$(version "$sdkmanager_version")" -lt "$(version "$ANDROID_COMMAND_LINE_TOOLS_PACKAGE_VERSION")" ]]; then
-        SDK_OPTIONS+="\"cmdline-tools;$ANDROID_COMMAND_LINE_TOOLS_PACKAGE_VERSION\" "
-      fi
-      SDK_OPTIONS+="\"ndk;$NDK_VERSION\" "
-      SDK_OPTIONS+="\"platform-tools\" "
-      SDK_OPTIONS+="\"platforms;android-$ANDROID_SDK_PLATFORM\" "
-      SDK_OPTIONS+="\"build-tools;$ANDROID_BUILD_TOOLS_VERSION\" "
+      sdk_packages+=("ndk;$NDK_VERSION" "platform-tools"
+        "platforms;android-$ANDROID_SDK_PLATFORM" "build-tools;$ANDROID_BUILD_TOOLS_VERSION")
+
+      local -a missing_sdk_packages=()
+      local sdk_package=""
+      for sdk_package in "${sdk_packages[@]}"; do
+        if ! android_sdk_package_installed "$sdk_package"; then
+          missing_sdk_packages+=("$sdk_package")
+        fi
+      done
 
       local yes="echo"
       [[ -n "$ANDROID_SDK_MANAGER_ACCEPT_LICENSES" ]] && [[ "$ANDROID_SDK_MANAGER_ACCEPT_LICENSES" != "n" ]] && yes="$ANDROID_SDK_MANAGER_ACCEPT_LICENSES"
       yes="$(unix_path "$yes")"
 
-      if [[ -n "$ANDROID_HOME" && -d "$ANDROID_HOME" ]]; then
+      if [[ -n "$ANDROID_HOME" && -d "$ANDROID_HOME" ]] && (( ${#missing_sdk_packages[@]} > 0 )); then
+        # Installed build packages do not require invoking a provisioning tool.
+        # Newer SDK manager shims can acquire user-directory locks even for --version.
+        local sdkmanager_version="$("$sdkmanager_binary" --version 2>/dev/null | tail -n 1)"
+        if [[ "$(version "$sdkmanager_version")" -lt "$(version "$ANDROID_COMMAND_LINE_TOOLS_PACKAGE_VERSION")" ]]; then
+          missing_sdk_packages=("cmdline-tools;$ANDROID_COMMAND_LINE_TOOLS_PACKAGE_VERSION" "${missing_sdk_packages[@]}")
+        fi
         write_log "h" "# Ensuring Android build SDK packages are installed (emulator packages are installed only by emulator workflows)."
-        write_log "d" "$yes | $(unix_path "$ANDROID_HOME/$ANDROID_SDK_MANAGER")" "$SDK_OPTIONS"
-        # Without eval, sdk manager says there is a syntax error
-        if ! eval "$yes | ($sdkmanager_binary $SDK_OPTIONS)"; then
+        write_log "d" "$yes | $sdkmanager_binary" "${missing_sdk_packages[@]}"
+        if ! "$yes" | "$sdkmanager_binary" "${missing_sdk_packages[@]}"; then
           JAVA_OPTS="$OLD_JAVA_OPTS"
+          ANDROID_DEPS_ERROR=1
           write_log "h" "not ok - Android SDK package installation failed."
           return 1
         fi
@@ -951,13 +990,18 @@ function android_fte() {
         if [[ -f "$ANDROID_HOME/$installed_sdk_manager" ]]; then
           ANDROID_SDK_MANAGER="$(native_path "$installed_sdk_manager")"
           export ANDROID_SDK_MANAGER
-          write_env_data
+          if ! write_env_data; then
+            JAVA_OPTS="$OLD_JAVA_OPTS"
+            ANDROID_DEPS_ERROR=1
+            return 1
+          fi
         fi
 
         write_log "d" "# Running Android licensing process"
         write_log "d" "$yes | $(native_path "$ANDROID_HOME/$ANDROID_SDK_MANAGER")" --licenses
-        if ! $yes | "$(native_path "$ANDROID_HOME/$ANDROID_SDK_MANAGER")" --licenses; then
+        if ! "$yes" | "$(native_path "$ANDROID_HOME/$ANDROID_SDK_MANAGER")" --licenses; then
           JAVA_OPTS="$OLD_JAVA_OPTS"
+          ANDROID_DEPS_ERROR=1
           write_log "h" "not ok - Android SDK license acceptance failed."
           return 1
         fi
@@ -970,6 +1014,7 @@ function android_fte() {
   if [[ -z "$ANDROID_HOME" ]]; then
     write_log "d" "# Android dependencies: ANDROID_HOME not set."
     ANDROID_DEPS_ERROR=1
+    return 1
   fi
 
   NDK_BUILD="$ANDROID_HOME/ndk/$NDK_VERSION/ndk-build$(use_bin_ext ".cmd")"
@@ -977,6 +1022,7 @@ function android_fte() {
   export NDK_BUILD
   export NDK_TOOLCHAINS
 
+  android_fte=1
   rc=$?
   [[ -n "$set_exit_code" ]] && exit $rc
   return $rc
@@ -985,6 +1031,17 @@ function android_fte() {
 function main() {
   while (( $# > 0 )); do
     declare arg="$1"; shift
+    if [[ "$arg" == "--android-sdk-packages-installed" ]]; then
+      [[ $# == 1 ]] || return 64
+      ANDROID_HOME="$1"
+      local package=""
+      for package in "ndk;$NDK_VERSION" platform-tools \
+        "platforms;android-$ANDROID_SDK_PLATFORM" "build-tools;$ANDROID_BUILD_TOOLS_VERSION"; do
+        android_sdk_package_installed "$package" || return 1
+      done
+      printf 'oro-android-sdk-packages-installed-v1\n'
+      return 0
+    fi
     if [[ "$arg" == "--android-fte" ]]; then
       android_fte "$@"
       exit $?

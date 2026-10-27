@@ -197,6 +197,12 @@
 #define ORO_RUNTIME_PLATFORM_OS "unknown"
 #endif
 
+// GNU C predefines `unix`, which otherwise expands public fields named unix.
+// Platform detection above retains the value through the Oro-prefixed macro.
+#if defined(unix)
+#undef unix
+#endif
+
 #define ORO_RUNTIME_PLATFORM_POSIX ORO_RUNTIME_PLATFORM_UNIX
 #define ORO_RUNTIME_PLATFORM_DARWIN ORO_RUNTIME_PLATFORM_APPLE
 #define ORO_RUNTIME_PLATFORM_IS(name) (ORO_RUNTIME_PLATFORM_##name)

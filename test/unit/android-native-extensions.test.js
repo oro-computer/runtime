@@ -25,6 +25,7 @@ test('compiled extensions coexist, receive lifecycle hooks and discard private r
     if (name === 'Regression.kt') {
       source = source.replace('open class AppActivity {', 'open class AppActivity : android.app.Activity() {')
         .replace('class App {', 'class App : android.app.Application() {')
+        .replace('mutableMapOf<Long, JSONObject>()', 'java.util.concurrent.ConcurrentHashMap<Long, JSONObject>()')
         .replace(/^internal object NativeExtensions .*\n/m, '')
         .replace('fun main() {', 'fun oldRegression() {')
     }
@@ -33,8 +34,16 @@ test('compiled extensions coexist, receive lifecycle hooks and discard private r
     sources.push(filename)
   }
   const files = {
+    'NativeCallbacks.kt': 'package oro.runtime.app\ninternal object RuntimeNativeCallbacks { fun initialize(app: App): List<NativeExtension> = emptyList() }',
     'Context.kt': 'package android.content\nopen class Context\nclass Intent\n',
-    'Bundle.kt': 'package android.os\nclass Bundle\n',
+    'Bundle.kt': `package android.os
+      class Bundle
+      class OperationCanceledException : RuntimeException()
+      class CancellationSignal {
+        @Volatile var isCanceled = false
+        fun cancel() { isCanceled = true }
+        fun throwIfCanceled() { if (isCanceled) throw OperationCanceledException() }
+      }`,
     'Application.kt': `package android.app
       import android.os.Bundle
       open class Activity
@@ -56,6 +65,8 @@ test('compiled extensions coexist, receive lifecycle hooks and discard private r
       import org.json.JSONObject
       import oro.runtime.window.*
       class Fixture(override val name: String) : NativeExtension {
+        val entered = java.util.concurrent.CountDownLatch(4)
+        val release = java.util.concurrent.CountDownLatch(1)
         var starts = 0; var created = 0; var resumed = 0; var stopped = 0; var destroyed = 0
         var intents = 0; var results = 0; var cleanups = 0; var waiting: NativeExtensionCall? = null
         override fun onCreate(app: App) { starts++ }
@@ -67,6 +78,19 @@ test('compiled extensions coexist, receive lifecycle hooks and discard private r
         override fun onActivityResult(activity: AppActivity, requestCode: Int, resultCode: Int, data: Intent?) { results++ }
         override fun request(call: NativeExtensionCall, action: String, options: JSONObject) {
           check(call.foregroundActivity() != null)
+          if (action == "worker") {
+            call.runOnWorker { signal ->
+              entered.countDown()
+              release.await()
+              signal.throwIfCanceled()
+              JSONObject().put("public", true)
+            }
+            return
+          }
+          if (action == "worker-error") {
+            call.runOnWorker { throw IllegalStateException("public-test-secret") }
+            return
+          }
           call.onCancel { cleanups++ }
           if (action == "wait") waiting = call else call.success(JSONObject().put("extension", name))
         }
@@ -109,6 +133,21 @@ test('compiled extensions coexist, receive lifecycle hooks and discard private r
         a.waiting!!.success(JSONObject().put("private", "public-test-secret"))
         check(app.results[1003]!!.getJSONObject("err").getString("code") == "ABORT_ERR")
         check(app.results.values.none { it.optJSONObject("data")?.has("private") == true })
+        for (token in 1100L..1119L) request(token,"fixture.first","worker")
+        check(a.entered.await(3, java.util.concurrent.TimeUnit.SECONDS))
+        request(1120,"fixture.first","worker")
+        check(app.results[1120]!!.getJSONObject("err").getString("code") == "EBUSY")
+        PlatformOperations.cancelWindow(owner)
+        a.release.countDown()
+        val expires = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+        while (NativeExtensionWorkers.executor.activeCount != 0 || NativeExtensionWorkers.executor.queue.isNotEmpty() || NativeExtensionWorkers.capacity.availablePermits() != 20) {
+          check(System.nanoTime() < expires); Thread.sleep(5)
+        }
+        for (token in 1100L..1119L) check(app.results[token]!!.getJSONObject("err").getString("code") == "ABORT_ERR")
+        request(1121,"fixture.first","worker-error")
+        while (!app.results.containsKey(1121L)) { check(System.nanoTime() < expires); Thread.sleep(5) }
+        check(app.results[1121]!!.getJSONObject("err").getString("code") == "EIO")
+        check(app.results.values.none { it.toString().contains("public-test-secret") })
         ConfiguredNativeExtensions.fail = true
         val failure = runCatching { NativeExtensions.initialize(App()) }.exceptionOrNull()
         check(failure is IllegalStateException && failure.message == "Native extension startup failed" && failure.cause == null)

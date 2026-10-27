@@ -554,7 +554,11 @@ fi
   fi
 
 if [[ -n "$BUILD_ANDROID" ]]; then
-  android_fte "$pass_yes_deps" && rc=$?
+  android_fte "$pass_yes_deps"
+  rc=$?
+  if (( rc != 0 )) && [[ -n "$BUILD_ANDROID" ]]; then
+    die "$rc" "not ok - Android setup failed."
+  fi
   # android_fte will unset BUILD_ANDROID if user elects not to install
 fi
 
@@ -1768,6 +1772,10 @@ function _install {
         rm -rf "$ORO_HOME/include/psa"
         ln -sf "$BUILD_DIR/include/psa" "$ORO_HOME/include/psa"
       fi
+      if [[ "$host" = "Linux" && -f "$root/build/include/pkcs11/pkcs11.h" ]]; then
+        mkdir -p "$ORO_HOME/include/pkcs11"
+        ln -sf "$root/build/include/pkcs11/pkcs11.h" "$ORO_HOME/include/pkcs11/pkcs11.h"
+      fi
     else
       mkdir -p $ORO_HOME/include
       cp -rfp "$BUILD_DIR"/uv/include/* "$ORO_HOME/include"
@@ -1784,6 +1792,10 @@ function _install {
       if [[ "$host" = "Linux" && -d "$BUILD_DIR/include/psa" ]]; then
         rm -rf "$ORO_HOME/include/psa"
         cp -rfp "$BUILD_DIR/include/psa" "$ORO_HOME/include"
+      fi
+      if [[ "$host" = "Linux" && -f "$root/build/include/pkcs11/pkcs11.h" ]]; then
+        mkdir -p "$ORO_HOME/include/pkcs11"
+        cp -fp "$root/build/include/pkcs11/pkcs11.h" "$ORO_HOME/include/pkcs11/pkcs11.h"
       fi
     fi
 

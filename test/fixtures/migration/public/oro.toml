@@ -1,0 +1,25 @@
+[meta]
+bundle_identifier = "oro.runtime.qualification.migration"
+title = "Public history migration"
+version = "1.0.0"
+[build]
+name = "runtime_history_check"
+output = ".cache/out"
+copy_map = "copy-map.toml"
+[migration]
+enabled = true
+definitions = "migration.json"
+[permissions]
+allow_biometrics = true
+allow_notifications = true
+[workflows]
+enabled = true
+definitions = "workflows.json"
+[foreground]
+enabled = true
+[background]
+deferred_enabled = true
+[android]
+min_sdk_version = 30
+[webview]
+require_ready = true

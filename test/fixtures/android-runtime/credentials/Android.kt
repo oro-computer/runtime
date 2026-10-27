@@ -1,7 +1,11 @@
 package android.os
 
 class Looper {
-  companion object { fun getMainLooper() = Looper() }
+  companion object {
+    private val main = Looper()
+    fun getMainLooper() = main
+    fun myLooper() = main
+  }
 }
 
 object SystemClock { var now = 0L; fun elapsedRealtime() = now }

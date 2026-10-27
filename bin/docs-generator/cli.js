@@ -23,6 +23,7 @@ function getCliUsageCommandTokens (usageLines) {
     for (const token of tokens) {
       if (
         token.startsWith('[') ||
+        token.startsWith('(') ||
         token.startsWith('<') ||
         token.startsWith('-') ||
         /^[A-Z][A-Z0-9_-]*$/.test(token)
@@ -54,8 +55,8 @@ function getCliWebsiteDocsUrl (content) {
   return formatWebsiteDocsUrl(`cli/${path}`)
 }
 
-function extractSectionSources (source) {
-  const startMarker = /constexpr auto gHelpText(\S*) = R"TEXT\(/gm
+function extractSectionSources (source, prefix) {
+  const startMarker = new RegExp(`constexpr auto ${prefix}(\\w*) = R"TEXT\\(`, 'gm')
   const endMarker = ')TEXT";'
 
   return [...source.matchAll(startMarker)].map((match) => {
@@ -79,9 +80,12 @@ function parseIni (iniText) {
 
   for (const line of iniText.extractedText.split('\n')) {
     const trimmedLine = line.trim()
-    const isSubSection = /\w+:$/.test(trimmedLine) && trimmedLine[0] !== '-'
+    const isSubSection = /^\S.*:$/.test(line)
 
     if (trimmedLine.length === 0) {
+      const subsection = sections[section][currentSubSection]
+      if (Array.isArray(subsection) && subsection.length > 0) subsection.push('')
+      if (!currentSubSection && description.length > 0) description.push('')
       continue
     }
 
@@ -95,10 +99,10 @@ function parseIni (iniText) {
     }
 
     if (isSubSection) {
-      currentSubSection = trimmedLine.replace(/:$/, '')
+      currentSubSection = trimmedLine.replace(/:$/, '').toLowerCase()
       sections[section][currentSubSection] =
         currentSubSection.includes('options') ||
-        currentSubSection === 'subcommands'
+        ['commands', 'subcommands', 'environment', 'update tooling'].includes(currentSubSection)
           ? {}
           : []
       option = undefined
@@ -110,15 +114,12 @@ function parseIni (iniText) {
       continue
     }
 
-    if (
-      !currentSubSection.includes('options') &&
-      currentSubSection !== 'subcommands'
-    ) {
+    if (Array.isArray(sections[section][currentSubSection])) {
       sections[section][currentSubSection].push(trimmedLine)
       continue
     }
 
-    if (/.+\s{2,}.+/.test(trimmedLine)) {
+    if (/^ {2}\S.*\s{2,}\S/.test(line)) {
       const [value, desc] = trimmedLine.split(/\s{2,}/)
       option = value
       sections[section][currentSubSection][value] = [desc]
@@ -131,6 +132,7 @@ function parseIni (iniText) {
   }
 
   sections[section].description = description
+  delete sections[section].documentation
   return sections
 }
 
@@ -139,7 +141,19 @@ function generateIni (parts) {
 }
 
 function parseCliSections (source) {
-  return generateIni(extractSectionSources(source))
+  const manuals = Object.assign({}, ...generateIni(extractSectionSources(source, 'gManualText')))
+  return generateIni(extractSectionSources(source, 'gHelpText')).map((section) => {
+    const [title, content] = Object.entries(section)[0]
+    for (const [key, value] of Object.entries(manuals[title] ?? {})) {
+      if (Array.isArray(value)) {
+        if (value.length > 0) content[key] = value
+      } else {
+        content[key] = { ...content[key], ...value }
+      }
+    }
+    const tokens = getCliUsageCommandTokens(content.usage)
+    return { [tokens?.join(' ') ?? title]: content }
+  })
 }
 
 function getSectionEntries (sections) {
@@ -149,42 +163,56 @@ function getSectionEntries (sections) {
 }
 
 function createCliMd (sections) {
-  let md = '# Command Line interface\n'
+  let md = '# Command Line Interface\n\n'
   md +=
     'These commands are available from the command line interface (CLI).\n\n'
 
   getSectionEntries(sections).forEach(({ title, content }) => {
-    md += `## ${title}\n`
+    md += `## ${title}\n\n`
     const { description, usage, ...subsections } = content
     const websiteDocUrl = getCliWebsiteDocsUrl(content)
     if (websiteDocUrl) {
       md += `Web docs: ${websiteDocUrl}\n\n`
     }
     if (description?.length) {
-      md += description.join('\n') + '\n\n'
+      md += description.join('\n').trim() + '\n\n'
     }
     if (usage?.length) {
-      md += '### Usage\n'
+      md += '### Usage\n\n'
       md += '```bash\n'
-      md += usage.join('\n') + '\n'
+      md += usage.join('\n').trim() + '\n'
       md += '```\n\n'
     }
 
     Object.entries(subsections).forEach(([subKey, subVal]) => {
+      const heading = (subKey[0].toUpperCase() + subKey.slice(1))
+        .replace(/^Macos\b/, 'macOS')
+        .replace(/^Ios\b/, 'iOS')
       if (Array.isArray(subVal)) {
         if (subVal.length) {
-          md += `### ${subKey}\n`
-          md += subVal.join('\n') + '\n\n'
+          md += `### ${heading}\n\n`
+          if (subKey === 'examples') {
+            for (const { command, description } of collectExamples(subVal)) {
+              md += `\`\`\`bash\n${command}\n\`\`\`\n\n`
+              if (description.length) md += description.join(' ') + '\n\n'
+            }
+          } else {
+            md += subVal.join('\n').trim() + '\n\n'
+          }
         }
         return
       }
 
-      md += `### ${subKey}\n`
-      md += '| Option | Description |\n'
+      md += `### ${heading}\n\n`
+      const label = subKey.includes('commands') || subKey === 'update tooling'
+        ? 'Command'
+        : subKey === 'environment' ? 'Variable' : 'Option'
+      md += `| ${label} | Description |\n`
       md += '| --- | --- |\n'
       Object.entries(subVal).forEach(([opt, desc]) => {
         const lines = Array.isArray(desc) ? desc : [String(desc)]
-        md += `| ${opt} | ${lines.join('<br>')} |\n`
+        const description = foldWrappedLines(lines).join('<br>').replace(/\|/g, '\\|')
+        md += `| \`${opt.replace(/\|/g, '\\|')}\` | ${description} |\n`
       })
       md += '\n'
     })
@@ -298,8 +326,8 @@ function renderRoffOptionDescription (lines) {
   )
 }
 
-function renderRoffExamples (lines) {
-  let output = ''
+function collectExamples (lines) {
+  const examples = []
   let currentCommand = ''
   let currentDescription = []
 
@@ -308,11 +336,7 @@ function renderRoffExamples (lines) {
       return
     }
 
-    output += '.TP\n'
-    output += `\\fB${escapeRoffText(currentCommand)}\\fR\n`
-    if (currentDescription.length > 0) {
-      output += `${escapeRoffText(currentDescription.join(' '))}\n`
-    }
+    examples.push({ command: currentCommand, description: currentDescription })
 
     currentCommand = ''
     currentDescription = []
@@ -332,7 +356,14 @@ function renderRoffExamples (lines) {
   }
 
   flushCurrent()
-  return output
+  return examples
+}
+
+function renderRoffExamples (lines) {
+  return collectExamples(lines).map(({ command, description }) => {
+    return `.TP\n\\fB${escapeRoffText(command)}\\fR\n` +
+      (description.length ? `${escapeRoffText(description.join(' '))}\n` : '')
+  }).join('')
 }
 
 function toManSectionTitle (title) {
@@ -349,7 +380,7 @@ function deriveCommandTokens (title, usageLines) {
       continue
     }
 
-    if (/^(?:\[|<|-)/.test(token)) {
+    if (/^(?:\[|\(|<|-)/.test(token)) {
       break
     }
 
@@ -405,7 +436,7 @@ function createCliManPage ({ title, content, cliVersion }) {
   if (usage.length > 0) {
     man += '.SH SYNOPSIS\n'
     man += '.nf\n'
-    man += usage.map(escapeRoffText).join('\n') + '\n'
+    man += usage.filter(Boolean).map(escapeRoffText).join('\n') + '\n'
     man += '.fi\n'
   }
 

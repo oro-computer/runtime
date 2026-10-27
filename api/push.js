@@ -1,23 +1,35 @@
 /**
  * @module push
- * Optional Android UnifiedPush transport. Requires `[push] enabled = true`,
+ * Optional Android and Linux UnifiedPush transport. Requires `[push] enabled = true`,
  * `provider = "unifiedpush"` and a compiled NativePushHandler registered at
  * Application startup. Native handlers authorize and process encrypted payloads
  * without a WebView. Server enrollment, IAM and notification policy are app-owned.
+ * A Linux native session host can supply cold D-Bus activation. Actual installed
+ * activation, distributor retries and user-session hosting require qualification.
+ * iOS/iPadOS, macOS and Windows backends for this API are not implemented.
+ * `getSupport()` reports unavailable with a platform/reason; operations reject
+ * ENOSYS. Registration and transport receipts do not prove server enrollment,
+ * trusted delivery, notification presentation or successful remote processing.
  */
 import request from './internal/platform-request.js'
 
 /**
  * @typedef {object} PushSupport
+ * @property {string} [platform] Present on an unavailable cross-platform support result.
+ * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform API restriction; not a permission denial.
+ * @property {string} [reason] Stable unavailable reason.
  * @property {boolean} available Whether the compiled transport is enabled.
- * @property {string} provider unifiedpush.
- * @property {string} selectedDistributor Selected Android package, or an empty string.
+ * @property {string|null} provider unifiedpush, or null when the backend is unavailable.
+ * @property {string} selectedDistributor Selected Android package or Linux D-Bus service, or an empty string.
  * @property {string[]} registeredKinds Compiled native handler names.
  * @property {number} maximumRegistrations 16.
  * @property {number} maximumPendingMessages 64 across all registrations.
  * @property {number} maximumMessageBytes 4096 encrypted bytes.
  * @property {boolean} backgroundJavaScript False.
  * @property {boolean} survivesForceStop False.
+ * @property {boolean} [coldActivationConfigured] False for the Linux application-process connector.
+ * @property {string[]} [availableDistributors] Discovered Linux distributor service names.
+ * @property {boolean} [serverEnrollmentRequired] True on Linux; transport registration does not enroll a trusted server.
  */
 /**
  * @typedef {object} PushRegistrationOptions
@@ -27,7 +39,7 @@ import request from './internal/platform-request.js'
  * @property {string} accountRef Opaque account identity.
  * @property {string} targetRef Opaque native application state identity.
  * @property {string} applicationServerKey Base64url uncompressed P-256 VAPID public key.
- * @property {string} [description] Short public registration label, at most 128 UTF-8 bytes.
+ * @property {string} [description] Short public label: at most 128 UTF-8 bytes on Android or 100 on Linux.
  */
 /**
  * @typedef {object} PushEnrollmentKeys
@@ -40,7 +52,7 @@ import request from './internal/platform-request.js'
  * @property {string} kind
  * @property {string} phase registering, registered, registration-failed, unregistered or temporarily-unavailable.
  * @property {string} endpoint HTTPS push endpoint, empty until registration succeeds.
- * @property {string} distributor Selected Android package.
+ * @property {string} distributor Selected Android package or Linux D-Bus service.
  * @property {string} applicationServerKey
  * @property {string} generation Endpoint generation used to acknowledge server enrollment.
  * @property {boolean} enrollmentPending Whether this endpoint still needs application server enrollment.
@@ -57,13 +69,34 @@ import request from './internal/platform-request.js'
 export async function getSupport () { return request('push', 'support', {}) }
 
 /**
+ * @typedef {object} DistributorSelectionOptions
+ * @property {string} [distributor] Linux D-Bus distributor name. Omit on Android to open its system chooser.
+ */
+
+/**
+ * Lists Linux UnifiedPush distributor service names, including activatable services.
+ * Other platforms reject with ENOSYS. This does not select or register a provider.
+ * @returns {Promise<string[]>}
+ */
+export async function getDistributors () { return request('push', 'distributors', {}) }
+
+/**
  * Opens the system distributor chooser. Existing registrations must first be
  * unregistered. Returns after launch; listen for pushchange and reread support
  * when the activity resumes. Selection is bound to the originating document and
  * expires after 90 seconds. Cancellation leaves the previous selection intact.
+ * On Linux, pass a name from getDistributors(), configure push.distributor, or
+ * select the only installed distributor. Multiple unselected providers reject EAGAIN.
+ * @param {DistributorSelectionOptions} [options]
  * @returns {Promise<PushSubmission>}
  */
-export async function selectDistributor () { return request('push', 'selectDistributor', {}) }
+export async function selectDistributor (options = {}) {
+  if (!options || Object.keys(options).some(key => key !== 'distributor') ||
+      (options.distributor !== undefined && (typeof options.distributor !== 'string' || options.distributor.length > 255))) {
+    throw new TypeError('Invalid distributor selection options')
+  }
+  return request('push', 'selectDistributor', options)
+}
 
 /**
  * Begins or renews transport registration. An endpoint arrives asynchronously;
@@ -113,4 +146,4 @@ export async function unregister (id) { return request('push', 'unregister', { i
  */
 export async function retryPending () { return request('push', 'retryPending', {}) }
 
-export default { getSupport, selectDistributor, register, getRegistration, acknowledgeRegistration, unregister, retryPending }
+export default { getSupport, getDistributors, selectDistributor, register, getRegistration, acknowledgeRegistration, unregister, retryPending }

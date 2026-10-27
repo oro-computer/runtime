@@ -14,6 +14,8 @@
 #include "../app.hh"
 #include "../url.hh"
 #include "../webview/tls_pins.hh"
+#include "../native/desktop_credentials.hh"
+#include "../native/desktop_back.hh"
 
 #include "../window.hh"
 
@@ -786,6 +788,56 @@ namespace oro::runtime::window {
     this->userContentManager = webkit_user_content_manager_new();
     webkit_user_content_manager_register_script_message_handler(this->userContentManager, "external");
 
+    webkit_user_content_manager_register_script_message_handler_in_world(
+      this->userContentManager, "oroNative", "oro-native");
+    auto isolatedNativeScript = webkit_user_script_new_for_world(R"JS(
+      (() => {
+        if (globalThis.top !== globalThis) return
+        const values = new Uint8Array(16)
+        crypto.getRandomValues(values)
+        const proof = Array.from(values, value => value.toString(16).padStart(2, '0')).join('')
+        const bridge = webkit.messageHandlers.oroNative
+        const announce = () => bridge.postMessage('oro:native-document:' + proof)
+        announce()
+        globalThis.addEventListener('pageshow', announce)
+        globalThis.addEventListener('message', event => {
+          if (!event.isTrusted || event.source !== globalThis || event.origin !== location.origin ||
+              typeof event.data?.__oroNativeRequest !== 'string' || event.data.__oroNativeRequest.length > 1048576) return
+          const uri = new URL(event.data.__oroNativeRequest)
+          if (uri.protocol !== 'ipc:' || !['runtime.platform', 'runtime.platform.support'].includes(uri.hostname)) return
+          uri.searchParams.set('documentToken', proof)
+          uri.searchParams.set('runtime-frame-type', 'top-level')
+          bridge.postMessage(uri.href)
+        })
+      })()
+    )JS", WEBKIT_USER_CONTENT_INJECT_TOP_FRAME, WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START,
+      "oro-native", nullptr, nullptr);
+    webkit_user_content_manager_add_script(this->userContentManager, isolatedNativeScript);
+    webkit_user_script_unref(isolatedNativeScript);
+    g_signal_connect(this->userContentManager, "script-message-received::oroNative", G_CALLBACK(+[](
+      WebKitUserContentManager*, WebKitJavascriptResult* result, gpointer data) {
+      const auto window = static_cast<Window*>(data);
+      if (!window || !window->bridge) return;
+      const auto value = webkit_javascript_result_get_js_value(result);
+      if (!value || !jsc_value_is_string(value)) return;
+      const auto bytes = jsc_value_to_string(value);
+      if (!bytes) return;
+      const String source(bytes);
+      g_free(bytes);
+      const auto bridge = window->bridge;
+      if (source.starts_with("oro:native-document:")) {
+        const auto token = source.substr(20);
+        if (token.size() != 32 || token.find_first_not_of("0123456789abcdef") != String::npos) return;
+        if (bridge->nativeDocumentToken != token) {
+          bridge->getRuntime()->services.platform.nativeLinux()->cancelDocument(std::to_string(bridge->client.id) + ":");
+          bridge->nativeDocumentGeneration++;
+          bridge->nativeDocumentToken = token;
+        }
+      } else if (source.starts_with("ipc://runtime.platform?") || source.starts_with("ipc://runtime.platform.support?")) {
+        bridge->route(source, nullptr, 0);
+      }
+    }), this);
+
     auto preloadUserScriptSource = webview::Preload::compile({
       .features = webview::Preload::Options::Features {
         .useGlobalCommonJS = false,
@@ -808,7 +860,8 @@ namespace oro::runtime::window {
     });
 
     auto preloadUserScript = webkit_user_script_new(
-      preloadUserScriptSource.str().c_str(),
+      (String("if (globalThis.top === globalThis) Object.defineProperty(globalThis, '__oroLinuxNativeBridge', { value: true });\n") +
+        preloadUserScriptSource.str()).c_str(),
       WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES,
       WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START,
       nullptr,
@@ -904,7 +957,12 @@ namespace oro::runtime::window {
         gpointer userData
       ) -> gboolean {
         auto self = reinterpret_cast<Window*>(userData);
-        if (self) self->evalDomBlurThrottled();
+        if (self) {
+          self->evalDomBlurThrottled();
+          native::DesktopBack::cancelPending(*self);
+          if (!native::DesktopCredentials::ownsPrompt(self->window))
+            self->bridge->getRuntime()->services.platform.nativeLinux()->cancelDocument(std::to_string(self->bridge->client.id) + ":");
+        }
         auto app = App::sharedApplication();
         if (app) app->pause();
         return FALSE;
@@ -959,6 +1017,7 @@ namespace oro::runtime::window {
 
     webkit_web_view_set_background_color(WEBKIT_WEB_VIEW(webview), &webviewBackground);
 
+    native::DesktopBack::attach(*this);
     this->hotkey.init();
     this->bridge->init();
     this->bridge->configureSchemeHandlers({
@@ -966,6 +1025,66 @@ namespace oro::runtime::window {
     });
 
     this->bridge->configureWebView(this->webview);
+
+    g_signal_connect(this->webview, "load-changed", G_CALLBACK(+[](WebKitWebView*, WebKitLoadEvent event, gpointer data) {
+      if (event != WEBKIT_LOAD_STARTED) return;
+      const auto window = static_cast<Window*>(data);
+      if (!window || !window->bridge) return;
+      window->bridge->nativeDocumentGeneration++;
+      window->bridge->nativeDocumentToken.clear();
+      native::DesktopBack::reset(*window);
+      window->bridge->getRuntime()->services.platform.nativeLinux()->cancelDocument(
+        std::to_string(window->bridge->client.id) + ":");
+    }), this);
+
+    g_signal_connect(this->webview, "web-process-terminated", G_CALLBACK(+[](
+      WebKitWebView* webview, WebKitWebProcessTerminationReason, gpointer data) {
+      const auto window = static_cast<Window*>(data);
+      if (!window || !window->bridge || !window->window) return;
+      window->bridge->nativeDocumentGeneration++;
+      window->bridge->nativeDocumentToken.clear();
+      native::DesktopBack::reset(*window);
+      window->bridge->getRuntime()->services.platform.nativeLinux()->cancelDocument(
+        std::to_string(window->bridge->client.id) + ":");
+      const auto uri = webkit_web_view_get_uri(webview);
+      const URL location(uri ? uri : "");
+      const auto bundle = window->bridge->userConfig.find("meta_bundle_identifier");
+      const bool owned = bundle != window->bridge->userConfig.end() && location.scheme == "oro" &&
+        toLowerCase(location.hostname) == toLowerCase(bundle->second);
+      g_object_set_data_full(G_OBJECT(window->window), "oro-recovery-uri",
+        owned ? g_strdup(uri) : nullptr, g_free);
+      auto panel = GTK_WIDGET(g_object_get_data(G_OBJECT(window->window), "oro-recovery-panel"));
+      if (!panel) {
+        panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
+        gtk_widget_set_no_show_all(panel, true);
+        gtk_container_set_border_width(GTK_CONTAINER(panel), 24);
+        const auto label = gtk_label_new("The application view stopped. Unsaved changes may be lost.\n"
+          "Check unfinished operations after reloading.");
+        gtk_label_set_line_wrap(GTK_LABEL(label), true);
+        gtk_box_pack_start(GTK_BOX(panel), label, true, true, 0);
+        const auto button = gtk_button_new_with_label("Reload application");
+        gtk_widget_set_name(button, "oro-renderer-reload");
+        gtk_box_pack_end(GTK_BOX(panel), button, false, false, 0);
+        g_signal_connect(button, "clicked", G_CALLBACK(+[](GtkButton*, gpointer pointer) {
+          const auto window = static_cast<Window*>(pointer);
+          const auto uri = static_cast<const char*>(g_object_get_data(G_OBJECT(window->window), "oro-recovery-uri"));
+          if (!uri || !window->webview) return;
+          const String destination(uri);
+          const auto panel = GTK_WIDGET(g_object_get_data(G_OBJECT(window->window), "oro-recovery-panel"));
+          gtk_widget_hide(panel);
+          gtk_widget_show(GTK_WIDGET(window->webview));
+          webkit_web_view_load_uri(window->webview, destination.c_str());
+        }), window);
+        gtk_box_pack_end(GTK_BOX(window->vbox), panel, true, true, 0);
+        g_object_set_data(G_OBJECT(window->window), "oro-recovery-panel", panel);
+        g_object_set_data(G_OBJECT(window->window), "oro-recovery-button", button);
+      }
+      const auto button = GTK_WIDGET(g_object_get_data(G_OBJECT(window->window), "oro-recovery-button"));
+      gtk_widget_set_sensitive(button, owned);
+      gtk_widget_hide(GTK_WIDGET(webview));
+      gtk_widget_show_all(panel);
+      gtk_widget_show(panel);
+    }), this);
 
     // TLS certificate pinning hook for WebKit.
     g_signal_connect(

@@ -141,6 +141,10 @@ done
 
 declare objects=()
 
+if [[ "$host" == "Linux" && "$platform" == "desktop" ]]; then
+  bash "$root/bin/fetch-pkcs11-header.sh" || exit $?
+fi
+
 declare sqlite_amalgamation="$root/build/sqlite/sqlite3.c"
 if (( ! syntax_only )) && [[ ! -f "$sqlite_amalgamation" ]]; then
   echo >&2 "not ok - missing sqlite amalgamation. run bin/fetch-sqlite.sh first."
@@ -180,6 +184,7 @@ declare sources=(
   $(find "$root"/src/runtime/javascript/*.cc)
   $(find "$root"/src/runtime/json/*.cc)
   $(find "$root/src/runtime/mcp" -name '*.cc')
+  $(find "$root/src/runtime/native" -name '*.cc')
   $(find "$root"/src/runtime/loop/*.cc)
   $(find "$root"/src/runtime/tcp/*.cc)
   $(find "$root"/src/runtime/tls/*.cc)
@@ -233,7 +238,7 @@ declare cflags
 
 if [[ "$platform" = "android" ]]; then
   source "$root/bin/android-functions.sh"
-  android_fte
+  android_fte || exit $?
 
   if [[ -n $ANDROID_DEPS_ERROR ]]; then
     echo >&2 "not ok - Android dependencies not satisfied."
@@ -442,9 +447,7 @@ else
   for source in "${sources[@]}"; do
     declare src_directory="$root/src"
 
-    declare object="${source/.cc/$d.o}"
-    object="${object/.cpp/$d.o}"
-    object="${object/.c/$d.o}"
+    declare object="${source}${d}.o"
 
     declare build_dir="$root/build"
 
@@ -556,11 +559,8 @@ function main () {
 
     {
       declare src_directory="$root/src"
-      declare object="${source/.cc/$d.o}"
+      declare object="${source}${d}.o"
       declare build_dir="$root/build"
-
-      object="${object/.cpp/$d.o}"
-      object="${object/.c/$d.o}"
 
       declare source_ext="${source##*.}"
       declare compiler="$clang"
@@ -604,12 +604,22 @@ function main () {
         object="${object/$build_dir/$output_directory}"
       fi
 
+      declare metadata_changed=0
+      declare metadata_value=""
+      if [[ "$source" == "$root/src/runtime/version.cc" ]]; then
+        metadata_value="$(printf '%s\n' "${runtime_metadata_cflags[@]}")"
+        if [[ ! -f "$object.metadata" ]] || [[ "$(cat "$object.metadata")" != "$metadata_value" ]]; then
+          metadata_changed=1
+        fi
+      fi
+
       if (( syntax_only )); then
         echo "# checking syntax ($arch-$platform) $(basename "$source")"
         run_runtime_compiler "$compiler" "${compile_flags[@]}" -ferror-limit=0 -fsyntax-only "$source" || onsignal
         echo "ok - checked ${source/$src_directory\//} ($arch-$platform)"
       elif
         (( force )) ||
+        (( metadata_changed )) ||
         ! test -f "$object" ||
         (( $(stat_mtime "$source") > $(stat_mtime "$object") )) ||
         (( newest_header_mtime > $(stat_mtime "$object") ));
@@ -618,6 +628,9 @@ function main () {
 
         echo "# compiling object ($arch-$platform) $(basename "$source")"
         run_runtime_compiler "$compiler" "${compile_flags[@]}" -c "$source" -o "$object" || onsignal
+        if [[ "$source" == "$root/src/runtime/version.cc" ]]; then
+          printf '%s\n' "$metadata_value" > "$object.metadata" || onsignal
+        fi
         echo "ok - built ${source/$src_directory\//} -> ${object/$output_directory\//} ($arch-$platform)"
       fi
     } & pids+=($!)
@@ -667,7 +680,8 @@ function main () {
   local static_library_mtime=$(stat_mtime "$static_library")
   local archive_inputs_file="${static_library}.inputs"
   local archive_inputs=""
-  archive_inputs="$(printf '%s\n' "${objects[@]}")"
+  # Revision changes must also invalidate the archive within the same timestamp second.
+  archive_inputs="$(printf '%s\n' "${objects[@]}" "${runtime_metadata_cflags[@]}")"
 
   for source in "${objects[@]}"; do
     if ! test -f "$source"; then

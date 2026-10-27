@@ -4,6 +4,12 @@ function sleep (ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+async function waitFor (predicate) {
+  const deadline = Date.now() + 1500
+  while (!predicate() && Date.now() < deadline) await sleep(10)
+  return predicate()
+}
+
 // Only run in strict mode (second pass) and desktop
 if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
   test.desktop(
@@ -43,23 +49,27 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       await win.minimize()
       await sleep(200)
 
-      // send during pause; expect no delivery within short window
-      const noRecv = new Promise((resolve, reject) => {
-        const to = setTimeout(() => {
-          resolve(true)
-        }, 600)
-        server.once('message', () => {
-          clearTimeout(to)
-          reject(new Error('unexpected udp during pause'))
-        })
-      })
-      await new Promise((resolve) =>
-        client.send('ok-2', port, address, resolve)
+      // Queue native I/O while paused; awaiting its callback here would prevent restore.
+      const pausedMessages = []
+      const onPausedMessage = message => pausedMessages.push(String(message))
+      server.on('message', onPausedMessage)
+      const pausedSend = new Promise((resolve, reject) =>
+        client.send('ok-2', port, address, error => error ? reject(error) : resolve())
       )
-      t.equal(await noRecv, true, 'no udp delivery while paused')
+      await sleep(600)
+      t.equal(pausedMessages.length, 0, 'no udp delivery while paused')
+      server.removeListener('message', onPausedMessage)
 
       // restore to resume
-      await win.restore()
+      await Promise.race([
+        win.restore(),
+        sleep(3000).then(() => { throw new Error('timeout: restore IPC') })
+      ])
+      t.pass('restore IPC settles')
+      await Promise.race([
+        pausedSend,
+        sleep(3000).then(() => { throw new Error('timeout: paused UDP send after restore') })
+      ])
       await sleep(200)
 
       const got2 = new Promise((resolve, reject) => {
@@ -67,10 +77,13 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
           () => reject(new Error('timeout: udp receive after resume')),
           1500
         )
-        server.once('message', () => {
+        const onMessage = message => {
+          if (String(message) !== 'ok-3') return
+          server.removeListener('message', onMessage)
           clearTimeout(to)
           resolve(true)
-        })
+        }
+        server.on('message', onMessage)
       })
       await new Promise((resolve) =>
         client.send('ok-3', port, address, resolve)
@@ -112,8 +125,7 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
         client.once('connect', resolve)
       })
       client.write('hello-1')
-      await sleep(100)
-      t.equal(messages.includes('hello-1'), true, 'tcp baseline receive ok')
+      t.equal(await waitFor(() => messages.join('').includes('hello-1')), true, 'tcp baseline receive ok')
 
       const win = await application.getCurrentWindow()
       await win.minimize()
@@ -122,7 +134,7 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       client.write('hello-2')
       await sleep(600)
       t.equal(
-        messages.includes('hello-2'),
+        messages.join('').includes('hello-2'),
         false,
         'no tcp data observed while paused'
       )
@@ -131,10 +143,8 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       await sleep(300)
 
       client.write('hello-3')
-      // Give time for delivery
-      await sleep(300)
       t.equal(
-        messages.includes('hello-3'),
+        await waitFor(() => messages.join('').includes('hello-3')),
         true,
         'tcp delivery after resume ok'
       )

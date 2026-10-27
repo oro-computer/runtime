@@ -11,6 +11,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.net.Uri
 import android.os.Bundle
+import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.WindowManager
 
@@ -45,6 +46,7 @@ open class WindowFragmentManager (
    */
   fun createWindowFragment (options: WindowOptions) {
     val manager = this.manager
+    if (!this.activity.canMutateWindows()) return
     if (this.hasWindowFragment(options.index)) {
       return
     }
@@ -81,6 +83,7 @@ open class WindowFragmentManager (
    * otherwise `false`.
    */
   fun showWindowFragment (index: Int): Boolean {
+    if (!this.activity.canMutateWindows()) return false
     val fragment = this.fragments.find { it.index == index }
 
     if (fragment != null) {
@@ -127,10 +130,12 @@ open class WindowFragmentManager (
    * otherwise `false`.
    */
   fun hideWindowFragment (index: Int): Boolean {
+    if (!this.activity.canMutateWindows()) return false
     val fragment = this.fragments.find { it.index == index }
 
     if (fragment != null) {
       this.activity.runOnUiThread {
+        if (!this.activity.canMutateWindows()) return@runOnUiThread
         this.manager.beginTransaction()
         // .setCustomAnimations(android.R.anim.slide_in_left, android.R.anim.slide_out_right)
           .hide(fragment)
@@ -148,15 +153,17 @@ open class WindowFragmentManager (
    * otherwise `false`.
    */
   fun closeWindowFragment (index: Int): Boolean {
+    if (!this.activity.canMutateWindows()) return false
     val fragment = this.fragments.find { it.index == index }
 
     if (fragment != null) {
-      this.fragments.remove(fragment)
       this.activity.runOnUiThread {
+        if (!this.activity.canMutateWindows()) return@runOnUiThread
         this.manager.beginTransaction()
           // .setCustomAnimations(android.R.anim.slide_in_left, android.R.anim.slide_out_right)
           .remove(fragment)
           .commit()
+        this.fragments.remove(fragment)
       }
       return true
     }
@@ -341,6 +348,7 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
   }
 
   override fun onConfigurationChanged (configuration: Configuration) {
+    windowFragmentManager.fragments.forEach { it.window?.let { owner -> oro.runtime.app.NativeGestures.invalidate(owner) } }
     super.onConfigurationChanged(configuration)
     systemAppearance.refresh()
   }
@@ -444,6 +452,11 @@ open class WindowManagerActivity : AppCompatActivity(R.layout.window_container_v
     outState.putString(PROCESS_STATE_KEY, processToken)
     super.onSaveInstanceState(outState)
   }
+
+  /** Native window changes must run on the UI thread before state is saved. */
+  fun canMutateWindows (): Boolean = Looper.myLooper() == Looper.getMainLooper() &&
+    !this.isFinishing && !this.isDestroyed && !this.supportFragmentManager.isDestroyed &&
+    !this.supportFragmentManager.isStateSaved
 
   /**
    * Creates a new window at a given `index`.

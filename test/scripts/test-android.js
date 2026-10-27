@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { resolveOrocExecutable } from './oroc-path.js'
-import { stageAndroidFixtures } from './android-fixtures.js'
+import { selectAndroidSerial, stageAndroidFixtures } from './android-fixtures.js'
 
 const { ANDROID_HOME, ORO_ANDROID_CI } = process.env
 const dirname = path.dirname(import.meta.url.replace('file://', ''))
@@ -14,6 +14,9 @@ const adb = ANDROID_HOME
   )
   : process.platform === 'win32' ? 'adb.exe' : 'adb'
 const id = 'computer.oro.runtime.tests'
+const serial = selectAndroidSerial(execFileSync(adb, ['devices'], { encoding: 'utf8' }), process.env.ANDROID_SERIAL)
+const deviceArgs = ['-s', serial]
+process.env.ANDROID_SERIAL = serial
 
 // Resolve local oroc binary if not on PATH
 const repoRoot = path.resolve(root, '..')
@@ -25,7 +28,7 @@ const cliEnv = {
 }
 
 try {
-  execFileSync(adb, ['uninstall', id], { stdio: 'inherit' })
+  execFileSync(adb, [...deviceArgs, 'uninstall', id], { stdio: 'inherit' })
 } catch {}
 
 if (ORO_ANDROID_CI) {
@@ -73,15 +76,16 @@ const flavor = ORO_ANDROID_CI ? 'dev' : 'live'
 const apk = path.join(root, 'build', 'android', 'app', 'build', 'outputs', 'apk',
   flavor, 'debug', `app-${flavor}-debug.apk`)
 // CI has no operator to answer runtime permission dialogs during startup.
-const installArgs = ['install', '-r', ...(ORO_ANDROID_CI ? ['-g'] : []), apk]
+const installArgs = [...deviceArgs, 'install', '-r', ...(ORO_ANDROID_CI ? ['-g'] : []), apk]
 execFileSync(adb, installArgs, { stdio: 'inherit' })
 
-stageAndroidFixtures(adb, id, path.join(root, 'fixtures'))
+stageAndroidFixtures(adb, id, path.join(root, 'fixtures'), serial)
 
 execFileSync(
   process.env.SHELL || (process.platform === 'win32' ? 'bash' : 'sh'),
   [path.resolve(root, 'scripts', 'poll-adb-logcat.sh')],
   {
-    stdio: 'inherit'
+    stdio: 'inherit',
+    env: cliEnv
   }
 )

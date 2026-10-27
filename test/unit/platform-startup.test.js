@@ -186,6 +186,94 @@ test('Windows resources read complete files and handle invalid or truncated file
   `)
 })
 
+test('module proxies scan only the resource bytes when selecting default exports', options, () => {
+  const str = fragment('src/runtime/filesystem/resource.cc',
+    '  const String Resource::str (bool cached)', '  Resource::ReadStream Resource::stream (')
+  const expressions = [...read('src/runtime/bridge/bridge.cc').matchAll(
+    /const auto moduleImportProxy = tmpl\(\s*([^\n]+)\n\s*\? ESM_IMPORT_PROXY_TEMPLATE_WITH_DEFAULT_EXPORT/g
+  )].map(match => match[1])
+  assert.equal(expressions.length, 2, 'both oro: and node: proxies use bounded reads')
+  runNative(`
+    #include <cassert>
+    #include <string>
+    using String = std::string;
+    struct Resource {
+      String bytes;
+      size_t length = 0;
+      bool accessing = true;
+      bool available = true;
+      bool exists () { return available; }
+      size_t size (bool) { return length; }
+      const unsigned char* read (bool = true) {
+        return available ? reinterpret_cast<const unsigned char*>(bytes.data()) : nullptr;
+      }
+      const String str (bool cached = true);
+    };
+    ${str}
+    ${expressions.map((expression, index) => `
+      bool hasDefault${index} (Resource& resource) { return ${expression}; }
+    `).join('\n')}
+    int main () {
+      for (auto hasDefault : {hasDefault0, hasDefault1}) {
+        Resource named;
+        const String source = "export const value = 1";
+        named.bytes = source + "export default 42";
+        named.length = source.size();
+        assert(!hasDefault(named));
+        named.length = named.bytes.size();
+        assert(hasDefault(named));
+        named.available = false;
+        assert(!hasDefault(named));
+        named.available = true;
+        named.length = 0;
+        assert(!hasDefault(named));
+      }
+    }
+  `)
+})
+
+test('resource defaults wait for application initialization before resolving paths', options, () => {
+  const globals = fragment('src/runtime/filesystem/resource.cc',
+    '  static Map<String, Resource::Cache> caches;', '\n#if ORO_RUNTIME_PLATFORM_ANDROID')
+  const setDefaults = fragment('src/runtime/filesystem/resource.cc',
+    '  void Resource::WellKnownPaths::setDefaults (', '  const Resource::WellKnownPaths Resource::getWellKnownPaths (')
+  runNative(`
+    #include <cassert>
+    #include <filesystem>
+    #include <map>
+    #include <mutex>
+    #include <optional>
+    #include <string>
+    using String = std::string;
+    using Path = std::filesystem::path;
+    using Mutex = std::recursive_mutex;
+    template <typename K, typename V> using Map = std::map<K, V>;
+    bool ready = false;
+    int resolutions = 0;
+    struct Resource {
+      struct Cache {};
+      struct WellKnownPaths {
+        Path tmp;
+        WellKnownPaths () { assert(ready); ++resolutions; }
+        static void setDefaults (const WellKnownPaths&);
+      };
+    };
+    ${globals}
+    ${setDefaults}
+    int main () {
+      assert(resolutions == 0);
+      ready = true;
+      Resource::WellKnownPaths paths;
+      paths.tmp = "/app/cache";
+      Resource::WellKnownPaths::setDefaults(paths);
+      assert(defaultWellKnownPaths->tmp == paths.tmp && resolutions == 1);
+      paths.tmp = "/other/cache";
+      Resource::WellKnownPaths::setDefaults(paths);
+      assert(defaultWellKnownPaths->tmp == paths.tmp && resolutions == 1);
+    }
+  `)
+})
+
 test('WebView2 waits for preload registration and reports synchronous and asynchronous failures', options, () => {
   const register = fragment('src/runtime/window/win.cc',
     '              const auto preloadResult = this->webview->AddScriptToExecuteOnDocumentCreated(',
@@ -845,6 +933,7 @@ test('Android well-known temporary paths preserve the private app cache director
     #include <cassert>
     #include <filesystem>
     #include <map>
+    #include <optional>
     #include <string>
     #define ORO_RUNTIME_PLATFORM_ANDROID 1
     namespace fs = std::filesystem;
@@ -862,11 +951,11 @@ test('Android well-known temporary paths preserve the private app cache director
       static Path getExternalAndroidStorageDirectory () { return "/storage/emulated/0"; }
       static Path getExternalAndroidCacheDirectory () { return "/storage/emulated/0/Android/data/app.example/cache"; }
     };
-    Resource::WellKnownPaths defaultWellKnownPaths;
+    std::optional<Resource::WellKnownPaths> defaultWellKnownPaths;
     ${constructor}
     int main () {
       const Path cache = "/data/user/0/app.example/cache/app.example";
-      defaultWellKnownPaths.tmp = cache;
+      defaultWellKnownPaths.emplace().tmp = cache;
       Resource::WellKnownPaths paths(Path{});
       assert(paths.tmp == cache);
       Resource::WellKnownPaths scoped(Path{"archives"});

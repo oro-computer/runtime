@@ -1,13 +1,13 @@
 .TH OROC-UPDATE-EXTRACT 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
 .SH NAME
-oroc\-update\-extract \- Extract a tar archive produced by update\-bundle into a destination directory.
+oroc\-update\-extract \- Extract an update tar archive into a destination directory.
 .SH SYNOPSIS
 .nf
 oroc update extract \-\-bundle=<bundle.tar> \-\-dest=<dir> [options]
 .fi
 .SH DESCRIPTION
 .PP
-Extract a tar archive produced by update\-bundle into a destination directory.
+Extract an update tar archive into a destination directory.
 .SH OPTIONS
 .TP
 \fB\-\-bundle=<bundle.tar>\fR
@@ -18,9 +18,14 @@ destination directory to extract files into (created if missing)
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-The extractor rejects absolute paths and any paths containing ".." or ':' to avoid directory traversal. Special tar entries (symlinks, devices, etc.) are ignored; regular files and directories are restored.
+The extractor rejects absolute paths and any paths containing ".." or ':' to avoid directory traversal.
+.PP
+Special tar entries (symlinks, devices, etc.) are ignored; regular files and directories are restored.
 .SH EXAMPLES
 .TP
 \fBoroc update extract \-\-bundle app\-1.0.0.tar \-\-dest ./update\-staging\fR

@@ -484,6 +484,20 @@ namespace oro::runtime::config {
       switch (value.type()) {
         case TOML::Type::Array: {
           const auto& arr = value.asArray();
+          // Editor argv and source arrays preserve spaces and literal characters.
+          // Keep their flattened values as JSON string arrays.
+          if ((prefix.starts_with("language_server_") && endsWith(prefix, "_args")) ||
+              prefix.starts_with("tooling_")) {
+            JSON::Array arguments;
+            for (const auto& argument : arr) {
+              if (argument.type() != TOML::Type::String) {
+                throw std::runtime_error("Editor tooling arrays must contain only strings");
+              }
+              arguments.push(argument.asString());
+            }
+            output[prefix] = arguments.str();
+            return;
+          }
           const bool allScalars = std::all_of(
             arr.begin(),
             arr.end(),
@@ -602,6 +616,182 @@ namespace oro::runtime::config {
     // conservative and focuses on commonly used and security-sensitive
     // options; new keys should be added here when introduced.
     const Vector<ConfigKeyInfo> kConfigRegistry = {
+      // Editor launch settings. Additional language names use the same prefix.
+      {
+        "language_server_kotlin_command", "language_server.kotlin.command",
+        "Kotlin language server executable; resolved through PATH or relative to oro.toml.",
+        "kotlin-language-server", ConfigValueType::String, false
+      },
+      {
+        "language_server_kotlin_args", "language_server.kotlin.args",
+        "Kotlin server argument array; each element is passed literally without shell expansion.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "language_server_kotlin_adapter", "language_server.kotlin.adapter",
+        "Kotlin adapter: fwcd or kotlin-lsp for the Android compilation model, or stdio for backend project discovery.",
+        "fwcd", ConfigValueType::String, false
+      },
+      {
+        "language_server_typescript_command", "language_server.typescript.command",
+        "Server for JavaScript, TypeScript, JSX and TSX; resolved through PATH or relative to oro.toml.",
+        "typescript-language-server", ConfigValueType::String, false
+      },
+      {
+        "language_server_typescript_args", "language_server.typescript.args",
+        "JavaScript/TypeScript server argument array; replaces the default --stdio argument.",
+        "[\"--stdio\"]", ConfigValueType::String, false
+      },
+      {
+        "language_server_cpp_command", "language_server.cpp.command",
+        "Server for C, C++, Objective-C and Objective-C++; resolved through PATH or relative to oro.toml.",
+        "clangd", ConfigValueType::String, false
+      },
+      {
+        "language_server_cpp_args", "language_server.cpp.args",
+        "C-family server argument array; clangd uses stdio without extra arguments.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "language_server_swift_command", "language_server.swift.command",
+        "Swift language server executable; resolved through PATH or relative to oro.toml.",
+        "sourcekit-lsp", ConfigValueType::String, false
+      },
+      {
+        "language_server_swift_args", "language_server.swift.args",
+        "Swift language server argument array.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "language_server_typescript_adapter", "language_server.typescript.adapter",
+        "Oro TypeScript plugin adapter, or stdio for backend-owned discovery.",
+        "typescript", ConfigValueType::String, false
+      },
+      {
+        "language_server_cpp_adapter", "language_server.cpp.adapter",
+        "Oro compilation database adapter, or stdio for backend-owned discovery.",
+        "clangd", ConfigValueType::String, false
+      },
+      {
+        "language_server_swift_adapter", "language_server.swift.adapter",
+        "Oro Swift compilation database adapter, or stdio for native SwiftPM discovery.",
+        "sourcekit", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_platform", "tooling.cpp.platform",
+        "Native editor target; defaults to the host desktop platform.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_arch", "tooling.cpp.arch",
+        "Native editor architecture; defaults to host, or arm64 for Android/iOS.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_compilation_database", "tooling.cpp.compilation_database",
+        "Existing compilation database path relative to oro.toml.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_cmake", "tooling.cpp.cmake",
+        "CMake source directory relative to oro.toml; mutually exclusive with compilation_database.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_toolchain", "tooling.cpp.toolchain",
+        "CMake cross-compilation toolchain file relative to oro.toml.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_configure_args", "tooling.cpp.configure_args",
+        "Literal CMake configuration argument array.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_prepare_targets", "tooling.cpp.prepare_targets",
+        "Explicit CMake targets to build for --prepare; no default application target is built.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_sources", "tooling.cpp.sources",
+        "Optional original-file allowlist for a native compilation database.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_ndk", "tooling.cpp.ndk",
+        "Selected Android NDK directory; otherwise use the environment or the version required by the Oro SDK.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_cpp_deployment_target", "tooling.cpp.deployment_target",
+        "Apple deployment target override for native editor analysis.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_typescript_tsconfig", "tooling.typescript.tsconfig",
+        "Original tsconfig/jsconfig path; defaults to tsconfig.json then jsconfig.json in the project root.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_typescript_typescript", "tooling.typescript.typescript",
+        "Installed TypeScript package directory; otherwise use project TypeScript or tsserver on PATH.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_typescript_sources", "tooling.typescript.sources",
+        "Optional original web files/directories without tsconfig/jsconfig; otherwise use build.copy or infer from opened documents.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_platform", "tooling.swift.platform",
+        "Swift editor target platform; defaults to host.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_arch", "tooling.swift.arch",
+        "Swift editor target architecture; defaults to host, or arm64 for iOS.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_compilation_database", "tooling.swift.compilation_database",
+        "Existing Swift compilation database; its build system owns module preparation.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_sources", "tooling.swift.sources",
+        "Original Swift source file array for the declared module.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_module", "tooling.swift.module",
+        "Swift module identifier for original sources.",
+        "OroApplication", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_compiler_flags", "tooling.swift.compiler_flags",
+        "Literal Swift compiler analysis flags; output modes and target overrides are rejected.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_module_paths", "tooling.swift.module_paths",
+        "Installed dependency module directories relative to oro.toml.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_framework_paths", "tooling.swift.framework_paths",
+        "Installed framework search directories relative to oro.toml.",
+        "[]", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_bridging_header", "tooling.swift.bridging_header",
+        "Objective-C bridging header relative to oro.toml.",
+        "", ConfigValueType::String, false
+      },
+      {
+        "tooling_swift_deployment_target", "tooling.swift.deployment_target",
+        "Apple deployment target override for Swift editor analysis.",
+        "", ConfigValueType::String, false
+      },
       // Filesystem and sandboxing
       {
         "filesystem_sandbox_enabled",
@@ -882,6 +1072,57 @@ namespace oro::runtime::config {
         true
       },
 
+      {
+        "workflows_enabled",
+        "workflows.enabled",
+        "Enable bundled declarative Android HTTPS GET/checkpoint/notification workflows without application native executors.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "workflows_definitions",
+        "workflows.definitions",
+        "Packaged workflow JSON asset, copied from the project root using build.copy or build.copy_map. No downloaded or executable policy.",
+        "workflows.json",
+        ConfigValueType::String,
+        false
+      },
+
+      {
+        "foreground_enabled",
+        "foreground.enabled",
+        "Enable explicitly user-started native Android dataSync or Linux process execution with a Stop notification. No automatic restart or JavaScript execution.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+
+      {
+        "foreground_continuous_enabled",
+        "foreground.continuous_enabled",
+        "Enable explicitly user-started compiled Android specialUse or Linux process monitoring with a public Stop notification. No duration cap, boot launch or automatic restart.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "foreground_notification_icon",
+        "foreground.notification_icon",
+        "Optional compiled monochrome Android drawable reference, such as @drawable/runtime_status. Applies to finite and continuous Stop notifications; empty uses the runtime icon.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "foreground_continuous_subtype",
+        "foreground.continuous_subtype",
+        "Required public specialUse purpose for continuous monitoring, 1..512 bytes without control characters. The application owns service-type eligibility.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+
       // I18n locales
       {
         "i18n_locales",
@@ -975,6 +1216,118 @@ namespace oro::runtime::config {
       },
 
       // Exec and tooling toggles
+      {
+        "build_cache",
+        "build.cache",
+        "Opt in to all supported build result caches; platform and cache-specific settings override this.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "build_compiler_cache",
+        "build.compiler_cache",
+        "Use ccache or sccache from PATH for native object compilation; inherits build.cache when unset.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "android_cache",
+        "android.cache",
+        "Override build.cache for Android application builds.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "android_compiler_cache",
+        "android.compiler_cache",
+        "Override compiler caching for Android; inherit android.cache, then build.compiler_cache and build.cache.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "ios_cache",
+        "ios.cache",
+        "Override build.cache for iOS application builds.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "ios_compiler_cache",
+        "ios.compiler_cache",
+        "Override compiler caching for iOS; inherit ios.cache, then build.compiler_cache and build.cache.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "mac_cache",
+        "mac.cache",
+        "Override build.cache for macOS application builds.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "mac_compiler_cache",
+        "mac.compiler_cache",
+        "Override compiler caching for macOS; inherit mac.cache, then build.compiler_cache and build.cache.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "linux_cache",
+        "linux.cache",
+        "Override build.cache for Linux application builds.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "linux_compiler_cache",
+        "linux.compiler_cache",
+        "Override compiler caching for Linux; inherit linux.cache, then build.compiler_cache and build.cache.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "win_cache",
+        "win.cache",
+        "Override build.cache for Windows application builds.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "win_compiler_cache",
+        "win.compiler_cache",
+        "Override compiler caching for Windows; inherit win.cache, then build.compiler_cache and build.cache.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "android_build_cache",
+        "android.build_cache",
+        "Enable Gradle task output caching; inherits android.cache, then build.cache when unset.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "android_configuration_cache",
+        "android.configuration_cache",
+        "Enable Gradle configuration caching with strict compatibility checks; inherits android.cache, then build.cache when unset.",
+        "",
+        ConfigValueType::Bool,
+        false
+      },
       {
         "allow_exec",
         "build.allow_exec",
@@ -1163,6 +1516,30 @@ namespace oro::runtime::config {
         "android_native_sources",
         "android.native_sources",
         "Additional Android native sources to compile.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "android_native_callbacks_enabled",
+        "android.native.callbacks_enabled",
+        "Enable compiled C++ callbacks registered during Application startup, including cold native services. Requires android.native.callback_sources and initializers; no renderer-supplied code.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "android_native_callback_sources",
+        "android.native.callback_sources",
+        "Space-separated project-relative C++ sources containing native callback handlers and startup initializers.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "android_native_initializers",
+        "android.native.initializers",
+        "Space-separated extern C void initializer(Runtime*) names run once per Android Application process before cold receiver/job dispatch.",
         "",
         ConfigValueType::String,
         false
@@ -1876,7 +2253,87 @@ namespace oro::runtime::config {
       {
         "push_enabled",
         "push.enabled",
-        "Enable optional native Android push transport; compiled handlers and authenticated server enrollment are separate requirements.",
+        "Enable optional native push transport; compiled handlers and authenticated server enrollment are separate requirements.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "credentials_enabled",
+        "credentials.enabled",
+        "Enable explicit native password selection on supported Android and Linux backends. Does not enable automatic form filling, save credentials or authenticate a server.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "authentication_linux_provider",
+        "authentication.linux.provider",
+        "Protected-key provider: auto prefers an eligible TPM2 PKCS#11 provider, then a unique hardware PKCS#11 token. Saved keys remain pinned to their provider.",
+        "auto",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "authentication_linux_module",
+        "authentication.linux.module",
+        "Optional absolute trusted PKCS#11 module path. Empty discovers installed p11-kit modules. Never supply a PIN in project configuration.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "authentication_linux_token_serial",
+        "authentication.linux.token_serial",
+        "Optional exact native token serial to resolve multiple eligible hardware tokens. The serial is not returned to JavaScript.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "authentication_linux_rsa_bits",
+        "authentication.linux.rsa_bits",
+        "New protected-secret RSA wrapping key size: 2048, 3072 or 4096 bits. Existing keys retain their saved size.",
+        "2048",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "linux_native_service_enabled",
+        "linux.native.service_enabled",
+        "Package an opt-in Linux native session service and authenticated GUI delegation. Requires compiled native sources and initializers; does not enable login hosting automatically.",
+        "false",
+        ConfigValueType::Bool,
+        false
+      },
+      {
+        "linux_native_sources",
+        "linux.native.sources",
+        "Space-separated project-relative C++ sources compiled into the Linux application and its native service.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "linux_native_initializers",
+        "linux.native.initializers",
+        "Space-separated extern C void initializer(Runtime*) names. Register native handlers; do not start arbitrary work during initialization.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "push_distributor",
+        "push.distributor",
+        "Optional Linux UnifiedPush D-Bus distributor service name. Otherwise select explicitly or use the only available distributor.",
+        "",
+        ConfigValueType::String,
+        false
+      },
+      {
+        "push_development_allow_loopback_http",
+        "push.development_allow_loopback_http",
+        "Linux development only: allow UnifiedPush HTTP endpoints at literal loopback addresses. HTTPS remains required elsewhere.",
         "false",
         ConfigValueType::Bool,
         false

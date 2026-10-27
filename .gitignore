@@ -14,6 +14,8 @@ target/
 .oro.env
 .vscode
 *.gradle*
+!/src/cli/push-distributor/*.gradle
+!/src/cli/tooling/*.gradle
 compile_flags.txt
 .classpath
 gradle.properties
@@ -53,6 +55,7 @@ node_modules/
 .pnpm-store/
 package-lock.json
 !test/package-lock.json
+!editors/vscode/package-lock.json
 
 # Default output directory
 build/
@@ -62,6 +65,7 @@ build/
 dist/
 examples/build/
 *.o
+*.o.metadata
 .npm
 .cache
 tmp/
@@ -73,3 +77,9 @@ api/index.tmp.d.ts
 
 # Locally cached MCP specification pages and generated indexes
 /docs/mcp/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+
+# Retained checkout SDK generations, outside disposable build output
+/.local/share/oro-sdk/
+
+# Python helper bytecode
+__pycache__/

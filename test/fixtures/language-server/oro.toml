@@ -1,0 +1,10 @@
+[meta]
+version = "1.0.0"
+bundle_identifier = "computer.oro.languagefixture"
+
+[build]
+name = "language_fixture"
+output = "build"
+
+[android]
+sources = "android/Probe.kt android/Sibling.kt"

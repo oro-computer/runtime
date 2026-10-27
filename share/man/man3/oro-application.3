@@ -142,7 +142,7 @@ Returns the current window index
 \fInumber\fR
 .TP
 \fBcreateWindow(opts)\fR
-Creates a new window and returns an instance of ApplicationWindow.
+Creates a new window and returns an instance of ApplicationWindow. Android rejects with `ENOTREADY` after Activity state is saved or while the Activity is unavailable. Retry the intended creation after application resume.
 \fBParameters:\fR
 .br
 \fIopts\fR (object; required) an options object

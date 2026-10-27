@@ -38,20 +38,23 @@ internal object PushCryptography {
     }
   }
 
-  private fun storageKey (create: Boolean): SecretKey {
+  fun hasStorageKey (alias: String = ALIAS): Boolean = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias(alias)
+
+  private fun storageKey (create: Boolean, alias: String): SecretKey {
     val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-    (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
-    check(create) { "Push storage key unavailable" }
+    (store.getKey(alias, null) as? SecretKey)?.let { return it }
+    if (!create || store.containsAlias(alias)) throw PlatformFailure("EKEYREVOKED")
     return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-      init(KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+      init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
         .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
         .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
     }.generateKey()
   }
 
-  fun seal (value: JSONObject, identity: String, create: Boolean): String {
+  @JvmOverloads
+  fun seal (value: JSONObject, identity: String, create: Boolean, alias: String = ALIAS): String {
     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    cipher.init(Cipher.ENCRYPT_MODE, storageKey(create))
+    cipher.init(Cipher.ENCRYPT_MODE, storageKey(create, alias))
     cipher.updateAAD(identity.toByteArray(Charsets.UTF_8))
     val bytes = value.toString().toByteArray(Charsets.UTF_8)
     return try {
@@ -59,12 +62,16 @@ internal object PushCryptography {
     } finally { bytes.fill(0) }
   }
 
-  fun open (value: String, identity: String): JSONObject {
+  @JvmOverloads
+  fun open (value: String, identity: String, alias: String = ALIAS): JSONObject {
     val record = JSONObject(value)
+    val iv = decode(record.getString("iv"))
+    val body = decode(record.getString("body"))
+    require(iv.size == 12 && body.size >= 16)
     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    cipher.init(Cipher.DECRYPT_MODE, storageKey(false), GCMParameterSpec(128, decode(record.getString("iv"))))
+    cipher.init(Cipher.DECRYPT_MODE, storageKey(false, alias), GCMParameterSpec(128, iv))
     cipher.updateAAD(identity.toByteArray(Charsets.UTF_8))
-    val bytes = cipher.doFinal(decode(record.getString("body")))
+    val bytes = cipher.doFinal(body)
     return try { JSONObject(bytes.toString(Charsets.UTF_8)) } finally { bytes.fill(0) }
   }
 

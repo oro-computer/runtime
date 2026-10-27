@@ -5,7 +5,7 @@ you explicitly broker additional locations. The native bootstrap wires the
 following directories when the activity starts:
 
 - **Root directory** – `Context.getExternalFilesDir(null)`; falls back to
-  `Context.getFilesDir()` when the scoped “external” directory is unavailable.
+  `Context.getFilesDir()` when the scoped "external” directory is unavailable.
 - **Cache directory** – `Context.getExternalCacheDir()` with an internal cache
   fallback.
 - **Media directory** – `Context.getExternalMediaDirs().first()` when present,

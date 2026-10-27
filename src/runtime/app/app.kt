@@ -61,7 +61,7 @@ internal object RuntimeLifecycleEvents {
 
   @Synchronized
   fun record (index: Int, phase: String, duration: Long = 0) {
-    require(phase in listOf("loading", "ready", "failed", "renderer-lost", "reload"))
+    require(phase in listOf("loading", "presented", "ready", "failed", "renderer-lost", "reload"))
     if (events.size >= 64) events.removeFirst()
     events.addLast(JSONObject().put("index", index).put("phase", phase)
       .put("elapsedMs", android.os.SystemClock.elapsedRealtime() - started)
@@ -77,7 +77,7 @@ internal object RuntimeStartupTimings {
   private val phases = linkedMapOf<String, Long>()
 
   fun <T> measure (phase: String, operation: () -> T): T {
-    require(phase in listOf("native-library", "native-allocation", "native-extensions", "process-lifecycle"))
+    require(phase in listOf("native-library", "native-allocation", "native-workflows", "native-extensions", "process-lifecycle"))
     val started = android.os.SystemClock.elapsedRealtimeNanos()
     android.os.Trace.beginSection("oro.startup.$phase")
     try {
@@ -117,8 +117,9 @@ internal object NotificationReceipts {
   }
 
   @Synchronized
-  fun createIntent (context: Context, target: Intent, id: String, action: String): Intent? {
-    if (id.length !in 1..256 || action.length !in 1..256) return null
+  @JvmOverloads
+  fun createIntent (context: Context, target: Intent, id: String, action: String, tag: String = "", targetRef: String = ""): Intent? {
+    if (id.length !in 1..256 || action.length !in 1..256 || tag.length > 256 || targetRef.length > 256) return null
     val state = read(context)
     val previous = state.optJSONObject("pending") ?: JSONObject()
     val pending = JSONObject()
@@ -129,7 +130,7 @@ internal object NotificationReceipts {
     }
     val token = java.util.UUID.randomUUID().toString()
     pending.put(token, JSONObject().put("id", id).put("action", action)
-      .put("createdAt", System.currentTimeMillis()))
+      .put("tag", tag).put("targetRef", targetRef).put("createdAt", System.currentTimeMillis()))
     state.put("pending", pending)
     if (!preferences(context).edit().putString("state", state.toString()).commit()) return null
     return target.setData(Uri.Builder().scheme("oro-notification-receipt")
@@ -151,6 +152,7 @@ internal object NotificationReceipts {
     pending.remove(token)
     val receipt = JSONObject().put("receiptId", token)
       .put("id", id).put("action", action)
+      .put("tag", record.optString("tag")).put("targetRef", record.optString("targetRef"))
       .put("receivedAt", System.currentTimeMillis())
     val responses = responses(state)
     val retained = JSONArray()
@@ -160,8 +162,11 @@ internal object NotificationReceipts {
     retained.put(receipt)
     state.put("responses", retained)
     if (!preferences(context).edit().putString("state", state.toString()).commit()) return null
-    return receipt
+    return publicReceipt(receipt)
   }
+
+  private fun publicReceipt(value: JSONObject): JSONObject = JSONObject().put("receiptId", value.getString("receiptId"))
+    .put("id", value.getString("id")).put("action", value.getString("action")).put("receivedAt", value.getLong("receivedAt"))
 
   private fun responses (state: JSONObject): JSONArray {
     val previous = state.optJSONArray("responses") ?: JSONArray()
@@ -174,7 +179,27 @@ internal object NotificationReceipts {
   }
 
   @Synchronized
-  fun list (context: Context): String = responses(read(context)).toString()
+  fun list (context: Context): String {
+    val values = responses(read(context))
+    return JSONArray((0 until values.length()).map { publicReceipt(values.getJSONObject(it)) }).toString()
+  }
+
+  @Synchronized
+  fun listNative (context: Context): String = responses(read(context)).toString()
+
+  @Synchronized
+  fun target (context: Context, id: String, tag: String): String {
+    val pending = read(context).optJSONObject("pending") ?: return ""
+    var newest = -1L
+    var target = ""
+    for (key in pending.keys()) {
+      val record = pending.optJSONObject(key) ?: continue
+      val timestamp = record.optLong("createdAt")
+      if (record.optString("id") == id && record.optString("tag") == tag && record.optString("action") == "default" &&
+          fresh(timestamp) && timestamp > newest) { newest = timestamp; target = record.optString("targetRef") }
+    }
+    return target
+  }
 
   @Synchronized
   fun acknowledge (context: Context, receiptId: String): Boolean {
@@ -699,6 +724,8 @@ open class AppActivity : WindowManagerActivity() {
   override fun onNewIntent (intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    try { RetainedComponents.activity(applicationContext, intent)
+    } catch (_: Exception) { console.error("Historical routing entry was not admitted") }
     LauncherDestinations.accept(this, intent)
     NativeExtensions.dispatch { it.onNewIntent(this, intent) }
     val action = intent.action
@@ -821,6 +848,7 @@ open class App : Application() {
   fun getAppPlatform (): AppPlatform = platform
 
   @Volatile private var packageCompatible: Boolean? = null
+  internal val packagedAssetsVerified: Boolean get() = packageCompatible == true
 
   private val applicationInputSha256: String? by lazy {
     try {
@@ -959,6 +987,9 @@ open class App : Application() {
     .put("backgroundJavaScript", false).put("push", NativePush.available(this))
     .put("applicationBackHandling", true).put("periodicDeferredReads", DeferredSync.available(this))
     .put("nativeDeferredMaintenance", DeferredSync.available(this))
+    .put("nativeForegroundExecution", ForegroundTasks.available(this))
+    .put("nativeContinuousExecution", ContinuousTasks.available(this))
+    .put("nativeTransactionalRecords", true).put("nativeCoordination", true)
     .put("biometricSecretUnlock", ProtectedAuthentication.status(this).optBoolean("enabled"))
     .put("namedLauncherDestinations", getUserConfigValue("launcher_enabled") == "true")
     .put("nativeDeferredReads", DeferredSync.available(this)).put("deferredWrites", false)
@@ -967,6 +998,8 @@ open class App : Application() {
     .put("nativePasswordSelection", PasswordCredentials.available(this))
     .put("nativeNotificationPresentation", true)
     .put("systemTextScaling", true)
+    .put("systemGestureExclusion", Build.VERSION.SDK_INT >= 29)
+    .put("nativeStartupPresentation", true)
     .put("nativeExtensions", getUserConfigValue("android_extensions").isNotBlank())
     .put("pointerCapture", false)
     .put("historicalProcessExits", Build.VERSION.SDK_INT >= 30).toString()
@@ -1172,6 +1205,7 @@ open class App : Application() {
 
   override fun onCreate () {
     super.onCreate()
+    RuntimeStartupTimings.measure("native-workflows") { NativeWorkflows.initialize(this) }
     RuntimeStartupTimings.measure("native-extensions") { NativeExtensions.initialize(this) }
     NativePush.start(this)
 

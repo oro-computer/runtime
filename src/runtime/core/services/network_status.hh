@@ -15,6 +15,7 @@ namespace oro::runtime::core::services {
     #elif ORO_RUNTIME_PLATFORM_LINUX
       GNetworkMonitor* monitor = nullptr;
       guint signal = 0;
+      JSON::Object snapshot () const;
     #endif
 
       Observers observers;

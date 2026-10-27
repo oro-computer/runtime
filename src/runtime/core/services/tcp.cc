@@ -6,6 +6,15 @@
 using oro::runtime::crypto::rand64;
 
 namespace oro::runtime::core::services {
+  bool TCP::start () {
+    if (!this->enabled) {
+      return false;
+    }
+    return this->loop.dispatch([this]() {
+      this->manager.resumeOnLoopThread();
+    });
+  }
+
   void TCP::create (const String& seq, ID id, const Callback cb) {
     this->loop.dispatch([=, this]{
       Lock lock(this->mutex);

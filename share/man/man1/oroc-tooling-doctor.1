@@ -1,0 +1,46 @@
+.TH OROC-TOOLING-DOCTOR 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-tooling\-doctor \- Inspect editor setup without preparing dependencies.
+.SH SYNOPSIS
+.nf
+oroc tooling doctor [options] [<project\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Inspect editor setup without preparing dependencies.
+.SH OPTIONS
+.TP
+\fB\-\-language=<name>\fR
+inspect one language family; otherwise inspect declared languages
+.TP
+\fB\-\-platform=<name>\fR
+select the native target
+.TP
+\fB\-\-arch=<name>\fR
+select target architecture
+.TP
+\fB\-\-variant=<name>\fR
+select Android variant (default devDebug)
+.TP
+\fB\-\-prod\fR
+inspect release model
+.TP
+\fB\-\-json\fR
+emit the structured report instead of readable text
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml or oro.ini
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Checks project root, selected SDK, server executables, required tools and cached model freshness.
+.PP
+Does not install servers, generate models, run Gradle tasks or invoke preparation targets.
+.PP
+Returns a nonzero status when a required check fails; stale or absent models are warnings.
+.PP
+See docs/LANGUAGE_SERVER.md for configuration and editor examples.
+.SH SEE ALSO
+oroc(1), oroc\-tooling(1)

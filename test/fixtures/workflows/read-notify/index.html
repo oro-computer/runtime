@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Public declarative workflow</title>
+<style>
+body { font: 1rem system-ui; margin: 1.5rem; color: #182535; background: #f4f7fa }
+button { display: block; margin: 1rem 0; padding: .75rem }
+pre { white-space: pre-wrap; overflow-wrap: anywhere }
+</style>
+<h1>Public declarative workflow</h1>
+<p>This screen uses public test data and has no application Kotlin or C++ files.</p>
+<button id="bind">Bind public read</button>
+<button id="run">Read and notify</button>
+<button id="status">Check local state</button>
+<button id="discover">Find public bindings</button>
+<button id="stop">Stop</button>
+<pre id="result" role="status">Starting</pre>
+<script type="module">
+import workflows from 'oro:workflows'
+import foreground from 'oro:foreground'
+
+import application from 'oro:application'
+import Notification from 'oro:notification'
+import secureStorage from 'oro:secure-storage'
+const result = document.querySelector('#result')
+const scope = { authorityRef: 'public-authority', accountRef: 'public-account', targetRef: 'public-target', userInitiated: true }
+let binding = JSON.parse(localStorage.getItem('public-workflow-binding') || 'null')
+let latestRun = null
+window.publicWorkflowCheck = async (action, options = {}) => {
+  if (action === 'support') return workflows.getSupport()
+  if (action === 'restore') { binding = await workflows.getStatus({ id: options.id }); localStorage.setItem('public-workflow-binding', JSON.stringify(binding)); return binding }
+  if (action === 'approveAuthority') return workflows.approveAuthority({ workflow: 'public-self-hosted', ...scope, ...options })
+  if (action === 'discover') { const { userInitiated, ...identity } = scope; return workflows.discover({ workflow: options.workflow || 'public-read', ...identity }) }
+  if (action === 'events') return workflows.getEvents({ id: binding.id })
+  if (action === 'releaseEvents') return workflows.releaseEvents({ id: binding.id, generation: (await workflows.getStatus({ id: binding.id })).generation, ...options })
+  if (action === 'release') return workflows.release({ id: binding.id, generation: (await workflows.getStatus({ id: binding.id })).generation })
+  if (action === 'releaseCredential') return workflows.releaseCredential(options)
+  if (action === 'revokeAuthority') return workflows.revokeAuthority(options)
+  if (action === 'releaseAuthority') return workflows.releaseAuthority(options)
+  if (action === 'bind') {
+    binding = await workflows.bind({ workflow: options.workflow || 'public-read', ...scope, ...options })
+    localStorage.setItem('public-workflow-binding', JSON.stringify(binding))
+    return binding
+  }
+  if (action === 'credential') {
+    // Public fixture value only. Real applications use their existing foreground sign-in flow.
+    await secureStorage.setItem('public-workflow-bearer', 'public-test-bearer')
+    return workflows.importCredential({ workflow: options.workflow || 'public-authorized', ...scope, ...options })
+  }
+  if (action === 'run') {
+    latestRun = await workflows.run({ id: binding.id, userInitiated: true })
+    return latestRun
+  }
+  if (action === 'monitor') { latestRun = await workflows.monitor({ id: binding.id, userInitiated: true }); return latestRun }
+  if (action === 'monitorStatus') return (await import('oro:foreground/continuous')).default.getStatus(latestRun.id)
+  if (action === 'runStatus') return foreground.getStatus(latestRun.id)
+  if (action === 'status') return workflows.getStatus({ id: binding.id })
+  if (action === 'stop') return workflows.stop({ id: binding.id })
+  if (action === 'revoke') return workflows.revokeCredential(options)
+  if (action === 'schedule') return workflows.schedule({ id: binding.id, ...options })
+  if (action === 'pushOptions') return workflows.getPushOptions({ id: binding.id })
+  if (action === 'responses') return workflows.getResponses({ id: binding.id })
+  throw new Error('Unknown public check')
+}
+for (const action of ['bind', 'run', 'status', 'stop', 'discover']) document.querySelector('#' + action).onclick = async () => {
+  try {
+    if (action === 'run') await Notification.requestPermission()
+    result.textContent = JSON.stringify(await window.publicWorkflowCheck(action), null, 2)
+  } catch (error) { result.textContent = error.code || 'Public check failed' }
+}
+// UI storage is a hint. Durable identity and outcomes belong to the runtime.
+if (binding) {
+  try { binding = await workflows.getStatus({ id: binding.id }) }
+  catch (error) { if (error.code === 'ENOENT') binding = null; else throw error }
+}
+const support = await workflows.getSupport()
+result.textContent = JSON.stringify(support, null, 2)
+await (await application.getCurrentWindow()).markReady()
+</script>

@@ -31,7 +31,7 @@ data class DeferredReadTask (
 )
 
 /** Fixed outcomes from an authorized read/reconciliation, never mutation replay. */
-enum class DeferredReadOutcome { COMPLETED, RETRY, CONFLICT, UNAUTHORIZED, UNKNOWN }
+enum class DeferredReadOutcome { COMPLETED, RETRY, CONFLICT, UNAUTHORIZED, UNKNOWN, FAILED }
 
 /** In-memory authorization. Close must release credentials/connections after use. */
 interface AuthorizedDeferredRead : AutoCloseable {
@@ -77,7 +77,7 @@ object DeferredSync {
   @Synchronized
   fun registerReadExecutor (kind: String, executor: DeferredReadExecutor) {
     require(Regex("[a-z][a-z0-9.-]{0,63}").matches(kind))
-    require(!executors.containsKey(kind) && executors.size < 16)
+    require(!executors.containsKey(kind) && executors.keys.count { it.startsWith("workflow.") == kind.startsWith("workflow.") } < 16)
     executors[kind] = executor
   }
 
@@ -402,6 +402,7 @@ class RuntimeDeferredJob : JobService() {
               DeferredReadOutcome.CONFLICT -> "conflict"
               DeferredReadOutcome.UNAUTHORIZED -> "unauthorized"
               DeferredReadOutcome.UNKNOWN -> "unknown"
+              DeferredReadOutcome.FAILED -> "failed"
             }
           }
         } catch (_: java.io.IOException) { "retry"

@@ -440,8 +440,24 @@ jobs:
           name: npm-pack-${{ inputs.version }}-top-level
           path: ${{ runner.temp }}/npm-smoke-packs
 
+      - name: Setup Java for Android editor qualification
+        if: ${{ matrix.build_android }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install editor qualification backends
+        shell: bash
+        run: |
+          editor_args=()
+          if [[ "${{ matrix.build_android }}" == "true" ]]; then editor_args+=(--android); fi
+          node bin/install-editor-test-tools.js "$RUNNER_TEMP/editor-tools" "${editor_args[@]}"
+
       - name: Smoke install exact package family on native runner
         shell: bash
+        env:
+          ORO_REQUIRE_EDITOR_QUALIFICATION: '1'
         run: |
           platform_archive="$RUNNER_TEMP/npm-packs/oro-computer-runtime-$PACKAGE_ID-$RELEASE_VERSION.tgz"
           node_archive="$RUNNER_TEMP/npm-smoke-packs/oro-computer-runtime-node-$RELEASE_VERSION.tgz"

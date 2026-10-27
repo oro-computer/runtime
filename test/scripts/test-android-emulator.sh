@@ -52,12 +52,47 @@ if [[ ! -f "$adb" ]]; then
 fi
 export adb
 
+port="${ORO_ANDROID_EMULATOR_PORT:-${ANDROID_SERIAL#emulator-}}"
+port="${port:-5554}"
+if [[ ! "$port" =~ ^[0-9]{4}$ ]] || (( port < 5554 || port > 5584 || port % 2 != 0 )); then
+  echo >&2 "Use an even ORO_ANDROID_EMULATOR_PORT from 5554 through 5584."
+  exit 1
+fi
+if [[ -n "$ANDROID_SERIAL" && "$ANDROID_SERIAL" != "emulator-$port" ]]; then
+  echo >&2 "ANDROID_SERIAL must match emulator-$port for an emulator test run."
+  exit 1
+fi
+export ANDROID_SERIAL="emulator-$port"
+export ORO_ANDROID_EMULATOR_PORT="$port"
+if "$adb" devices | awk 'NR > 1 {print $1}' | grep -Fx "$ANDROID_SERIAL" >/dev/null; then
+  echo >&2 "Android target $ANDROID_SERIAL already exists; choose a free ORO_ANDROID_EMULATOR_PORT."
+  exit 1
+fi
+
+bootstrap_pid=""
+function stop_owned_emulator() {
+  if [[ -n "$bootstrap_pid" ]]; then
+    kill "$bootstrap_pid" 2>/dev/null || true
+    for attempt in {1..100}; do
+      kill -0 "$bootstrap_pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    if kill -0 "$bootstrap_pid" 2>/dev/null; then
+      kill -KILL "$bootstrap_pid" 2>/dev/null || true
+    fi
+    wait "$bootstrap_pid" 2>/dev/null || true
+    bootstrap_pid=""
+  fi
+}
+trap stop_owned_emulator EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 
 echo "Ensuring adb server running..."
-$adb start-server || exit $?
+"$adb" start-server || exit $?
 
 temp="$(mktemp)"
-${SHELL:-sh} -c "$root/scripts/bootstrap-android-emulator.sh $temp" & bootstrap_pid=$!
+bash "$root/scripts/bootstrap-android-emulator.sh" "$temp" & bootstrap_pid=$!
 
 bootstrap_exit_code=""
 bootstrap_wait_count=0
@@ -81,8 +116,7 @@ while [ -z "$bootstrap_exit_code" ]; do
 
   if (( bootstrap_wait_count >= bootstrap_timeout )); then
     echo "Android emulator setup timed out after ${bootstrap_timeout}s."
-    kill "$bootstrap_pid" 2>/dev/null || true
-    wait "$bootstrap_pid" 2>/dev/null || true
+    stop_owned_emulator
     rm "$temp"
     exit 124
   fi
@@ -110,7 +144,24 @@ boot_completed=""
 boot_wait_count=0
 boot_timeout="${ORO_ANDROID_EMULATOR_BOOT_TIMEOUT_SECONDS:-300}"
 while [[ "$boot_completed" != "1" ]] ; do
-  boot_completed="$($adb shell getprop sys.boot_completed 2>/dev/null)"
+  if ! kill -0 "$bootstrap_pid" 2>/dev/null; then
+    wait "$bootstrap_pid"
+    bootstrap_exit_code=$?
+    bootstrap_pid=""
+    (( bootstrap_exit_code == 0 )) && bootstrap_exit_code=1
+    echo "Android Emulator exited before framework readiness."
+    rm "$temp"
+    exit "$bootstrap_exit_code"
+  fi
+  boot_completed="$("$adb" -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+  if [[ "$boot_completed" == "1" ]]; then
+    for service in package activity; do
+      if ! "$adb" -s "$ANDROID_SERIAL" shell service check "$service" 2>/dev/null | grep -E ': found[[:space:]]*$' >/dev/null; then
+        boot_completed=""
+        break
+      fi
+    done
+  fi
   # reliable cross platform method of waiting for background process asynchronously
   bootstrap_exit_code="$(cat "$temp")"
   if [[ -n "$bootstrap_exit_code" ]] && [[ "$bootstrap_exit_code" != "0" ]]; then
@@ -124,8 +175,7 @@ while [[ "$boot_completed" != "1" ]] ; do
   if (( boot_wait_count >= boot_timeout )); then
     echo "Android Emulator boot timed out after ${boot_timeout}s."
     "$adb" devices || true
-    kill "$bootstrap_pid" 2>/dev/null || true
-    wait "$bootstrap_pid" 2>/dev/null || true
+    stop_owned_emulator
     rm "$temp"
     exit 124
   fi
@@ -145,21 +195,12 @@ node "$root/scripts/test-android.js" || {
   rc=$?
   if [[ -n "$RUNNER_TEMP" ]]; then
     mkdir -p "$RUNNER_TEMP/android-failure-logs"
-    "$adb" logcat -d -b all > "$RUNNER_TEMP/android-failure-logs/logcat.txt" 2>&1 || true
-    "$adb" shell dumpsys activity activities > "$RUNNER_TEMP/android-failure-logs/activities.txt" 2>&1 || true
+    "$adb" -s "$ANDROID_SERIAL" logcat -d -b all > "$RUNNER_TEMP/android-failure-logs/logcat.txt" 2>&1 || true
+    "$adb" -s "$ANDROID_SERIAL" shell dumpsys activity activities > "$RUNNER_TEMP/android-failure-logs/activities.txt" 2>&1 || true
   fi
   echo "info: Shutting Android Emulator due to failed build."
-  "$adb" devices | grep emulator | cut -f1 | while read -r line; do
-    "$adb" -s "$line" emu kill
-  done
   exit "$rc"
 }
 
 echo "info: Shutting Android Emulator due to poll-adb-logcat.sh finishing."
-"$adb" devices | grep emulator | cut -f1 | while read -r line; do
-  "$adb" -s "$line" emu kill
-done
-
-"$adb" kill-server >/dev/null 2>&1
-
-exit $rc
+exit 0

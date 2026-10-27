@@ -3,8 +3,12 @@
 
 #include "../../core.hh"
 #include "../../bytes.hh"
+#include "../../native/records.hh"
 
 namespace oro::runtime::core::services {
+  struct NativeRecordKeyAccess;
+  class NativeRecordKeyStore;
+
   class SecureStorage : public core::Service {
     public:
       enum class Encoding {
@@ -33,6 +37,9 @@ namespace oro::runtime::core::services {
 
       bool start () override;
       bool stop () override;
+
+      /** Native-only keys in a non-origin namespace that JS secure-storage routes reject. */
+      std::shared_ptr<native::RecordKeyStore> nativeRecordKeys ();
 
       void set (
         const String& seq,
@@ -70,6 +77,8 @@ namespace oro::runtime::core::services {
       );
 
     private:
+      friend class NativeRecordKeyStore;
+      std::shared_ptr<NativeRecordKeyAccess> nativeKeyAccess;
       String computeDefaultScope () const;
       bool normalizeScope (
         const String& requested,

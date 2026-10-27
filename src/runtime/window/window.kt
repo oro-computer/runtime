@@ -648,6 +648,7 @@ open class WindowFragment : Fragment(R.layout.web_view), IWindowFragment {
   private var startupLocation: String? = null
   private var loading = false
   private var failed = false
+  private var startupPresented = false
   internal val readyForPresentation: Boolean get() = hasWebView && !loading && !failed
   private var startupStartedAt = 0L
   private val startupHandler = Handler(Looper.getMainLooper())
@@ -663,8 +664,16 @@ open class WindowFragment : Fragment(R.layout.web_view), IWindowFragment {
       this.showRecovery(true)
       return
     }
-    if (this.loading) return
+    if (this.loading) {
+      if (this.startupPresented) {
+        this.startupPresented = false
+        this.currentWebView?.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        this.showRecovery(false)
+      }
+      return
+    }
     this.loading = true
+    this.startupPresented = false
     this.startupStartedAt = SystemClock.elapsedRealtime()
     oro.runtime.app.RuntimeLifecycleEvents.record(index, "loading")
     this.currentWebView?.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -678,11 +687,53 @@ open class WindowFragment : Fragment(R.layout.web_view), IWindowFragment {
     }
   }
 
+  /** Presentation releases the loading cover, never the readiness watchdog. */
+  internal fun presentStartup (call: oro.runtime.app.PlatformCall) {
+    val owner = call.document()
+    val webview = this.currentWebView ?: throw oro.runtime.app.PlatformFailure("ENOTREADY")
+    fun validate () {
+      val current = call.document()
+      val uri = Uri.parse(webview.url ?: "")
+      if (current !== owner || current.fragment !== this || this.currentWebView !== webview || this.failed) {
+        throw oro.runtime.app.PlatformFailure("ABORT_ERR")
+      }
+      if (!call.app.packagedAssetsVerified || uri.scheme != "https" || uri.authority != owner.getBundleIdentifier()) {
+        throw oro.runtime.app.PlatformFailure("EACCES")
+      }
+    }
+    validate()
+    if (!this.loading || this.startupPresented) {
+      call.success()
+      return
+    }
+    webview.postVisualStateCallback(0, object : WebView.VisualStateCallback() {
+      override fun onComplete (requestId: Long) {
+        if (call.done.get()) return
+        try {
+          validate()
+          if (this@WindowFragment.loading && !this@WindowFragment.startupPresented) {
+            oro.runtime.app.RuntimeLifecycleEvents.record(index, "presented", SystemClock.elapsedRealtime() - startupStartedAt)
+            this@WindowFragment.recovery?.let { this@WindowFragment.content?.removeView(it) }
+            this@WindowFragment.recovery = null
+            this@WindowFragment.startupPresented = true
+            webview.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+          }
+          call.success()
+        } catch (error: oro.runtime.app.PlatformFailure) { call.failure(error.code)
+        } catch (_: Exception) {
+          call.failure("EIO")
+          this@WindowFragment.failStartup()
+        }
+      }
+    })
+  }
+
   fun markReady (explicit: Boolean = false) {
     if (this.failed || !this.hasWebView) return
     if (!explicit && !this.options.headless && App.getInstance().getUserConfigValue("webview_require_ready") == "true") return
     if (this.loading) oro.runtime.app.RuntimeLifecycleEvents.record(index, "ready", SystemClock.elapsedRealtime() - startupStartedAt)
     this.loading = false
+    this.startupPresented = false
     this.startupHandler.removeCallbacks(this.startupWatchdog)
     this.recovery?.let { this.content?.removeView(it) }
     this.recovery = null
@@ -693,12 +744,16 @@ open class WindowFragment : Fragment(R.layout.web_view), IWindowFragment {
 
   fun failStartup (message: Int = R.string.runtime_startup_failed) {
     if (this.failed) return
-    this.window?.let { it.activity.presentation.navigation(it) }
+    this.window?.let {
+      oro.runtime.app.PlatformOperations.cancelWindow(it)
+      it.activity.presentation.navigation(it)
+    }
     this.failureMessage = message
     console.error("Runtime window $index entered native startup recovery")
     oro.runtime.app.RuntimeLifecycleEvents.record(index, "failed", if (loading) SystemClock.elapsedRealtime() - startupStartedAt else 0)
     this.loading = false
     this.failed = true
+    this.startupPresented = false
     this.startupHandler.removeCallbacks(this.startupWatchdog)
     this.currentWebView?.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     this.showRecovery(true)
@@ -812,6 +867,7 @@ open class WindowFragment : Fragment(R.layout.web_view), IWindowFragment {
 
   override fun onHiddenChanged (hidden: Boolean) {
     super.onHiddenChanged(hidden)
+    if (hidden) this.window?.let { oro.runtime.app.NativeGestures.invalidate(it) }
     (this.activity as? WindowManagerActivity)?.systemAppearance?.refresh()
     (this.activity as? WindowManagerActivity)?.presentation?.refresh()
   }
@@ -844,6 +900,7 @@ open class WindowFragment : Fragment(R.layout.web_view), IWindowFragment {
   }
 
   override fun onPause () {
+    this.window?.let { oro.runtime.app.NativeGestures.invalidate(it) }
     super.onPause()
   }
 

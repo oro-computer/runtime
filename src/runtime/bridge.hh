@@ -47,6 +47,10 @@ namespace oro::runtime::bridge {
 
       DispatchHandler dispatchHandler = nullptr;
       bool dispatchRouterCallbacksWithBridge = false;
+#if ORO_RUNTIME_PLATFORM_LINUX
+      String nativeDocumentToken;
+      Atomic<uint64_t> nativeDocumentGeneration = 0;
+#endif
       webview::SchemeHandlers schemeHandlers;
       webview::Navigator navigator;
       ipc::Router router;

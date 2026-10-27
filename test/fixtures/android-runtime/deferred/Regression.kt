@@ -42,6 +42,21 @@ private fun awaitPhase(id: String, phase: String) {
   error("Deferred task did not reach $phase")
 }
 
+/** Inline Handler callbacks can publish completion before their worker returns. */
+internal fun awaitDeferredWorkerIdle() {
+  val field = RuntimeDeferredJob::class.java.getDeclaredField("worker").apply { isAccessible = true }
+  val worker = field.get(null) as java.util.concurrent.ThreadPoolExecutor
+  val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+  fun idle(): Boolean = worker.poolSize == 0 || worker.activeCount == 0 && Thread.getAllStackTraces().any { (thread, stack) ->
+    thread.name == "oro-deferred-read" && thread.state == Thread.State.TIMED_WAITING &&
+      stack.any { it.className == "java.util.concurrent.SynchronousQueue" && it.methodName == "poll" }
+  }
+  while (!idle()) {
+    check(System.nanoTime() < deadline) { "Deferred fixture worker did not become idle" }
+    Thread.sleep(1)
+  }
+}
+
 fun main() {
   val authorized = AtomicInteger()
   val closed = AtomicInteger()

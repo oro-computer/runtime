@@ -36,6 +36,7 @@ namespace oro::runtime::udp {
     SOCKET_STATE_UDP_CONNECTED = 1 << 11,
     SOCKET_STATE_UDP_RECV_STARTED = 1 << 12,
     SOCKET_STATE_UDP_PAUSED = 1 << 13,
+    SOCKET_STATE_UDP_PAUSED_RECV = 1 << 14,
     // tcp states (20)
     SOCKET_STATE_TCP_BOUND = 1 << 20,
     SOCKET_STATE_TCP_CONNECTED = 1 << 21,

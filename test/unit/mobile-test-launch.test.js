@@ -25,8 +25,9 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 const args = process.argv.slice(2)
 const command = path.basename(process.argv[1])
-appendFileSync(process.env.ORO_MOCK_LOG, JSON.stringify({ command, args }) + '\\n')
-const step = command === 'oroc' ? 'build' : args[1]
+appendFileSync(process.env.ORO_MOCK_LOG, JSON.stringify({ command, args, androidSerial: process.env.ANDROID_SERIAL }) + '\\n')
+const step = command === 'oroc' ? 'build' : command === 'adb' ? args[2] : args[1]
+if (command === 'adb' && args[0] === 'devices') console.log('List of devices attached\\npublic-phone\\tdevice\\nemulator-5564\\tdevice')
 if (step === process.env.ORO_MOCK_FAILURE) process.exit(7)
 if (command === 'adb' && args.includes('tar')) {
   const archive = readFileSync(0)
@@ -58,6 +59,7 @@ if (command === 'xcrun' && step === 'launch') {
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       ORO_BIN: path.join(bin, 'oroc'),
       ANDROID_HOME: '',
+      ANDROID_SERIAL: 'emulator-5564',
       SHELL: path.join(bin, 'mock-shell'),
       ORO_MOCK_LOG: log,
       ORO_MOCK_CONTAINER: container,
@@ -111,16 +113,20 @@ for (const ci of ['1', '']) {
     harness.env.ORO_ANDROID_CI = ci
     const { result, commands } = runHarness(harness)
     assert.equal(result.status, 0, result.stderr)
-    const install = commands.find(({ command, args }) => command === 'adb' && args[0] === 'install')
+    const install = commands.find(({ command, args }) => command === 'adb' && args[2] === 'install')
     assert.equal(install.args.includes('-g'), Boolean(ci))
     assert.ok(install.args.at(-1).endsWith(`app-${ci ? 'dev' : 'live'}-debug.apk`))
     const build = commands.find(({ command }) => command === 'oroc')
     assert.ok(!build.args.includes('-r'))
     assert.equal(commands.at(-1).command, 'mock-shell')
     assert.deepEqual(commands.at(-2).args, [
-      'shell', '-T', 'run-as', 'computer.oro.runtime.tests',
+      '-s', 'emulator-5564', 'shell', '-T', 'run-as', 'computer.oro.runtime.tests',
       'tar', '-xf', '-', '-C', 'cache/oro-test-fixtures'
     ], 'fixtures must be extracted as the app UID before launch')
     assert.ok(build.args.includes('--env=ORO_TEST_FIXTURES_DIR'))
+    assert.equal(commands.at(-1).androidSerial, 'emulator-5564')
+    for (const call of commands.filter(({ command, args }) => command === 'adb' && args[0] !== 'devices')) {
+      assert.deepEqual(call.args.slice(0, 2), ['-s', 'emulator-5564'])
+    }
   })
 }

@@ -371,7 +371,9 @@ stateDiagram-v2
 Platform mapping summary
 
 - iOS/macOS/Android/Windows/Linux map activation/background/terminate to `applicationpause`/`applicationresume`/`applicationstop` events. On desktop, native pause/resume is opt‑in (`lifecycle_desktop_always_running = false`).
-- File watchers are stopped on pause; recreate on `applicationresume` as needed.
+- Work accepted by a paused native loop remains queued until resume. Callers must not await paused native I/O before arranging the resume action. Stopped or destroyed loops do not accept new work.
+- UDP pause stops receives while retaining the initialized handle and local endpoint; resume restarts its reader. TCP resume restarts only readers active before pause. These local lifecycle primitives do not establish remote protocol reconnection or successful transfer completion.
+- File watchers are stopped and their native registrations released on a real pause; recreate on `applicationresume` as needed. Closing an original watcher after that release reports `NOT_FOUND_ERR`. Desktop's default always-running policy emits lifecycle events without stopping these services.
 
 ## Security and Configuration
 

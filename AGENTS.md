@@ -14,8 +14,8 @@
 
 - Assume multiple agents may share the same working tree.
 - NEVER run destructive or state-changing git commands unless the user explicitly asks (no `git checkout`/`switch`/`restore`/`reset`/`clean`/`stash`/`rebase`/`merge`/`cherry-pick`/`revert`, and never use `-f`/`--force`).
-- NEVER discard or overwrite uncommitted work unless the user explicitly asks. This includes “manual restore” patterns that still destroy local edits, such as `git show HEAD:<file> > <file>`, copying files out of `.git/`, or otherwise replacing working-tree files to match `HEAD`.
-- NEVER run filesystem-destructive commands unless the user explicitly asks (no `rm`/`unlink`/`find -delete`/cleanup scripts like `./bin/clean.sh`). Treat “cleanup” as destructive even when it targets ignored/generated directories.
+- NEVER discard or overwrite uncommitted work unless the user explicitly asks. This includes "manual restore” patterns that still destroy local edits, such as `git show HEAD:<file> > <file>`, copying files out of `.git/`, or otherwise replacing working-tree files to match `HEAD`.
+- NEVER run filesystem-destructive commands unless the user explicitly asks (no `rm`/`unlink`/`find -delete`/cleanup scripts like `./bin/clean.sh`). Treat "cleanup” as destructive even when it targets ignored/generated directories.
 - Before any potentially destructive operation, first inspect and preserve local changes (e.g., capture `git status --porcelain` and `git diff` output) and get explicit confirmation.
 - If a clean baseline is needed, first preserve local changes (e.g., save `git diff`/`git status --porcelain` output to a patch file in the workspace) and get explicit confirmation before proceeding.
 - Do not create branches, commits, tags, or pushes unless the user explicitly requests it.
@@ -27,7 +27,7 @@
 - `npm test`: Run desktop tests (installs `test` deps, uses the Oro test runner).
 - `npm run test:android` | `npm run test:ios-simulator`: Run mobile tests.
 - `npm run test:runtime-core`: Headless core tests.
-- `npm run lint`: Authoritative repo-wide validation. Runs Standard for JS/MJS/CJS, checks generated documentation for drift, regenerates TypeScript declarations, verifies third-party dependency fetch defaults and recursive submodule fetches use CI-safe HTTPS GitHub URLs, checks the distinct `NO_ANDROID`/`NO_IOS` documentation contract, runs oxlint, checks Prettier-managed files, and runs cpplint. If `lint:docs` fails, run `npm run gen:docs` and include the generated updates; source line changes can affect man-page links even when API signatures are unchanged.
+- `npm run lint`: Authoritative repo-wide validation. Runs Standard for JS/MJS/CJS, checks generated documentation for drift, regenerates TypeScript declarations, verifies third-party dependency fetch defaults and recursive submodule fetches use CI-safe HTTPS GitHub URLs, checks the distinct `NO_ANDROID`/`NO_IOS` documentation requirements, runs oxlint, checks Prettier-managed files, and runs cpplint. If `lint:docs` fails, run `npm run gen:docs` and include the generated updates; source line changes can affect man-page links even when API signatures are unchanged.
 - `npm run lint:fix`: Applies supported auto-fixes, regenerates TypeScript declarations, and rewrites Prettier-managed files.
 - `npm run test:lint`: Compatibility alias for `npm run lint`.
 - `npm run test:lint:ci`: Compatibility alias for the CI-safe lint entrypoint with a writable Standard cache path.
@@ -99,6 +99,16 @@ function set(options) {}
 - Consistent indentation and spacing: match surrounding code; avoid trailing whitespace.
 - Naming: Use descriptive file names (e.g., `runtime/core/services/fs.cc`). Scopes should mirror directory names.
 
+### Terminology
+
+- NEVER use the word "contract" or its plural as project terminology. This prohibition applies to identifiers, filenames, comments, documentation, CLI flags and help, error messages, tests, and agent communication.
+- ALWAYS use a narrower, context-appropriate term that names the specific thing being described: interface, API, protocol, schema, format, metadata, invariant, behavior, requirement, or compatibility check. Choose by meaning; do not substitute one generic word everywhere.
+
+### API Evolution
+
+- Deprecate an API only if it was available in a previous published release. Git history or the current SDK alone does not establish release availability.
+- During unreleased API exploration, rename or remove obsolete entry points and generated types directly. Do not add compatibility shims or deprecation notices for APIs that have never shipped in a release.
+
 ### Comments & Quality Bar
 
 - NEVER say "best-effort" or "best effort" in comments. Use concrete, testable language: what is supported, what is stubbed, what errors are returned, and what the exact limits/caps are.
@@ -110,6 +120,9 @@ function set(options) {}
 - Prefer the built‑in Oro test harness (see `test/scripts/*`).
 - Quick runs: `npm test` (desktop). Platform checks: mobile scripts above.
 - Keep tests deterministic; avoid network unless explicitly required.
+- Prefer `act` for local GitHub Actions verification; fall back to Docker containers when `act` is unavailable or a job cannot run there. Select explicit workflows/jobs and retain the command, runner image, results and skipped coverage.
+- Run `act` in its default copied workspace. Never bind this shared working tree into a checkout step that can clean/reset it; local workflows must preserve uncommitted and untracked work.
+- `act` with Linux containers qualifies Linux execution and portable behavior tests. It does not establish macOS/iOS/iPadOS or Windows OS behavior. Keep native SDK, signing, UI, hardware and platform-service acceptance separate, and do not count unsupported runner jobs as passing.
 
 ## Commit & Pull Request Guidelines
 
@@ -132,6 +145,7 @@ function set(options) {}
 
 ## Runtime Constraints
 
+- Common runtime capabilities must be usable through supported JavaScript APIs or declarative project configuration without application Kotlin, C++, JNI, receiver classes or service implementations. Compiled application extensions are optional for truly custom behavior outside runtime concerns. A missing platform backend is runtime implementation work; moving generic plumbing into an application native extension does not close that gap. Qualify at least one application with no native sources before claiming such a workflow is ready.
 - The Oro runtime exposes only a subset of the Node.js standard library and does **not** provide `SharedArrayBuffer` or `Atomics.wait`. Always defensively gate those APIs and supply synchronous fallbacks (e.g., for sleep primitives) so behaviour remains correct when shared memory is unavailable.
 
 ## Linear Ticket Workflow

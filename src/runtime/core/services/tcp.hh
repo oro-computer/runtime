@@ -19,6 +19,8 @@ namespace oro::runtime::core::services {
         : core::Service(options), manager(this->loop)
       {}
 
+      bool start () override;
+
       bool stop () override {
       #if ORO_RUNTIME_PLATFORM_LINUX
         // Non-blocking on Linux to avoid GTK deadlocks

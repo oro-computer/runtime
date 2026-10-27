@@ -1,0 +1,65 @@
+.TH ORO-FOREGROUND 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:foreground \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:foreground'
+.fi
+.SH DESCRIPTION
+.PP
+Explicitly user\-started Android data\-sync or Linux native\-process work. Requires `[foreground] enabled = true` and a compiled registered executor. This does not run background JavaScript, authorize accounts, retry, or prove transfers. Linux can delegate to an explicitly packaged native session host using `[linux.native] service_enabled = true`; login hosting needs deployment setup. iOS/iPadOS, macOS and Windows backends for this API are not implemented. Support probes report unavailable and operational calls reject ENOSYS on missing backends; an accepted executor is not proof of completed remote work.
+.SH REFERENCE
+.TP
+\fBgetSupport()\fR
+Reports configuration, registered executors and current notification policy. Missing or platform\-restricted backends return unavailable status; operational calls still reject with ENOSYS.
+\fBReturns:\fR
+.br
+\fIPromise<ForegroundSupport>\fR
+.TP
+\fBstart(options, requestOptions)\fR
+Starts from the current foreground document after an explicit user action. Linux additionally requires an action\-capable freedesktop notification server for its public Stop control. It does not install a daemon or restart work. Returns durable admission, not completion. Navigation or an aborted/lost reply can race admission: inspect the ID before another attempt. The admitted native operation survives Home/navigation and has its own Stop notification/deadline. Task removal, OS timeout and stop record uncertainty; no work auto\-restarts.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ForegroundOptions; required)
+.br
+\fIrequestOptions\fR (ForegroundRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<ForegroundStatus>\fR
+.TP
+\fBgetStatus(id)\fR
+Reads the retained status without restarting work.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<ForegroundStatus>\fR
+.TP
+\fBlist()\fR
+Lists at most sixteen retained, redacted operation statuses.
+\fBReturns:\fR
+.br
+\fIPromise<ForegroundStatus[]>\fR
+.TP
+\fBstop(id, expectedGeneration)\fR
+Requests stop for one exact generation. An uncertain remote outcome stays unknown. Cancellation does not undo an already completed remote operation.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+.br
+\fIexpectedGeneration\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<ForegroundStatus>\fR
+.TP
+\fBrelease(id, expectedGeneration)\fR
+Releases a terminal journal entry after app reconciliation. Resource cleanup must finish before the operation ID can be released or a new executor started.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+.br
+\fIexpectedGeneration\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR

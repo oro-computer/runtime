@@ -9,6 +9,9 @@
 #endif
 
 #include "secure_storage.hh"
+
+#include <algorithm>
+#include <mutex>
 #include "../services.hh"
 
 #if ORO_RUNTIME_PLATFORM_ANDROID
@@ -267,7 +270,7 @@
 
   enum SecretSchemaFlags {
     SECRET_SCHEMA_NONE = 0,
-    SECRET_SCHEMA_DONT_MATCH_NAME = 1 << 0
+    SECRET_SCHEMA_DONT_MATCH_NAME = 1 << 1
   };
 
   enum SecretSchemaAttributeType {
@@ -285,6 +288,8 @@
     const gchar* name;
     SecretSchemaFlags flags;
     SecretSchemaAttribute attributes[32];
+    int reserved = 0;
+    void* reservedPointers[7] = {};
   };
 
   using secret_password_store_sync_fn = gboolean (*)(
@@ -309,6 +314,7 @@
   );
 
   using g_free_fn = void (*)(void*);
+  using g_error_free_fn = void (*)(GError*);
 
   struct LibSecretBackend {
     void* secretHandle = nullptr;
@@ -317,9 +323,10 @@
     secret_password_lookup_sync_fn lookup = nullptr;
     secret_password_clear_sync_fn clear = nullptr;
     g_free_fn g_free = nullptr;
+    g_error_free_fn g_error_free = nullptr;
 
     bool load (String& error) {
-      if (this->store && this->lookup && this->clear && this->g_free) {
+      if (this->store && this->lookup && this->clear && this->g_free && this->g_error_free) {
         return true;
       }
 
@@ -356,9 +363,10 @@
         this->g_free = reinterpret_cast<g_free_fn>(
           dlsym(this->glibHandle, "g_free")
         );
+        this->g_error_free = reinterpret_cast<g_error_free_fn>(dlsym(this->glibHandle, "g_error_free"));
       }
 
-      if (!this->store || !this->lookup || !this->clear || !this->g_free) {
+      if (!this->store || !this->lookup || !this->clear || !this->g_free || !this->g_error_free) {
         error = "Failed to resolve libsecret symbols";
         return false;
       }
@@ -510,26 +518,99 @@ namespace oro::runtime::core::services {
     return false;
   }
 
-  SecureStorage::SecureStorage (const Options& options)
-    : core::Service(options)
-  {}
+  struct NativeRecordKeyAccess {
+    std::mutex mutex;
+    SecureStorage* storage = nullptr;
+    bool active = false;
+  };
 
-  SecureStorage::~SecureStorage () {}
+  class NativeRecordKeyStore final : public native::RecordKeyStore {
+    public:
+      explicit NativeRecordKeyStore (std::shared_ptr<NativeRecordKeyAccess> access) : access(std::move(access)) {}
+      std::optional<native::RecordKey> get (const std::string& scope, char slot) override {
+        const auto key = keyName(scope, slot);
+        std::lock_guard lock(this->access->mutex);
+        auto& storage = this->storage();
+        bytes::Buffer value;
+        bool found = false;
+        String error;
+        if (!storage.platformGet(this->privateScope(storage), key, value, found, error)) throw native::StateError("EACCES");
+        if (!found) return std::nullopt;
+        if (value.size() != 32) {
+          std::fill(value.begin(), value.end(), 0);
+          throw native::StateError("EBADMSG");
+        }
+        native::RecordKey result;
+        std::copy(value.begin(), value.end(), result.begin());
+        std::fill(value.begin(), value.end(), 0);
+        return result;
+      }
+      void put (const std::string& scope, char slot, const native::RecordKey& key) override {
+        const auto name = keyName(scope, slot);
+        std::lock_guard lock(this->access->mutex);
+        auto& storage = this->storage();
+        auto value = bytes::Buffer::from(key.data(), key.size());
+        String error;
+        const auto success = storage.platformSet(this->privateScope(storage), name, value, error);
+        std::fill(value.begin(), value.end(), 0);
+        if (!success) throw native::StateError("EACCES");
+      }
+      void remove (const std::string& scope, char slot) override {
+        const auto key = keyName(scope, slot);
+        std::lock_guard lock(this->access->mutex);
+        auto& storage = this->storage();
+        String error;
+        bytes::Buffer value;
+        bool found = false;
+        if (!storage.platformGet(this->privateScope(storage), key, value, found, error)) throw native::StateError("EACCES");
+        std::fill(value.begin(), value.end(), 0);
+        if (!found) return;
+        if (!storage.platformRemove(this->privateScope(storage), key, error)) throw native::StateError("EACCES");
+      }
+
+    private:
+      std::shared_ptr<NativeRecordKeyAccess> access;
+      SecureStorage& storage () const {
+        if (!this->access->active || !this->access->storage || !this->access->storage->enabled) throw native::StateError("EACCES");
+        return *this->access->storage;
+      }
+      String privateScope (SecureStorage& storage) const {
+        // Not a serialized origin. Public JS get/set/clear/keys reject this namespace.
+        return "oro.native.records.v2:" + storage.computeDefaultScope();
+      }
+      static String keyName (const std::string& scope, char slot) {
+        if (scope.size() != 64 || (slot != 'a' && slot != 'b') || !std::all_of(scope.begin(), scope.end(), [](unsigned char c) {
+          return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+        })) throw native::StateError("EINVAL");
+        return scope + ":" + slot;
+      }
+  };
+
+  SecureStorage::SecureStorage (const Options& options)
+    : core::Service(options), nativeKeyAccess(std::make_shared<NativeRecordKeyAccess>()) {
+    this->nativeKeyAccess->storage = this;
+  }
+
+  SecureStorage::~SecureStorage () {
+    std::lock_guard lock(this->nativeKeyAccess->mutex);
+    this->nativeKeyAccess->storage = nullptr;
+    this->nativeKeyAccess->active = false;
+  }
+
+  std::shared_ptr<native::RecordKeyStore> SecureStorage::nativeRecordKeys () {
+    return std::make_shared<NativeRecordKeyStore>(this->nativeKeyAccess);
+  }
 
   bool SecureStorage::start () {
-    if (!this->enabled) {
-      return false;
-    }
-
-    return true;
+    std::lock_guard lock(this->nativeKeyAccess->mutex);
+    this->nativeKeyAccess->active = this->enabled;
+    return this->enabled;
   }
 
   bool SecureStorage::stop () {
-    if (!this->enabled) {
-      return false;
-    }
-
-    return true;
+    std::lock_guard lock(this->nativeKeyAccess->mutex);
+    this->nativeKeyAccess->active = false;
+    return this->enabled;
   }
 
   void SecureStorage::set (
@@ -786,6 +867,10 @@ namespace oro::runtime::core::services {
     String& normalized,
     String& error
   ) const {
+    if (toLowerCase(requested).starts_with("oro.native.records.v2:")) {
+      error = "Native record key namespaces are not available through secure-storage requests";
+      return false;
+    }
     if (requested.empty()) {
       normalized = this->computeDefaultScope();
       return true;
@@ -972,7 +1057,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    this->registerKey(scope, key);
+    if (!scope.starts_with("oro.native.records.v2:")) this->registerKey(scope, key);
     return true;
 #elif ORO_RUNTIME_PLATFORM_WINDOWS
     if (value.size() > CRED_MAX_CREDENTIAL_BLOB_SIZE) {
@@ -997,7 +1082,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    this->registerKey(scope, key);
+    if (!scope.starts_with("oro.native.records.v2:")) this->registerKey(scope, key);
     return true;
 #elif ORO_RUNTIME_PLATFORM_ANDROID
     auto app = app::App::sharedApplication();
@@ -1080,7 +1165,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    this->registerKey(scope, key);
+    if (!scope.starts_with("oro.native.records.v2:")) this->registerKey(scope, key);
     return true;
 #elif ORO_RUNTIME_PLATFORM_LINUX
     auto& context = libsecretContext();
@@ -1108,7 +1193,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    this->registerKey(scope, key);
+    if (!scope.starts_with("oro.native.records.v2:")) this->registerKey(scope, key);
     return true;
 #else
     (void)scope;
@@ -1326,15 +1411,22 @@ namespace oro::runtime::core::services {
       return false;
     }
 
+    GError* failure = nullptr;
     gchar* result = context.backend.lookup(
       &context.schema,
       nullptr,
-      nullptr,
+      &failure,
       "scope", scope.c_str(),
       "key", key.c_str(),
       nullptr
     );
 
+    if (failure != nullptr) {
+      context.backend.g_error_free(failure);
+      if (result != nullptr) context.backend.g_free(result);
+      error = "Secret Service lookup failed or access was denied";
+      return false;
+    }
     if (result == nullptr) {
       found = false;
       return true;
@@ -1406,7 +1498,7 @@ namespace oro::runtime::core::services {
     CFRelease(account);
 
     if (status == errSecSuccess || status == errSecItemNotFound) {
-      this->unregisterKey(scope, key);
+      if (!scope.starts_with("oro.native.records.v2:")) this->unregisterKey(scope, key);
       return true;
     }
 
@@ -1418,7 +1510,7 @@ namespace oro::runtime::core::services {
     if (!CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0)) {
       const DWORD errorCode = GetLastError();
       if (errorCode == ERROR_NOT_FOUND) {
-        this->unregisterKey(scope, key);
+        if (!scope.starts_with("oro.native.records.v2:")) this->unregisterKey(scope, key);
         return true;
       }
 
@@ -1426,7 +1518,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    this->unregisterKey(scope, key);
+    if (!scope.starts_with("oro.native.records.v2:")) this->unregisterKey(scope, key);
     return true;
 #elif ORO_RUNTIME_PLATFORM_ANDROID
     auto app = app::App::sharedApplication();
@@ -1495,7 +1587,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    this->unregisterKey(scope, key);
+    if (!scope.starts_with("oro.native.records.v2:")) this->unregisterKey(scope, key);
     return true;
 #elif ORO_RUNTIME_PLATFORM_LINUX
     auto& context = libsecretContext();
@@ -1517,7 +1609,7 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-    this->unregisterKey(scope, key);
+    if (!scope.starts_with("oro.native.records.v2:")) this->unregisterKey(scope, key);
     return true;
 #else
     (void)scope;

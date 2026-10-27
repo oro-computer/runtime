@@ -390,12 +390,40 @@ extern "C" {
     );
   }
 
+  static gboolean onLifecycleMessage (
+    WebKitWebPage* page,
+    WebKitUserMessage* message,
+    gpointer userData
+  ) {
+    if (g_strcmp0(webkit_user_message_get_name(message), "oro.runtime.lifecycle") != 0) {
+      return false;
+    }
+    const auto parameters = webkit_user_message_get_parameters(message);
+    if (parameters == nullptr || !g_variant_is_of_type(parameters, G_VARIANT_TYPE_STRING)) {
+      return false;
+    }
+    const auto event = g_variant_get_string(parameters, nullptr);
+    const auto app = App::sharedApplication();
+    if (app == nullptr) {
+      return false;
+    }
+    if (g_strcmp0(event, "applicationpause") == 0) {
+      app->pause();
+    } else if (g_strcmp0(event, "applicationresume") == 0) {
+      app->resume();
+    } else {
+      return false;
+    }
+    return true;
+  }
+
   static void onPageCreated (
     WebKitWebExtension* extension,
     WebKitWebPage* page,
     gpointer userData
   ) {
     auto userConfig = getUserConfig();
+    g_signal_connect(page, "user-message-received", G_CALLBACK(onLifecycleMessage), nullptr);
     g_signal_connect(
       page,
       "document-loaded",

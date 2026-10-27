@@ -7,11 +7,11 @@ import * as module from 'oro:authentication'
 .fi
 .SH DESCRIPTION
 .PP
-Android 11+ authentication\-gated Keystore operations. Enable `[permissions] allow_biometrics = true`. User authentication authorizes one cryptographic operation; account authority must still be verified by a server.
+Authentication\-gated Android 11+ Keystore and Linux hardware PKCS#11 operations. Enable `[permissions] allow_biometrics = true`. Linux supports explicit `biometric\-or\-device` policy through a provider PIN or protected device path; this does not attest biometrics or use the desktop login password. Defaults remain biometric\-only and reject on Linux. Account authority still requires server verification. See the Linux native integration guide for provider setup. iOS/iPadOS, macOS and Windows backends for this API are not implemented. `getStatus()` reports unavailable with platform/implementation/reason metadata; operational calls reject ENOSYS. Hardware, enrollment and provider\-policy failures are separate admission errors and must not be reported as success.
 .SH REFERENCE
 .TP
 \fBgetStatus(options)\fR
-Reads policy/enrollment availability without prompting or creating keys. Other platforms reject with ENOSYS.
+Reads policy/enrollment availability without prompting or creating keys. Missing or platform\-restricted backends return unavailable status; operational calls still reject with ENOSYS.
 \fBParameters:\fR
 .br
 \fIoptions\fR (AuthenticationOptions; optional)
@@ -31,7 +31,7 @@ Encrypts at most 64 KiB after a native cryptographic authentication prompt. At m
 \fIPromise<ProtectedSecret>\fR
 .TP
 \fBopen(sealed, options)\fR
-Decrypts only through a user\-authenticated native Cipher operation. Returns bytes; decoding or restoring an application session remains app\-owned.
+Decrypts through an Android authenticated Cipher or Linux authenticated hardware unwrap followed by native AES\-GCM. Linux ephemeral AES keys exist briefly in native memory and are erased after use; long\-lived private keys stay in the provider. Returns bytes; application session recovery remains app\-owned.
 \fBParameters:\fR
 .br
 \fIsealed\fR (ProtectedSecret; required)

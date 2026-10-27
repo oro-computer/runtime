@@ -1,0 +1,193 @@
+.TH ORO-WORKFLOWS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:workflows \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:workflows'
+.fi
+.SH DESCRIPTION
+.PP
+Bundled declarative background reads and notifications. No application native executor or background JavaScript is required on implemented platforms. Definitions are immutable packaged assets. IAM, server enrollment, schemas, consent and routing remain application policy.
+.PP
+Platform support: the declarative executor is implemented on Android only. Linux, macOS, iOS/iPadOS and Windows workflow backends are not implemented, even where their lower\-level scheduling, push or native execution APIs exist. `getSupport()` returns available false and reason workflow\-backend\-unimplemented on those platforms; operations reject ENOSYS. Probe before enabling workflows; there is no arbitrary background JavaScript or automatic native\-extension fallback. Android requires bundled definitions and OS admission. A successful read or local receipt does not establish trusted push, server authorization, protocol reconnection, completed transfers or production/device qualification.
+.SH REFERENCE
+.TP
+\fBgetSupport()\fR
+Probe configuration and implementation without reading saved credentials. An unavailable platform is runtime implementation work, not a requirement for product Kotlin/C++ adapters.
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowSupport>\fR
+.TP
+\fBapproveAuthority(options, request)\fR
+Request native foreground confirmation for a self\-hosted HTTPS origin. Only definitions declaring authority: "approved" accept it. The path and operation remain fixed by the bundled definition. A basePath requires the bundled request to opt into allowApprovedBasePath; consent shows the full fixed read URL. Cancellation leaves no new approval.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowAuthorityOptions; required)
+.br
+\fIrequest\fR (WorkflowRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowAuthority>\fR
+.TP
+\fBrevokeAuthority(options)\fR
+Disable this locally approved destination and cancel its active calls. Server grants, transport registrations and certificate trust remain separate.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowAuthorityId; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowRevokeResult>\fR
+.TP
+\fBreleaseAuthority(options)\fR
+Release a revoked destination after releasing all its bindings and credential copies. Original sign\-in storage and remote registrations are unchanged.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowAuthorityId; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowReleaseResult>\fR
+.TP
+\fBdiscover(options)\fR
+Recover bounded local handles for an exact application\-resolved identity and the invoking document origin. No values, cursors or server payloads are exported. Rediscovery does not establish server authorization.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowDiscoveryOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowDiscovery>\fR
+.TP
+\fBimportCredential(options, request)\fR
+Imports a bearer credential from the definition's fixed secure\-storage key in this application's origin. Sign\-in and setItem happen in the application's foreground authentication flow; this API accepts no secret value or arbitrary key/alias selector. Restoring an opaque handle does not prove server IAM.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowCredentialOptions; required)
+.br
+\fIrequest\fR (WorkflowRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowCredential>\fR
+.TP
+\fBbind(options, request)\fR
+Create an explicitly authorized installation binding. Scope must exactly match its native credential. No plaintext credential or response is returned.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowBindingOptions; required)
+.br
+\fIrequest\fR (WorkflowRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowStatus>\fR
+.TP
+\fBrun(options, request)\fR
+Start one visible, user\-requested read using the shared finite foreground controller. Admission returns its durable ID/generation, not read completion.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowRunOptions; required)
+.br
+\fIrequest\fR (WorkflowRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<import('./foreground.js').ForegroundStatus>\fR
+.TP
+\fBmonitor(options, request)\fR
+Start an explicitly user\-requested continuous read session when the bundled definition declares pollIntervalMs and the project opts into continuous foreground admission. There is no boot/force\-stop restart. Stop remains available through the shared public notification/controller.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowMonitorOptions; required)
+.br
+\fIrequest\fR (WorkflowRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<import('./foreground/continuous.js').ContinuousStatus>\fR
+.TP
+\fBschedule(options, request)\fR
+Schedule read\-only catch\-up using the shared OS scheduler. No custom native executor is needed. The platform's periodic interval/permission limits apply.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowScheduleOptions; required)
+.br
+\fIrequest\fR (WorkflowRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<import('./background/deferred.js').DeferredReadState>\fR
+.TP
+\fBgetPushOptions(options)\fR
+Return references for oro:push.register. JavaScript performs authenticated server enrollment and acknowledges its exact endpoint generation through oro:push; receipt of a push only triggers the fixed approved read.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowId; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowPushOptions>\fR
+.TP
+\fBgetStatus(options)\fR
+Read bounded local outcome/count metadata. Credentials, cursors and server payloads are excluded. Process loss retains unknown attempts without replay.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowId; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowStatus>\fR
+.TP
+\fBstop(options)\fR
+Persist local disablement, cancel active work and remove scheduled reads. Check drained before claiming cleanup finished. Remote enrollment/revocation and existing notification cancellation remain separate explicit operations.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowId; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowStatus>\fR
+.TP
+\fBrevokeCredential(options)\fR
+Disable a native credential and cancel its active workflow calls. This does not revoke the server token or erase historical encrypted originals.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowRevokeOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowRevokeResult>\fR
+.TP
+\fBgetResponses(options)\fR
+Read this authorized binding's opaque notification responses. Recheck current account/navigation policy, then acknowledge through oro:notification. Private server event payloads and credential values are never returned.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowId; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowResponse[]>\fR
+.TP
+\fBgetEvents(options)\fR
+Read opaque local event outcomes, including uncertainty retained after a lost submission reply. Response bodies and source server IDs are not exported.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowId; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowEventOutcome[]>\fR
+.TP
+\fBreleaseEvents(options)\fR
+Explicitly consume selected dedup/outcome records only after application reconciliation. This permits the same server IDs to become eligible again; it does not acknowledge or revoke server state. Running bindings reject EBUSY. No automatic pruning removes this protection.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowReleaseEventsOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowStatus>\fR
+.TP
+\fBrelease(options)\fR
+Release a disabled, drained binding after consuming its outcomes and handling transport/server cleanup through oro:push and the authenticated server. The fixed source secure\-storage key and its originals are untouched.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowReleaseOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowReleaseResult>\fR
+.TP
+\fBreleaseCredential(options)\fR
+Release a locally revoked credential after all referencing bindings have stopped and drained. This does not delete the source secure\-storage item.
+\fBParameters:\fR
+.br
+\fIoptions\fR (WorkflowRevokeOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<WorkflowReleaseResult>\fR

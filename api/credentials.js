@@ -1,7 +1,11 @@
 /**
  * @module credentials
- * Explicit Android 14+ password selection. Enable `[credentials] enabled = true`.
+ * Explicit Android 14+ or Linux Secret Service password selection. Enable `[credentials] enabled = true`.
  * WebView Autofill, passkeys and account/server authorization remain separate.
+ * iOS/iPadOS, macOS and Windows explicit-selection backends are not implemented.
+ * `getStatus()` reports unavailable with a reason; selection rejects ENOSYS on
+ * missing backends. Android also requires an eligible installed password provider;
+ * Linux requires a running unlocked Secret Service and interactive session.
  */
 import request from './internal/platform-request.js'
 
@@ -17,14 +21,20 @@ import request from './internal/platform-request.js'
  */
 /**
  * @typedef {object} PasswordSelectionStatus
+ * @property {string} [platform] Present on an unavailable cross-platform support result.
+ * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform API restriction; not a permission denial.
+ * @property {string} [reason] Stable unavailable reason.
  * @property {boolean} supported Platform implements native password selection.
  * @property {boolean} enabled Application opted into selection.
  * @property {boolean} busy A selection request is active.
+ * @property {'secret-service'} [provider] Linux provider backend.
+ * @property {'application-attribute'} [association] Linux searches exact application and optional username attributes.
+ * @property {boolean} [autofill] False on Linux; selection does not install WebKit Autofill.
  */
 
 /**
  * Queries support without opening a provider or reading a credential.
- * Other platforms reject with ENOSYS.
+ * Missing or platform-restricted backends return unavailable status; operational calls still reject with ENOSYS.
  * @returns {Promise<PasswordSelectionStatus>}
  */
 export async function getStatus () {
@@ -40,6 +50,11 @@ export async function getStatus () {
  * A provider result waits at most five seconds for the requesting Activity to
  * resume, then revalidates document ownership and the foreground window.
  * Cancellation, navigation, activity stop and the original deadline still apply.
+ * Linux shows at most 64 matching Secret Service accounts in a native modal. Items
+ * must carry `application=<bundle identifier>` and `username` attributes. Only
+ * the chosen item is unlocked/read. These lookup attributes are not an attested
+ * app association. Secret Service providers and locked-keyring prompts require
+ * desktop qualification; no browser-origin association or automatic fill is added.
  * @param {PasswordSelectionOptions} [options]
  * @returns {Promise<SelectedPassword>}
  */

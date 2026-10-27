@@ -40,7 +40,8 @@ const RUNTIME_ENV_KEYS = [
   'ORO_TEST_SKIP_TEST_EXTENSIONS',
   'ORO_TEST_GREP',
   'ORO_TEST_SKIP',
-  'ORO_TEST_ONLY'
+  'ORO_TEST_ONLY',
+  'ORO_LIFECYCLE_TEST_STRICT'
 ]
 
 function forEachConfigFile (dir, visitor) {
@@ -116,7 +117,6 @@ export function runDesktopTests (inputOptions = {}) {
       options,
       baseEnv: childEnv,
       oroc,
-      buildArgs,
       sourceWorkdir: workdirState.path,
       log
     })
@@ -364,6 +364,7 @@ function copyTestApp (workdir) {
       return !['build', 'node_modules', 'tmp'].includes(topLevel)
     }
   })
+  forEachConfigFile(workdir, filename => retainExtensionSources(filename, testRoot))
 
   const packageScope = path.join(workdir, 'node_modules', '@oro-computer')
   const runtimeModule = path.join(packageScope, 'runtime')
@@ -371,6 +372,26 @@ function copyTestApp (workdir) {
   if (!existsSync(runtimeModule)) {
     symlinkSync(RUNTIME_HOME_API, runtimeModule, 'dir')
   }
+}
+
+// Native test extensions keep their repository-relative headers when the app is copied.
+function retainExtensionSources (filename, sourceRoot) {
+  let extensions = false
+  const source = String(readFileSync(filename))
+  const rewritten = source.split('\n').map(line => {
+    const section = line.trim().match(/^\[([^\]]+)\]$/)
+    if (section) extensions = /^build\.extensions(?:\.(?:linux|mac|win|android|ios))?$/.test(section[1])
+    if (!extensions) return line
+    const setting = line.match(/^(\s*[\w-]+\s*=\s*)(.+?)\s*$/)
+    if (!setting) return line
+    const value = setting[2].replace(/^['"]|['"]$/g, '')
+    if (path.isAbsolute(value)) return line
+    const original = path.resolve(sourceRoot, value)
+    if (!existsSync(original)) return line
+    const portable = original.split(path.sep).join('/')
+    return setting[1] + (filename.endsWith('.toml') ? JSON.stringify(portable) : portable)
+  }).join('\n')
+  if (rewritten !== source) writeFileSync(filename, rewritten)
 }
 
 function scrubExtensions (iniPath) {
@@ -421,7 +442,6 @@ function runStrictPass ({
   options,
   baseEnv,
   oroc,
-  buildArgs,
   sourceWorkdir,
   log
 }) {
@@ -430,21 +450,15 @@ function runStrictPass ({
     rm(strictWorkdir, { recursive: true, force: true })
   } catch {}
   cp(sourceWorkdir, strictWorkdir, { recursive: true })
+  forEachConfigFile(strictWorkdir, filename => retainExtensionSources(filename, sourceWorkdir))
 
   const appendLifecycleFlag = (iniPath) => {
-    try {
-      const src = existsSync(iniPath) ? String(readFileSync(iniPath)) : ''
-      const add = src.endsWith('\n') ? '' : '\n'
-      writeFileSync(
-        iniPath,
-        src + add + 'lifecycle_desktop_always_running = false\n'
-      )
-    } catch (err) {
-      console.warn(
-        `Warning: failed to set lifecycle_desktop_always_running in ${path.basename(iniPath)}:`,
-        err?.message || err
-      )
-    }
+    const src = String(readFileSync(iniPath))
+    const configured = iniPath.endsWith('.toml')
+      ? src.replace(/(^env\s*=\s*\[)/m, '$1\n  "ORO_LIFECYCLE_TEST_STRICT",')
+      : src.replace(/^\[build\]\s*$/m, '[build]\nenv[] = ORO_LIFECYCLE_TEST_STRICT')
+    if (configured === src) throw new Error('Strict lifecycle requires an explicit build environment allowlist')
+    writeFileSync(iniPath, 'lifecycle_desktop_always_running = false\n' + configured)
   }
   forEachConfigFile(strictWorkdir, appendLifecycleFlag)
 
@@ -453,7 +467,8 @@ function runStrictPass ({
     ORO_LIFECYCLE_TEST_STRICT: '1'
   }
 
-  const result = runOroc(oroc, buildArgs, env, strictWorkdir)
+  const strictArgs = createBuildArgs({ ...options, entry: 'lifecycle/strict.js' }, env.ORO_TEST_FIXTURES_DIR, env)
+  const result = runOroc(oroc, strictArgs, env, strictWorkdir)
 
   if (result.status === 0) {
     log('strict lifecycle pass complete')

@@ -23,7 +23,8 @@ namespace oro::runtime::tcp {
     TCP_STATE_CONNECTED = 1 << 3,
     TCP_STATE_RECV_STARTED = 1 << 4,
     TCP_STATE_PAUSED = 1 << 5,
-    TCP_STATE_CONNECTING = 1 << 6
+    TCP_STATE_CONNECTING = 1 << 6,
+    TCP_STATE_PAUSED_RECV = 1 << 7
   };
 
   class Socket {
@@ -104,6 +105,7 @@ namespace oro::runtime::tcp {
       SharedPointer<Socket> get (ID id);
       void remove (ID id);
       void pauseOnLoopThread ();
+      void resumeOnLoopThread ();
   };
 }
 

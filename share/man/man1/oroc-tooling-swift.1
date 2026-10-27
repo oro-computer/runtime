@@ -1,0 +1,46 @@
+.TH OROC-TOOLING-SWIFT 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-tooling\-swift \- Export Swift compiler commands and prepare analysis modules.
+.SH SYNOPSIS
+.nf
+oroc tooling swift [options] [<project\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Export Swift compiler commands and prepare analysis modules.
+.SH OPTIONS
+.TP
+\fB\-\-platform=<name>\fR
+desktop, mac, ios, ios\-simulator, linux or win
+.TP
+\fB\-\-arch=<name>\fR
+target architecture
+.TP
+\fB\-\-prod\fR
+select release compiler flags
+.TP
+\fB\-\-prepare\fR
+emit the declared Swift module without linking or signing
+.TP
+\fB\-\-refresh\fR
+allocate a fresh editor generation
+.TP
+\fB\-\-offline\fR
+use installed toolchains and dependencies only
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml or oro.ini
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Declare original sources and module settings under tooling.swift, or import an existing compilation database.
+.PP
+Apple targets require macOS and Xcode. External build systems own their dependency preparation.
+.PP
+Use language_server.swift.adapter="stdio" for native SwiftPM discovery.
+.PP
+See docs/LANGUAGE_SERVER.md for configuration and editor examples.
+.SH SEE ALSO
+oroc(1), oroc\-tooling(1)

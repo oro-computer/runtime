@@ -1,5 +1,6 @@
 import test from 'oro:test'
 import os from 'oro:os'
+import platform from 'oro:platform'
 import { getStatus } from 'oro:network-status'
 import documentAccess from 'oro:document-access'
 import { perform } from 'oro:haptics'
@@ -24,10 +25,9 @@ test('Android capabilities validate before native UI', async t => {
   await t.rejects(documentAccess.persist('content://example/document', { read: false }), TypeError, 'empty grant modes fail')
 })
 
-test('Android capability availability is explicit', async t => {
+test('Native capability availability follows the platform inventory', async t => {
   if (os.platform() !== 'android') {
-    for (const request of [getStatus, documentAccess.list, getBuildIdentity, getCapabilities, getSecureStorageStatus,
-      getAuthenticationStatus, getLauncherStatus, getDeferredSupport]) {
+    for (const request of [documentAccess.list, getBuildIdentity, getCapabilities, getSecureStorageStatus]) {
       try {
         await request()
         t.fail('unsupported Android capability should reject')
@@ -35,10 +35,37 @@ test('Android capability availability is explicit', async t => {
         t.equal(error.code, 'ENOSYS', 'unsupported platform is observable')
       }
     }
+    if (os.platform() === 'linux') {
+      const status = await getStatus()
+      t.equal(typeof status.available, 'boolean', 'Linux reports network-monitor availability')
+      t.equal(status.transportDetailsAvailable, false, 'Linux does not infer transport details')
+      t.equal(status.serverReachabilityKnown, false, 'network state does not establish server health')
+    } else {
+      try {
+        await getStatus()
+        t.fail('missing network-status backend should reject')
+      } catch (error) {
+        t.equal(error.code, 'ENOSYS', 'missing network-status backend is observable')
+      }
+    }
+    const inventory = await platform.getCapabilities()
+    for (const [feature, probe] of [['authentication', getAuthenticationStatus], ['launcher', getLauncherStatus], ['deferred', getDeferredSupport]]) {
+      const descriptor = inventory.features[feature]
+      t.ok(descriptor, 'backend inventory describes ' + feature)
+      if (descriptor.implementation === 'implemented') {
+        // The headless harness uses inventory; Linux private native calls require a GUI document.
+        t.equal(descriptor.platform, inventory.platform, 'implemented backend identifies its platform')
+      } else {
+        const status = await probe()
+        t.equal(status.available, false, 'missing or restricted backend reports unavailable')
+        t.equal(status.implementation, descriptor.implementation, 'support result preserves backend classification')
+        t.equal(status.reason, descriptor.reason, 'support result preserves the unavailable reason')
+      }
+    }
     return
   }
   const identity = await getBuildIdentity()
-  t.equal(identity.androidBridgeProtocol, 4, 'running native bridge matches packaged contract')
+  t.equal(identity.androidBridgeProtocol, 5, 'running native bridge matches packaged protocol')
   t.equal(identity.assetsVerified, true, 'native verified assets before loading this document')
   t.ok(/^[a-f0-9]{64}$/.test(identity.assetManifestSha256), 'native manifest digest is SHA-256')
   const capabilities = await getCapabilities()

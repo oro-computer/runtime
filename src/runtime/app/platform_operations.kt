@@ -43,15 +43,23 @@ internal class PlatformCall (
     }
   }
 
-  fun foreground (): Window {
+  /** A live trusted document can release its resources while hidden or paused. */
+  fun document (): Window {
     val owner = window ?: throw PlatformFailure("ENOTREADY")
     if (owner.activity.isFinishing || owner.activity.isDestroyed ||
-        !owner.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
-        owner.fragment.options.headless || owner.fragment.isHidden ||
+        owner.fragment.options.headless ||
         !owner.fragment.hasWebView || owner.fragment.window !== owner ||
         !owner.fragment.webview.isAttachedToWindow || !owner.userMessageHandler.active ||
         owner.platformDocumentToken != documentToken ||
         !owner.isTrustedOrigin(Uri.parse(owner.fragment.webview.url ?: ""))) throw PlatformFailure("ENOTREADY")
+    return owner
+  }
+
+  fun foreground (): Window {
+    val owner = document()
+    if (!owner.activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || owner.fragment.isHidden) {
+      throw PlatformFailure("ENOTREADY")
+    }
     return owner
   }
 
@@ -93,6 +101,7 @@ internal object PlatformOperations {
   }
 
   fun cancelWindow (window: Window) {
+    NativeGestures.invalidate(window)
     if (Looper.myLooper() == Looper.getMainLooper()) window.activity.applicationBack.invalidate(window)
     else main.post { window.activity.applicationBack.invalidateStale(window) }
     val calls = synchronized(this) { pending.values.filter { it.window === window } }
@@ -143,14 +152,22 @@ internal object PlatformOperations {
           "authentication" -> ProtectedAuthentication.request(call, action, options)
           "launcher" -> LauncherDestinations.request(call, action, options)
           "deferred" -> DeferredSync.request(call, action, options)
+          "foreground" -> ForegroundTasks.request(call, action, options)
+          "gestures" -> NativeGestures.request(call, action, options)
           "credentials" -> PasswordCredentials.request(call, action, options)
           "extension" -> NativeExtensions.request(call, action, options)
           "notifications" -> NativeNotifications.request(call, action, options)
-          "back" -> call.foreground().activity.applicationBack.request(call, action, options)
+          "back" -> owner.activity.applicationBack.request(call, action, options)
           "push" -> NativePush.request(call, action, options)
+          "workflows" -> NativeWorkflows.request(call, action, options)
+          "startup" -> {
+            require(action == "present" && options.length() == 0)
+            call.document().fragment.presentStartup(call)
+          }
           else -> call.failure("ENOSYS")
         }
       } catch (error: PlatformFailure) { call.failure(error.code)
+      } catch (error: NativeStateException) { call.failure(error.code)
       } catch (_: SecurityException) { call.failure("EACCES")
       } catch (_: IllegalArgumentException) { call.failure("EINVAL")
       } catch (_: Exception) { call.failure("EIO") }

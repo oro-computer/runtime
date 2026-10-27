@@ -7,11 +7,11 @@ import * as module from 'oro:network\-status'
 .fi
 .SH DESCRIPTION
 .PP
-Android network path state. Connectivity never establishes server health, account authorization, or permission to retry an uncertain operation.
+Android and Linux network path state. Connectivity never establishes server health, account authorization, or permission to retry an uncertain operation.
 .SH REFERENCE
 .TP
 \fBgetStatus()\fR
-Reads Android's current default path without making a network request. Other platforms and disabled monitoring reject with `ENOSYS`.
+Reads the OS monitor's current default path without making a network request. Other platforms and disabled monitoring reject with `ENOSYS`.
 \fBReturns:\fR
 .br
 \fIPromise<NetworkStatus>\fR

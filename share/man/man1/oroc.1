@@ -1,28 +1,27 @@
 .TH OROC 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
 .SH NAME
-oroc \- command line interface for Oro Runtime projects
+oroc \- Build, run, and manage Oro applications.
 .SH SYNOPSIS
 .nf
-oroc [SUBCOMMAND] [options] [<project\-dir>]
-oroc [SUBCOMMAND] \-h
+oroc <command> [options]
 oroc help [query...]
 .fi
 .SH DESCRIPTION
 .PP
-oroc is the main command line interface for Oro Runtime projects.
-.SH SUBCOMMANDS
-.TP
-\fBhelp\fR
-search commands, options, and platform notes
+Build, run, and manage Oro applications.
+.SH COMMANDS
 .TP
 \fBbuild\fR
 build project
 .TP
-\fBlist\-devices\fR
-get the list of connected devices
+\fBconfig\fR
+inspect configuration values and docs
 .TP
-\fBdevices\fR
-alias for list\-devices
+\fBenv\fR
+print relevant environment variables
+.TP
+\fBhelp\fR
+search commands, options, and platform notes
 .TP
 \fBinit\fR
 create a new project (in the current directory)
@@ -33,32 +32,69 @@ install app to the device
 \fBinstall\fR
 alias for install\-app
 .TP
-\fBprint\-build\-dir\fR
-print build path to stdout
+\fBlanguage\-server\fR
+run Oro Language Server over stdio
 .TP
-\fBrun\fR
-run application
+\fBlist\-devices\fR
+get the list of connected devices
 .TP
-\fBconfig\fR
-inspect configuration values and docs
-.TP
-\fBenv\fR
-print relevant environment variables
+\fBdevices\fR
+alias for list\-devices
 .TP
 \fBmcp\fR
 run an MCP server for agent tooling
 .TP
+\fBprint\-build\-dir\fR
+print build path to stdout
+.TP
+\fBpush\fR
+run a local UnifiedPush development server
+.TP
+\fBrun\fR
+run application
+.TP
 \fBsetup\fR
 install build dependencies
+.TP
+\fBtooling\fR
+export and prepare editor compilation models
+.TP
+\fBupdate\fR
+update tooling (keys, manifests, bundles)
 .TP
 \fBversion\fR
 inspect or bump project version
 .TP
 \fBversions\fR
-print Oro CLI/runtime and dependency versions
+print runtime and dependency versions
+.SH GENERAL OPTIONS
 .TP
-\fBupdate\fR
-update tooling (keys, manifests, bundles)
+\fB\-h, \-\-help\fR
+show help
+.TP
+\fB\-\-prefix\fR
+print install path
+.TP
+\fB\-v, \-\-version\fR
+print program version
+.TP
+\fB\-q, \-\-quiet\fR
+hint for less log output
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output (can be global)
+.TP
+\fB\-D, \-\-debug\fR
+enable debug output (can be global)
+.TP
+\fB\-\-no\-color\fR
+disable colored log output
+.TP
+\fB\-\-json\fR
+enable structured JSON logs on stdout
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
 .SH ENVIRONMENT
 .TP
 \fBORO_DEBUG\fR
@@ -87,40 +123,17 @@ source bootstrap: disable only Android work when non\-empty
 .TP
 \fBNO_IOS\fR
 source bootstrap: disable only iOS/iOS Simulator work when non\-empty
-.SH GENERAL OPTIONS
-.TP
-\fB\-h, \-\-help\fR
-print help message
-.TP
-\fB\-\-prefix\fR
-print install path
-.TP
-\fB\-\-android\-runtime\-contract\fR
-validate Android distribution and print its compiled contract
-.TP
-\fB\-v, \-\-version\fR
-print program version
-.TP
-\fB\-q, \-\-quiet\fR
-hint for less log output
-.TP
-\fB\-V, \-\-verbose\fR
-enable verbose output (can be global)
-.TP
-\fB\-D, \-\-debug\fR
-enable debug output (can be global)
-.TP
-\fB\-\-no\-color\fR
-disable colored log output
-.TP
-\fB\-\-json\fR
-enable structured JSON logs on stdout
-.TP
-\fB\-\-log\-file=<path>\fR
-mirror logs to a JSON file
 .SH NOTES
 .PP
-Run 'oroc <subcommand> \-\-help' for subcommand\-specific flags, examples, and platform notes. Use 'oroc help <query>' to search commands, options, examples, and workflow notes by topic. 'oroc <subcommand> \-\-json' emits structured command results when that subcommand supports it. The global 'oroc \-\-json <subcommand>' form is reserved for JSON log streaming. Use '\-\-log\-file=<path>' when you need machine\-readable stdout plus a separate log stream. NO_ANDROID and NO_IOS are independent presence flags for building the runtime source tree; they do not select an application target for 'oroc build \-\-platform'. Values such as 0 and false are non\-empty and still disable the named target.
+Run 'oroc <command> \-\-help' for usage and options; see the command's man page for examples and platform guidance.
+.PP
+Use 'oroc help <query>' to search commands, options, examples, and workflow notes by topic. 'oroc <subcommand> \-\-json' emits structured command results when that subcommand supports it.
+.PP
+The global 'oroc \-\-json <subcommand>' form is reserved for JSON log streaming.
+.PP
+Use '\-\-log\-file=<path>' when you need machine\-readable stdout plus a separate log stream.
+.PP
+NO_ANDROID and NO_IOS are independent presence flags for building the runtime source tree; they do not select an application target for 'oroc build \-\-platform'. Values such as 0 and false are non\-empty and still disable the named target.
 .SH EXAMPLES
 .TP
 \fBoroc init my\-app\fR

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Public C++ callback verification</title>
+  <h1>Public C++ callback verification</h1>
+  <p id="result">Waiting for the public window to be focused.</p>
+  <script type="module">
+    import platform from 'oro:platform'
+    import application from 'oro:application'
+    import foreground from 'oro:foreground'
+    import monitoring from 'oro:foreground/continuous'
+    import deferred from 'oro:background/deferred'
+    const result = document.getElementById('result')
+    const references = { authorityRef: 'authority', accountRef: 'account', targetRef: 'target', operationRef: 'read' }
+    try {
+      await (await application.getCurrentWindow()).markReady()
+      while (!document.hasFocus()) await new Promise(resolve => setTimeout(resolve, 100))
+      const initial = await platform.request('public.callbacks', 'read', {})
+      if (!initial.initialized) throw new Error('Compiled startup did not complete')
+      await foreground.start({ id: 'public-finite', kind: 'public.complete', ...references, userInitiated: true, durationMs: 30000 })
+      await deferred.enqueue({ id: 'public-deferred', kind: 'public.read', ...references, network: 'any' })
+      await monitoring.start({ id: 'public-monitor', kind: 'public.monitor', ...references, userInitiated: true })
+      result.textContent = 'Public native callbacks started. This screen contains no account data.'
+    } catch (error) {
+      result.textContent = 'Public verification failed: ' + (error.code || 'EIO')
+    }
+  </script>
+</html>

@@ -1,6 +1,6 @@
 /**
  * Reads policy/enrollment availability without prompting or creating keys.
- * Other platforms reject with ENOSYS.
+ * Missing or platform-restricted backends return unavailable status; operational calls still reject with ENOSYS.
  * @param {AuthenticationOptions} [options]
  * @returns {Promise<AuthenticationStatus>}
  */
@@ -16,8 +16,10 @@ export function getStatus(options?: AuthenticationOptions): Promise<Authenticati
  */
 export function seal(value: string | Uint8Array | ArrayBuffer, options: ProtectedKeyOptions): Promise<ProtectedSecret>;
 /**
- * Decrypts only through a user-authenticated native Cipher operation. Returns
- * bytes; decoding or restoring an application session remains app-owned.
+ * Decrypts through an Android authenticated Cipher or Linux authenticated hardware
+ * unwrap followed by native AES-GCM. Linux ephemeral AES keys exist briefly in
+ * native memory and are erased after use; long-lived private keys stay in the
+ * provider. Returns bytes; application session recovery remains app-owned.
  * @param {ProtectedSecret} sealed
  * @param {ProtectedKeyOptions} options
  * @returns {Promise<Uint8Array>}
@@ -56,7 +58,7 @@ export default _default;
 export type AuthenticationPolicy = "biometric" | "biometric-or-device";
 export type AuthenticationOptions = {
     /**
-     * Strong biometric, optionally device credential fallback. The fallback policy does not invalidate on biometric enrollment changes.
+     * Strong biometric; Android optionally allows device credentials. Linux requires explicit biometric-or-device and a key-provider PIN/protected path. That policy does not invalidate on biometric enrollment changes.
      */
     policy?: AuthenticationPolicy;
     /**
@@ -82,10 +84,34 @@ export type ProtectedSecret = {
      * Base64 ciphertext and authentication tag. Store this sealed record, not plaintext.
      */
     ciphertext: string;
+    /**
+     * Linux schema 2: RSA-OAEP-SHA256 wrapped ephemeral AES key. Preserve the whole record.
+     */
+    wrappedKey?: string;
+    /**
+     * Linux schema 2: application, key and provider binding.
+     */
+    binding?: string;
+    /**
+     * Linux schema 2: hardware RSA key size. Records are platform-specific.
+     */
+    wrappingKeyBits?: number;
 };
 export type AuthenticationStatus = {
     /**
-     * Android API 30+.
+     * Present on an unavailable cross-platform support result.
+     */
+    platform?: string;
+    /**
+     * Missing runtime backend or platform restriction; not a permission denial.
+     */
+    implementation?: "missing" | "restricted";
+    /**
+     * Stable unavailable reason.
+     */
+    reason?: string;
+    /**
+     * Platform implements this policy; Android requires API 30+.
      */
     supported: boolean;
     /**
@@ -102,11 +128,51 @@ export type AuthenticationStatus = {
     statusCode: number;
     policy: AuthenticationPolicy;
     cryptographicOperationsOnly: boolean;
+    /**
+     * 1 when the Android historical migration endpoints are compiled in; query oro:migration.getSupport for project configuration.
+     */
+    historicalMigrationProtocol?: number;
     serverVerificationRequired: boolean;
     /**
      * At most one native prompt per process.
      */
     busy: boolean;
+    /**
+     * Linux reports false; a provider PIN is not biometric attestation.
+     */
+    biometricOnlySupported?: boolean;
+    /**
+     * Linux reports key-provider-pin, including providers with a protected authentication path.
+     */
+    credentialType?: string;
+    /**
+     * Available Linux provider families: tpm2 or pkcs11. Discovery does not authenticate.
+     */
+    providers?: string[];
+    /**
+     * Linux auto preference is tpm2-then-hardware-pkcs11. Saved keys never switch providers automatically.
+     */
+    providerPreference?: string;
+    /**
+     * Linux reports false; trusted modules declare hardware slot support.
+     */
+    hardwareAttestationProvided?: boolean;
+    /**
+     * Provider advertises supported signing mechanisms; actual key policy is checked at use.
+     */
+    signingAvailable?: boolean;
+    /**
+     * Provider advertises supported wrapping mechanisms; actual key policy is checked at use.
+     */
+    sealingAvailable?: boolean;
+    /**
+     * Configured RSA size for newly created Linux secret keys.
+     */
+    newWrappingKeyBits?: number;
+    /**
+     * Stable native discovery error when no eligible Linux provider is available.
+     */
+    providerStatusCode?: string;
 };
 /**
  * `authority` is an exact HTTPS origin, including a self-hosted IP origin when

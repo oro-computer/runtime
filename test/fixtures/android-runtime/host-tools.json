@@ -1,0 +1,68 @@
+[
+  {
+    "name": "kotlin-compiler-embeddable",
+    "version": "2.2.10",
+    "sha256": "79628fd5d64b4692a62f98962baab00e9076a37e2cffd6ace33cd0b7be7d1cdf",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.2.10/kotlin-compiler-embeddable-2.2.10.jar"
+  },
+  {
+    "name": "kotlin-stdlib",
+    "version": "2.2.10",
+    "sha256": "9c67cc79efd6b9215b49d2a4308f5f3433537376c7c88e89bdd6729bd096e61a",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.2.10/kotlin-stdlib-2.2.10.jar"
+  },
+  {
+    "name": "kotlin-script-runtime",
+    "version": "2.2.10",
+    "sha256": "c304a67dba6a61dde560e6310920bed746307c3854f6675c29ac29114731b6b0",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-script-runtime/2.2.10/kotlin-script-runtime-2.2.10.jar"
+  },
+  {
+    "name": "kotlin-reflect",
+    "version": "1.6.10",
+    "sha256": "3277ac102ae17aad10a55abec75ff5696c8d109790396434b496e75087854203",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-reflect/1.6.10/kotlin-reflect-1.6.10.jar"
+  },
+  {
+    "name": "kotlin-daemon-embeddable",
+    "version": "2.2.10",
+    "sha256": "b31573d418961fa080760fedcfc90d68ad67a85eafa245c73fe3d551476777ba",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-daemon-embeddable/2.2.10/kotlin-daemon-embeddable-2.2.10.jar"
+  },
+  {
+    "name": "kotlinx-coroutines-core-jvm",
+    "version": "1.8.0",
+    "sha256": "9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar"
+  },
+  {
+    "name": "annotations",
+    "version": "23.0.0",
+    "sha256": "7b0f19724082cbfcbc66e5abea2b9bc92cf08a1ea11e191933ed43801eb3cd05",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/annotations/23.0.0/annotations-23.0.0.jar"
+  },
+  {
+    "name": "slf4j-api",
+    "version": "1.7.30",
+    "sha256": "cdba07964d1bb40a0761485c6b1e8c2f8fd9eb1d19c53928ac0d7f9510105c57",
+    "url": "https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.30/slf4j-api-1.7.30.jar"
+  },
+  {
+    "name": "kxml2",
+    "version": "2.3.0",
+    "sha256": "f264dd9f79a1fde10ce5ecc53221eff24be4c9331c830b7d52f2f08a7b633de2",
+    "url": "https://repo.maven.apache.org/maven2/net/sf/kxml/kxml2/2.3.0/kxml2-2.3.0.jar"
+  },
+  {
+    "name": "json",
+    "version": "20240303",
+    "sha256": "3cf6cd6892e32e2b4c1c39e0f52f5248a2f5b37646fdfbb79a66b46b618414ed",
+    "url": "https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar"
+  },
+  {
+    "name": "sqlite-jdbc",
+    "version": "3.46.1.0",
+    "sha256": "6dc7464e3803648d3ff18a7359bab6adf079fcd8495b18991f6f5edcb8ac6e3b",
+    "url": "https://repo.maven.apache.org/maven2/org/xerial/sqlite-jdbc/3.46.1.0/sqlite-jdbc-3.46.1.0.jar"
+  }
+]

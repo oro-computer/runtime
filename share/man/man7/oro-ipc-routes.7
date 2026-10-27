@@ -3,7 +3,7 @@
 oro\-ipc\-routes \- generated catalog of resolved IPC routes
 .SH DESCRIPTION
 .PP
-This guide indexes 391 resolved IPC routes across 48 top\-level domains.
+This guide indexes 392 resolved IPC routes across 48 top\-level domains.
 .PP
 Each route entry lists the transport families used from JavaScript, the public oro:* APIs that expose it, and the source locations that define or consume it.
 .SH HOW TO READ THIS CATALOG
@@ -17,11 +17,11 @@ Exposed by points at the nearest documented API function or method plus the sour
 Binary semantics flags routes that carry raw request or response bytes rather than plain JSON\-like payloads.
 .SH ROUTES
 .PP
-This catalog is generated from JavaScript calls to ipc.request(), ipc.send(), ipc.sendSync(), ipc.write(), and thin wrappers around those primitives. It inventories 391 resolved routes across 48 top\-level domains.
+This catalog is generated from JavaScript calls to ipc.request(), ipc.send(), ipc.sendSync(), ipc.write(), and thin wrappers around those primitives. It inventories 392 resolved routes across 48 top\-level domains.
 .PP
 1 IPC call sites still use route expressions that could not be reduced to static strings. Review those locations before treating this catalog as complete for private dynamic dispatch.
 .IP \(bu 2
-send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L589)
+send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L591)
 .PP
 Domains: ai, application, asn1, background, bluetooth, cdp, child_process, cookies, dbus, diagnostics, dns, documentAccess, extension, fs, geolocation, haptics, hci, hid, internal, ipfs, iroh, mcp, mime, networkStatus, notification, os, otp, permissions, platform, process, protocol, queuedResponse, runtime, secureStorage, semver, serviceWorker, sqlite, stderr, stdout, tar, tcp, timers, tls, udp, usb, window, xpc, zlib
 .SS ai
@@ -209,14 +209,14 @@ Transports: request
 .br
 Modules: oro:application
 .br
-Exposed by: oro:application exit() (api/application.js#L646)
+Exposed by: oro:application exit() (api/application.js#L648)
 .TP
 \fBapplication.getScreenSize\fR
 Transports: request
 .br
 Modules: oro:application
 .br
-Exposed by: oro:application getScreenSize() (api/application.js#L531)
+Exposed by: oro:application getScreenSize() (api/application.js#L533)
 .TP
 \fBapplication.getWebviewTlsPins\fR
 Transports: request
@@ -230,7 +230,7 @@ Transports: request
 .br
 Modules: oro:application
 .br
-Exposed by: oro:application getWindows() (api/application.js#L589)
+Exposed by: oro:application getWindows() (api/application.js#L591)
 .TP
 \fBapplication.setSystemMenu\fR
 Transports: request
@@ -244,7 +244,7 @@ Transports: request
 .br
 Modules: oro:application
 .br
-Exposed by: oro:application setSystemMenuItemEnabled() (api/application.js#L759)
+Exposed by: oro:application setSystemMenuItemEnabled() (api/application.js#L761)
 .TP
 \fBapplication.setTrayMenu\fR
 Transports: request
@@ -620,21 +620,21 @@ Transports: request
 .br
 Modules: oro:diagnostics/runtime
 .br
-Exposed by: oro:diagnostics/runtime getBuildIdentity() (api/diagnostics/runtime.js#L99)
+Exposed by: oro:diagnostics/runtime getBuildIdentity() (api/diagnostics/runtime.js#L110)
 .TP
 \fBdiagnostics.capabilities\fR
 Transports: request
 .br
 Modules: oro:diagnostics/runtime
 .br
-Exposed by: oro:diagnostics/runtime getCapabilities() (api/diagnostics/runtime.js#L88)
+Exposed by: oro:diagnostics/runtime getCapabilities() (api/diagnostics/runtime.js#L99)
 .TP
 \fBdiagnostics.query\fR
 Transports: request
 .br
 Modules: oro:diagnostics/runtime
 .br
-Exposed by: oro:diagnostics/runtime query() (api/diagnostics/runtime.js#L297); oro:diagnostics/runtime query() (api/diagnostics/runtime.js#L306)
+Exposed by: oro:diagnostics/runtime query() (api/diagnostics/runtime.js#L308); oro:diagnostics/runtime query() (api/diagnostics/runtime.js#L317)
 .SS dns
 .TP
 \fBdns.lookup\fR
@@ -761,7 +761,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1094)
+Exposed by: oro:internal/init (api/internal/init.js#L1096)
 .TP
 \fBfs.copyFile\fR
 Transports: request, send, sendSync
@@ -1607,7 +1607,7 @@ Transports: request
 .br
 Modules: oro:network\-status
 .br
-Exposed by: oro:network\-status getStatus() (api/network\-status.js#L25)
+Exposed by: oro:network\-status getStatus() (api/network\-status.js#L28)
 .SS notification
 .TP
 \fBnotification.acknowledgeResponse\fR
@@ -1615,14 +1615,14 @@ Transports: request
 .br
 Modules: oro:notification
 .br
-Exposed by: oro:notification acknowledgeResponse() (api/notification.js#L185)
+Exposed by: oro:notification acknowledgeResponse() (api/notification.js#L254)
 .TP
 \fBnotification.close\fR
 Transports: request
 .br
 Modules: oro:notification
 .br
-Exposed by: oro:notification Notification.close() (api/notification.js#L1478)
+Exposed by: oro:notification Notification.close() (api/notification.js#L1550)
 .br
 Notes: Closes the notification programmatically.
 .TP
@@ -1631,28 +1631,28 @@ Transports: request
 .br
 Modules: oro:notification
 .br
-Exposed by: oro:notification getDeliveryStatus() (api/notification.js#L214)
+Exposed by: oro:notification getDeliveryStatus() (api/notification.js#L286)
 .TP
 \fBnotification.getResponses\fR
 Transports: request
 .br
 Modules: oro:notification
 .br
-Exposed by: oro:notification getResponses() (api/notification.js#L170)
+Exposed by: oro:notification getResponses() (api/notification.js#L235)
 .TP
 \fBnotification.openChannelSettings\fR
 Transports: request
 .br
 Modules: oro:notification
 .br
-Exposed by: oro:notification openChannelSettings() (api/notification.js#L230)
+Exposed by: oro:notification openChannelSettings() (api/notification.js#L302)
 .TP
 \fBnotification.show\fR
 Transports: request
 .br
 Modules: oro:notification
 .br
-Exposed by: oro:notification Notification.constructor() (api/notification.js#L1035)
+Exposed by: oro:notification Notification.constructor() (api/notification.js#L1107)
 .br
 Notes: `Notification` class constructor.
 .SS os
@@ -1678,7 +1678,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1095)
+Exposed by: oro:internal/init (api/internal/init.js#L1097)
 .TP
 \fBos.cpus\fR
 Transports: sendSync
@@ -1758,14 +1758,14 @@ Transports: send, sendSync
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L856); oro:internal/init (api/internal/init.js#L1224)
+Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L858); oro:internal/init (api/internal/init.js#L1226)
 .TP
 \fBplatform.openExternal\fR
 Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.openExternal() (api/window.js#L921)
+Exposed by: oro:window ApplicationWindow.openExternal() (api/window.js#L943)
 .br
 Notes: Opens an URL in the default application associated with the URL protocol, such as 'https:' for the default web browser.
 .TP
@@ -1774,7 +1774,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.revealFile() (api/window.js#L938)
+Exposed by: oro:window ApplicationWindow.revealFile() (api/window.js#L960)
 .br
 Notes: Opens a file in the default file explorer.
 .SS process
@@ -1784,21 +1784,21 @@ Transports: send
 .br
 Modules: oro:application
 .br
-Exposed by: oro:application (api/application.js#L806)
+Exposed by: oro:application (api/application.js#L808)
 .TP
 \fBprocess.open\fR
 Transports: send
 .br
 Modules: oro:application
 .br
-Exposed by: oro:application (api/application.js#L799)
+Exposed by: oro:application (api/application.js#L801)
 .TP
 \fBprocess.write\fR
 Transports: send
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.send() (api/window.js#L868)
+Exposed by: oro:window ApplicationWindow.send() (api/window.js#L890)
 .br
 Notes: This is a high\-level API that you should use instead of `ipc.request` when you want to send a message to another window or to the backend.
 .SS protocol
@@ -1825,7 +1825,7 @@ Binary semantics: binary response body
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L934); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L935)
+Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L936); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L937)
 .SS runtime
 .TP
 \fBruntime.platform\fR
@@ -1833,7 +1833,14 @@ Transports: request
 .br
 Modules: oro:internal/platform\-request
 .br
-Exposed by: oro:internal/platform\-request abort() (api/internal/platform\-request.js#L19); oro:internal/platform\-request platformRequest() (api/internal/platform\-request.js#L25)
+Exposed by: oro:internal/platform\-request abort() (api/internal/platform\-request.js#L99); oro:internal/platform\-request platformRequest() (api/internal/platform\-request.js#L105)
+.TP
+\fBruntime.platform.support\fR
+Transports: request
+.br
+Modules: oro:internal/platform\-request, oro:platform
+.br
+Exposed by: oro:internal/platform\-request platformRequest() (api/internal/platform\-request.js#L114); oro:platform getCapabilities() (api/platform.js#L67); oro:platform getSupport() (api/platform.js#L81)
 .SS secureStorage
 .TP
 \fBsecureStorage.clear\fR
@@ -2744,7 +2751,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.update() (api/window.js#L950)
+Exposed by: oro:window ApplicationWindow.update() (api/window.js#L972)
 .br
 Notes: Updates window state
 .TP
@@ -2753,7 +2760,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.blur() (api/window.js#L361)
+Exposed by: oro:window ApplicationWindow.blur() (api/window.js#L365)
 .br
 Notes: Removes focus from the window (desktop: sends to back; mobile: hides).
 .TP
@@ -2762,23 +2769,23 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.close() (api/window.js#L310)
+Exposed by: oro:window ApplicationWindow.close() (api/window.js#L312)
 .br
-Notes: Close the window
+Notes: Close the window Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 .TP
 \fBwindow.create\fR
 Transports: request
 .br
 Modules: oro:application
 .br
-Exposed by: oro:application createWindow() (api/application.js#L508)
+Exposed by: oro:application createWindow() (api/application.js#L510)
 .TP
 \fBwindow.focus\fR
 Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.focus() (api/window.js#L349)
+Exposed by: oro:window ApplicationWindow.focus() (api/window.js#L353)
 .br
 Notes: Brings the window to the foreground and focuses it.
 .TP
@@ -2787,7 +2794,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.isAlwaysOnTop() (api/window.js#L652)
+Exposed by: oro:window ApplicationWindow.isAlwaysOnTop() (api/window.js#L674)
 .br
 Notes: Checks if the window is set to always be on top (desktop only).
 .TP
@@ -2796,7 +2803,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.getBackgroundColor() (api/window.js#L606)
+Exposed by: oro:window ApplicationWindow.getBackgroundColor() (api/window.js#L628)
 .br
 Notes: Gets the background color of the window
 .TP
@@ -2805,9 +2812,9 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.hide() (api/window.js#L337)
+Exposed by: oro:window ApplicationWindow.hide() (api/window.js#L341)
 .br
-Notes: Hides the window
+Notes: Hides the window Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 .TP
 \fBwindow.hotkey.bind\fR
 Transports: request
@@ -2842,16 +2849,16 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.markReady() (api/window.js#L579)
+Exposed by: oro:window ApplicationWindow.markReady() (api/window.js#L583)
 .br
-Notes: Acknowledges that this window has a usable application screen. Call after mounting the UI and loading required styles. Android apps configured with `[webview] require_ready = true` retain native startup recovery until this acknowledgement. Only the current window can acknowledge its own readiness. This does not replay operations or establish application authorization.
+Notes: Acknowledges that this window has a usable application screen. Call after mounting the UI and loading required styles. Android apps configured with `[webview] require_ready = true` keep native startup recovery armed until this acknowledgement. Only the current window can acknowledge its own readiness. This does not replay operations or establish application authorization.
 .TP
 \fBwindow.maximize\fR
 Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.maximize() (api/window.js#L373)
+Exposed by: oro:window ApplicationWindow.maximize() (api/window.js#L377)
 .br
 Notes: Maximize the window
 .TP
@@ -2860,7 +2867,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.minimize() (api/window.js#L385)
+Exposed by: oro:window ApplicationWindow.minimize() (api/window.js#L389)
 .br
 Notes: Minimize the window
 .TP
@@ -2869,7 +2876,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.navigate() (api/window.js#L544)
+Exposed by: oro:window ApplicationWindow.navigate() (api/window.js#L548)
 .br
 Notes: Navigate the window to a given path
 .TP
@@ -2878,14 +2885,14 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window (api/window.js#L832)
+Exposed by: oro:window (api/window.js#L854)
 .TP
 \fBwindow.restore\fR
 Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.restore() (api/window.js#L397)
+Exposed by: oro:window ApplicationWindow.restore() (api/window.js#L401)
 .br
 Notes: Restore the window
 .TP
@@ -2894,7 +2901,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.postMessage() (api/window.js#L903); oro:window ApplicationWindow.send() (api/window.js#L881)
+Exposed by: oro:window ApplicationWindow.postMessage() (api/window.js#L925); oro:window ApplicationWindow.send() (api/window.js#L903)
 .br
 Notes: Post a message to a window TODO(@jwerle): research using `BroadcastChannel` instead This is a high\-level API that you should use instead of `ipc.request` when you want to send a message to another window or to the backend.
 .TP
@@ -2903,7 +2910,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.setAlwaysOnTop() (api/window.js#L636)
+Exposed by: oro:window ApplicationWindow.setAlwaysOnTop() (api/window.js#L658)
 .br
 Notes: Sets whether the window should stay always on top (desktop only).
 .TP
@@ -2912,7 +2919,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.setBackgroundColor() (api/window.js#L593)
+Exposed by: oro:window ApplicationWindow.setBackgroundColor() (api/window.js#L615)
 .br
 Notes: Sets the background color of the window
 .TP
@@ -2928,7 +2935,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.setPosition() (api/window.js#L534)
+Exposed by: oro:window ApplicationWindow.setPosition() (api/window.js#L538)
 .br
 Notes: Sets the position of the window
 .TP
@@ -2937,7 +2944,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.setSize() (api/window.js#L475)
+Exposed by: oro:window ApplicationWindow.setSize() (api/window.js#L479)
 .br
 Notes: Sets the size of the window
 .TP
@@ -2946,7 +2953,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.setSystemAppearance() (api/window.js#L789)
+Exposed by: oro:window ApplicationWindow.setSystemAppearance() (api/window.js#L811)
 .br
 Notes: Sets Android 11+ system surfaces for this window. The foreground window owns appearance; `system` follows configuration changes. Insets/IME updates arrive as `windowinsetschange` CustomEvents. Earlier Android versions and other platforms reject with `ENOSYS`.
 .TP
@@ -2955,7 +2962,7 @@ Transports: request
 .br
 Modules: oro:internal/primitives, oro:window
 .br
-Exposed by: oro:internal/primitives init() (api/internal/primitives.js#L480); oro:internal/primitives init() (api/internal/primitives.js#L496); oro:window ApplicationWindow.setTitle() (api/window.js#L410)
+Exposed by: oro:internal/primitives init() (api/internal/primitives.js#L480); oro:internal/primitives init() (api/internal/primitives.js#L496); oro:window ApplicationWindow.setTitle() (api/window.js#L414)
 .br
 Notes: Sets the title of the window
 .TP
@@ -2966,7 +2973,7 @@ Binary semantics: binary request body
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.share() (api/window.js#L765); oro:window ApplicationWindow.share() (api/window.js#L766)
+Exposed by: oro:window ApplicationWindow.share() (api/window.js#L787); oro:window ApplicationWindow.share() (api/window.js#L788)
 .br
 Notes: Opens the platform share sheet for the current window. New Android file opens expire after 24 hours. Recipients can retain copies. Resolution means a share target was selected, not that delivery completed.
 .TP
@@ -2975,16 +2982,16 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.show() (api/window.js#L325)
+Exposed by: oro:window ApplicationWindow.show() (api/window.js#L328)
 .br
-Notes: Shows the window
+Notes: Shows the window Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 .TP
 \fBwindow.showFileSystemPicker\fR
 Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.showDirectoryFilePicker() (api/window.js#L708); oro:window ApplicationWindow.showOpenFilePicker() (api/window.js#L668); oro:window ApplicationWindow.showSaveFilePicker() (api/window.js#L688)
+Exposed by: oro:window ApplicationWindow.showDirectoryFilePicker() (api/window.js#L730); oro:window ApplicationWindow.showOpenFilePicker() (api/window.js#L690); oro:window ApplicationWindow.showSaveFilePicker() (api/window.js#L710)
 .br
 Notes: Shows a native directory dialog. Shows a native open file dialog.
 .TP
@@ -2993,7 +3000,7 @@ Transports: request
 .br
 Modules: oro:window
 .br
-Exposed by: oro:window ApplicationWindow.showInspector() (api/window.js#L557)
+Exposed by: oro:window ApplicationWindow.showInspector() (api/window.js#L561)
 .br
 Notes: Opens the Web Inspector for the window (desktop only).
 .SS xpc

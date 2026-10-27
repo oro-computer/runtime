@@ -1,0 +1,29 @@
+name: Language server lifecycle
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lifecycle:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Lifecycle, cancellation, scope, cache, and workspace import
+        run: node --test test/unit/language-server-session.test.js test/unit/language-server-editing.test.js test/unit/language-server-vscode.test.js
+      - name: Install pinned VS Code API types
+        run: npm ci --ignore-scripts --prefix editors/vscode
+      - name: Check the standard VS Code language-client interfaces
+        run: npm run check --prefix editors/vscode

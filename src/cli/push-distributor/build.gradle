@@ -1,0 +1,64 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath 'com.android.tools.build:gradle:9.3.2'
+  }
+}
+apply plugin: 'com.android.application'
+
+android {
+  namespace = 'dev.oro.push'
+  compileSdk = providers.gradleProperty('oroPushCompileSdk').get().toInteger()
+  defaultConfig {
+    applicationId = 'dev.oro.push'
+    minSdk = 26
+    targetSdk = 35
+    versionCode = 1
+    versionName = '0.1.0-dev'
+  }
+  sourceSets {
+    main {
+      manifest.srcFile 'AndroidManifest.xml'
+      kotlin.directories.add('kotlin')
+      assets.srcDirs = ['assets']
+    }
+  }
+  signingConfigs {
+    debug {
+      storeFile = file(providers.gradleProperty('oroPushKeystore').get())
+      storePassword = 'android'
+      keyAlias = 'oro-push-dev'
+      keyPassword = 'android'
+    }
+  }
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+  }
+}
+kotlin {
+  compilerOptions {
+    jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8
+  }
+}
+
+tasks.register('verifyPushEntryPoints') {
+  dependsOn 'compileDebugKotlin'
+  doLast {
+    def classes = tasks.named('compileDebugKotlin').get().outputs.files.asFileTree.files
+    def entries = file('AndroidManifest.xml').text =~ /<(?:activity|receiver|service)\b[^>]*android:name="([^"]+)"/
+    entries.each { entry ->
+      def name = entry[1].startsWith('.') ? android.namespace + entry[1] : entry[1]
+      def suffix = name.replace('.', '/') + '.class'
+      if (!classes.any { it.path.replace('\\', '/').endsWith(suffix) }) {
+        throw new GradleException("Missing compiled Kotlin entry point: ${name}")
+      }
+    }
+  }
+}
+tasks.matching { it.name == 'assembleDebug' }.configureEach {
+  dependsOn 'verifyPushEntryPoints'
+}

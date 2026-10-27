@@ -181,6 +181,7 @@ private fun startAndStopRaces() {
   val first = params(record)
   check(service.onStartJob(first))
   awaitCondition("First attempt did not complete") { !RuntimeDeferredJob.running(record.getString("generation")) }
+  awaitDeferredWorkerIdle()
   val second = params(record)
   check(service.onStartJob(second))
   check(entered.await(3, TimeUnit.SECONDS))

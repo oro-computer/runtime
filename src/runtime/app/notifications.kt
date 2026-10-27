@@ -140,7 +140,11 @@ object NativeNotifications {
   }
 
   /** May be called from a compiled receiver/executor using Application context; no WebView is started. */
-  fun submit (context: Context, options: JSONObject): JSONObject {
+  fun submit (context: Context, options: JSONObject): JSONObject = submitNative(context, options, "")
+
+  /** Native-only opaque target correlation. The renderer request validator does not accept targetRef. */
+  fun submitNative (context: Context, options: JSONObject, targetRef: String): JSONObject {
+    require(targetRef.length <= 256 && targetRef.none { it.code < 32 })
     if (!App.getInstance().hasRuntimePermission("notifications") ||
         !NotificationManagerCompat.from(context).areNotificationsEnabled()) throw PlatformFailure("EACCES")
     validatePresentation(context, options)
@@ -165,14 +169,67 @@ object NativeNotifications {
     val posted = context.post(id, title, text(options, "body", 16384), text(options, "tag", 256), channel,
       text(options, "category", 128), flag(options, "silent"), text(options, "icon", 4096), text(options, "image", 4096),
       text(options, "vibratePattern", 4096), (options.optJSONArray("actions") ?: JSONArray()).toString(),
-      text(options, "dataJSON", 65536), flag(options, "requireInteraction"), flag(options, "renotify"), options)
+      text(options, "dataJSON", 65536), flag(options, "requireInteraction"), flag(options, "renotify"), options, targetRef)
     if (!posted) throw PlatformFailure("EIO")
     return JSONObject().put("id", id).put("submitted", true).put("presentationObserved", false)
+  }
+
+  /** Read-only OS metadata; does not create channels or request permission. */
+  fun status(context: Context, channels: JSONArray): JSONObject {
+    if (!App.getInstance().hasRuntimePermission("notifications")) throw PlatformFailure("EACCES")
+    require(channels.length() <= 32)
+    val manager = context.getSystemService(NotificationManager::class.java)
+    val values = JSONArray()
+    for (index in 0 until channels.length()) {
+      val id = channels.getString(index);require(id.length in 1..128)
+      val channel = manager.getNotificationChannel(if (id == "default") context.packageName else id)
+      values.put(JSONObject().put("id", id).put("exists", channel != null).put("importance", channel?.importance ?: 0)
+        .put("sound", channel?.sound != null).put("vibration", channel?.shouldVibrate() ?: false)
+        .put("blocked", channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE))
+    }
+    return JSONObject().put("enabled", NotificationManagerCompat.from(context).areNotificationsEnabled()).put("channels", values)
+  }
+
+  /** Native-only inspection of this package, including retained legacy OS entries. No titles/body are returned. */
+  fun active(context: Context): JSONArray {
+    if (!App.getInstance().hasRuntimePermission("notifications")) throw PlatformFailure("EACCES")
+    val manager = context.getSystemService(NotificationManager::class.java)
+    val active = manager.activeNotifications
+    if (active.size > 256) throw PlatformFailure("E2BIG")
+    return JSONArray(active.map { posted ->
+      val notification = posted.notification
+      val nativeTag = posted.tag ?: ""
+      val prefix = nativeTag.substringBefore(':')
+      val size = nativeTag.substringAfter(':', "").substringBefore(':').toIntOrNull()
+      val payload = nativeTag.substringAfter(':', "").substringAfter(':', "")
+      val owned = prefix == "oro" && size != null && size in 1..256 && payload.length > size && payload[size] == ':'
+      val id = if (owned) payload.substring(0, size!!) else ""
+      val tag = if (owned) payload.substring(size!! + 1) else nativeTag
+      JSONObject().put("id", id).put("tag", tag).put("legacy", !owned).put("channel", notification.channelId ?: "")
+        .put("group", notification.group ?: "").put("summary", notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY != 0)
+        .put("private", notification.visibility == android.app.Notification.VISIBILITY_PRIVATE)
+        .put("openAction", notification.contentIntent != null)
+        .put("targetRef", if (owned) NotificationReceipts.target(context, id, tag) else "")
+    })
   }
 
   internal fun request (call: PlatformCall, action: String, options: JSONObject) {
     call.foreground()
     when (action) {
+      "status" -> {
+        require(options.keys().asSequence().all { it == "channels" })
+        call.success(status(call.app, options.optJSONArray("channels") ?: JSONArray()))
+      }
+      "active" -> {
+        require(options.length() == 0)
+        val values = active(call.app)
+        call.success(JSONArray((0 until values.length()).map { values.getJSONObject(it) }
+          .filter { !it.getBoolean("legacy") }.map { value ->
+            value.remove("targetRef")
+            value.remove("legacy")
+            value
+          }))
+      }
       "configureChannels" -> {
         require(options.keys().asSequence().all { it == "channels" })
         call.success(configureChannels(call.app, options.getJSONArray("channels")))
@@ -211,7 +268,8 @@ object NativeNotifications {
     dataJSON: String,
     requireInteraction: Boolean,
     renotify: Boolean,
-    presentation: JSONObject
+    presentation: JSONObject,
+    targetRef: String = ""
   ): Boolean {
     try {
       val notificationManager = getSystemService(NotificationManager::class.java)
@@ -249,7 +307,7 @@ object NativeNotifications {
 
       val intentFlags = Intent.FLAG_ACTIVITY_SINGLE_TOP
 
-      val contentIntent = (NotificationReceipts.createIntent(this, Intent(launchIntent), id, "default") ?: return false).apply {
+      val contentIntent = (NotificationReceipts.createIntent(this, Intent(launchIntent), id, "default", tag, targetRef) ?: return false).apply {
         addCategory(Intent.CATEGORY_LAUNCHER)
         setAction("notification.response.default")
         putExtra("id", id)
@@ -261,7 +319,7 @@ object NativeNotifications {
       }
 
       val deleteIntent = (NotificationReceipts.createIntent(
-        this, Intent(this, NotificationDismissReceiver::class.java), id, "dismiss"
+        this, Intent(this, NotificationDismissReceiver::class.java), id, "dismiss", tag, targetRef
       ) ?: return false).apply {
         setAction("notification.response.dismiss")
         putExtra("id", id)
@@ -338,7 +396,7 @@ object NativeNotifications {
 
       var actionRequestCode = identifier + 1
       for ((actionId, actionTitle) in actions) {
-        val actionIntent = (NotificationReceipts.createIntent(this, Intent(launchIntent), id, actionId) ?: return false).apply {
+        val actionIntent = (NotificationReceipts.createIntent(this, Intent(launchIntent), id, actionId, tag, targetRef) ?: return false).apply {
           setAction("notification.response.action")
           putExtra("id", id)
           putExtra("action", actionId)

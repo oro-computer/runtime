@@ -14,11 +14,18 @@ class Fragment (val index: Int) {
   var hasWebView = true
   val webview = WebView()
   var window: Window? = null
+  internal fun presentStartup(call: oro.runtime.app.PlatformCall) { call.success() }
 }
 class Manager { val fragments = mutableListOf<Fragment>() }
+internal class ApplicationBack {
+  fun invalidate(window: Window) {}
+  fun invalidateStale(window: Window) {}
+  fun request(call: oro.runtime.app.PlatformCall, action: String, options: org.json.JSONObject) { call.success() }
+}
 class WindowManagerActivity : AppActivity(), LifecycleOwner {
   override val lifecycle = Lifecycle(this)
   val windowFragmentManager = Manager()
+  internal val applicationBack = ApplicationBack()
   val credentials = CredentialManager()
   val mainExecutor = Executor { it.run() }
   var focused = true

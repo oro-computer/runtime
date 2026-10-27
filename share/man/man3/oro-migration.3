@@ -1,0 +1,171 @@
+.TH ORO-MIGRATION 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:migration \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:migration'
+.fi
+.SH DESCRIPTION
+.PP
+Bundled historical protected imports and retained Android component handover. Aliases, codecs, AAD and component identities come from immutable project data. Original records/keys and uncertain receipts are preserved. Account authority, historical schema and authenticated server reconciliation remain application policy.
+.PP
+Platform support: Android only, with `[migration] enabled = true`, bundled definitions and an SDK reporting historicalMigrationProtocol 1. Protected imports require Android 11+ authentication\-bound keys. iOS/iPadOS, macOS, Linux and Windows historical migration backends are not implemented. `getSupport()` reports unavailable with a platform/reason; operational calls reject ENOSYS. There is no fallback to plaintext storage or background JS. Source implementation and a support probe do not establish historical signed upgrade, production signing, OEM authentication or server reconciliation acceptance. Fixed `prefer\-native\-records\-v1` source selection uses legacy ciphertext only while the native scope is absent. A present scope is authoritative; missing rows, lost keys and provenance mismatches never fall back to legacy data. `[migration] generate_adapters = false` bundles identical policy for a bridge build retaining existing app components. Generated adapters do not continue old alarm presentation before an explicitly approved replacement handover.
+.SH REFERENCE
+.TP
+\fBgetSupport()\fR
+Probe without prompting, creating keys or reading legacy values. Other platforms and older runtimes report unavailable; operational calls still reject ENOSYS. Android implements this backend. iOS/iPadOS, macOS, Linux and Windows return reason migration\-backend\-unimplemented; older Android SDKs return migration\-protocol\-unavailable. A configured backend can be unavailable due to disabled/malformed bundled definitions; inspect error before enabling UI.
+\fBReturns:\fR
+.br
+\fIPromise<MigrationSupport>\fR
+.TP
+\fBinspectProtected(options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ProtectedSource; required)
+\fBReturns:\fR
+.br
+\fIPromise<ProtectedSourceStatus>\fR
+.TP
+\fBimportProtected(options, settings)\fR
+Opens the bundled historical envelope with its original key, then rewraps to an authentication\-bound runtime key. Each protected cryptographic operation uses its own system prompt. No plaintext is returned. The original source digest is rechecked before commit; retry/discovery recovers an already committed import. After explicit user recovery, a fresh recoveryRef rewraps the still\-readable original into a new key/handle while preserving earlier imports. Reuse that recoveryRef to reconcile a lost reply. Missing original keys are never replaced.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ProtectedImportOptions; required)
+.br
+\fIsettings\fR (MigrationRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<ProtectedImport>\fR
+.TP
+\fBopenProtected(options, settings)\fR
+Unlock a migrated value for the owning private interactive form. This always uses the new key's per\-operation prompt, never a cached authentication boolean.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ProtectedOpenOptions; required)
+.br
+\fIsettings\fR (MigrationRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<ProtectedValue>\fR
+.TP
+\fBdiscoverProtected(options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ProtectedIdentity; required)
+\fBReturns:\fR
+.br
+\fIPromise<ProtectedImport[]>\fR
+.TP
+\fBreadUnprotected(options, settings)\fR
+Read only a bundled noninteractive source explicitly marked exposure: private\-document. Requires native foreground consent and returns Base64 to that private document. Authentication\-bound sources always reject this path. Never expose the result through logs, assistant tools or background handlers.
+\fBParameters:\fR
+.br
+\fIoptions\fR (UnprotectedReadOptions; required)
+.br
+\fIsettings\fR (MigrationRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<UnprotectedValue>\fR
+.TP
+\fBgetHistoricalEntries(options)\fR
+Read bounded opaque references captured from an allowlisted historical Activity action. Primary window only. Every entry is untrusted: authorize its destination in the current account before navigating or performing work.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HistoricalEntryOptions; required)
+\fBReturns:\fR
+.br
+\fIPromise<HistoricalEntry[]>\fR
+.TP
+\fBacknowledgeHistoricalEntry(options)\fR
+Acknowledge an owned routing entry after application validation. This does not acknowledge a source alarm, remote operation or notification delivery.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HistoricalEntryId; required)
+\fBReturns:\fR
+.br
+\fIPromise<HistoricalEntryAcknowledgement>\fR
+.TP
+\fBinspectHandover(options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HistoricalComponentSource; required)
+\fBReturns:\fR
+.br
+\fIPromise<HistoricalSourceStatus>\fR
+.TP
+\fBprepareHandover(options, settings)\fR
+Prepare an exact source/replacement binding after native consent. Pass an empty expectedGeneration only for an absent mapping. Bundled identity fields must match the already\-authorized workflow binding; no server authority is inferred.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HandoverOptions; required)
+.br
+\fIsettings\fR (MigrationRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<HandoverStatus>\fR
+.TP
+\fBdiscoverHandovers(options)\fR
+Rediscover exact owned generations after an interrupted reply, including Stop. An existing historical reference cannot be rebound to another account/authority.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HandoverIdentity; required)
+\fBReturns:\fR
+.br
+\fIPromise<DiscoveredHandover[]>\fR
+.TP
+\fBactivateHandover(options)\fR
+Activate only the prepared generation after rechecking source and replacement. The original component names, job IDs/schedules and encrypted receipts remain. This neither unregisters old endpoints nor claims remote migration completion.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HandoverId; required)
+\fBReturns:\fR
+.br
+\fIPromise<HandoverStatus>\fR
+.TP
+\fBgetHandoverStatus(options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HandoverId; required)
+\fBReturns:\fR
+.br
+\fIPromise<HandoverStatus>\fR
+.TP
+\fBstopHandover(options)\fR
+Fence this generation and cancel its admitted reads. Poll drained before treating owned cleanup as complete. Already\-submitted effects stay uncertain.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HandoverId; required)
+\fBReturns:\fR
+.br
+\fIPromise<HandoverStatus>\fR
+.TP
+\fBgetRetainedReceipts(options)\fR
+Documented function exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (HandoverId; required)
+\fBReturns:\fR
+.br
+\fIPromise<RetainedReceipt[]>\fR
+.TP
+\fBresolveRetainedReceipt(options)\fR
+Record an application\-verified result without claiming runtime verification of its server. Repeated identical resolutions are idempotent; changed ones conflict.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ReceiptResolution; required)
+\fBReturns:\fR
+.br
+\fIPromise<ReceiptResolutionResult>\fR
+.TP
+\fBreleaseRetainedReceipt(options)\fR
+Release only an explicitly resolved receipt. Unknown receipts never expire or disappear automatically; at capacity new admission returns ENOSPC.
+\fBParameters:\fR
+.br
+\fIoptions\fR (RetainedReceiptId; required)
+\fBReturns:\fR
+.br
+\fIPromise<ReceiptReleaseResult>\fR

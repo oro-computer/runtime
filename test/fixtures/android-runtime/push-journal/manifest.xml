@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <receiver android:name="oro.runtime.qualification.pushjournal.JournalReceiver"
+      android:exported="true" android:permission="android.permission.DUMP" />
+    <receiver android:name="oro.runtime.qualification.pushjournal.PublicDistributor" android:exported="false">
+      <intent-filter><action android:name="org.unifiedpush.android.distributor.UNREGISTER" /></intent-filter>
+    </receiver>
+  </application>
+</manifest>

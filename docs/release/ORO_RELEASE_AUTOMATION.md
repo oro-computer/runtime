@@ -29,6 +29,7 @@ Pushing a signed `v<version>` tag starts `.github/workflows/release-artifacts.ym
 
 1. verifies the signed tag and synchronized release metadata;
 2. calls the reusable CI workflow and waits for lint, generated-output checks, Node compatibility,
+   native backend regressions, Android Kotlin/JVM behavior, language-server lifecycle checks,
    and the comprehensive Linux integration lane;
 3. builds supported desktop and mobile-SDK distributions on their native runners;
 4. smoke tests the staged `oroc` executable;
@@ -42,6 +43,39 @@ The trust anchor keeps the `v<version>` tag spelling, while package metadata and
 use the normalized SemVer without the tag's `v` prefix (for example, tag `v0.1.0` produces
 `oro-runtime-0.1.0-linux-x64-desktop.tar.gz`). Manual and signed-tag runs therefore use the same
 artifact naming convention.
+
+Release tags always select complete source validation. The duplicate branch-push
+optimization must not suppress checks when a tagged commit also has an open
+pull request, and a documentation-only comparison must not bypass a tag's native
+regression lanes. The unit regression executes the actual classification script
+with that tag/open-PR combination.
+
+The native and editor workflows are reusable CI dependencies rather than
+independent required checks inferred from a previous branch run. Native tests
+include shared C++ behavior on Linux, macOS and Windows, Linux transports and
+software-TPM providers, SDK retention/packing, and Android Kotlin behavior on a
+Linux JVM. The Android host lane installs checksum-pinned Kotlin, JSON, SQLite,
+logging and XML fixtures using `bin/install-native-test-tools.js`. It requires
+an Android SDK JAR and a working JDK/compiler before executing tests. These OS
+facades do not qualify Android system services, prompts or hardware.
+
+Local workflow checks should use `act` with its copied workspace and selected
+Linux jobs. A Linux container cannot establish macOS/iOS/iPadOS or Windows OS
+acceptance. Keep uncommitted/untracked source out of a release claim: hosted
+workflows check out the selected commit and do not include a developer's working
+tree. Record every skipped job and missing native runner explicitly.
+
+The desktop integration runner runs its ordinary entry first, then a dedicated
+`lifecycle/strict.js` entry with `lifecycle_desktop_always_running = false` at the
+project configuration root. The strict pass exposes
+`ORO_LIFECYCLE_TEST_STRICT=1` through both the build environment and the project's
+environment allowlist, and asserts that it reached the document before testing
+pause/resume. A successful ordinary pass alone does not qualify this policy.
+Native source paths in copied test projects retain the original include roots.
+A separate Linux integration step enables the compiled WebKit extension while
+keeping application test extensions disabled. It verifies that the WebProcess
+filesystem runtime receives the same opt-in pause/resume policy as the UI
+runtime; the extension-disabled lane cannot establish that behavior.
 
 Before archiving, each job validates its staged target directories against the
 declared `desktop`, `android`, or `ios` family. Desktop artifacts must contain

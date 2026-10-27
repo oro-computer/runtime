@@ -157,16 +157,19 @@ export class ApplicationWindow extends EventTarget {
     getStatus(): number;
     /**
      * Close the window
+     * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
      * @return {Promise<object>} - the options of the window
      */
     close(): Promise<object>;
     /**
      * Shows the window
+     * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
      * @return {Promise<ipc.Result>}
      */
     show(): Promise<ipc.Result>;
     /**
      * Hides the window
+     * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
      * @return {Promise<ipc.Result>}
      */
     hide(): Promise<ipc.Result>;
@@ -239,12 +242,24 @@ export class ApplicationWindow extends EventTarget {
     /**
      * Acknowledges that this window has a usable application screen. Call after
      * mounting the UI and loading required styles. Android apps configured with
-     * `[webview] require_ready = true` retain native startup recovery until this
+     * `[webview] require_ready = true` keep native startup recovery armed until this
      * acknowledgement. Only the current window can acknowledge its own readiness.
      * This does not replay operations or establish application authorization.
      * @returns {Promise<void>}
      */
     markReady(): Promise<void>;
+    /**
+     * Reveals this Android window's verified bundled startup screen after a native
+     * visual-state fence. Call after installing its inline styles and startup UI.
+     * This does not acknowledge application readiness or stop the 30-second native
+     * watchdog. Keep application controls inert until the usable screen calls
+     * markReady(). Failed startup restores native recovery and its Reload control.
+     * Requires the current trusted top-level document; foreign origins, headless
+     * windows and stale documents cannot reveal a startup screen. Other platforms
+     * reject with ENOSYS. Hidden windows do not gain focus from this call.
+     * @returns {Promise<void>}
+     */
+    markPresented(): Promise<void>;
     /**
      * Sets the background color of the window
      * @param {object} opts - an options object

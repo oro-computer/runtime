@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "protected": [
+    {
+      "id": "registry",
+      "preferences": "qualification.history",
+      "key": "registry.{sourceRef}",
+      "alias": "qualification.history.registry",
+      "aad": "{sourceRef}",
+      "encoding": "base64url",
+      "ciphertextField": "body",
+      "authentication": "none",
+      "policy": "biometric-or-device"
+    },
+    {
+      "id": "records",
+      "format": "native-records-v1",
+      "records": {
+        "namespace": "qualification.history",
+        "identity": {
+          "authorityRef": "public-legacy",
+          "accountRef": "{package}",
+          "identityRef": "installation-1"
+        }
+      },
+      "key": "registry.{sourceRef}",
+      "authentication": "none",
+      "policy": "biometric-or-device",
+      "provenance": {
+        "legacy": "registry",
+        "markerKey": "migration.v1",
+        "format": 1,
+        "formatPointer": "/format",
+        "digestPointer": "/sourceSha256",
+        "digestFormat": "android-json-pairs-sha256-v1"
+      }
+    },
+    {
+      "id": "selected",
+      "format": "prefer-native-records-v1",
+      "primary": "records",
+      "fallback": "registry",
+      "authentication": "none",
+      "policy": "biometric-or-device"
+    }
+  ],
+  "components": [
+    {
+      "source": "selected",
+      "referenceExtra": "clientId",
+      "referencePointer": "/clientId",
+      "generationPointer": "/generation",
+      "identityFields": {
+        "authorityRef": {
+          "pointer": "/authority",
+          "encoding": "text"
+        },
+        "accountRef": {
+          "pointer": "/account",
+          "encoding": "text"
+        },
+        "targetRef": {
+          "pointer": "/clientId",
+          "encoding": "text"
+        }
+      },
+      "id": "receiver",
+      "className": "public.oro.migration.LegacyReceiver",
+      "type": "receiver",
+      "actions": ["public.oro.migration.MESSAGE"],
+      "tokenExtra": "token",
+      "tokenPointer": "/token",
+      "senderPointer": "/sender"
+    },
+    {
+      "source": "selected",
+      "referenceExtra": "clientId",
+      "referencePointer": "/clientId",
+      "generationPointer": "/generation",
+      "identityFields": {
+        "authorityRef": {
+          "pointer": "/authority",
+          "encoding": "text"
+        },
+        "accountRef": {
+          "pointer": "/account",
+          "encoding": "text"
+        },
+        "targetRef": {
+          "pointer": "/clientId",
+          "encoding": "text"
+        }
+      },
+      "id": "job",
+      "className": "public.oro.migration.LegacyJob",
+      "type": "job",
+      "minimumJobId": 23101,
+      "maximumJobId": 23108
+    }
+  ]
+}

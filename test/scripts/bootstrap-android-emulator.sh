@@ -18,6 +18,12 @@ function exit_and_write_code() {
   exit "$exit_code"
 }
 
+port="${ORO_ANDROID_EMULATOR_PORT:-5554}"
+if [[ ! "$port" =~ ^[0-9]{4}$ ]] || (( port < 5554 || port > 5584 || port % 2 != 0 )); then
+  echo >&2 "Use an even ORO_ANDROID_EMULATOR_PORT from 5554 through 5584."
+  exit_and_write_code 1
+fi
+
 declare rc
 
 oro_env=""
@@ -171,10 +177,28 @@ fi
 [[ -z "$EMULATOR_FLAGS" ]] && EMULATOR_FLAGS=()
 
 EMULATOR_FLAGS+=("-gpu" "swiftshader_indirect")
+EMULATOR_FLAGS+=("-port" "$port")
 # fixes adb: failed to install cmd: Can't find service: package
 
 write_code 0
 echo "Starting Android emulator..."
+emulator_pid=""
+function stop_owned_process() {
+  if [[ -n "$emulator_pid" ]]; then
+    kill "$emulator_pid" 2>/dev/null || true
+    for attempt in {1..50}; do
+      kill -0 "$emulator_pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    if kill -0 "$emulator_pid" 2>/dev/null; then
+      kill -KILL "$emulator_pid" 2>/dev/null || true
+    fi
+    wait "$emulator_pid" 2>/dev/null || true
+  fi
+}
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap stop_owned_process EXIT
 if [[ -z "$CI" ]]; then
   "$emulator" "@$avd_name"    \
     "${EMULATOR_FLAGS[@]}"    \
@@ -182,7 +206,7 @@ if [[ -z "$CI" ]]; then
     -no-boot-anim             \
     -no-window                \
     -noaudio                  \
-    >/dev/null
+    >/dev/null &
 else
   "$emulator" "@$avd_name"    \
     "${EMULATOR_FLAGS[@]}"    \
@@ -190,9 +214,11 @@ else
     -no-boot-anim             \
     -no-window                \
     -noaudio                  \
-    | grep -v "\[CAMetalLayer nextDrawable\] returning nil because device is nil." \
-    2>&1
+    2>&1 &
 fi
 
+emulator_pid=$!
+wait "$emulator_pid"
 rc=$?
+emulator_pid=""
 exit_and_write_code $rc

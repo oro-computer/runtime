@@ -1,0 +1,12 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Public source history</title>
+<h1>Public source history</h1>
+<p>Isolated registration history checks. Public test data only.</p>
+<script type="module">
+import migration from 'oro:migration'
+import application from 'oro:application'
+window.publicMigration = migration
+await (await application.getCurrentWindow()).markReady()
+window.publicSupport = await migration.getSupport()
+</script>

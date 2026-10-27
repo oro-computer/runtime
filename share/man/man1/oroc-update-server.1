@@ -30,6 +30,9 @@ run in UDP mode (binary OUP CHECK/RESPONSE)
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
 Default mode is HTTP. The server exposes these endpoints.
@@ -42,7 +45,9 @@ whose manifestUrl points at "/<appId>/<manifest\-name>" when present
 .IP \(bu 2
 GET /<path>           — serves files rooted under \-\-root, including "<appId>/<manifest\-name>"
 .PP
-and "<appId>/<manifest\-name>.sig" HTTP mode is designed to be run behind a load balancer or reverse proxy in production. TCP and UDP modes implement the same CHECK/RESPONSE selection semantics using the binary OUP framing.
+and "<appId>/<manifest\-name>.sig" HTTP mode is designed to be run behind a load balancer or reverse proxy in production.
+.PP
+TCP and UDP modes implement the same CHECK/RESPONSE selection semantics using the binary OUP framing.
 .SH EXAMPLES
 .TP
 \fBoroc update server \-\-root ./updates\fR

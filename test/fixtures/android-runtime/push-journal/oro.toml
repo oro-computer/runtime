@@ -1,0 +1,24 @@
+[build]
+name = "public_push_journal"
+output = "out"
+copy_map = "copy-map.toml"
+[meta]
+bundle_identifier = "oro.runtime.qualification.pushjournal"
+version = "1.0.0"
+title = "Public push journal recovery"
+[android]
+runtime_protocol = "5"
+sources = "JournalReceiver.kt"
+manifests = "manifest.xml"
+[android.native]
+callbacks_enabled = true
+callback_sources = "Journal.cc"
+initializers = "initialize_public_journal"
+[push]
+enabled = true
+provider = "unifiedpush"
+[permissions]
+allow_usb = false
+allow_bluetooth = false
+[webview]
+require_ready = true

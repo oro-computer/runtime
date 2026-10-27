@@ -1,0 +1,28 @@
+[build]
+name = "public_workflow_check"
+output = "out"
+copy_map = "copy-map.toml"
+[meta]
+bundle_identifier = "oro.runtime.qualification.workflows"
+version = "1.0.0"
+title = "Public declarative workflow"
+[android]
+runtime_protocol = "5"
+[workflows]
+enabled = true
+definitions = "workflows.json"
+[foreground]
+enabled = true
+continuous_enabled = true
+continuous_subtype = "User-started public read monitoring"
+[background]
+deferred_enabled = true
+[push]
+enabled = true
+provider = "unifiedpush"
+[permissions]
+allow_notifications = true
+allow_usb = false
+allow_bluetooth = false
+[webview]
+require_ready = true

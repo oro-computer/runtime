@@ -20,6 +20,7 @@ import menu from './application/menu.js'
 import ipc from './ipc.js'
 import os from './os.js'
 import { validateFiles } from './internal/share-files.js'
+import platformRequest from './internal/platform-request.js'
 
 /**
  * @typedef {object} FullscreenState
@@ -123,7 +124,7 @@ export class ApplicationWindow extends EventTarget {
   #updateState (response) {
     const { data, err } = response
     if (err) {
-      throw new Error(err)
+      throw err
     }
     const { id, index, ...state } = data
     this.#id = id ?? null
@@ -304,6 +305,7 @@ export class ApplicationWindow extends EventTarget {
 
   /**
    * Close the window
+   * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
    * @return {Promise<object>} - the options of the window
    */
   async close () {
@@ -319,6 +321,7 @@ export class ApplicationWindow extends EventTarget {
 
   /**
    * Shows the window
+   * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
    * @return {Promise<ipc.Result>}
    */
   async show () {
@@ -331,6 +334,7 @@ export class ApplicationWindow extends EventTarget {
 
   /**
    * Hides the window
+   * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
    * @return {Promise<ipc.Result>}
    */
   async hide () {
@@ -567,7 +571,7 @@ export class ApplicationWindow extends EventTarget {
   /**
    * Acknowledges that this window has a usable application screen. Call after
    * mounting the UI and loading required styles. Android apps configured with
-   * `[webview] require_ready = true` retain native startup recovery until this
+   * `[webview] require_ready = true` keep native startup recovery armed until this
    * acknowledgement. Only the current window can acknowledge its own readiness.
    * This does not replay operations or establish application authorization.
    * @returns {Promise<void>}
@@ -578,6 +582,24 @@ export class ApplicationWindow extends EventTarget {
     }
     const { err } = await ipc.request('window.markReady')
     if (err) throw err
+  }
+
+  /**
+   * Reveals this Android window's verified bundled startup screen after a native
+   * visual-state fence. Call after installing its inline styles and startup UI.
+   * This does not acknowledge application readiness or stop the 30-second native
+   * watchdog. Keep application controls inert until the usable screen calls
+   * markReady(). Failed startup restores native recovery and its Reload control.
+   * Requires the current trusted top-level document; foreign origins, headless
+   * windows and stale documents cannot reveal a startup screen. Other platforms
+   * reject with ENOSYS. Hidden windows do not gain focus from this call.
+   * @returns {Promise<void>}
+   */
+  async markPresented () {
+    if (this.#index !== this.#senderWindowIndex) {
+      throw new Error('Only the current window can present its startup screen')
+    }
+    await platformRequest('startup', 'present', {})
   }
 
   /**

@@ -166,6 +166,14 @@ namespace oro::runtime {
     if (!this->destroyed.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
       return true;
     }
+#if ORO_RUNTIME_PLATFORM_ANDROID
+    // Backgrounding pauses renderer-facing services; compiled service callbacks
+    // retain their Application-owned resources until actual runtime destruction.
+    if (!this->services.platform.shutdownNativeCallbacks()) {
+      this->destroyed.store(false, std::memory_order_release);
+      return false;
+    }
+#endif
     if (this->loop.state == loop::Loop::State::None) {
       return true;
     }

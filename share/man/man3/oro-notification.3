@@ -11,7 +11,7 @@ The Notification modules provides an API to configure and display desktop and mo
 .SH REFERENCE
 .TP
 \fBconfigureChannels(channels)\fR
-Registers at most 32 immutable named Android channels. Reusing an ID with changed defaults rejects EEXIST; choose a new versioned ID instead. Existing user changes are preserved. Requires notification capability; does not prompt.
+Registers at most 32 immutable named policies. Android uses OS channels; Linux stores application policy without changing desktop user preferences. Linux supports default/none sound, no vibration, and no badge guarantee. Reusing an ID with changed defaults rejects EEXIST; choose a new versioned ID instead. Existing user changes are preserved. Requires notification capability; does not prompt.
 \fBParameters:\fR
 .br
 \fIchannels\fR (AndroidNotificationChannel[]; required)
@@ -20,7 +20,7 @@ Registers at most 32 immutable named Android channels. Reusing an ID with change
 \fIPromise<AndroidNotificationChannelStatus[]>\fR
 .TP
 \fBsubmit(options)\fR
-Submits an Android notification with channel/group/public\-version policy. Reads and acknowledgement use getResponses()/acknowledgeResponse(). This function does not establish account authority or deduplicate server events. Other platforms reject ENOSYS. Compiled native executors can use the same NativeNotifications.submit(Context, JSONObject) implementation without a WebView.
+Submits an Android notification with channel/group/public\-version policy. Reads and acknowledgement use getResponses()/acknowledgeResponse(). This function does not establish account authority or deduplicate server events. Linux uses freedesktop notifications in the GUI or configured native host. It cannot enforce lock\-screen visibility: publicVersion replaces all content on every surface; otherwise supply only public content. Group summaries/group alert policies reject ENOSYS. Other unimplemented platforms reject ENOSYS. Compiled Android executors can use the same NativeNotifications.submit(Context, JSONObject) implementation without a WebView.
 \fBParameters:\fR
 .br
 \fIoptions\fR (AndroidNotificationOptions; required)
@@ -29,7 +29,7 @@ Submits an Android notification with channel/group/public\-version policy. Reads
 \fIPromise<AndroidNotificationSubmission>\fR
 .TP
 \fBcancel(id, options)\fR
-Cancels an Android notification by its exact application ID/tag. Missing notifications are allowed. It does not create a dismissal receipt, revoke server state or acknowledge existing responses. Compiled receivers can use NativeNotifications.cancel(Context, id, tag) without an Activity or WebView. Other platforms reject with ENOSYS.
+Cancels an Android notification by its exact application ID/tag. Missing notifications are allowed. It does not create a dismissal receipt, revoke server state or acknowledge existing responses. Compiled receivers can use NativeNotifications.cancel(Context, id, tag) without an Activity or WebView. Linux also supports exact ID/tag cancellation. Other backends may reject ENOSYS.
 \fBParameters:\fR
 .br
 \fIid\fR (string; required)
@@ -39,14 +39,29 @@ Cancels an Android notification by its exact application ID/tag. Missing notific
 .br
 \fIPromise<void>\fR
 .TP
+\fBgetStatus(options)\fR
+Read Android package/channel settings without prompting or changing channels. Other platform metadata backends may reject ENOSYS. An enabled setting is not proof that a notification was displayed or heard.
+\fBParameters:\fR
+.br
+\fIoptions\fR (AndroidNotificationStatusOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<AndroidNotificationStatus>\fR
+.TP
+\fBgetActive()\fR
+Read bounded Android OS metadata for this application's runtime notifications. Content, private target references and legacy non\-runtime tags are excluded. Existing private correlation and historical compatibility inspection remain native\-only SDK operations. Other metadata backends may reject ENOSYS.
+\fBReturns:\fR
+.br
+\fIPromise<AndroidActiveNotification[]>\fR
+.TP
 \fBgetResponses()\fR
-Reads Android notification responses retained across process restarts. Call after restoring authorization, resolve IDs against authorized application state, then acknowledge handled or obsolete receipts. Reading does not remove receipts. At most 64 responses are retained for seven days. Notification content and arbitrary `data` are not persisted. Other platforms reject with `ENOSYS`. A receipt does not establish authorization or verified presentation.
+Reads Android or Linux notification responses retained across process restarts. Call after restoring authorization, resolve IDs against authorized application state, then acknowledge handled or obsolete receipts. Reading does not remove receipts. At most 64 responses are retained for seven days. Notification content and arbitrary `data` are not persisted. Linux actions require the notification\-owning process to remain alive; saved receipts survive its restart. A native session host can receive actions while the GUI is closed and launch it with an opaque receipt hint. A `notificationresponse` hint with `requiresRefresh: true` means query these retained receipts after restoring authorization; it does not carry the complete response or authorize opening. Other unimplemented platforms reject with `ENOSYS`. A receipt does not establish authorization or verified presentation.
 \fBReturns:\fR
 .br
 \fIPromise<NotificationResponseReceipt[]>\fR
 .TP
 \fBacknowledgeResponse(receiptId)\fR
-Removes an Android response after application reconciliation. Repeated acknowledgements are allowed. Other platforms reject with `ENOSYS`.
+Removes an Android or Linux response after application reconciliation. Repeated acknowledgements are allowed. Other platforms reject with `ENOSYS`.
 \fBParameters:\fR
 .br
 \fIreceiptId\fR (string; required) Opaque identity returned by `getResponses()`.
@@ -55,7 +70,7 @@ Removes an Android response after application reconciliation. Repeated acknowled
 \fIPromise<void>\fR
 .TP
 \fBgetDeliveryStatus(channel)\fR
-Reads Android application/channel policy without asking for consent. Refresh after resume because the user can change it in Settings. Other platforms reject with `ENOSYS`; a true `canSubmit` does not establish server authorization.
+Reads Android application/channel or Linux application/transport policy without asking for consent. Refresh after resume because the user can change it in Settings. Other platforms reject with `ENOSYS`; a true `canSubmit` does not establish server authorization.
 \fBParameters:\fR
 .br
 \fIchannel\fR (string; optional; default 'default') Native channel ID, or the application's default.

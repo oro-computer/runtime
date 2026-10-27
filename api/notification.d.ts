@@ -49,9 +49,14 @@
  * @property {string} id
  * @property {boolean} submitted OS submission succeeded.
  * @property {boolean} presentationObserved False; submission is not proof of display, sound or user attention.
+ * @property {string} [visibilityPolicy] Linux uses publicVersion on every surface when supplied; otherwise all supplied content must be public.
+ * @property {boolean} [groupingSupported] False on Linux; Android grouping policies reject there.
  */
 /**
- * Registers at most 32 immutable named Android channels. Reusing an ID with
+ * Registers at most 32 immutable named policies. Android uses OS channels;
+ * Linux stores application policy without changing desktop user preferences.
+ * Linux supports default/none sound, no vibration, and no badge guarantee.
+ * Reusing an ID with
  * changed defaults rejects EEXIST; choose a new versioned ID instead. Existing
  * user changes are preserved. Requires notification capability; does not prompt.
  * @param {AndroidNotificationChannel[]} channels
@@ -62,7 +67,11 @@ export function configureChannels(channels: AndroidNotificationChannel[]): Promi
  * Submits an Android notification with channel/group/public-version policy.
  * Reads and acknowledgement use getResponses()/acknowledgeResponse(). This
  * function does not establish account authority or deduplicate server events.
- * Other platforms reject ENOSYS. Compiled native executors can use the same
+ * Linux uses freedesktop notifications in the GUI or configured native host. It cannot enforce
+ * lock-screen visibility: publicVersion replaces all content on every surface;
+ * otherwise supply only public content. Group summaries/group alert policies
+ * reject ENOSYS. Other unimplemented platforms reject ENOSYS.
+ * Compiled Android executors can use the same
  * NativeNotifications.submit(Context, JSONObject) implementation without a WebView.
  * @param {AndroidNotificationOptions} options
  * @returns {Promise<AndroidNotificationSubmission>}
@@ -77,12 +86,50 @@ export function submit(options: AndroidNotificationOptions): Promise<AndroidNoti
  * notifications are allowed. It does not create a dismissal receipt, revoke
  * server state or acknowledge existing responses. Compiled receivers can use
  * NativeNotifications.cancel(Context, id, tag) without an Activity or WebView.
- * Other platforms reject with ENOSYS.
+ * Linux also supports exact ID/tag cancellation. Other backends may reject ENOSYS.
  * @param {string} id
  * @param {AndroidNotificationCancelOptions} [options]
  * @returns {Promise<void>}
  */
 export function cancel(id: string, options?: AndroidNotificationCancelOptions): Promise<void>;
+/**
+ * @typedef {object} AndroidNotificationStatusOptions
+ * @property {string[]} [channels] At most 32 exact channel IDs; no channel is created.
+ */
+/**
+ * @typedef {AndroidNotificationChannelStatus & { exists: boolean }} AndroidExistingNotificationChannel
+ */
+/**
+ * @typedef {object} AndroidNotificationStatus
+ * @property {boolean} enabled Current OS package notification setting.
+ * @property {AndroidExistingNotificationChannel[]} channels Current requested channel settings.
+ */
+/**
+ * @typedef {object} AndroidActiveNotification
+ * @property {string} id Opaque application ID.
+ * @property {string} tag Exact tag used for cancellation.
+ * @property {string} channel
+ * @property {string} group
+ * @property {boolean} summary
+ * @property {boolean} private Private lock-screen visibility was requested.
+ * @property {boolean} openAction A content PendingIntent exists; this is not authorization to navigate.
+ */
+/**
+ * Read Android package/channel settings without prompting or changing channels.
+ * Other platform metadata backends may reject ENOSYS. An enabled setting is
+ * not proof that a notification was displayed or heard.
+ * @param {AndroidNotificationStatusOptions} [options]
+ * @returns {Promise<AndroidNotificationStatus>}
+ */
+export function getStatus(options?: AndroidNotificationStatusOptions): Promise<AndroidNotificationStatus>;
+/**
+ * Read bounded Android OS metadata for this application's runtime notifications.
+ * Content, private target references and legacy non-runtime tags are excluded.
+ * Existing private correlation and historical compatibility inspection remain
+ * native-only SDK operations. Other metadata backends may reject ENOSYS.
+ * @returns {Promise<AndroidActiveNotification[]>}
+ */
+export function getActive(): Promise<AndroidActiveNotification[]>;
 /**
  * @typedef {object} NotificationResponseReceipt
  * @property {string} receiptId Opaque identity used to acknowledge this receipt.
@@ -91,17 +138,23 @@ export function cancel(id: string, options?: AndroidNotificationCancelOptions): 
  * @property {number} receivedAt Unix timestamp in milliseconds.
  */
 /**
- * Reads Android notification responses retained across process restarts. Call
+ * Reads Android or Linux notification responses retained across process restarts. Call
  * after restoring authorization, resolve IDs against authorized application
  * state, then acknowledge handled or obsolete receipts. Reading does not remove
  * receipts. At most 64 responses are retained for seven days. Notification
- * content and arbitrary `data` are not persisted. Other platforms reject with
+ * content and arbitrary `data` are not persisted. Linux actions require the
+ * notification-owning process to remain alive; saved receipts survive its restart.
+ * A native session host can receive actions while the GUI is closed and launch
+ * it with an opaque receipt hint. A `notificationresponse` hint with
+ * `requiresRefresh: true` means query these retained receipts after restoring
+ * authorization; it does not carry the complete response or authorize opening.
+ * Other unimplemented platforms reject with
  * `ENOSYS`. A receipt does not establish authorization or verified presentation.
  * @returns {Promise<NotificationResponseReceipt[]>}
  */
 export function getResponses(): Promise<NotificationResponseReceipt[]>;
 /**
- * Removes an Android response after application reconciliation. Repeated
+ * Removes an Android or Linux response after application reconciliation. Repeated
  * acknowledgements are allowed. Other platforms reject with `ENOSYS`.
  * @param {string} receiptId Opaque identity returned by `getResponses()`.
  * @returns {Promise<void>}
@@ -118,10 +171,12 @@ export function acknowledgeResponse(receiptId: string): Promise<void>;
  * @property {boolean} vibration Whether channel vibration is enabled.
  * @property {boolean} canSubmit Current permission/channel state permits submission.
  * @property {'submission-only'} deliveryBoundary Submission never proves presentation or delivery.
- * @property {false} pushAvailable No unattended push transport is configured by this runtime.
+ * @property {boolean} pushAvailable Configured native transport, not a trusted subscription or guaranteed delivery.
+ * @property {boolean} [systemChannel] False on Linux; policies are application-local.
+ * @property {boolean} [systemPolicyKnown] False on Linux; DND, audio and presentation decisions remain desktop-owned.
  */
 /**
- * Reads Android application/channel policy without asking for consent. Refresh
+ * Reads Android application/channel or Linux application/transport policy without asking for consent. Refresh
  * after resume because the user can change it in Settings. Other platforms
  * reject with `ENOSYS`; a true `canSubmit` does not establish server authorization.
  * @param {string} [channel='default'] Native channel ID, or the application's default.
@@ -647,12 +702,60 @@ export type AndroidNotificationSubmission = {
      * False; submission is not proof of display, sound or user attention.
      */
     presentationObserved: boolean;
+    /**
+     * Linux uses publicVersion on every surface when supplied; otherwise all supplied content must be public.
+     */
+    visibilityPolicy?: string;
+    /**
+     * False on Linux; Android grouping policies reject there.
+     */
+    groupingSupported?: boolean;
 };
 export type AndroidNotificationCancelOptions = {
     /**
      * Exact tag used for submission.
      */
     tag?: string;
+};
+export type AndroidNotificationStatusOptions = {
+    /**
+     * At most 32 exact channel IDs; no channel is created.
+     */
+    channels?: string[];
+};
+export type AndroidExistingNotificationChannel = AndroidNotificationChannelStatus & {
+    exists: boolean;
+};
+export type AndroidNotificationStatus = {
+    /**
+     * Current OS package notification setting.
+     */
+    enabled: boolean;
+    /**
+     * Current requested channel settings.
+     */
+    channels: AndroidExistingNotificationChannel[];
+};
+export type AndroidActiveNotification = {
+    /**
+     * Opaque application ID.
+     */
+    id: string;
+    /**
+     * Exact tag used for cancellation.
+     */
+    tag: string;
+    channel: string;
+    group: string;
+    summary: boolean;
+    /**
+     * Private lock-screen visibility was requested.
+     */
+    private: boolean;
+    /**
+     * A content PendingIntent exists; this is not authorization to navigate.
+     */
+    openAction: boolean;
 };
 export type NotificationResponseReceipt = {
     /**
@@ -707,9 +810,17 @@ export type NotificationDeliveryStatus = {
      */
     deliveryBoundary: "submission-only";
     /**
-     * No unattended push transport is configured by this runtime.
+     * Configured native transport, not a trusted subscription or guaranteed delivery.
      */
-    pushAvailable: false;
+    pushAvailable: boolean;
+    /**
+     * False on Linux; policies are application-local.
+     */
+    systemChannel?: boolean;
+    /**
+     * False on Linux; DND, audio and presentation decisions remain desktop-owned.
+     */
+    systemPolicyKnown?: boolean;
 };
 import { Enumeration } from './enumeration.js';
 import URL from './url.js';

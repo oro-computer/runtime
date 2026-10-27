@@ -318,6 +318,8 @@ export function getCurrentWindowIndex () {
 
 /**
  * Creates a new window and returns an instance of ApplicationWindow.
+ * Android rejects with `ENOTREADY` after Activity state is saved or while the
+ * Activity is unavailable. Retry the intended creation after application resume.
  * @param {object} opts - an options object
  * @param {string=} opts.aspectRatio - a string (split on ':') provides two float values which set the window's aspect ratio.
  * @param {boolean=} opts.closable - deterime if the window can be closed.

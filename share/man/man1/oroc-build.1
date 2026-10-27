@@ -7,7 +7,9 @@ oroc build [options] [<project\-or\-source>]
 .fi
 .SH DESCRIPTION
 .PP
-Build Oro application. Provide a project directory, HTML file, or JavaScript module. When no oro.toml is found, oroc infers a minimal configuration automatically.
+Build Oro application.
+.PP
+Provide a project directory, HTML file, or JavaScript module. When no oro.toml is found, oroc infers a minimal configuration automatically.
 .SH OPTIONS
 .TP
 \fB\-\-platform=<platform>\fR
@@ -36,23 +38,23 @@ load "index.html" from a specific port (if host is not specified, defaults to lo
 \fB\-\-host=<host>\fR
 load "index.html" from a specific host (if port is not specified, defaults to 80)
 .TP
-\fB\-\-test[=path]\fR
-indicate test mode, optionally importing a test file relative to resource files
+\fB\-t, \-\-test=<path>\fR
+enable test mode and import a test file relative to resource files
 .TP
-\fB\-\-headless\fR
+\fB\-H, \-\-headless\fR
 build application to run in headless mode (without frame or window)
 .TP
-\fB\-\-prod\fR
+\fB\-P, \-\-prod\fR
 build for production (disables debugging info, inspector, etc.)
 .TP
 \fB\-D, \-\-debug\fR
 enable debug mode
 .TP
-\fB\-E, \-\-env\fR
+\fB\-E, \-\-env=<name[=value]>\fR
 add environment variables
 .TP
 \fB\-o, \-\-only\-build\fR
-only run build step,
+only run the build step
 .TP
 \fB\-p, \-\-package\fR
 package the app for distribution
@@ -75,24 +77,50 @@ allow native extension commands (git/build scripts)
 \fB\-\-sanitizers\fR
 enable developer sanitizers (ASan/UBSan) for desktop core builds
 .TP
+\fB\-\-cache\fR
+enable all supported build result caches (default: off)
+.TP
+\fB\-\-no\-cache\fR
+disable supported build result caches for this build
+.TP
+\fB\-\-compiler\-cache\fR
+enable ccache/sccache for native object compilation
+.TP
+\fB\-\-no\-compiler\-cache\fR
+disable the native compiler cache
+.TP
+\fB\-\-android\-cache\fR
+enable all supported caches for Android builds
+.TP
+\fB\-\-no\-android\-cache\fR
+disable supported caches for Android builds
+.TP
+\fB\-\-android\-build\-cache\fR
+enable Gradle's task output cache
+.TP
+\fB\-\-no\-android\-build\-cache\fR
+disable Gradle's task output cache
+.TP
+\fB\-\-android\-configuration\-cache\fR
+enable Gradle's configuration cache
+.TP
+\fB\-\-no\-android\-configuration\-cache\fR
+disable Gradle's configuration cache
+.TP
 \fB\-\-tls\-keylog=<path>\fR
 write NSS TLS key log lines to <path> (OpenSSL provider)
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
-.SH ENVIRONMENT
 .TP
-\fBORO_ALLOW_EXEC\fR
-allow native extension commands during builds
+\fB\-\-editor\-project=<dir>\fR
+export an Android editor project
 .TP
-\fBORO_ENABLE_SANITIZERS\fR
-enable ASan/UBSan on desktop builds
-.SH NOTES
-.PP
-Relative paths are resolved from the project root or from the directory containing the explicit `\-\-config` file when one is supplied. `\-\-prod` controls packaging/debug defaults; `\-\-package` controls whether a distributable artifact is produced in addition to the build output directory. Use `\-\-copy` for one\-off extra bundle mappings without modifying `oro.toml`. Android run targets use \-\-device, then ANDROID_SERIAL, then the first ready device listed by `adb devices`. The android\-emulator target selects the first ready emulator. NO_ANDROID and NO_IOS do not control this application build command. They are independent, presence\-based exclusions for runtime source bootstrap (`bin/install.sh` / `npm run relink`).
-.SH COMMON ERRORS
-.PP
-Android builds: run `oroc setup \-\-platform=android` and accept SDK licenses. macOS/iOS signing: set `[ios] provisioning_profile`/specifier or `[mac.productbuild] identity` in your config file. Standard Android builds run NDK and Gradle automatically. Native extension commands may require `\-\-allow\-exec` or `ORO_ALLOW_EXEC=1`.
+\fB\-\-remote\-debugging\-port=<port>\fR
+set the remote debugging port
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH LINUX OPTIONS
 .TP
 \fB\-f, \-\-package\-format=<format>\fR
@@ -111,9 +139,6 @@ sign Linux packages with GPG (writes .asc next to the artifact)
 .TP
 \fB\-\-sign\-key=<id>\fR
 optional GPG key ID or fingerprint to use with '\-\-sign' (letters/digits/@._\- only)
-.SH DEPENDENCIES
-.PP
-Windows 10/11 SDK and Visual Studio Build Tools are recommended. Ensure `signtool.exe` is available (set SIGNTOOL or add SDK bin to PATH).
 .SH MACOS OPTIONS
 .TP
 \fB\-c, \-\-codesign\fR
@@ -131,13 +156,53 @@ package a macOS application in a specified format for distribution:
 .SH IOS OPTIONS
 .TP
 \fB\-c, \-\-codesign\fR
-code sign application during xcoddbuild (requires '[ios] provisioning_profile' in your config file)
+code sign application during xcodebuild (requires '[ios] provisioning_profile' in your config file)
 .SH WINDOWS OPTIONS
 .TP
 \fB\-f, \-\-package\-format=<format>\fR
 package a Windows application in a specified format for distribution:
 .br
 \(bu appx (default)
+.SH ENVIRONMENT
+.TP
+\fBORO_ALLOW_EXEC\fR
+allow native extension commands during builds
+.TP
+\fBORO_ENABLE_SANITIZERS\fR
+enable ASan/UBSan on desktop builds
+.SH NOTES
+.PP
+Relative paths are resolved from the project root or from the directory containing the explicit `\-\-config` file when one is supplied. `\-\-prod` controls packaging/debug defaults; `\-\-package` controls whether a distributable artifact is produced in addition to the build output directory.
+.PP
+Use `\-\-copy` for one\-off extra bundle mappings without modifying `oro.toml`.
+.PP
+Cache flags override oro.toml; specific cache flags override broader cache flags.
+.PP
+Set [build] cache=true for a project default, [android] cache=true for Android only, or [android] configuration_cache=true for only Gradle configuration caching.
+.PP
+Use compiler_cache in [build] or a platform section to control native object caching.
+.PP
+Compiler caching uses ccache/sccache from PATH and compiles directly if neither is installed.
+.PP
+Download caches and existing incremental build behavior retain their toolchain defaults.
+.PP
+Android run targets use \-\-device, then ANDROID_SERIAL, then the first ready device listed by `adb devices`. The android\-emulator target selects the first ready emulator.
+.PP
+NO_ANDROID and NO_IOS do not control this application build command. They are independent, presence\-based exclusions for runtime source bootstrap (`bin/install.sh` / `npm run relink`).
+.SH COMMON ERRORS
+.PP
+Android builds: run `oroc setup \-\-platform=android` and accept SDK licenses. macOS/iOS signing: set `[ios] provisioning_profile`/specifier or `[mac.productbuild] identity` in your config file.
+.PP
+Standard Android builds run NDK and Gradle automatically. Native extension commands may require `\-\-allow\-exec` or `ORO_ALLOW_EXEC=1`.
+.SH LINUX DEPENDENCIES
+.PP
+deb packaging requires `dpkg` and `fakeroot` (e.g., `sudo apt\-get install dpkg\-dev fakeroot`). rpm packaging requires `rpmbuild` (e.g., `sudo dnf install rpm\-build`).
+.SH MACOS DEPENDENCIES
+.PP
+Xcode and Command Line Tools are required (`xcode\-select \-\-install`). For Gradle/JDK: `brew install gradle openjdk` (or use SDKMAN).
+.SH WINDOWS DEPENDENCIES
+.PP
+Windows 10/11 SDK and Visual Studio Build Tools are recommended. Ensure `signtool.exe` is available (set SIGNTOOL or add SDK bin to PATH).
 .SH EXAMPLES
 .TP
 \fBoroc build .\fR
@@ -151,5 +216,8 @@ produce a signed/package\-ready iOS build using your config
 .TP
 \fBoroc build \-\-copy assets:assets .\fR
 include an extra assets directory in the bundle for this build only
+.TP
+\fBoroc build \-\-platform=android \-\-cache \-\-no\-android\-configuration\-cache .\fR
+enable supported caches except Gradle configuration caching
 .SH SEE ALSO
 oroc(1)

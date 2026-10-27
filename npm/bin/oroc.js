@@ -119,6 +119,10 @@ export async function run () {
     child.kill('SIGTERM')
   })
 
+  process.on('SIGINT', () => {
+    child.kill('SIGINT')
+  })
+
   process.on('exit', () => {
     child.kill('SIGTERM')
   })

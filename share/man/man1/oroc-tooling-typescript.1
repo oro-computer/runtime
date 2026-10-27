@@ -1,0 +1,39 @@
+.TH OROC-TOOLING-TYPESCRIPT 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-tooling\-typescript \- Export web compiler context and selected Oro SDK declarations.
+.SH SYNOPSIS
+.nf
+oroc tooling typescript [options] [<project\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Export web compiler context and selected Oro SDK declarations.
+.SH OPTIONS
+.TP
+\fB\-\-prepare\fR
+materialize the editor config and TypeScript plugin
+.TP
+\fB\-\-refresh\fR
+allocate a fresh editor generation
+.TP
+\fB\-\-offline\fR
+use installed packages; disable automatic typings acquisition in LSP
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml or oro.ini
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Uses the original tsconfig.json/jsconfig.json, including references, or explicit source declarations.
+.PP
+Without a declared scope, tsserver infers projects from opened documents and their imports.
+.PP
+Does not rewrite application configs, emit JavaScript, or install packages.
+.PP
+The default TypeScript LSP adapter adds Oro declarations through an Oro\-owned tsserver plugin.
+.PP
+See docs/LANGUAGE_SERVER.md for configuration and editor examples.
+.SH SEE ALSO
+oroc(1), oroc\-tooling(1)

@@ -1,8 +1,11 @@
 /**
  * @module launcher
- * Android named destinations. Requires `[launcher] enabled = true`. A shortcut
+ * Android named destinations and Linux desktop actions. Requires `[launcher] enabled = true`. A shortcut
  * produces routing receipts, never authorization or resource mutation. Restore
  * sign-in and resolve the exact current account/target before opening it.
+ * iOS/iPadOS, macOS and Windows backends for this publication API are not
+ * implemented. `getStatus()` reports unavailable with a reason; operational
+ * calls reject ENOSYS. Linux desktop actions do not implement Android pinning.
  */
 import request from './internal/platform-request.js'
 
@@ -24,6 +27,9 @@ import request from './internal/platform-request.js'
  */
 /**
  * @typedef {object} LauncherStatus
+ * @property {string} [platform] Present on an unavailable cross-platform support result.
+ * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform contract restriction; not a permission denial.
+ * @property {string} [reason] Stable unavailable reason.
  * @property {boolean} available
  * @property {boolean} pinSupported
  * @property {number} maximumPerActivity Android's quota, shared with app-owned shortcuts.
@@ -50,7 +56,10 @@ export async function getStatus () { return request('launcher', 'status', {}) }
 
 /**
  * Replaces this runtime's dynamic destinations, preserving unrelated app
- * shortcuts. Removed targets are disabled, including pinned copies. At most
+ * shortcuts. Linux publishes a separate owned desktop entry containing actions;
+ * it does not overwrite the installed app entry or request pinning. Changed
+ * publications invalidate old routing generations, including copied entries.
+ * Removed Android targets are disabled, including pinned copies. At most
  * 16 entries and Android's per-activity quota. Must run from a visible window.
  * @param {LauncherDestination[]} destinations
  * @returns {Promise<LauncherPublicationResult>}
@@ -61,7 +70,7 @@ export async function replace (destinations) {
 }
 
 /**
- * Requests Android's user-controlled pin flow for an existing destination.
+ * Requests Android's user-controlled pin flow for an existing destination. Linux rejects ENOSYS.
  * Submission is not confirmation that the user pinned the shortcut.
  * @param {string} id
  * @returns {Promise<LauncherPinResult>}

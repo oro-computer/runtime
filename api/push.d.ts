@@ -1,14 +1,20 @@
 /**
  * @typedef {object} PushSupport
+ * @property {string} [platform] Present on an unavailable cross-platform support result.
+ * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform API restriction; not a permission denial.
+ * @property {string} [reason] Stable unavailable reason.
  * @property {boolean} available Whether the compiled transport is enabled.
- * @property {string} provider unifiedpush.
- * @property {string} selectedDistributor Selected Android package, or an empty string.
+ * @property {string|null} provider unifiedpush, or null when the backend is unavailable.
+ * @property {string} selectedDistributor Selected Android package or Linux D-Bus service, or an empty string.
  * @property {string[]} registeredKinds Compiled native handler names.
  * @property {number} maximumRegistrations 16.
  * @property {number} maximumPendingMessages 64 across all registrations.
  * @property {number} maximumMessageBytes 4096 encrypted bytes.
  * @property {boolean} backgroundJavaScript False.
  * @property {boolean} survivesForceStop False.
+ * @property {boolean} [coldActivationConfigured] False for the Linux application-process connector.
+ * @property {string[]} [availableDistributors] Discovered Linux distributor service names.
+ * @property {boolean} [serverEnrollmentRequired] True on Linux; transport registration does not enroll a trusted server.
  */
 /**
  * @typedef {object} PushRegistrationOptions
@@ -18,7 +24,7 @@
  * @property {string} accountRef Opaque account identity.
  * @property {string} targetRef Opaque native application state identity.
  * @property {string} applicationServerKey Base64url uncompressed P-256 VAPID public key.
- * @property {string} [description] Short public registration label, at most 128 UTF-8 bytes.
+ * @property {string} [description] Short public label: at most 128 UTF-8 bytes on Android or 100 on Linux.
  */
 /**
  * @typedef {object} PushEnrollmentKeys
@@ -31,7 +37,7 @@
  * @property {string} kind
  * @property {string} phase registering, registered, registration-failed, unregistered or temporarily-unavailable.
  * @property {string} endpoint HTTPS push endpoint, empty until registration succeeds.
- * @property {string} distributor Selected Android package.
+ * @property {string} distributor Selected Android package or Linux D-Bus service.
  * @property {string} applicationServerKey
  * @property {string} generation Endpoint generation used to acknowledge server enrollment.
  * @property {boolean} enrollmentPending Whether this endpoint still needs application server enrollment.
@@ -46,13 +52,26 @@
 /** @returns {Promise<PushSupport>} */
 export function getSupport(): Promise<PushSupport>;
 /**
+ * @typedef {object} DistributorSelectionOptions
+ * @property {string} [distributor] Linux D-Bus distributor name. Omit on Android to open its system chooser.
+ */
+/**
+ * Lists Linux UnifiedPush distributor service names, including activatable services.
+ * Other platforms reject with ENOSYS. This does not select or register a provider.
+ * @returns {Promise<string[]>}
+ */
+export function getDistributors(): Promise<string[]>;
+/**
  * Opens the system distributor chooser. Existing registrations must first be
  * unregistered. Returns after launch; listen for pushchange and reread support
  * when the activity resumes. Selection is bound to the originating document and
  * expires after 90 seconds. Cancellation leaves the previous selection intact.
+ * On Linux, pass a name from getDistributors(), configure push.distributor, or
+ * select the only installed distributor. Multiple unselected providers reject EAGAIN.
+ * @param {DistributorSelectionOptions} [options]
  * @returns {Promise<PushSubmission>}
  */
-export function selectDistributor(): Promise<PushSubmission>;
+export function selectDistributor(options?: DistributorSelectionOptions): Promise<PushSubmission>;
 /**
  * Begins or renews transport registration. An endpoint arrives asynchronously;
  * read getRegistration after foreground resume or pushchange. Identical IDs and
@@ -96,6 +115,7 @@ export function unregister(id: string): Promise<void>;
 export function retryPending(): Promise<PushSubmission>;
 declare namespace _default {
     export { getSupport };
+    export { getDistributors };
     export { selectDistributor };
     export { register };
     export { getRegistration };
@@ -106,15 +126,27 @@ declare namespace _default {
 export default _default;
 export type PushSupport = {
     /**
+     * Present on an unavailable cross-platform support result.
+     */
+    platform?: string;
+    /**
+     * Missing runtime backend or platform API restriction; not a permission denial.
+     */
+    implementation?: "missing" | "restricted";
+    /**
+     * Stable unavailable reason.
+     */
+    reason?: string;
+    /**
      * Whether the compiled transport is enabled.
      */
     available: boolean;
     /**
-     * unifiedpush.
+     * unifiedpush, or null when the backend is unavailable.
      */
-    provider: string;
+    provider: string | null;
     /**
-     * Selected Android package, or an empty string.
+     * Selected Android package or Linux D-Bus service, or an empty string.
      */
     selectedDistributor: string;
     /**
@@ -141,6 +173,18 @@ export type PushSupport = {
      * False.
      */
     survivesForceStop: boolean;
+    /**
+     * False for the Linux application-process connector.
+     */
+    coldActivationConfigured?: boolean;
+    /**
+     * Discovered Linux distributor service names.
+     */
+    availableDistributors?: string[];
+    /**
+     * True on Linux; transport registration does not enroll a trusted server.
+     */
+    serverEnrollmentRequired?: boolean;
 };
 export type PushRegistrationOptions = {
     /**
@@ -168,7 +212,7 @@ export type PushRegistrationOptions = {
      */
     applicationServerKey: string;
     /**
-     * Short public registration label, at most 128 UTF-8 bytes.
+     * Short public label: at most 128 UTF-8 bytes on Android or 100 on Linux.
      */
     description?: string;
 };
@@ -194,7 +238,7 @@ export type PushRegistration = {
      */
     endpoint: string;
     /**
-     * Selected Android package.
+     * Selected Android package or Linux D-Bus service.
      */
     distributor: string;
     applicationServerKey: string;
@@ -224,4 +268,10 @@ export type PushSubmission = {
      * Native processing or chooser launch was submitted, not completed.
      */
     submitted: boolean;
+};
+export type DistributorSelectionOptions = {
+    /**
+     * Linux D-Bus distributor name. Omit on Android to open its system chooser.
+     */
+    distributor?: string;
 };

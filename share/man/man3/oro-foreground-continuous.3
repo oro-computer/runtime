@@ -1,0 +1,65 @@
+.TH ORO-FOREGROUND-CONTINUOUS 3 "" "Oro Runtime" "Oro Runtime API Manual"
+.SH NAME
+oro:foreground/continuous \- JavaScript API module
+.SH SYNOPSIS
+.nf
+import * as module from 'oro:foreground/continuous'
+.fi
+.SH DESCRIPTION
+.PP
+Explicitly user\-started continuous Android specialUse or Linux process work. iOS/iPadOS restrict unbounded background execution; macOS and Windows backends for this API are not implemented. Support probes return unavailable with a restricted/missing reason; operations reject ENOSYS. No JS polling fallback supplies a durable execution guarantee on those platforms. Requires `[foreground] continuous_enabled = true` and a compiled executor. Android also requires a public continuous_subtype purpose. This does not run background JavaScript, authorize accounts, retry, or prove transfers. An optional packaged Linux native session host can outlive the GUI. Host interruption still leaves durable outcomes for explicit reconciliation.
+.SH REFERENCE
+.TP
+\fBgetSupport()\fR
+Reports configuration, registered executors and current notification policy. Missing or platform\-restricted backends return unavailable status; operational calls still reject with ENOSYS.
+\fBReturns:\fR
+.br
+\fIPromise<ContinuousSupport>\fR
+.TP
+\fBstart(options, requestOptions)\fR
+Starts from the current foreground document after an explicit user action. Returns durable admission, not completion. Navigation or an aborted/lost reply can race admission: inspect the ID before another attempt. The admitted native operation survives Home/navigation and has its own public Stop notification. Removing the Android app task keeps monitoring active. Linux uses a live application process and an action\-capable desktop notification server; closing that process ends work. Stop or process loss records uncertainty. Reopen/reboot never restarts work; a new explicit start is required.
+\fBParameters:\fR
+.br
+\fIoptions\fR (ContinuousOptions; required)
+.br
+\fIrequestOptions\fR (ContinuousRequestOptions; optional)
+\fBReturns:\fR
+.br
+\fIPromise<ContinuousStatus>\fR
+.TP
+\fBgetStatus(id)\fR
+Reads the retained status without restarting work.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<ContinuousStatus>\fR
+.TP
+\fBlist()\fR
+Lists at most sixteen retained, redacted monitoring statuses.
+\fBReturns:\fR
+.br
+\fIPromise<ContinuousStatus[]>\fR
+.TP
+\fBstop(id, expectedGeneration)\fR
+Requests stop for one exact generation. An uncertain remote outcome stays unknown. Cancellation does not undo an already completed remote operation.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+.br
+\fIexpectedGeneration\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<ContinuousStatus>\fR
+.TP
+\fBrelease(id, expectedGeneration)\fR
+Releases a terminal journal entry after app reconciliation. Resource cleanup must finish before the operation ID can be released or a new executor started.
+\fBParameters:\fR
+.br
+\fIid\fR (string; required)
+.br
+\fIexpectedGeneration\fR (string; required)
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR

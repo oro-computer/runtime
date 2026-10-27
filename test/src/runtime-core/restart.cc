@@ -144,6 +144,80 @@ namespace oro::Tests {
       t.assert(!instance.loop.started(), "destroy does not start the loop");
     });
 
+    t.test("UDP: repeated pause/resume retains its live endpoint", [](auto t) {
+      runtime::loop::Loop loop(runtime::loop::Loop::Options { .dedicatedThread = true });
+      runtime::udp::SocketManager manager({ loop });
+      std::promise<bool> result;
+      auto completed = result.get_future();
+      loop.start();
+      loop.dispatch([&]() {
+        const auto socket = manager.create(runtime::udp::SOCKET_TYPE_UDP, 1);
+        bool valid = socket->bind("127.0.0.1", 0) == 0;
+        const auto port = socket->getLocalPeerInfo()->port;
+        for (size_t index = 0; index < 3; ++index) {
+          valid = socket->pause() == 0 && socket->pause() == 0 && valid;
+          valid = socket->resume() == 0 && socket->resume() == 0 && valid;
+          valid = socket->isBound() && socket->initLocalPeerInfo() == 0 &&
+            socket->getLocalPeerInfo()->port == port && valid;
+        }
+        valid = socket->recvstart([](auto, const auto* buffer, const auto*) {
+          if (buffer && buffer->base) {
+            delete[] buffer->base;
+          }
+        }) == 0 && valid;
+        valid = socket->pause() == 0 && socket->pause() == 0 &&
+          socket->resume() == 0 && socket->hasState(runtime::udp::SOCKET_STATE_UDP_RECV_STARTED) && valid;
+        valid = socket->pause() == 0 && socket->recvstop() == 0 && socket->resume() == 0 &&
+          !socket->hasState(runtime::udp::SOCKET_STATE_UDP_RECV_STARTED) && valid;
+        socket->close([&, valid]() { result.set_value(valid); });
+      });
+      const bool ready = completed.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+      t.assert(ready && completed.get(), "bound endpoint survives repeated pause/resume without handle replacement");
+      loop.shutdown();
+    });
+
+    t.test("Loop: dispatch during pause waits for resume", [](auto t) {
+      using runtime::loop::Loop;
+      Loop loop(Loop::Options { .dedicatedThread = true });
+      t.assert(loop.start(), "loop starts");
+      t.assert(loop.pause(), "loop pauses");
+      std::promise<void> delivered;
+      auto completed = delivered.get_future();
+      const bool accepted = loop.dispatch([&]() {
+        delivered.set_value();
+      });
+      t.assert(accepted, "paused dispatch is retained");
+      t.assert(completed.wait_for(std::chrono::milliseconds(100)) == std::future_status::timeout,
+        "queued work does not execute during pause");
+      t.assert(loop.resume(), "loop resumes");
+      t.assert(completed.wait_for(std::chrono::seconds(2)) == std::future_status::ready,
+        "queued work executes after resume");
+      t.assert(loop.stop(), "loop stops");
+      t.assert(!loop.dispatch([]() {}), "stopped loop rejects new work");
+      loop.shutdown();
+    });
+
+  #if ORO_RUNTIME_PLATFORM_LINUX && !ORO_RUNTIME_PLATFORM_ANDROID
+    t.test("Loop: GTK pumping cannot execute paused work", [](auto t) {
+      using runtime::loop::Loop;
+      Loop loop;
+      t.assert(loop.start() && loop.pause(), "GTK loop starts and pauses");
+      bool delivered = false;
+      t.assert(loop.dispatch([&]() { delivered = true; }), "GTK loop retains paused work");
+      for (size_t index = 0; index < 20; ++index) {
+        g_main_context_iteration(nullptr, false);
+      }
+      t.assert(!delivered && loop.paused(), "GLib leaves paused work pending");
+      t.assert(loop.resume(), "GTK loop resumes");
+      for (size_t index = 0; index < 100 && !delivered; ++index) {
+        g_main_context_iteration(nullptr, false);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      }
+      t.assert(delivered, "GLib delivers retained work after resume");
+      loop.shutdown();
+    });
+  #endif
+
     t.test("Loop: start/stop/restart drains handles", [](auto t) {
       using oro::runtime::loop::Loop;
       const int iterations = 5;

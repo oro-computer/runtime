@@ -172,6 +172,7 @@ function collectCanonicalApiManpageInputs (apiModules) {
     'network.js',
     'os.js',
     'path/path.js',
+    'platform.js',
     'process.js',
     'test/index.js',
     // 'test/dom-helpers.js',

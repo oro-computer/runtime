@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
+import androidSdk from '../src/cli/android-sdk.cjs'
+import { qualifyEditorInstall } from './qualify-editor-install.js'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -56,7 +58,7 @@ function fileDigest (filename) {
   return hash.digest('hex')
 }
 
-function verifyAndroidDistribution (installationRoot, apiRoot) {
+async function verifyAndroidDistribution (installationRoot, apiRoot) {
   const filename = path.join(installationRoot, 'android-distribution.json')
   requireFile(filename)
   const report = JSON.parse(fs.readFileSync(filename, 'utf8'))
@@ -77,11 +79,12 @@ function verifyAndroidDistribution (installationRoot, apiRoot) {
     assert.equal(fileDigest(target), digest, `Installed Android artifact differs: ${name}`)
   }
   const executable = path.join(installationRoot, 'bin', process.platform === 'win32' ? 'oroc.exe' : 'oroc')
-  const compiled = JSON.parse(run(executable, ['--android-runtime-contract'], installationRoot, {
-    ...environment, ORO_HOME: installationRoot, ORO_HOME_API: apiRoot
-  }))
+  const compiled = await androidSdk.readAndroidSdk(executable, {
+    cwd: installationRoot,
+    env: { ...environment, ORO_HOME: installationRoot, ORO_HOME_API: apiRoot }
+  })
   for (const key of ['schema', 'androidBridgeProtocol', 'cliVersion', 'cliSourceFingerprint', 'sources', 'apis', 'gradleTemplateSha256', 'manifestTemplateSha256']) {
-    assert.deepEqual(compiled[key], report[key], `Installed compiled Android contract differs: ${key}`)
+    assert.deepEqual(compiled[key], report[key], `Installed Android SDK metadata differs: ${key}`)
   }
 }
 
@@ -170,7 +173,10 @@ for (const globalInstall of [false, true]) {
   }
   verifyTargetLibraries(installationRoot)
   if (fs.readdirSync(path.join(installationRoot, 'lib')).some(name => name.endsWith('-android'))) {
-    verifyAndroidDistribution(installationRoot, metaRoot)
+    await verifyAndroidDistribution(installationRoot, metaRoot)
+  }
+  if (!globalInstall && process.env.ORO_REQUIRE_EDITOR_QUALIFICATION === '1') {
+    await qualifyEditorInstall(path.join(installationRoot, 'bin', process.platform === 'win32' ? 'oroc.exe' : 'oroc'), installationRoot, metaRoot, environment)
   }
   requireFile(path.join(metaRoot, 'process.js'))
   requireFile(path.join(metaRoot, 'index.d.ts'))

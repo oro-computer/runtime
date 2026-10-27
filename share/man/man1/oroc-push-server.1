@@ -1,0 +1,76 @@
+.TH OROC-PUSH-SERVER 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-push\-server \- Run a local UnifiedPush development server backed by ntfy.
+.SH SYNOPSIS
+.nf
+oroc push server [options]
+.fi
+.SH DESCRIPTION
+.PP
+Run a local UnifiedPush development server backed by ntfy.
+.SH OPTIONS
+.TP
+\fB\-\-host=<ip>\fR
+listen address (default: 127.0.0.1)
+.TP
+\fB\-\-port=<port>\fR
+listen port (default: 8787)
+.TP
+\fB\-\-base\-url=<origin>\fR
+URL reachable by the distributor and application server
+.TP
+\fB\-\-data\-dir=<path>\fR
+writable cache, tools and message storage directory
+.TP
+\fB\-\-cert\-file=<path>\fR
+PEM certificate for direct HTTPS (requires \-\-key\-file)
+.TP
+\fB\-\-key\-file=<path>\fR
+PEM private key for direct HTTPS (requires \-\-cert\-file)
+.TP
+\fB\-\-ntfy\-bin=<path>\fR
+use an explicitly supplied ntfy executable without download
+.TP
+\fB\-\-offline\fR
+require the verified cached ntfy release or \-\-ntfy\-bin
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Requires Node.js 22 or later. On first use, downloads ntfy 2.33.1 from its official GitHub release and verifies a pinned SHA\-256. Later starts use the verified cache.
+.PP
+Automatic installation supports Linux x64/arm64 and Windows x64. On macOS, use \-\-ntfy\-bin with a server\-enabled development build; upstream's macOS release is client\-only.
+.PP
+State defaults to the user's Oro data directory, outside the installed SDK.
+.PP
+The server runs in the foreground; Ctrl\-C stops it. Cached messages expire after 12 hours.
+.PP
+This is an anonymous development server. Use public test data and private development networks.
+.PP
+No FCM, upstream push relay or system ntfy configuration is used.
+.PP
+Use 'push distributor' to build Oro Push Dev, or install the Android ntfy distributor.
+.PP
+Configure the selected distributor with this base URL; both use the same server.
+.PP
+LAN binding requires an explicit HTTPS base URL. Supply a certificate trusted by the distributor, or terminate HTTPS with a local reverse proxy. HTTP loopback is for host checks; Oro Android push registration requires HTTPS endpoints and encrypted Web Push payloads.
+.PP
+Application\-server authentication, endpoint enrollment and notification handling remain app work.
+.PP
+See https://docs.ntfy.sh/config/ and https://unifiedpush.org/users/distributors/.
+.SH EXAMPLES
+.TP
+\fBoroc push server\fR
+start at http://127.0.0.1:8787
+.TP
+\fBoroc push server \-\-offline\fR
+restart from the verified cached release
+.TP
+\fBoroc push server \-\-host=0.0.0.0 \-\-base\-url=https://push.dev.example:8787 \-\-cert\-file=./cert.pem \-\-key\-file=./key.pem\fR
+serve HTTPS on port 8787 for an Android distributor
+.TP
+\fBoroc push server \-\-base\-url=https://push.dev.example\fR
+run loopback HTTP behind a local HTTPS reverse proxy
+.SH SEE ALSO
+oroc(1), oroc\-push(1)

@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "protected": [
+    {
+      "id": "private",
+      "preferences": "qualification.history",
+      "key": "protected",
+      "alias": "qualification.history.private",
+      "aad": "{package}:public-private",
+      "encoding": "base64",
+      "ciphertextField": "ciphertext",
+      "authentication": "biometric-or-device",
+      "policy": "biometric-or-device"
+    },
+    {
+      "id": "registry",
+      "preferences": "qualification.history",
+      "key": "registry.{sourceRef}",
+      "alias": "qualification.history.registry",
+      "aad": "{sourceRef}",
+      "encoding": "base64url",
+      "ciphertextField": "body",
+      "authentication": "none",
+      "policy": "biometric-or-device"
+    },
+    {
+      "id": "records",
+      "format": "native-records-v1",
+      "records": {
+        "namespace": "qualification.history",
+        "identity": {
+          "authorityRef": "public-legacy",
+          "accountRef": "{package}",
+          "identityRef": "installation-1"
+        }
+      },
+      "key": "registry.{sourceRef}",
+      "authentication": "none",
+      "policy": "biometric-or-device"
+    },
+    {
+      "id": "metadata",
+      "format": "preferences-json",
+      "preferences": "qualification.history",
+      "key": "shortcut.{sourceRef}",
+      "authentication": "none",
+      "policy": "biometric-or-device",
+      "exposure": "private-document"
+    }
+  ],
+  "components": [
+    {
+      "source": "registry",
+      "referenceExtra": "clientId",
+      "referencePointer": "/clientId",
+      "generationPointer": "/generation",
+      "identityFields": {
+        "authorityRef": {
+          "pointer": "/authority",
+          "encoding": "text"
+        },
+        "accountRef": {
+          "pointer": "/account",
+          "encoding": "text"
+        },
+        "targetRef": {
+          "pointer": "/clientId",
+          "encoding": "text"
+        }
+      },
+      "id": "receiver",
+      "className": "public.oro.migration.LegacyReceiver",
+      "type": "receiver",
+      "actions": ["public.oro.migration.MESSAGE"],
+      "tokenExtra": "token",
+      "tokenPointer": "/token",
+      "senderPointer": "/sender"
+    },
+    {
+      "source": "registry",
+      "referenceExtra": "clientId",
+      "referencePointer": "/clientId",
+      "generationPointer": "/generation",
+      "identityFields": {
+        "authorityRef": {
+          "pointer": "/authority",
+          "encoding": "text"
+        },
+        "accountRef": {
+          "pointer": "/account",
+          "encoding": "text"
+        },
+        "targetRef": {
+          "pointer": "/clientId",
+          "encoding": "text"
+        }
+      },
+      "id": "job",
+      "className": "public.oro.migration.LegacyJob",
+      "type": "job",
+      "minimumJobId": 23101,
+      "maximumJobId": 23108
+    },
+    {
+      "id": "importance",
+      "className": "public.oro.migration.LegacyImportance",
+      "type": "service",
+      "actions": ["public.oro.migration.IMPORTANCE"]
+    },
+    {
+      "id": "activity",
+      "className": "public.oro.migration.LegacyActivity",
+      "type": "activity",
+      "targetActivity": "oro.runtime.qualification.migration.MainActivity",
+      "actions": ["public.oro.migration.OPEN"],
+      "referenceExtras": ["destination"]
+    },
+    {
+      "source": "records",
+      "referenceExtra": "clientId",
+      "referencePointer": "/clientId",
+      "generationPointer": "/generation",
+      "identityFields": {
+        "authorityRef": {
+          "pointer": "/authority",
+          "encoding": "text"
+        },
+        "accountRef": {
+          "pointer": "/account",
+          "encoding": "text"
+        },
+        "targetRef": {
+          "pointer": "/clientId",
+          "encoding": "text"
+        }
+      },
+      "id": "native-job",
+      "className": "public.oro.migration.NativeRecordJob",
+      "type": "job",
+      "minimumJobId": 23109,
+      "maximumJobId": 23109,
+      "checks": [
+        {
+          "pointer": "/revoked",
+          "equals": false,
+          "default": false
+        }
+      ]
+    }
+  ]
+}

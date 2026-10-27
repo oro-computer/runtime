@@ -77,7 +77,7 @@ Expected results
 Wireshark decryption (OpenSSL provider)
 
 1. Ensure `ORO_TLS_KEYLOG` is set to a writable path (see Environment above).
-2. In Wireshark: Preferences → Protocols → TLS → set “(Pre)-Master-Secret log filename” to the keylog path.
+2. In Wireshark: Preferences → Protocols → TLS → set "(Pre)-Master-Secret log filename” to the keylog path.
 3. Capture filters (ports used by tests):
 
 ```

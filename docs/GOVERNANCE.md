@@ -80,7 +80,7 @@ If you disagree with a proposed or merged change, or if a decision feels blocked
    - Mention a maintainer directly in the PR/issue.
    - Summarize the points of agreement and disagreement so far.
 3. **Escalate to the TSC group**
-   - Use a GitHub Discussion (e.g., “Request for decision: …”) when the change affects multiple repos or long‑term policy.
+   - Use a GitHub Discussion (e.g., "Request for decision: …”) when the change affects multiple repos or long‑term policy.
    - The TSC aims to respond promptly, with a clear written decision and follow‑up tasks as needed.
 
 Security‑sensitive reports should always follow the security process in `SECURITY.md` rather than public escalation.

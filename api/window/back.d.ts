@@ -13,6 +13,9 @@
  * renderer replacement invalidates registration; install again in the new page.
  * Application code decides modal, drawer and router priority. Gesture progress
  * remains available through the existing backgesture event.
+ * The original live document can remove its registration while hidden or while
+ * its Activity is paused. Removal never grants foreground access or disables a
+ * replacement document's handler.
  * @param {(request: BackRequest) => boolean|Promise<boolean>} handler
  * @param {BackHandlerOptions} [options]
  * @returns {Promise<() => Promise<void>>} Idempotent handler removal.

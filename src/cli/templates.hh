@@ -1,66 +1,87 @@
 //
-// Cli Help
+// CLI help uses an 80-column layout with descriptions at column 39.
+// gManualText supplements are included in generated docs and topic search only.
+// Matching section and option labels replace brief descriptions in the manuals.
 //
 constexpr auto gHelpText = R"TEXT(
 {{cli_name}} v{{cli_version}}
 
-usage:
-  {{cli_name}} [SUBCOMMAND] [options] [<project-dir>]
-  {{cli_name}} [SUBCOMMAND] -h
+Build, run, and manage Oro applications.
+
+Usage:
+  {{cli_name}} <command> [options]
   {{cli_name}} help [query...]
 
-subcommands:
-  help                                 search commands, options, and platform notes
-  build                                build project
-  list-devices                         get the list of connected devices
-  devices                              alias for list-devices
-  init                                 create a new project (in the current directory)
-  install-app                          install app to the device
-  install                              alias for install-app
-  print-build-dir                      print build path to stdout
-  run                                  run application
-  config                               inspect configuration values and docs
-  env                                  print relevant environment variables
-  mcp                                  run an MCP server for agent tooling
-  setup                                install build dependencies
-  version                              inspect or bump project version
-  versions                             print Oro CLI/runtime and dependency versions
-  update                               update tooling (keys, manifests, bundles)
+Commands:
+  build                               build project
+  config                              inspect configuration values and docs
+  env                                 print relevant environment variables
+  help                                search commands and documentation
+  init                                create a project
+  install-app                         install app to the device
+  install                             alias for install-app
+  language-server                     run a language server over stdio
+  list-devices                        get the list of connected devices
+  devices                             alias for list-devices
+  mcp                                 run an MCP server for agent tooling
+  print-build-dir                     print build path to stdout
+  push                                manage local UnifiedPush development
+  run                                 run application
+  setup                               install build dependencies
+  tooling                             export editor compilation models
+  update                              update tooling (keys, manifests, bundles)
+  version                             inspect or bump project version
+  versions                            print runtime and dependency versions
 
-environment:
-  ORO_DEBUG                            enable debug mode (like -D)
-  ORO_VERBOSE                          enable verbose logs (like -V)
-  ORO_LOG_NO_COLOR                     disable colored log output
-  ORO_LOG_JSON                         enable structured JSON logs on stdout
-  ORO_LOG_FILE                         mirror logs to a JSON file
-  ORO_ALLOW_EXEC                       allow native extension commands during builds
-  ORO_ENABLE_SANITIZERS                enable ASan/UBSan on desktop builds
-  NO_ANDROID                           source bootstrap: disable only Android work when non-empty
-  NO_IOS                               source bootstrap: disable only iOS/iOS Simulator work when non-empty
+General options:
+  -h, --help                          show help
+  --prefix                            print install path
+  -v, --version                       print program version
+  -q, --quiet                         hint for less log output
+  -V, --verbose                       enable verbose output (can be global)
+  -D, --debug                         enable debug output (can be global)
+  --no-color                          disable colored log output
+  --json                              enable structured JSON logs on stdout
+  --log-file=<path>                   mirror logs to a JSON file
 
-general options:
-  -h, --help                           print help message
-  --prefix                             print install path
-  --android-runtime-contract           validate Android distribution and print its compiled contract
-  -v, --version                        print program version
-  -q, --quiet                          hint for less log output
-  -V, --verbose                        enable verbose output (can be global)
-  -D, --debug                          enable debug output (can be global)
-  --no-color                           disable colored log output
-  --json                               enable structured JSON logs on stdout
-  --log-file=<path>                    mirror logs to a JSON file
+Documentation:
+  man oroc
+)TEXT";
 
-notes:
-  Run '{{cli_name}} <subcommand> --help' for subcommand-specific flags, examples, and platform notes.
+constexpr auto gManualText = R"TEXT(
+Commands:
+  help                                search commands, options, and platform notes
+  init                                create a new project (in the current directory)
+  language-server                     run Oro Language Server over stdio
+  tooling                             export and prepare editor compilation models
+  push                                run a local UnifiedPush development server
+
+Environment:
+  ORO_DEBUG                           enable debug mode (like -D)
+  ORO_VERBOSE                         enable verbose logs (like -V)
+  ORO_LOG_NO_COLOR                    disable colored log output
+  ORO_LOG_JSON                        enable structured JSON logs on stdout
+  ORO_LOG_FILE                        mirror logs to a JSON file
+  ORO_ALLOW_EXEC                      allow native extension commands during builds
+  ORO_ENABLE_SANITIZERS               enable ASan/UBSan on desktop builds
+  NO_ANDROID                          source bootstrap: disable only Android work when non-empty
+  NO_IOS                              source bootstrap: disable only iOS/iOS Simulator work when non-empty
+
+Notes:
+  Run '{{cli_name}} <command> --help' for usage and options; see the command's man page for examples and platform guidance.
+
   Use '{{cli_name}} help <query>' to search commands, options, examples, and workflow notes by topic.
   '{{cli_name}} <subcommand> --json' emits structured command results when that subcommand supports it.
+
   The global '{{cli_name}} --json <subcommand>' form is reserved for JSON log streaming.
+
   Use '--log-file=<path>' when you need machine-readable stdout plus a separate log stream.
+
   NO_ANDROID and NO_IOS are independent presence flags for building the runtime source tree;
   they do not select an application target for '{{cli_name}} build --platform'. Values such as
   0 and false are non-empty and still disable the named target.
 
-examples:
+Examples:
   {{cli_name}} init my-app
                                       create a starter Oro project in ./my-app
   {{cli_name}} run .
@@ -72,44 +93,501 @@ examples:
   {{cli_name}} help ios signing
                                       search for commands and notes related to iOS signing and provisioning
 
-update tooling:
-  {{cli_name}} update keygen           generate an Ed25519 keypair for signing update manifests
-  {{cli_name}} update init             scaffold a manifest JSON file
-  {{cli_name}} update server           run an update server over HTTP/TCP/UDP
-  {{cli_name}} update info             query update servers or static manifests over HTTP/TCP/UDP
-  {{cli_name}} update sign             sign a manifest JSON file and emit a sidecar signature
-  {{cli_name}} update verify           verify a manifest JSON file + signature using a public key
-  {{cli_name}} update bundle           build a tar archive from a directory suitable as an update artifact
-  {{cli_name}} update extract          extract an update bundle tar archive into a directory
-  {{cli_name}} update validate         validate a manifest.json file against the update manifest schema shape
+Update tooling:
+  {{cli_name}} update keygen          generate an Ed25519 keypair for signing update manifests
+  {{cli_name}} update init            scaffold a manifest JSON file
+  {{cli_name}} update server          run an update server over HTTP/TCP/UDP
+  {{cli_name}} update info            query update servers or static manifests over HTTP/TCP/UDP
+  {{cli_name}} update sign            sign a manifest JSON file and emit a sidecar signature
+  {{cli_name}} update verify          verify a manifest JSON file + signature using a public key
+  {{cli_name}} update bundle          build a tar archive from a directory suitable as an update artifact
+  {{cli_name}} update extract         extract an update bundle tar archive into a directory
+  {{cli_name}} update validate        validate a manifest.json file against the update manifest schema shape
+)TEXT";
 
+constexpr auto gHelpTextLanguageServer = R"TEXT(
+Run Oro Language Server over stdio.
+
+Usage:
+  {{cli_name}} language-server --language <name> [options] [<project-dir>]
+
+Options:
+  --language=<name>                   language adapter (required)
+  --variant=<name>                    Android variant (default devDebug)
+  --server=<path>                     override the configured language server
+                                      executable
+  --prepare                           prepare native dependencies before launch
+                                      (Kotlin prepares SDK classes automatically)
+  --startup-timeout=<ms>              preparation and startup deadline (300000)
+  --refresh                           regenerate the selected editor model
+  --offline                           use installed dependencies only
+  --platform=<name>                   native target platform
+  --arch=<name>                       native target architecture
+  --prod                              release compiler flags for native models
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  -h, --help                          show help
+
+Documentation:
+  man oroc-language-server
+)TEXT";
+
+constexpr auto gManualTextLanguageServer = R"TEXT(
+Oro Language Server: editor-independent build models and language adapters.
+
+Options:
+  --language=<name>                   required: kotlin, typescript, cpp, c, objc, objcpp, swift, or configured language
+  --config=<path>                     explicit oro.toml or oro.ini
+
+Notes:
+  Language selection is required; there is no default language.
+
+  Run one wrapper process per language or language family to use several servers together.
+
+  Requires Node.js 22+ and the selected language server on PATH.
+
+  The directory containing oro.toml is the recommended project root (oro.ini is also supported).
+
+  Root discovery uses the editor's initialize workspace roots, falling back to cwd only if absent.
+
+  An explicit --config or project directory overrides editor root discovery.
+
+  Configure [language_server.<language>] command and args in oro.toml.
+
+  Defaults: kotlin-language-server; typescript-language-server --stdio; clangd; sourcekit-lsp.
+
+  Kotlin Android uses the fwcd adapter; adapter="stdio" delegates discovery to another backend.
+
+  Stdout is reserved for LSP. Build and adapter messages go to stderr.
+
+  See docs/LANGUAGE_SERVER.md for Coc, VS Code, preparation and compatibility.
+)TEXT";
+
+constexpr auto gHelpTextTooling = R"TEXT(
+Export and prepare editor compilation models.
+
+Usage:
+  {{cli_name}} tooling <command> [options]
+
+Commands:
+  kotlin                              export or prepare a Kotlin model
+  cpp                                 export C-family compiler commands
+  typescript                          export web sources and Oro SDK typings
+  swift                               export commands and prepare Swift modules
+  doctor                              inspect editor setup and model freshness
+
+Options:
+  -h, --help                          show help
+
+Documentation:
+  man oroc-tooling
+)TEXT";
+
+constexpr auto gManualTextTooling = R"TEXT(
+Notes:
+  Use '{{cli_name}} tooling <command> --help' for model export and preparation options.
+
+  Tooling models are JSON. Doctor defaults to readable text and also accepts --json.
+)TEXT";
+
+constexpr auto gHelpTextToolingKotlin = R"TEXT(
+Export or prepare the Kotlin editor compilation model.
+
+Usage:
+  {{cli_name}} tooling kotlin [options] [<project-dir>]
+
+Options:
+  --prepare                           compile resources and JVM classes for
+                                      analysis
+  --variant=<name>                    Android variant (default devDebug)
+  --refresh                           regenerate the Android editor project
+  --offline                           resolve dependencies without network
+                                      access
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  --classpath                         print only the resolved editor classpath
+  -h, --help                          show help
+
+Documentation:
+  man oroc-tooling-kotlin
+)TEXT";
+
+constexpr auto gManualTextToolingKotlin = R"TEXT(
+Export and prepare Oro editor compilation models.
+
+Options:
+  --config=<path>                     explicit oro.toml or oro.ini
+
+Notes:
+  Prints the versioned JSON model by default. Uses Oro configuration and Gradle task providers.
+
+  Preparation does not assemble, sign, install, or compile native libraries.
+
+  Gradle, a compatible JDK, Android SDK packages and dependency artifacts must be installed.
+)TEXT";
+
+constexpr auto gHelpTextToolingCpp = R"TEXT(
+Export C, C++, Objective-C and Objective-C++ compiler commands.
+
+Usage:
+  {{cli_name}} tooling cpp [options] [<project-dir>]
+
+Options:
+  --platform=<name>                   desktop, linux, mac, win, android, ios or
+                                      ios-simulator
+  --arch=<name>                       target architecture (host by default;
+                                      arm64 for Android/iOS)
+  --prod                              select release compiler flags
+  --prepare                           build explicitly configured CMake
+                                      preparation targets
+  --refresh                           allocate a fresh editor generation
+  --offline                           disable CMake FetchContent downloads and
+                                      updates
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  -h, --help                          show help
+
+Documentation:
+  man oroc-tooling-cpp
+)TEXT";
+
+constexpr auto gManualTextToolingCpp = R"TEXT(
+Notes:
+  Uses Oro extension declarations, an existing compilation database, or a configured CMake project.
+
+  Generated commands target original source files and live under build.output/.oro-tooling.
+
+  Apple SDK discovery requires macOS and Xcode; Android requires the selected NDK.
+
+  Custom scripts and generated dependency headers require a build-system compilation database or CMake provider.
+
+  See docs/LANGUAGE_SERVER.md for configuration and editor examples.
+)TEXT";
+
+constexpr auto gHelpTextToolingTypescript = R"TEXT(
+Export web compiler context and selected Oro SDK declarations.
+
+Usage:
+  {{cli_name}} tooling typescript [options] [<project-dir>]
+
+Options:
+  --prepare                           materialize the editor config and
+                                      TypeScript plugin
+  --refresh                           allocate a fresh editor generation
+  --offline                           use installed packages; disable automatic
+                                      typings acquisition in LSP
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  -h, --help                          show help
+
+Documentation:
+  man oroc-tooling-typescript
+)TEXT";
+
+constexpr auto gManualTextToolingTypescript = R"TEXT(
+Notes:
+  Uses the original tsconfig.json/jsconfig.json, including references, or explicit source declarations.
+
+  Without a declared scope, tsserver infers projects from opened documents and their imports.
+
+  Does not rewrite application configs, emit JavaScript, or install packages.
+
+  The default TypeScript LSP adapter adds Oro declarations through an Oro-owned tsserver plugin.
+
+  See docs/LANGUAGE_SERVER.md for configuration and editor examples.
+)TEXT";
+
+constexpr auto gHelpTextToolingSwift = R"TEXT(
+Export Swift compiler commands and prepare analysis modules.
+
+Usage:
+  {{cli_name}} tooling swift [options] [<project-dir>]
+
+Options:
+  --platform=<name>                   desktop, mac, ios, ios-simulator, linux or
+                                      win
+  --arch=<name>                       target architecture
+  --prod                              select release compiler flags
+  --prepare                           emit the declared Swift module without
+                                      linking or signing
+  --refresh                           allocate a fresh editor generation
+  --offline                           use installed toolchains and dependencies
+                                      only
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  -h, --help                          show help
+
+Documentation:
+  man oroc-tooling-swift
+)TEXT";
+
+constexpr auto gManualTextToolingSwift = R"TEXT(
+Notes:
+  Declare original sources and module settings under tooling.swift, or import an existing compilation database.
+
+  Apple targets require macOS and Xcode. External build systems own their dependency preparation.
+
+  Use language_server.swift.adapter="stdio" for native SwiftPM discovery.
+
+  See docs/LANGUAGE_SERVER.md for configuration and editor examples.
+)TEXT";
+
+constexpr auto gHelpTextToolingDoctor = R"TEXT(
+Inspect editor setup without preparing dependencies.
+
+Usage:
+  {{cli_name}} tooling doctor [options] [<project-dir>]
+
+Options:
+  --language=<name>                   inspect one language family; otherwise
+                                      inspect declared languages
+  --platform=<name>                   select the native target
+  --arch=<name>                       select target architecture
+  --variant=<name>                    select Android variant (default devDebug)
+  --prod                              inspect release model
+  --json                              emit the structured report instead of
+                                      readable text
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  -h, --help                          show help
+
+Documentation:
+  man oroc-tooling-doctor
+)TEXT";
+
+constexpr auto gManualTextToolingDoctor = R"TEXT(
+Notes:
+  Checks project root, selected SDK, server executables, required tools and cached model freshness.
+
+  Does not install servers, generate models, run Gradle tasks or invoke preparation targets.
+
+  Returns a nonzero status when a required check fails; stale or absent models are warnings.
+
+  See docs/LANGUAGE_SERVER.md for configuration and editor examples.
+)TEXT";
+
+constexpr auto gHelpTextPush = R"TEXT(
+Local UnifiedPush development tooling.
+
+Usage:
+  {{cli_name}} push <command> [options]
+
+Commands:
+  server                              run a local development server
+  distributor                         build or install Oro Push Dev
+
+Options:
+  -h, --help                          show help
+
+Documentation:
+  man oroc-push
+)TEXT";
+
+constexpr auto gManualTextPush = R"TEXT(
+Commands:
+  server                              run a local ntfy server for an Android UnifiedPush distributor
+  distributor                         build or install the Oro Kotlin development distributor APK
+
+Notes:
+  Run '{{cli_name}} push server --help' for configuration and HTTPS requirements.
+)TEXT";
+
+constexpr auto gHelpTextPushServer = R"TEXT(
+Run a local UnifiedPush development server backed by ntfy.
+
+Usage:
+  {{cli_name}} push server [options]
+
+Options:
+  --host=<ip>                         listen address (default: 127.0.0.1)
+  --port=<port>                       listen port (default: 8787)
+  --base-url=<origin>                 server URL reachable by the distributor
+  --data-dir=<path>                   writable cache, tools and message storage
+                                      directory
+  --cert-file=<path>                  HTTPS certificate (requires --key-file)
+  --key-file=<path>                   HTTPS private key (requires --cert-file)
+  --ntfy-bin=<path>                   use a local ntfy server executable
+  --offline                           require the verified cached ntfy release
+                                      or --ntfy-bin
+  -h, --help                          show help
+
+Documentation:
+  man oroc-push-server
+)TEXT";
+
+constexpr auto gManualTextPushServer = R"TEXT(
+Options:
+  --base-url=<origin>                 URL reachable by the distributor and application server
+  --cert-file=<path>                  PEM certificate for direct HTTPS (requires --key-file)
+  --key-file=<path>                   PEM private key for direct HTTPS (requires --cert-file)
+  --ntfy-bin=<path>                   use an explicitly supplied ntfy executable without download
+
+Notes:
+  Requires Node.js 22 or later. On first use, downloads ntfy 2.33.1 from its official
+  GitHub release and verifies a pinned SHA-256. Later starts use the verified cache.
+
+  Automatic installation supports Linux x64/arm64 and Windows x64. On macOS, use
+  --ntfy-bin with a server-enabled development build; upstream's macOS release is client-only.
+
+  State defaults to the user's Oro data directory, outside the installed SDK.
+
+  The server runs in the foreground; Ctrl-C stops it. Cached messages expire after 12 hours.
+
+  This is an anonymous development server. Use public test data and private development networks.
+
+  No FCM, upstream push relay or system ntfy configuration is used.
+
+  Use 'push distributor' to build Oro Push Dev, or install the Android ntfy distributor.
+
+  Configure the selected distributor with this base URL; both use the same server.
+
+  LAN binding requires an explicit HTTPS base URL. Supply a certificate trusted by the
+  distributor, or terminate HTTPS with a local reverse proxy. HTTP loopback is for host checks;
+  Oro Android push registration requires HTTPS endpoints and encrypted Web Push payloads.
+
+  Application-server authentication, endpoint enrollment and notification handling remain app work.
+
+  See https://docs.ntfy.sh/config/ and https://unifiedpush.org/users/distributors/.
+
+Examples:
+  {{cli_name}} push server
+                                      start at http://127.0.0.1:8787
+  {{cli_name}} push server --offline
+                                      restart from the verified cached release
+  {{cli_name}} push server --host=0.0.0.0 --base-url=https://push.dev.example:8787 --cert-file=./cert.pem --key-file=./key.pem
+                                      serve HTTPS on port 8787 for an Android distributor
+  {{cli_name}} push server --base-url=https://push.dev.example
+                                      run loopback HTTP behind a local HTTPS reverse proxy
+)TEXT";
+
+constexpr auto gHelpTextPushDistributor = R"TEXT(
+Run the Linux development distributor, or build the Oro Push Dev Android distributor.
+
+Usage:
+  {{cli_name}} push distributor [options]
+
+Options:
+  --platform=<android|linux>          Android APK build (default), or Linux service
+  --allow-loopback-http               Linux only: allow literal loopback HTTP
+  --android-home=<path>               Android SDK directory
+  --gradle-home=<path>                Gradle 9 installation directory
+  --java-home=<path>                  JDK installation directory
+  --data-dir=<path>                   writable build state and persistent
+                                      development signing key
+  --output=<path>                     APK destination (default: data
+                                      directory/oro-push-dev.apk)
+  --server=<origin>                   prefill the distributor HTTPS server
+  --ca-cert=<path>                    embed a development PEM CA, trusted only
+                                      by this APK
+  --offline                           build with cached Gradle/Android
+                                      dependencies only
+  --install                           install APK and open its settings on the
+                                      selected device
+  --device=<serial>                   explicit adb serial for installation (or
+                                      ANDROID_SERIAL)
+  -h, --help                          show help
+
+Documentation:
+  man oroc-push-distributor
+)TEXT";
+
+constexpr auto gManualTextPushDistributor = R"TEXT(
+Build or install Oro Push Dev, the Kotlin Android UnifiedPush development distributor.
+
+On Linux, '--platform=linux' runs a native Distributor2 service instead of building an APK.
+It needs a session D-Bus, an unlocked Secret Service and an ntfy-compatible server.
+It runs until interrupted; it does not install or enable a login service. No Node.js,
+Gradle or Android SDK is required by this Linux distributor command.
+
+Linux transport uses bounded polling every two seconds, reconnects with two-to-thirty
+second delays and retains ciphertext in an OS-key-encrypted journal. Limits are 32
+registrations, 32 pending messages of at most 4096 bytes, 1024 boundary-second deduplication IDs
+and seven days of pending retention. The encrypted journal has a 256 KiB aggregate
+limit. Storage or deduplication-window saturation pauses intake. An acknowledged
+connector message means durable local receipt, not completed application work.
+
+Linux HTTPS uses system trust, or only the explicitly supplied PEM CA database with
+'--ca-cert'. Redirects are rejected. '--allow-loopback-http' permits literal loopback
+addresses only; it never permits LAN HTTP or DNS names. Apps must separately opt into
+'[push] development_allow_loopback_http = true' to accept these development endpoints.
+Use HTTPS for phone distributors. Neither anonymous topics nor this local transport
+establish trusted enrollment, server authentication or remote revocation.
+
+Options:
+  --android-home=<path>               Android SDK (defaults to ANDROID_HOME or ANDROID_SDK_ROOT)
+  --gradle-home=<path>                Gradle 9 installation (defaults to GRADLE_HOME)
+  --java-home=<path>                  JDK installation (defaults to JAVA_HOME)
+  --server=<origin>                   prefill an HTTPS server in the app; user taps Save and start
+
+Notes:
+  Requires Node.js 22+, JDK 17+, Gradle 9, an installed Android platform 34 or newer, and build tools.
+
+  Run '{{cli_name}} setup --platform=android' to provision the normal Android toolchain first.
+
+  Uses the runtime's Android Gradle plugin with built-in Kotlin support. First build may
+  download Android/Kotlin dependencies; --offline requires those dependencies to be cached.
+
+  A debug signing key is retained outside the SDK so updates preserve the app's state.
+
+  Oro Push Dev is a separate sideloaded development APK. Your app still registers its native push handler.
+
+  It connects to 'push server' or an ntfy-compatible HTTPS server and implements UnifiedPush
+  registration, selection, unregistration and acknowledged delivery. Existing ntfy distributors
+  continue to work with the same server and oro:push APIs; apps choose one distributor.
+
+  The user must enable its visible foreground connection in its settings. Optional CA trust
+  is confined to this APK; hostname verification and Oro's HTTPS endpoint requirement remain.
+
+  Limits: 32 registrations, 256 pending ciphertexts (4096 bytes each), 512 recent ACK identities.
+
+  Unacknowledged ciphertext persists across process loss; a full inbox pauses further intake.
+
+  Reboot resumes an enabled service when Android permits it. Force-stop requires reopening it.
+
+  Doze, network reachability and Android background policy still require device qualification.
+
+  This is for public development data, not production server authentication or trusted enrollment.
+
+Examples:
+  {{cli_name}} push distributor --platform=linux --server=http://127.0.0.1:8787 --allow-loopback-http
+                                      run alongside a local 'push server'
+  {{cli_name}} push distributor --offline
+                                      build from the cached Android/Kotlin toolchain
+  {{cli_name}} push distributor --server=https://push.dev.example:8787 --ca-cert=./dev-ca.pem --install --device=emulator-5554
+                                      build, install, then review and start Oro Push Dev
 )TEXT";
 
 constexpr auto gHelpTextHelp = R"TEXT(
-{{cli_name}} v{{cli_version}}
+Find commands, options, and documentation.
 
-Discover commands, options, and workflow entry points from the CLI help index.
-
-usage:
+Usage:
   {{cli_name}} help [query...]
   {{cli_name}} help [query...] [--json]
 
-options:
-  --json                               emit structured search results for automation and editor tooling
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --json                              print structured JSON results
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-help
+)TEXT";
+
+constexpr auto gManualTextHelp = R"TEXT(
+Discover commands, options, and workflow entry points from the CLI help index.
+
+Options:
+  --json                              emit structured search results for automation and editor tooling
+
+Notes:
   With no query, this subcommand prints the top-level CLI help.
-  Exact command matches print the full subcommand page (for example, '{{cli_name}} help build' or '{{cli_name}} help update validate').
+
+  Exact command matches print concise command help (for example, '{{cli_name}} help build' or '{{cli_name}} help update validate').
+
   Free-form queries search command names, descriptions, options, notes, and examples, then rank the closest matches.
+
   Use this for discovery topics such as '{{cli_name}} help tls', '{{cli_name}} help ios signing', '{{cli_name}} help json logs', or '{{cli_name}} help agent tooling'.
   '{{cli_name}} help --json <query>' returns a machine-readable result list with ranked matches and exact-help payloads.
 
-examples:
+Examples:
   {{cli_name}} help build
-                                      print the full help page for the build command
+                                      print usage and options for the build command
   {{cli_name}} help update validate
-                                      print the full help page for the nested update validate command
+                                      print usage and options for the nested update validate command
   {{cli_name}} help ios signing
                                       search for commands and notes related to iOS signing and provisioning
   {{cli_name}} help json --json
@@ -117,15 +595,32 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdate = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Update tooling for manifests, signatures, and bundles.
 
-usage:
+Usage:
   {{cli_name}} update <subcommand> [options]
 
-subcommands:
-  keygen                              generate an Ed25519 keypair for update manifests
+Commands:
+  keygen                              generate an Ed25519 keypair for update
+                                      manifests
+  init                                create a project
+  server                              serve updates over HTTP, TCP, or UDP
+  info                                query a server or static manifest
+  sign                                sign an update manifest
+  verify                              verify an update manifest signature
+  bundle                              create an update archive
+  extract                             extract an update archive
+  validate                            validate an update manifest
+
+Options:
+  -h, --help                          show help
+
+Documentation:
+  man oroc-update
+)TEXT";
+
+constexpr auto gManualTextUpdate = R"TEXT(
+Commands:
   init                                scaffold a manifest JSON file
   server                              run an update server over HTTP/TCP/UDP
   info                                query update servers or static manifests over HTTP/TCP/UDP
@@ -135,12 +630,13 @@ subcommands:
   extract                             extract an update bundle tar archive into a directory
   validate                            validate a manifest.json file against the update manifest schema shape
 
-notes:
+Notes:
   All subcommands support '--log-file=<path>' to mirror logs to a JSON file.
+
   Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '--manifest-name' on relevant subcommands
   to override the default manifest.json filename (and derived sidecar names).
 
-examples:
+Examples:
   {{cli_name}} update init
                                       scaffold a default manifest.json in the current project
   {{cli_name}} update bundle --manifest manifest.json
@@ -158,19 +654,27 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateInit = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Scaffold a minimal update manifest JSON file.
 
-usage:
+Usage:
   {{cli_name}} update init [options]
 
-options:
-  --config=<path>                     use an explicit oro.toml/oro.ini file when deriving defaults
-  --manifest-name=<name>               filename for the manifest JSON (default: manifest.json or ORO_UPDATE_MANIFEST_FILENAME)
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  --manifest-name=<name>              override the manifest filename
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-update-init
+)TEXT";
+
+constexpr auto gManualTextUpdateInit = R"TEXT(
+Options:
+  --config=<path>                     use an explicit oro.toml/oro.ini file when deriving defaults
+  --manifest-name=<name>              filename for the manifest JSON (default: manifest.json or ORO_UPDATE_MANIFEST_FILENAME)
+
+Notes:
   The generated manifest includes these defaults.
     - schemaVersion = 1
     - appId derived from your oro.toml ([meta] bundle_identifier, falling back to "com.example.app")
@@ -179,7 +683,7 @@ notes:
     - updates = a single entry for the current version/channel (with an empty targets array)
   Edit the generated file to add real targets, artifact metadata, or additional updates.
 
-examples:
+Examples:
   {{cli_name}} update init
                                       create ./manifest.json using oro.toml metadata
   {{cli_name}} update init --manifest-name app-updates.json
@@ -187,23 +691,33 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateServer = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Run an update server that speaks the Oro Application Update Protocol.
 
-usage:
+Usage:
   {{cli_name}} update server [options]
 
-options:
-  --root=<dir>                         directory containing manifest trees and artifacts to serve
-  --host=<host>                        interface to bind (default: 0.0.0.0)
-  --port=<port>                        TCP/UDP port to bind (default: 8080)
-  --manifest-name=<name>               manifest filename to look up under each appId (default: manifest.json or ORO_UPDATE_MANIFEST_FILENAME)
-  --tcp                                run in TCP mode (binary OUP CHECK/RESPONSE)
-  --udp                                run in UDP mode (binary OUP CHECK/RESPONSE)
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --root=<dir>                        directory containing manifest trees and
+                                      artifacts to serve
+  --host=<host>                       interface to bind (default: 0.0.0.0)
+  --port=<port>                       TCP/UDP port to bind (default: 8080)
+  --manifest-name=<name>              override the manifest filename
+  --tcp                               run in TCP mode (binary OUP
+                                      CHECK/RESPONSE)
+  --udp                               run in UDP mode (binary OUP
+                                      CHECK/RESPONSE)
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-update-server
+)TEXT";
+
+constexpr auto gManualTextUpdateServer = R"TEXT(
+Options:
+  --manifest-name=<name>              manifest filename to look up under each appId (default: manifest.json or ORO_UPDATE_MANIFEST_FILENAME)
+
+Notes:
   Default mode is HTTP. The server exposes these endpoints.
     - GET /health           — readiness metadata
     - POST /check           — accepts a CHECK JSON payload with "appId" and responds with a RESPONSE JSON
@@ -211,9 +725,10 @@ notes:
     - GET /<path>           — serves files rooted under --root, including "<appId>/<manifest-name>"
                                and "<appId>/<manifest-name>.sig"
   HTTP mode is designed to be run behind a load balancer or reverse proxy in production.
+
   TCP and UDP modes implement the same CHECK/RESPONSE selection semantics using the binary OUP framing.
 
-examples:
+Examples:
   {{cli_name}} update server --root ./updates
                                       serve manifests and bundles over HTTP on port 8080
   {{cli_name}} update server --root ./updates --tcp --port 9090
@@ -223,36 +738,57 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateInfo = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Query update servers or static manifests over HTTP/TCP/UDP.
 
-usage:
+Usage:
   {{cli_name}} update info [--transport=<http|tcp|udp>] [options]
 
-options:
-  --config=<path>                      use an explicit oro.toml/oro.ini file for local CHECK request defaults
-  --transport=<http|tcp|udp>           transport to use (default: http)
-  --http                               shorthand for --transport=http
-  --tcp                                shorthand for --transport=tcp
-  --udp                                shorthand for --transport=udp
-  --follow-manifest                    when contacting servers, follow 'manifestUrl' in the RESPONSE and fetch/validate that manifest over HTTP(S)
-  --timeout-ms=<ms>                    optional timeout for TCP/UDP CHECK requests (0 = no timeout)
-  --manifest-url=<url>                 HTTP(S) URL of a manifest.json hosted statically
-  --signature-url=<url>                optional HTTP(S) URL of the corresponding signature JSON (default: derived from --manifest-url)
-  --keys=<file>                        JSON file containing a public key ("publicKey" or "key" field) for manifest verification
-  --public-key=<hex>                   Ed25519 public key as a hex string for manifest verification
-  --host=<host>                        host for HTTP/TCP/UDP update servers (default: 127.0.0.1)
-  --port=<port>                        port for HTTP/TCP/UDP update servers (default: 8080)
-  --app-id=<id>                        application identifier to send in CHECK messages (default: active config meta.bundle_identifier when available)
-  --channel=<name>                     update channel hint (default: active config update_channel or "stable")
-  --current-version=<version>          current application version hint (default: active config meta.version when available)
-  --runtime-version=<version>          runtime version hint advertised in CHECK (optional)
-  --platform=<id>                      platform hint advertised in CHECK (optional)
-  --arch=<id>                          architecture hint advertised in CHECK (optional)
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  --transport=<http|tcp|udp>          transport to use (default: http)
+  --http                              shorthand for --transport=http
+  --tcp                               shorthand for --transport=tcp
+  --udp                               shorthand for --transport=udp
+  --follow-manifest                   fetch and validate the returned manifest
+  --timeout-ms=<ms>                   TCP/UDP timeout (default: 0, no timeout)
+  --manifest-url=<url>                HTTP(S) URL of a manifest.json hosted
+                                      statically
+  --signature-url=<url>               signature URL (default: from manifest URL)
+  --keys=<file>                       public key JSON file
+  --public-key=<hex>                  Ed25519 public key in hexadecimal
+  --host=<host>                       host for HTTP/TCP/UDP update servers
+                                      (default: 127.0.0.1)
+  --port=<port>                       port for HTTP/TCP/UDP update servers
+                                      (default: 8080)
+  --app-id=<id>                       application ID (default: active config)
+  --channel=<name>                    update channel hint (default: active
+                                      config update_channel or "stable")
+  --current-version=<version>         app version (default: active config)
+  --runtime-version=<version>         runtime version hint for the server
+  --platform=<id>                     platform hint advertised in CHECK
+                                      (optional)
+  --arch=<id>                         architecture hint advertised in CHECK
+                                      (optional)
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-update-info
+)TEXT";
+
+constexpr auto gManualTextUpdateInfo = R"TEXT(
+Options:
+  --config=<path>                     use an explicit oro.toml/oro.ini file for local CHECK request defaults
+  --follow-manifest                   when contacting servers, follow 'manifestUrl' in the RESPONSE and fetch/validate that manifest over HTTP(S)
+  --timeout-ms=<ms>                   optional timeout for TCP/UDP CHECK requests (0 = no timeout)
+  --signature-url=<url>               optional HTTP(S) URL of the corresponding signature JSON (default: derived from --manifest-url)
+  --keys=<file>                       JSON file containing a public key ("publicKey" or "key" field) for manifest verification
+  --public-key=<hex>                  Ed25519 public key as a hex string for manifest verification
+  --app-id=<id>                       application identifier to send in CHECK messages (default: active config meta.bundle_identifier when available)
+  --current-version=<version>         current application version hint (default: active config meta.version when available)
+  --runtime-version=<version>         runtime version hint advertised in CHECK (optional)
+
+Notes:
   - With '--manifest-url', this command fetches and pretty-prints a manifest JSON and reports whether a signature file is reachable.
     When '--keys' or '--public-key' is provided and libsodium is available, it also verifies the manifest signature before printing.
   - With HTTP/TCP/UDP transports and no '--manifest-url', it sends a CHECK message to an update server and pretty-prints the RESPONSE JSON.
@@ -264,7 +800,7 @@ notes:
   - When using TCP/UDP, '--timeout-ms' can be used to bound how long the client waits for a response.
   - The flags '--http', '--tcp', and '--udp' are shorthands for '--transport=http', '--transport=tcp', and '--transport=udp' respectively.
 
-examples:
+Examples:
   {{cli_name}} update info --manifest-url https://cdn.example.com/app/manifest.json
                                       inspect a statically hosted manifest
   {{cli_name}} update info --manifest-url https://cdn.example.com/app/manifest.json --keys app-pubkey.json
@@ -276,23 +812,32 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateKeygen = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Generate an Ed25519 keypair for signing update manifests.
 
-usage:
+Usage:
   {{cli_name}} update keygen [options]
 
-options:
-  --out=<path>                         write keypair JSON to a file instead of stdout
-  --key-id=<id>                        optional key identifier to embed in the keypair (default: "pk-1")
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --out=<path>                        write keypair JSON to a file instead of
+                                      stdout
+  --key-id=<id>                       signing key identifier (default: pk-1)
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-update-keygen
+)TEXT";
+
+constexpr auto gManualTextUpdateKeygen = R"TEXT(
+Options:
+  --key-id=<id>                       optional key identifier to embed in the keypair (default: "pk-1")
+
+Notes:
   The generated JSON includes "keyId", "publicKey", and "privateKey" fields (hex-encoded).
+
   Keep the private key secret; distribute only the public key with your application.
 
-examples:
+Examples:
   {{cli_name}} update keygen > key.json
                                       generate a default keypair and save it to key.json
   {{cli_name}} update keygen --key-id pk-prod --out prod-key.json
@@ -300,28 +845,42 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateSign = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Sign an update manifest and emit a detached manifest.sig file.
 
-usage:
-  {{cli_name}} update sign [--manifest=<path>] (--keys=<file> | --private-key=<hex>) [options]
+Usage:
+  {{cli_name}} update sign (--keys=<file> | --private-key=<hex>) [options]
 
-options:
-  --manifest=<path>                    path to the manifest JSON file to sign (default: manifest-name or ORO_UPDATE_MANIFEST_FILENAME)
-  --manifest-name=<name>               manifest filename to use when --manifest is not provided
-  --keys=<file>                        JSON file containing a signing key (with "privateKey" or "secretKey" field)
-  --private-key=<hex>                  Ed25519 private key as a hex string
-  --key-id=<id>                        optional key identifier to embed in manifest.sig (default: "pk-1")
-  --out=<path>                         output path for manifest.sig (default: <manifest-without-extension>.sig, e.g. manifest.json -> manifest.sig)
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --manifest=<path>                   manifest JSON (default: manifest.json)
+  --manifest-name=<name>              override the manifest filename
+  --keys=<file>                       signing key JSON file
+  --private-key=<hex>                 Ed25519 private key in hexadecimal
+  --key-id=<id>                       signing key identifier (default: pk-1)
+  --out=<path>                        signature output (default: from manifest)
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-update-sign
+)TEXT";
+
+constexpr auto gManualTextUpdateSign = R"TEXT(
+Options:
+  --manifest=<path>                   path to the manifest JSON file to sign (default: manifest-name or ORO_UPDATE_MANIFEST_FILENAME)
+  --manifest-name=<name>              manifest filename to use when --manifest is not provided
+  --keys=<file>                       JSON file containing a signing key (with "privateKey" or "secretKey" field)
+  --private-key=<hex>                 Ed25519 private key as a hex string
+  --key-id=<id>                       optional key identifier to embed in manifest.sig (default: "pk-1")
+  --out=<path>                        output path for manifest.sig (default: <manifest-without-extension>.sig, e.g. manifest.json -> manifest.sig)
+
+Notes:
   The signature file is JSON containing "schemaVersion", "algorithm", "keyId", and "signature" fields.
+
   Clients verify manifest bytes against manifest.sig and the configured public key(s).
+
   Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '--manifest-name' to change the default manifest filename.
 
-examples:
+Examples:
   {{cli_name}} update sign --keys key.json --manifest manifest.json
                                       sign manifest.json using the private key in key.json
   {{cli_name}} update sign --private-key <hex-private-key> --manifest manifest.json --out manifest.sig
@@ -329,27 +888,39 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateVerify = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Verify a manifest + signature pair using an Ed25519 public key.
 
-usage:
-  {{cli_name}} update verify [--manifest=<path>] [--signature=<path>] (--keys=<file> | --public-key=<hex>) [options]
+Usage:
+  {{cli_name}} update verify (--keys=<file> | --public-key=<hex>) [options]
 
-options:
-  --manifest=<path>                    path to the manifest JSON file (default: manifest-name or ORO_UPDATE_MANIFEST_FILENAME)
-  --manifest-name=<name>               manifest filename to use when --manifest is not provided
-  --signature=<path>                   path to the manifest.sig JSON file (default: <manifest>.sig)
-  --keys=<file>                        JSON file containing a public key ("publicKey" or "key" field)
-  --public-key=<hex>                   Ed25519 public key as a hex string
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --manifest=<path>                   manifest JSON (default: manifest.json)
+  --manifest-name=<name>              override the manifest filename
+  --signature=<path>                  signature JSON (default: from manifest)
+  --keys=<file>                       public key JSON file
+  --public-key=<hex>                  Ed25519 public key in hexadecimal
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-update-verify
+)TEXT";
+
+constexpr auto gManualTextUpdateVerify = R"TEXT(
+Options:
+  --manifest=<path>                   path to the manifest JSON file (default: manifest-name or ORO_UPDATE_MANIFEST_FILENAME)
+  --manifest-name=<name>              manifest filename to use when --manifest is not provided
+  --signature=<path>                  path to the signature JSON file (default: <manifest-without-extension>.sig)
+  --keys=<file>                       JSON file containing a public key ("publicKey" or "key" field)
+  --public-key=<hex>                  Ed25519 public key as a hex string
+
+Notes:
   Exits with status 0 when the signature is valid for the manifest and public key; non-zero otherwise.
+
   Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '--manifest-name' to change the default manifest filename
   (the default signature path is derived as '<manifest-without-extension>.sig', e.g. manifest.json -> manifest.sig).
 
-examples:
+Examples:
   {{cli_name}} update verify --keys key.json --manifest manifest.json
                                       verify manifest.json against manifest.sig using the public key in key.json
   {{cli_name}} update verify --public-key <hex-public-key> --manifest manifest.json --signature manifest.sig
@@ -357,28 +928,41 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateValidate = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Validate an update manifest JSON file against the expected schema shape.
 
-usage:
+Usage:
   {{cli_name}} update validate [--manifest=<path>] [options]
 
-options:
-  --manifest=<path>                    path to the manifest JSON file (default: manifest-name or ORO_UPDATE_MANIFEST_FILENAME)
-  --manifest-name=<name>               manifest filename to use when --manifest is not provided
-  --strict                             enable additional consistency checks (for example, channels vs updates, artifactUrl shape)
-  --json                               print a machine-readable JSON result object (for CI)
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --manifest=<path>                   manifest JSON (default: manifest.json)
+  --manifest-name=<name>              override the manifest filename
+  --strict                            enable additional consistency checks
+  --json                              print a machine-readable JSON result
+                                      object (for CI)
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-update-validate
+)TEXT";
+
+constexpr auto gManualTextUpdateValidate = R"TEXT(
+Options:
+  --manifest=<path>                   path to the manifest JSON file (default: manifest-name or ORO_UPDATE_MANIFEST_FILENAME)
+  --manifest-name=<name>              manifest filename to use when --manifest is not provided
+  --strict                            enable additional consistency checks (for example, channels vs updates, artifactUrl shape)
+
+Notes:
   This command parses the manifest and performs lightweight structural validation aligned with
   'schemas/update-manifest.schema.json' (required fields, types, and key relationships).
+
   It does not attempt full JSON Schema validation, but is suitable for fast local checks and CI.
+
   When '--strict' is provided, additional consistency rules are enforced.
+
   When '--json' is provided, stdout is reserved for the result object only.
 
-examples:
+Examples:
   {{cli_name}} update validate --manifest manifest.json
                                       run basic structural checks against manifest.json
   {{cli_name}} update validate --manifest manifest.json --strict
@@ -388,35 +972,57 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateBundle = R"TEXT(
-{{cli_name}} v{{cli_version}}
+Create a tar archive for an application update.
 
-Build a tar archive containing the contents of a directory for use as an update artifact.
-
-usage:
+Usage:
   {{cli_name}} update bundle [--input=<dir>] [--output=<bundle.tar>] [options]
 
-options:
-  --input=<dir>                        directory whose contents will be archived (default: project directory)
-  --output=<bundle.tar>               path to the tar archive to write (default: <build_name>-<version>.tar)
+Options:
+  --input=<dir>                       directory whose contents will be archived
+                                      (default: project directory)
+  --output=<bundle.tar>               path to the tar archive to write (default:
+                                      <build_name>-<version>.tar)
+  --manifest=<path>                   update the manifest with this bundle
+  --manifest-name=<name>              override the manifest filename
+  --channel=<name>                    update channel to associate with this
+                                      bundle (default: update_channel or
+                                      "stable")
+  --update-id=<id>                    update id to associate with this bundle
+                                      (default: <channel>-<version>)
+  --platform=<id>                     platform identifier for the bundle target
+                                      (default: "source")
+  --arch=<id>                         architecture identifier for the bundle
+                                      target (default: "any")
+  --artifact-url=<url-or-path>        artifact URL recorded in the manifest
+  --hash-algorithm=<sha256|sha1>      bundle hash algorithm
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
+
+Documentation:
+  man oroc-update-bundle
+)TEXT";
+
+constexpr auto gManualTextUpdateBundle = R"TEXT(
+Build a tar archive containing the contents of a directory for use as an update artifact.
+
+Options:
   --manifest=<path>                   optional manifest path to update with a new target for this bundle
   --manifest-name=<name>              manifest filename to use when --manifest is not provided
-  --channel=<name>                    update channel to associate with this bundle (default: update_channel or "stable")
-  --update-id=<id>                    update id to associate with this bundle (default: <channel>-<version>)
-  --platform=<id>                     platform identifier for the bundle target (default: "source")
-  --arch=<id>                         architecture identifier for the bundle target (default: "any")
   --artifact-url=<url-or-path>        artifactUrl to record in the manifest target (default: bundle filename)
   --hash-algorithm=<sha256|sha1>      hash algorithm to use for the bundle payload (default: sha256 when libsodium is available, otherwise sha1)
-  --log-file=<path>                    mirror logs to a JSON file
 
-notes:
+Notes:
   The archive is a plain tar file (no compression) built using the runtime's native tar implementation.
+
   Directory layout and basic metadata (mode bits, mtime) are preserved.
+
   When omitted, '--input' defaults to the project directory (app source),
   and '--output' defaults to "<build_name>-<version>.tar" derived from your oro.toml metadata.
+
   When '--manifest' or '--manifest-name' (or ORO_UPDATE_MANIFEST_FILENAME) is provided, the manifest is updated
   with a new target entry describing this bundle (including length and hash).
 
-examples:
+Examples:
   {{cli_name}} update bundle
                                       bundle the current project source into <build_name>-<version>.tar
   {{cli_name}} update bundle --manifest manifest.json
@@ -426,119 +1032,195 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextUpdateExtract = R"TEXT(
-{{cli_name}} v{{cli_version}}
+Extract an update tar archive into a destination directory.
 
-Extract a tar archive produced by update-bundle into a destination directory.
-
-usage:
+Usage:
   {{cli_name}} update extract --bundle=<bundle.tar> --dest=<dir> [options]
 
-options:
+Options:
   --bundle=<bundle.tar>               path to the tar archive to extract
-  --dest=<dir>                        destination directory to extract files into (created if missing)
+  --dest=<dir>                        destination directory to extract files
+                                      into (created if missing)
   --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-update-extract
+)TEXT";
+
+constexpr auto gManualTextUpdateExtract = R"TEXT(
+Notes:
   The extractor rejects absolute paths and any paths containing ".." or ':' to avoid directory traversal.
+
   Special tar entries (symlinks, devices, etc.) are ignored; regular files and directories are restored.
 
-examples:
+Examples:
   {{cli_name}} update extract --bundle app-1.0.0.tar --dest ./update-staging
                                       extract the contents of app-1.0.0.tar into ./update-staging
 )TEXT";
 
 constexpr auto gHelpTextBuild = R"TEXT(
-{{cli_name}} v{{cli_version}}
+Build an Oro application.
 
+Usage:
+  {{cli_name}} build [options] [<project-or-source>]
+
+Options:
+  --platform=<platform>               target platform (default: host)
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  --device=<serial>                   Android device to install and run on
+  --copy=<source:dest>                extra bundle mapping (repeatable)
+  --port=<port>                       development server port (default: 80)
+  --host=<host>                       development server host (default:
+                                      localhost)
+  -t, --test=<path>                   run a bundled test entry
+  -H, --headless                      run without a visible window
+  -P, --prod                          use production build settings
+  -D, --debug                         enable debug mode
+  -E, --env=<name[=value]>            add environment variables
+  -o, --only-build                    only run the build step
+  -p, --package                       package the app for distribution
+  -q, --quiet                         hint for less log output
+  -r, --run                           run after building
+  -V, --verbose                       enable verbose output
+  -w, --watch                         watch for changes to rerun build step
+  --allow-exec                        allow native extension build commands
+  --sanitizers                        enable desktop ASan/UBSan sanitizers
+  --cache                             enable all supported build result caches
+                                      (default: off)
+  --no-cache                          disable supported build result caches for
+                                      this build
+  --compiler-cache                    enable ccache/sccache for native object
+                                      compilation
+  --no-compiler-cache                 disable the native compiler cache
+  --android-cache                     enable all supported caches for Android
+                                      builds
+  --no-android-cache                  disable supported caches for Android
+                                      builds
+  --android-build-cache               enable Gradle's task output cache
+  --no-android-build-cache            disable Gradle's task output cache
+  --android-configuration-cache       enable Gradle's configuration cache
+  --no-android-configuration-cache    disable Gradle's configuration cache
+  --tls-keylog=<path>                 write NSS TLS keys (OpenSSL provider)
+  --log-file=<path>                   mirror logs to a JSON file
+  --editor-project=<dir>              export an Android editor project
+  --remote-debugging-port=<port>      set the remote debugging port
+  -h, --help                          show help
+
+Linux options:
+  -f, --package-format=<format>       package format: deb (default), rpm, zip,
+                                      aur
+  --sign                              sign Linux packages with GPG (writes .asc
+                                      next to the artifact)
+  --sign-key=<id>                     GPG key ID or fingerprint for --sign
+
+macOS options:
+  -c, --codesign                      code sign application with 'codesign'
+  -n, --notarize                      notarize application with 'notarytool'
+  -f, --package-format=<format>       package format: zip (default), pkg
+
+iOS options:
+  -c, --codesign                      sign with the configured iOS profile
+
+Windows options:
+  -f, --package-format=<format>       package format: appx
+
+Documentation:
+  man oroc-build
+)TEXT";
+
+constexpr auto gManualTextBuild = R"TEXT(
 Build Oro application.
 
 Provide a project directory, HTML file, or JavaScript module. When no
 oro.toml is found, {{cli_name}} infers a minimal configuration automatically.
 
-usage:
-  {{cli_name}} build [options] [<project-or-source>]
+Options:
+  --platform=<platform>               platform target to build application for (defaults to host):
+                                      - android
+                                      - android-emulator
+                                      - ios
+                                      - ios-simulator
+  --config=<path>                     use an explicit oro.toml/oro.ini file
+  --copy=<source:dest>                extra copy mapping (like [build] copy; can be repeated)
+  --port=<port>                       load "index.html" from a specific port (if host is not specified, defaults to localhost)
+  --host=<host>                       load "index.html" from a specific host (if port is not specified, defaults to 80)
+  -t, --test=<path>                   enable test mode and import a test file relative to resource files
+  -H, --headless                      build application to run in headless mode (without frame or window)
+  -P, --prod                          build for production (disables debugging info, inspector, etc.)
+  -o, --only-build                    only run the build step
+  --allow-exec                        allow native extension commands (git/build scripts)
+  --sanitizers                        enable developer sanitizers (ASan/UBSan) for desktop core builds
+  --tls-keylog=<path>                 write NSS TLS key log lines to <path> (OpenSSL provider)
 
-options:
-  --platform=<platform>                platform target to build application for (defaults to host):
-                                         - android
-                                         - android-emulator
-                                         - ios
-                                         - ios-simulator
-  --config=<path>                      use an explicit oro.toml/oro.ini file
-  --device=<serial>                    Android device to install and run on
-  --copy=<source:dest>                 extra copy mapping (like [build] copy; can be repeated)
-  --port=<port>                        load "index.html" from a specific port (if host is not specified, defaults to localhost)
-  --host=<host>                        load "index.html" from a specific host (if port is not specified, defaults to 80)
-  --test[=path]                        indicate test mode, optionally importing a test file relative to resource files
-  --headless                           build application to run in headless mode (without frame or window)
-  --prod                               build for production (disables debugging info, inspector, etc.)
-  -D, --debug                          enable debug mode
-  -E, --env                            add environment variables
-  -o, --only-build                     only run build step,
-  -p, --package                        package the app for distribution
-  -q, --quiet                          hint for less log output
-  -r, --run                            run after building
-  -V, --verbose                        enable verbose output
-  -w, --watch                          watch for changes to rerun build step
-  --allow-exec                         allow native extension commands (git/build scripts)
-  --sanitizers                         enable developer sanitizers (ASan/UBSan) for desktop core builds
-  --tls-keylog=<path>                  write NSS TLS key log lines to <path> (OpenSSL provider)
-  --log-file=<path>                    mirror logs to a JSON file
+Environment:
+  ORO_ALLOW_EXEC                      allow native extension commands during builds
+  ORO_ENABLE_SANITIZERS               enable ASan/UBSan on desktop builds
 
-environment:
-  ORO_ALLOW_EXEC                       allow native extension commands during builds
-  ORO_ENABLE_SANITIZERS                enable ASan/UBSan on desktop builds
-
-notes:
+Notes:
   Relative paths are resolved from the project root or from the directory containing the explicit
   `--config` file when one is supplied.
   `--prod` controls packaging/debug defaults; `--package` controls whether a distributable artifact
   is produced in addition to the build output directory.
+
   Use `--copy` for one-off extra bundle mappings without modifying `oro.toml`.
+
+  Cache flags override oro.toml; specific cache flags override broader cache flags.
+
+  Set [build] cache=true for a project default, [android] cache=true for Android only,
+  or [android] configuration_cache=true for only Gradle configuration caching.
+
+  Use compiler_cache in [build] or a platform section to control native object caching.
+
+  Compiler caching uses ccache/sccache from PATH and compiles directly if neither is installed.
+
+  Download caches and existing incremental build behavior retain their toolchain defaults.
+
   Android run targets use --device, then ANDROID_SERIAL, then the first ready device
   listed by `adb devices`. The android-emulator target selects the first ready emulator.
+
   NO_ANDROID and NO_IOS do not control this application build command. They are independent,
   presence-based exclusions for runtime source bootstrap (`bin/install.sh` / `npm run relink`).
 
-common errors:
+Common errors:
   Android builds: run `{{cli_name}} setup --platform=android` and accept SDK licenses.
   macOS/iOS signing: set `[ios] provisioning_profile`/specifier or `[mac.productbuild] identity` in your config file.
+
   Standard Android builds run NDK and Gradle automatically. Native extension commands may require `--allow-exec` or `ORO_ALLOW_EXEC=1`.
 
 Linux options:
-  -f, --package-format=<format>        package a Linux application in a specified format for distribution:
-                                         - deb (default)
-                                         - rpm
-                                         - zip
-                                         - aur (generate AUR PKGBUILD only)
-  --sign                               sign Linux packages with GPG (writes .asc next to the artifact)
-  --sign-key=<id>                      optional GPG key ID or fingerprint to use with '--sign' (letters/digits/@._- only)
-dependencies:
+  -f, --package-format=<format>       package a Linux application in a specified format for distribution:
+                                      - deb (default)
+                                      - rpm
+                                      - zip
+                                      - aur (generate AUR PKGBUILD only)
+  --sign-key=<id>                     optional GPG key ID or fingerprint to use with '--sign' (letters/digits/@._- only)
+
+Linux dependencies:
   deb packaging requires `dpkg` and `fakeroot` (e.g., `sudo apt-get install dpkg-dev fakeroot`).
   rpm packaging requires `rpmbuild` (e.g., `sudo dnf install rpm-build`).
 
 macOS options:
-  -c, --codesign                       code sign application with 'codesign'
-  -n, --notarize                       notarize application with 'notarytool'
-  -f, --package-format=<format>        package a macOS application in a specified format for distribution:
-                                         - zip (default)
-                                         - pkg
-dependencies:
+  -f, --package-format=<format>       package a macOS application in a specified format for distribution:
+                                      - zip (default)
+                                      - pkg
+
+macOS dependencies:
   Xcode and Command Line Tools are required (`xcode-select --install`).
   For Gradle/JDK: `brew install gradle openjdk` (or use SDKMAN).
 
 iOS options:
-  -c, --codesign                       code sign application during xcoddbuild
-                                       (requires '[ios] provisioning_profile' in your config file)
+  -c, --codesign                      code sign application during xcodebuild (requires '[ios] provisioning_profile' in your config file)
 
 Windows options:
-  -f, --package-format=<format>        package a Windows application in a specified format for distribution:
-                                         - appx (default)
-dependencies:
+  -f, --package-format=<format>       package a Windows application in a specified format for distribution:
+                                      - appx (default)
+
+Windows dependencies:
   Windows 10/11 SDK and Visual Studio Build Tools are recommended.
   Ensure `signtool.exe` is available (set SIGNTOOL or add SDK bin to PATH).
 
-examples:
+Examples:
   {{cli_name}} build .
                                       build the current project for the host platform
   {{cli_name}} build -r --debug .
@@ -547,53 +1229,76 @@ examples:
                                       produce a signed/package-ready iOS build using your config
   {{cli_name}} build --copy assets:assets .
                                       include an extra assets directory in the bundle for this build only
+  {{cli_name}} build --platform=android --cache --no-android-configuration-cache .
+                                      enable supported caches except Gradle configuration caching
 )TEXT";
 
 constexpr auto gHelpTextRun = R"TEXT(
-{{cli_name}} v{{cli_version}}
+Run an Oro application.
 
+Usage:
+  {{cli_name}} run [options] [<project-or-source>]
+
+Options:
+  -H, --headless                      run without a visible window
+  --platform=<platform>               target platform (default: host)
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  --device=<serial>                   Android device to install and run on
+  --port=<port>                       development server port (default: 80)
+  --host=<host>                       development server host (default:
+                                      localhost)
+  -P, --prod                          use production build settings
+  -t, --test=<path>                   run a bundled test entry
+  -D, --debug                         enable debug mode
+  -q, --quiet                         hint for less log output
+  -E, --env=<name[=value]>            add environment variables
+  -V, --verbose                       enable verbose output
+  --allow-exec                        allow native extension build commands
+  --tls-keylog=<path>                 write NSS TLS keys (OpenSSL provider)
+  --log-file=<path>                   mirror logs to a JSON file
+  --remote-debugging-port=<port>      set the remote debugging port
+  --sanitizers                        enable desktop ASan/UBSan sanitizers
+  -h, --help                          show help
+
+Documentation:
+  man oroc-run
+)TEXT";
+
+constexpr auto gManualTextRun = R"TEXT(
 Run application.
 
 Provide a project directory, HTML file, or JavaScript module. When no
 oro.toml is found, {{cli_name}} infers a minimal configuration automatically.
 
-usage:
-  {{cli_name}} run [options] [<project-or-source>]
+Options:
+  -H, --headless                      run application in headless mode (without frame or window)
+  --platform=<platform>               platform target to run application on (defaults to host):
+                                      - android
+                                      - android-emulator
+                                      - ios
+                                      - ios-simulator
+  --config=<path>                     use an explicit oro.toml/oro.ini file
+  --port=<port>                       load "index.html" from a specific port (if host is not specified, defaults to localhost)
+  --host=<host>                       load "index.html" from a specific host (if port is not specified, defaults to 80)
+  -P, --prod                          build for production (disables debugging info, inspector, etc.)
+  -t, --test=<path>                   enable test mode and import a test file relative to resource files
+  --allow-exec                        allow native extension commands (git/build scripts)
+  --tls-keylog=<path>                 write NSS TLS key log lines to <path> (OpenSSL provider)
 
-options:
-  --headless                           run application in headless mode (without frame or window)
-  --platform=<platform>                platform target to run application on (defaults to host):
-                                         - android
-                                         - android-emulator
-                                         - ios
-                                         - ios-simulator
-  --config=<path>                      use an explicit oro.toml/oro.ini file
-  --device=<serial>                    Android device to install and run on
-  --port=<port>                        load "index.html" from a specific port (if host is not specified, defaults to localhost)
-  --host=<host>                        load "index.html" from a specific host (if port is not specified, defaults to 80)
-  --prod                               build for production (disables debugging info, inspector, etc.)
-  --test[=path]                        indicate test mode, optionally importing a test file relative to resource files
-  -D, --debug                          enable debug mode
-  -q, --quiet                          hint for less log output
-  -E, --env                            add environment variables
-  -V, --verbose                        enable verbose output
-  --allow-exec                         allow native extension commands (git/build scripts)
-  --tls-keylog=<path>                  write NSS TLS key log lines to <path> (OpenSSL provider)
-  --log-file=<path>                    mirror logs to a JSON file
+Environment:
+  ORO_DEBUG                           enable debug mode (like -D)
+  ORO_VERBOSE                         enable verbose logs (like -V)
 
-environment:
-  ORO_DEBUG                            enable debug mode (like -D)
-  ORO_VERBOSE                          enable verbose logs (like -V)
-
-notes:
+Notes:
   Android targets use --device, then ANDROID_SERIAL, then the first ready device
   listed by `adb devices`. The android-emulator target selects the first ready emulator.
 
-common errors:
+Common errors:
   For CI/Linux headless, install `xvfb-run` or set a custom headless runner in your config.
+
   Use `--test=path` to run tests bundled with your app.
 
-examples:
+Examples:
   {{cli_name}} run .
                                       build and launch the current project on the host platform
   {{cli_name}} run --platform=android-emulator .
@@ -603,32 +1308,41 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextListDevices = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Get the list of connected devices.
 
-usage:
+Usage:
   {{cli_name}} list-devices [options] --platform=<platform>
   {{cli_name}} devices [options] --platform=<platform>
 
-options:
-  --platform=<platform>                platform target to list devices for:
-                                         - android
-                                         - ios
-  -f, --format=<format>                print as 'text' or 'json'
-  --json                               shorthand for '--format=json'
-  --ecid                               show device ECID (ios only)
-  --udid                               show device UDID (ios only)
-  --only                               only show ECID or UDID of the first device (ios only)
-  -V, --verbose                        enable verbose output
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --platform=<platform>               device platform: android or ios (required)
+  -f, --format=<format>               print as 'text' or 'json'
+  --json                              shorthand for '--format=json'
+  --ecid                              show device ECID (ios only)
+  --udid                              show device UDID (ios only)
+  --only                              only show ECID or UDID of the first device
+                                      (ios only)
+  -V, --verbose                       enable verbose output
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-list-devices
+)TEXT";
+
+constexpr auto gManualTextListDevices = R"TEXT(
+Options:
+  --platform=<platform>               platform target to list devices for:
+                                      - android
+                                      - ios
+
+Notes:
   Android output mirrors the device identifiers returned by `adb devices`.
   iOS output can include the human-readable simulator/device name plus ECID or UDID for scripting.
+
   JSON output emits an array of device objects with stable id fields for automation.
 
-examples:
+Examples:
   {{cli_name}} list-devices --platform=android
                                       list attached Android devices visible to adb
   {{cli_name}} list-devices --platform=ios --udid
@@ -638,20 +1352,24 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextEnv = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Print environment variables relevant to the Oro CLI and build configuration.
 
-usage:
+Usage:
   {{cli_name}} env [options]
 
-options:
-  -f, --format=<format>                print as 'text' or 'json'
-  --json                               shorthand for '--format=json'
-  -V, --verbose                        enable verbose output
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  -f, --format=<format>               print as 'text' or 'json'
+  --json                              shorthand for '--format=json'
+  -V, --verbose                       enable verbose output
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-env
+)TEXT";
+
+constexpr auto gManualTextEnv = R"TEXT(
+Notes:
   - Prints a curated set of CLI, runtime, source-bootstrap, toolchain, and platform variables (for example, ORO_DEBUG, ORO_VERBOSE, ORO_HOME, NO_ANDROID, NO_IOS, JAVA_HOME, ANDROID_HOME, APPLE_ID, SIGNTOOL).
   - NO_ANDROID and NO_IOS are independent presence flags for runtime source bootstrap. A non-empty
     NO_ANDROID disables only Android work; a non-empty NO_IOS disables only iOS/iOS Simulator work
@@ -661,7 +1379,7 @@ notes:
   - Filters out unset variables; text output prints each line as KEY=VALUE.
   - JSON output emits a flat object keyed by environment variable name.
 
-examples:
+Examples:
   {{cli_name}} env
                                       print the effective environment inputs visible to Oro tooling
   {{cli_name}} env --json
@@ -669,53 +1387,76 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextMcp = R"TEXT(
-{{cli_name}} v{{cli_version}}
+Run a Model Context Protocol (MCP) server for agent tooling.
 
+Usage:
+  {{cli_name}} mcp [options] [<workspace-dir>]
+
+Options:
+  --stdio                             use stdio transport (default)
+  --http                              use HTTP/SSE transport
+  --host=<host>                       HTTP bind host (default: 127.0.0.1)
+  --port=<port>                       HTTP bind port (default: 0 for ephemeral)
+  --endpoint=<path>                   HTTP endpoint path (default: /mcp)
+  --token=<token>                     HTTP bearer token (default: generated)
+  --no-auth                           disable token auth (loopback only)
+  --workspace=<path>                  workspace root (default: current
+                                      directory)
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  --read-workspace-only               limit reads to the workspace (default)
+  --allow-read-outside-workspace      allow reads outside the workspace
+  --replace-sse-stream                allow replacement of a session SSE stream
+  -h, --help                          show help
+
+Documentation:
+  man oroc-mcp
+)TEXT";
+
+constexpr auto gManualTextMcp = R"TEXT(
 Run a Model Context Protocol (MCP) server for agent tooling.
 
 By default this subcommand speaks JSON-RPC over stdio (stdout is reserved for MCP messages).
 Use --http to run an HTTP/SSE transport.
 
-usage:
-  {{cli_name}} mcp [options] [<workspace-dir>]
+Options:
+  --endpoint=<path>                   HTTP endpoint path (default: /mcp; normalizes mcp,/mcp,/mcp/)
+  --token=<token>                     require this bearer token (default: auto-generated in HTTP mode)
+  --workspace=<path>                  explicit workspace root (default: current directory or <workspace-dir>)
+  --config=<path>                     workspace-relative oro.toml/oro.ini path to use as the active project config
+  --read-workspace-only               restrict filesystem reads to the workspace root (default; compatibility flag)
+  --allow-read-outside-workspace      explicitly allow reading arbitrary files outside the workspace root
+  --replace-sse-stream                allow a new SSE connection to replace an existing one for the same session id
 
-options:
-  --stdio                              use stdio transport (default)
-  --http                               use HTTP/SSE transport
-  --host=<host>                        HTTP bind host (default: 127.0.0.1)
-  --port=<port>                        HTTP bind port (default: 0 for ephemeral)
-  --endpoint=<path>                    HTTP endpoint path (default: /mcp; normalizes mcp,/mcp,/mcp/)
-  --token=<token>                      require this bearer token (default: auto-generated in HTTP mode)
-  --no-auth                            disable token auth (loopback only)
-  --workspace=<path>                   explicit workspace root (default: current directory or <workspace-dir>)
-  --config=<path>                      workspace-relative oro.toml/oro.ini path to use as the active project config
-  --read-workspace-only                restrict filesystem reads to the workspace root (default; compatibility flag)
-  --allow-read-outside-workspace       explicitly allow reading arbitrary files outside the workspace root
-  --replace-sse-stream                 allow a new SSE connection to replace an existing one for the same session id
-
-notes:
+Notes:
   Stdio mode disables JSON logs and suppresses INFO output so stdout remains valid MCP JSON-RPC.
+
   HTTP mode supports MCP 2026-07-28 requests and MCP 2025-11-25 and 2025-06-18 sessions.
+
   MCP 2026-07-28 clients call server/discover, send per-request metadata and routing headers, and use a long-lived
   subscriptions/listen POST for notifications; they do not initialize or send a session header. MCP 2025 clients
   initialize first and then include Mcp-Session-Id on subsequent requests. HTTP bearer authentication is enabled
   by default.
+
   The server publishes descriptive MCP tool metadata, including standard titles, safety annotations, extension
   data under _meta, and structured tool results to help human and AI clients choose the right operation without
   shell parsing.
+
   Use the MCP `search_docs` tool for topic-driven discovery across README, source-build environment, MCP,
   API, config, and manpage resources before falling back to manual resource walking.
+
   When --config is omitted, the active config defaults to oro.toml and falls back to oro.ini when that is the
   only standard project config present in the workspace.
   resources/list includes the workspace root and, when present, the active config file, project-local docs under
   conventional paths, and installed runtime-doc:/ references for shipped API, CLI, config, MCP, README,
   BUILD_ENVIRONMENT.md, llms.txt, and man1/man3/man7 docs when available.
+
   Use runtime-doc:/BUILD_ENVIRONMENT.md for the independent, presence-based NO_ANDROID and NO_IOS
   source-bootstrap controls; neither variable selects an application build target.
+
   Prefer runtime-doc:/ resources for runtime behavior and API contracts, and workspace:/ resources for the current
   app's config and local docs.
 
-examples:
+Examples:
   {{cli_name}} mcp --stdio .
                                       start an MCP server over stdio for the current workspace
   {{cli_name}} mcp --http --host=127.0.0.1 --port=8080 .
@@ -723,23 +1464,32 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextInit = R"TEXT(
-{{cli_name}} v{{cli_version}}
+Create a project in the given directory (default: current directory).
 
+Usage:
+  {{cli_name}} init [options] [<project-dir>]
+
+Options:
+  -C, --config                        only create the config file
+  -n, --name=<name>                   project name
+  -V, --verbose                       enable verbose output
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
+
+Documentation:
+  man oroc-init
+)TEXT";
+
+constexpr auto gManualTextInit = R"TEXT(
 Create a new project. If the path is not provided, the new project will be created in the current directory.
 
-usage:
-  {{cli_name}} init [<project-dir>]
-
-options:
-  -C, --config                         only create the config file
-  -n, --name                           project name
-
-notes:
+Notes:
   By default this command creates a starter `oro.toml`, `src/index.html`, `src/index.js`,
   `src/serviceworker.js`, and `.gitignore`.
+
   Use `--config` when you only want the config scaffold without the example app files.
 
-examples:
+Examples:
   {{cli_name}} init my-app
                                       create a new starter project in ./my-app
   {{cli_name}} init --config
@@ -747,38 +1497,49 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextInstallApp = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Install the app to the device or host target.
 
-usage:
-  {{cli_name}} install-app [--platform=<platform>] [--device=<identifier>] [options]
-  {{cli_name}} install [--platform=<platform>] [--device=<identifier>] [options]
+Usage:
+  {{cli_name}} install-app [options] [<project-dir>]
+  {{cli_name}} install [options] [<project-dir>]
 
-options:
-  -D, --debug                          enable debug output
-  --device[=identifier]                identifier (ecid, ID) of the device to install to
-                                       Android defaults to ANDROID_SERIAL or the first ready device
-  --platform=<platform>                platform to install application to device (defaults to host)::
-                                         - android
-                                         - ios
-  --prod                               install production application
-  -V, --verbose                        enable verbose output
+Options:
+  -D, --debug                         enable debug output
+  --device=<identifier>               device identifier for installation
+  --platform=<platform>               target platform (default: host)
+  -P, --prod                          install production application
+  -V, --verbose                       enable verbose output
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
 macOS options:
-  --target=<target>                    installation target for macOS application (defaults to '/')
-                                       the application is installed into '$target/Applications'
+  --target=<target>                   macOS installation root (default: /)
 
-notes:
+Documentation:
+  man oroc-install-app
+)TEXT";
+
+constexpr auto gManualTextInstallApp = R"TEXT(
+Options:
+  --device=<identifier>               identifier (ecid, ID) of the device to install to Android defaults to ANDROID_SERIAL or the first ready device
+  --platform=<platform>               platform to install application to device (defaults to host):
+                                      - android
+                                      - ios
+
+macOS options:
+  --target=<target>                   installation target for macOS application (defaults to '/') the application is installed into '$target/Applications'
+
+Notes:
   Android installs use the first ready device listed by `adb devices` when neither
   --device nor ANDROID_SERIAL is set. Offline and unauthorized devices are skipped.
+
   The android-emulator target selects the first ready emulator.
 
-common errors:
+Common errors:
   Android: list devices with `adb devices` or pass `--device`.
   iOS/macOS: list devices with `{{cli_name}} list-devices --platform=ios` and pass `--device`.
 
-examples:
+Examples:
   {{cli_name}} install-app --platform=android --device emulator-5554
                                       install the current Android build onto a specific emulator
   {{cli_name}} install-app --platform=ios --device <udid>
@@ -786,27 +1547,38 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextPrintBuildDir = R"TEXT(
-{{cli_name}} v{{cli_version}}
+Print the build directory path.
 
+Usage:
+  {{cli_name}} print-build-dir [options] [<project-dir>]
+
+Options:
+  --platform=<platform>               target platform (default: host)
+  -P, --prod                          indicate production build directory
+  --root                              print the root build directory
+  -V, --verbose                       enable verbose output
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
+
+Documentation:
+  man oroc-print-build-dir
+)TEXT";
+
+constexpr auto gManualTextPrintBuildDir = R"TEXT(
 Print the build directory path
 
-usage:
-  {{cli_name}} print-build-dir [--platform=<platform>] [--prod] [--root] [<project-dir>]
+Options:
+  --platform=<platform>               platform to print build directory for (defaults to host):
+                                      - android
+                                      - android-emulator
+                                      - ios
+                                      - ios-simulator
 
-options:
-  --platform                           platform to print build directory for (defaults to host):
-                                         - android
-                                         - android-emulator
-                                         - ios
-                                         - ios-simulator
-  --prod                               indicate production build directory
-  --root                               print the root build directory
-
-notes:
+Notes:
   This is useful for scripts that need to locate packaged artifacts, intermediate bundles, or
   platform-specific staging directories without reimplementing Oro's path logic.
 
-examples:
+Examples:
   {{cli_name}} print-build-dir .
                                       print the host-platform build directory for the current project
   {{cli_name}} print-build-dir --platform=ios --prod .
@@ -814,26 +1586,36 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextSetup = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Setup build tools for host or target platform.
 
-usage:
+Usage:
   {{cli_name}} setup [options] [--platform=<platform>] [-y|--yes]
 
-options:
-  --platform=<platform>                platform target to run setup for (defaults to host):
-                                         - android
-                                         - ios
-                                         - linux
-                                         - windows
-  -q, --quiet                          hint for less log output
-  -y, --yes                            answer yes to any prompts
+Options:
+  --platform=<platform>               target platform (default: host)
+  -q, --quiet                         hint for less log output
+  -y, --yes                           answer yes to any prompts
+  -D, --debug                         enable debug output
+  -V, --verbose                       enable verbose output
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-common errors:
+Documentation:
+  man oroc-setup
+)TEXT";
+
+constexpr auto gManualTextSetup = R"TEXT(
+Options:
+  --platform=<platform>               platform target to run setup for (defaults to host):
+                                      - android
+                                      - ios
+                                      - linux
+                                      - windows
+
+Common errors:
   Without `--platform`, setup defaults to the host. Verify with `{{cli_name}} env`.
 
-examples:
+Examples:
   {{cli_name}} setup --platform=android
                                       install or validate Android SDK/NDK requirements
   {{cli_name}} setup --platform=ios
@@ -841,32 +1623,45 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextConfig = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Inspect configuration values.
 
-usage:
+Usage:
   {{cli_name}} config [options] [<key-or-path>]
 
-options:
-  --config=<path>                      use an explicit oro.toml/oro.ini file
-  --list                               list known configuration keys with current and default values
-  --key=<name>                         print the current value for a specific key
-  --describe=<name>                    print help and metadata for a specific key
-  -f, --format=<format>                print the full configuration as 'toml', 'ini', or 'json'
-  --json                               shorthand for '--format=json'
-  --strict                             treat unknown or unset keys as errors (non-zero exit)
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  --config=<path>                     use an explicit oro.toml or oro.ini
+  --list                              list known configuration keys with current
+                                      and default values
+  --key=<name>                        print the current value for a specific key
+  --describe=<name>                   print help and metadata for a specific key
+  -f, --format=<format>               print the full configuration as 'toml',
+                                      'ini', or 'json'
+  --json                              shorthand for '--format=json'
+  --strict                            fail on unknown or unset keys
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-config
+)TEXT";
+
+constexpr auto gManualTextConfig = R"TEXT(
+Options:
+  --config=<path>                     use an explicit oro.toml/oro.ini file
+  --strict                            treat unknown or unset keys as errors (non-zero exit)
+
+Notes:
   Keys may be provided in flattened form (e.g., "filesystem_sandbox_enabled") or as TOML-style paths (e.g., "filesystem.sandbox_enabled").
+
   A bare argument after 'config' is treated as a key query (for example, '{{cli_name}} config filesystem.sandbox_enabled').
+
   Unknown keys are printed when present in the active configuration but are marked as undocumented.
   `--format` prints the merged effective configuration after applying oro.toml, local .ororc overrides,
   and CLI-selected config sources.
+
   Use '--log-file=<path>' instead of the global '{{cli_name}} --json ...' flag when you need structured config output on stdout and logs at the same time.
 
-examples:
+Examples:
   {{cli_name}} config --list
                                       list all known configuration keys with effective values
   {{cli_name}} config meta.version
@@ -880,26 +1675,33 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextVersions = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Print Oro CLI/runtime and dependency versions.
 
-usage:
+Usage:
   {{cli_name}} versions [options] [<dependency-name>]
 
-options:
-  -f, --format=<format>                print as 'text' or 'json'
-  --json                               shorthand for '--format=json'
-  -V, --verbose                        enable verbose output
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  -f, --format=<format>               print as 'text' or 'json'
+  --json                              shorthand for '--format=json'
+  -V, --verbose                       enable verbose output
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-versions
+)TEXT";
+
+constexpr auto gManualTextVersions = R"TEXT(
+Notes:
   With no dependency name, prints the full version map for the CLI, runtime, and linked libraries.
+
   Passing a dependency name filters to a single entry (for example: oro, oroc, uv, sqlite, iroh).
+
   Use '--json' or '--format=json' when you need stable machine-readable output on stdout.
+
   Use '--log-file=<path>' if you also need logs; the global '{{cli_name}} --json ...' form is reserved for JSON log streaming.
 
-examples:
+Examples:
   {{cli_name}} versions
                                       print all known dependency versions as text
   {{cli_name}} versions --json
@@ -909,21 +1711,29 @@ examples:
 )TEXT";
 
 constexpr auto gHelpTextVersion = R"TEXT(
-{{cli_name}} v{{cli_version}}
-
 Inspect or bump the project version defined in your configuration file.
 
-usage:
+Usage:
   {{cli_name}} version [options]
   {{cli_name}} version <new-version | release> [options]
 
-options:
-  --config=<path>                      explicit oro.toml/oro.ini to update
-  --preid=<id>                         pre-release identifier for pre* / prerelease bumps (default: "rc")
-  --verbose, -V                        enable verbose output
-  --log-file=<path>                    mirror logs to a JSON file
+Options:
+  -C, --config=<path>                 use an explicit oro.toml or oro.ini
+  --preid=<id>                        pre-release identifier (default: rc)
+  -V, --verbose                       enable verbose output
+  --log-file=<path>                   mirror logs to a JSON file
+  -h, --help                          show help
 
-notes:
+Documentation:
+  man oroc-version
+)TEXT";
+
+constexpr auto gManualTextVersion = R"TEXT(
+Options:
+  -C, --config=<path>                 explicit oro.toml/oro.ini to update
+  --preid=<id>                        pre-release identifier for pre* / prerelease bumps (default: "rc")
+
+Notes:
   - With no arguments, 'version' prints the current semantic version from the [meta] section.
   - With a <new-version> argument, it sets the version to that exact SemVer 2.0.0 value.
   - With a release type, it bumps the version using SemVer rules:
@@ -933,7 +1743,7 @@ notes:
   - The command updates only your app configuration file; it does not call git or create tags.
   - oro.toml is the preferred config file, oro.ini is fully supported when oro.toml is absent.
 
-examples:
+Examples:
   {{cli_name}} version
                                       print the current project version
   {{cli_name}} version minor
@@ -1288,6 +2098,7 @@ constexpr auto gAndroidManifest = R"XML(
     {{android_allow_cleartext}}
   >
     {{android_usb_notification_icon_metadata}}
+    {{android_foreground_notification_icon_metadata}}
     <meta-data
       android:name="android.webkit.WebView.MetricsOptOut"
       android:value="true"
@@ -1324,6 +2135,7 @@ constexpr auto gAndroidManifest = R"XML(
       android:stopWithTask="false"
     />
     {{android_background_service}}
+    {{android_migration_components}}
     {{android_push_components}}
     <receiver
       android:name="oro.runtime.app.NotificationDismissReceiver"
@@ -2401,7 +3213,7 @@ android {
   aaptOptions {
     {{android_aapt}}
     // Matches the CLI asset-manifest inventory policy.
-    ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~'
+    ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~'
     noCompress {{android_aapt_no_compress}}
   }
 
@@ -2453,10 +3265,8 @@ dependencies {
 //
 constexpr auto gGradleSettings = R"GROOVY(
 rootProject.name = "{{build_name}}"
-startParameter.offline = false
 include ':app'
 {{android_extension_modules}}
-startParameter.offline=false
 )GROOVY";
 
 //
@@ -2465,6 +3275,9 @@ startParameter.offline=false
 constexpr auto gGradleProperties = R"GRADLE(
 org.gradle.jvmargs=-Xmx2048m
 org.gradle.parallel=true
+org.gradle.caching={{android_gradle_build_cache}}
+org.gradle.configuration-cache={{android_gradle_configuration_cache}}
+org.gradle.configuration-cache.problems=fail
 
 android.useAndroidX=true
 kotlin.code.style=official
@@ -2568,7 +3381,9 @@ LOCAL_CFLAGS += {{cflags}}
 
 LOCAL_LDLIBS := -landroid -llog -lz
 LOCAL_SRC_FILES =                                                              \
-  init.cc
+  init.cc {{android_native_callback_sources}}
+
+{{android_native_callback_includes}}
 
 LOCAL_STATIC_LIBRARIES :=                                                      \
   libllama                                                                     \
@@ -2798,6 +3613,8 @@ constexpr auto gDefaultConfig = R"INI(
 # Minimal oro.toml for a new app.
 # Most settings have safe defaults - you can add more sections later as your project grows.
 # Use `.ororc` next to this file for developer-local overrides and signing secrets.
+# This file is the recommended editor project-root marker for `oroc language-server`.
+# Optional [language_server.<language>] command/args override programs installed on PATH.
 ##
 
 # Build-time bundling, output, and environment forwarding.
@@ -2810,6 +3627,8 @@ name = "{{project_name}}"
 copy = "src"
 # Build output directory (relative to the project root). Safe to delete and regenerate.
 output = "build"
+# Opt in to supported build result caches. Platform and cache-specific settings can override this.
+cache = false
 # Environment variables forwarded from your shell into the runtime at launch.
 # Use `.ororc` or `[env]`/`env_*` overrides when values differ per machine.
 env = ["USER", "TMPDIR", "PWD"]

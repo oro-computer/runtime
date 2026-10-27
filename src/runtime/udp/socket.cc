@@ -429,7 +429,6 @@ namespace oro::runtime::udp {
       return UV_EALREADY;
     }
 
-    this->addState(SOCKET_STATE_UDP_RECV_STARTED);
     this->receiveCallback = receiveCallback;
 
     auto allocate = [](uv_handle_t *handle, size_t size, uv_buf_t *buf) {
@@ -460,10 +459,15 @@ namespace oro::runtime::udp {
       socket->receiveCallback(nread, buf, addr);
     };
 
-    return uv_udp_recv_start((uv_udp_t *) &this->handle, allocate, receive);
+    const int err = uv_udp_recv_start((uv_udp_t *) &this->handle, allocate, receive);
+    if (err == 0) {
+      this->addState(SOCKET_STATE_UDP_RECV_STARTED);
+    }
+    return err;
   }
 
   int Socket::recvstop () {
+    this->removeState(SOCKET_STATE_UDP_PAUSED_RECV);
     if (!this->hasState(SOCKET_STATE_UDP_RECV_STARTED)) {
       return 0;
     }
@@ -483,97 +487,43 @@ namespace oro::runtime::udp {
   }
 
   int Socket::resume () {
-    int err = 0;
-    this->removeState(SOCKET_STATE_UDP_PAUSED);
-    this->removeState(SOCKET_STATE_TCP_PAUSED);
-
-    // if (this->isPaused()) {
-    if ((err = this->init())) {
-      return err;
+    Lock lock(this->mutex);
+    if (!this->isPaused()) {
+      return 0;
+    }
+    if (this->isClosing() || this->isClosed()) {
+      return UV_EBADF;
     }
 
-    if (this->isBound()) {
-      const bool shouldRestartRecv = (this->receiveCallback != nullptr);
-      this->removeState(SOCKET_STATE_UDP_RECV_STARTED);
-
-      if ((err = this->rebind())) {
+    // Keep the initialized handle and endpoint; reinitializing a live libuv
+    // handle corrupts pending requests and loses its original binding.
+    if (this->isUDP() && this->hasState(SOCKET_STATE_UDP_PAUSED_RECV) && this->receiveCallback != nullptr) {
+      const int err = this->recvstart();
+      if (err < 0 && err != UV_EALREADY) {
         return err;
       }
-
-      // If previously receiving, restart receive on resume
-      if (shouldRestartRecv) {
-        const int rerr = this->recvstart();
-        if (rerr < 0 && rerr != UV_EALREADY && rerr != UV_EBUSY) {
-          return rerr;
-        }
-      }
-    } else if (this->isConnected()) {
-      const bool shouldRestartRecv = (this->receiveCallback != nullptr);
-      const auto remoteAddr = this->remote.address;
-      const auto remotePort = this->remote.port;
-
-      if (!remoteAddr.empty() && remotePort > 0) {
-        err = this->connect(remoteAddr, remotePort);
-        if (err) {
-          return err;
-        }
-
-        if (shouldRestartRecv) {
-          const int rerr = this->recvstart();
-          if (rerr < 0 && rerr != UV_EALREADY && rerr != UV_EBUSY) {
-            return rerr;
-          }
-        }
-      }
     }
-
-    // }
-
-    return err;
+    this->removeState(SOCKET_STATE_UDP_PAUSED_RECV);
+    this->removeState(SOCKET_STATE_UDP_PAUSED);
+    this->removeState(SOCKET_STATE_TCP_PAUSED);
+    return 0;
   }
 
   int Socket::pause () {
-    int err = 0;
-
-    if ((err = this->recvstop())) {
+    Lock lock(this->mutex);
+    if (this->isPaused() || this->isClosing() || this->isClosed()) {
+      return 0;
+    }
+    const bool reading = this->hasState(SOCKET_STATE_UDP_RECV_STARTED);
+    const int err = this->recvstop();
+    if (err < 0) {
       return err;
     }
-
-    if (!this->isPaused() && !this->isClosing()) {
-      this->addState(SOCKET_STATE_UDP_PAUSED);
-      if (this->isBound()) {
-        Lock lock(this->mutex);
-        if (!uv_is_closing(reinterpret_cast<uv_handle_t*>(&this->handle))) {
-          uv_close((uv_handle_t *) &this->handle, [](uv_handle_t* h) {
-            auto socket = static_cast<Socket*>(h->data);
-            if (socket) {
-              socket->removeState((socket_state_t) (
-                SOCKET_STATE_UDP_BOUND |
-                SOCKET_STATE_UDP_CONNECTED |
-                SOCKET_STATE_UDP_RECV_STARTED
-              ));
-            }
-          });
-        }
-      } else if (this->isConnected()) {
-        // Close the connected UDP handle to fully pause network IO.
-        Lock lock(this->mutex);
-        if (!uv_is_closing(reinterpret_cast<uv_handle_t*>(&this->handle))) {
-          uv_close(reinterpret_cast<uv_handle_t*>(&this->handle), [](uv_handle_t* h) {
-            auto socket = static_cast<Socket*>(h->data);
-            if (socket) {
-              socket->removeState((socket_state_t) (
-                SOCKET_STATE_UDP_BOUND |
-                SOCKET_STATE_UDP_CONNECTED |
-                SOCKET_STATE_UDP_RECV_STARTED
-              ));
-            }
-          });
-        }
-      }
+    if (reading) {
+      this->addState(SOCKET_STATE_UDP_PAUSED_RECV);
     }
-
-    return err;
+    this->addState(this->isUDP() ? SOCKET_STATE_UDP_PAUSED : SOCKET_STATE_TCP_PAUSED);
+    return 0;
   }
 
   void Socket::close () {

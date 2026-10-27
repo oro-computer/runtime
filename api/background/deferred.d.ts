@@ -6,10 +6,10 @@
  * @property {string} accountRef Opaque account identity; authorization is rechecked at execution.
  * @property {string} targetRef Opaque resource identity.
  * @property {string} operationRef Opaque operation identity for read-only status/reconciliation.
- * @property {'any'|'unmetered'} [network='unmetered'] Android scheduling constraint, not server availability.
+ * @property {'any'|'unmetered'} [network='unmetered'] OS path constraint, not server availability.
  * @property {boolean} [requiresCharging=false]
  * @property {boolean} [requiresBatteryNotLow=true]
- * @property {number} [delayMs=0] Minimum delay, at most seven days. Timing is controlled by Android.
+ * @property {number} [delayMs=0] Minimum delay, at most seven days. OS/process availability controls timing.
  * @property {number} [intervalMs=0] Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
  * @property {number} [flexMs] Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
  */
@@ -18,10 +18,13 @@
  */
 /**
  * @typedef {object} DeferredReadSupport
+ * @property {string} [platform] Present on an unavailable cross-platform support result.
+ * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform API restriction; not a permission denial.
+ * @property {string} [reason] Stable unavailable reason.
  * @property {boolean} available
  * @property {string[]} registeredKinds
  * @property {number} maximumTasks 32, including terminal records until explicitly released.
- * @property {number} maximumAttempts 5 with Android exponential backoff starting at 30 seconds.
+ * @property {number} maximumAttempts 5 with exponential backoff starting at 30 seconds.
  * @property {boolean} readOnly True for enqueue. Maintenance uses a separate explicitly registered contract.
  * @property {boolean} queuedWrites False.
  * @property {boolean} backgroundJavaScript False.
@@ -31,6 +34,8 @@
  * @property {number} minimumFlexMs 300000.
  * @property {string[]} registeredMaintenanceKinds Explicitly registered native maintenance executors.
  * @property {Object<string, string[]>} maintenanceOperations Allowed cleanup/revoke operations per maintenance kind.
+ * @property {'application-process'} [executionScope] Linux scheduling scope.
+ * @property {boolean} [survivesProcessExit] False on Linux; durable records require explicit interruption reconciliation.
  */
 /** @returns {Promise<DeferredReadSupport>} */
 export function getSupport(): Promise<DeferredReadSupport>;
@@ -124,13 +129,13 @@ export type DeferredReadOptions = {
      */
     operationRef: string;
     /**
-     * Android scheduling constraint, not server availability.
+     * OS path constraint, not server availability.
      */
     network?: "any" | "unmetered";
     requiresCharging?: boolean;
     requiresBatteryNotLow?: boolean;
     /**
-     * Minimum delay, at most seven days. Timing is controlled by Android.
+     * Minimum delay, at most seven days. OS/process availability controls timing.
      */
     delayMs?: number;
     /**
@@ -154,6 +159,18 @@ export type DeferredReadState = DeferredReadOptions & {
     completedRuns?: number;
 };
 export type DeferredReadSupport = {
+    /**
+     * Present on an unavailable cross-platform support result.
+     */
+    platform?: string;
+    /**
+     * Missing runtime backend or platform API restriction; not a permission denial.
+     */
+    implementation?: "missing" | "restricted";
+    /**
+     * Stable unavailable reason.
+     */
+    reason?: string;
     available: boolean;
     registeredKinds: string[];
     /**
@@ -161,7 +178,7 @@ export type DeferredReadSupport = {
      */
     maximumTasks: number;
     /**
-     * 5 with Android exponential backoff starting at 30 seconds.
+     * 5 with exponential backoff starting at 30 seconds.
      */
     maximumAttempts: number;
     /**
@@ -202,6 +219,14 @@ export type DeferredReadSupport = {
     maintenanceOperations: {
         [x: string]: string[];
     };
+    /**
+     * Linux scheduling scope.
+     */
+    executionScope?: "application-process";
+    /**
+     * False on Linux; durable records require explicit interruption reconciliation.
+     */
+    survivesProcessExit?: boolean;
 };
 export type DeferredMaintenanceOptions = Omit<DeferredReadOptions, "operationRef" | "intervalMs" | "flexMs"> & {
     operationRef: "cleanup" | "revoke";

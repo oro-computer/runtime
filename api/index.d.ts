@@ -5364,9 +5364,9 @@ declare module "oro:diagnostics/runtime" {
     /**
      * @typedef {object} AndroidLifecycleEvent
      * @property {number} index Runtime window index.
-     * @property {'loading'|'ready'|'failed'|'renderer-lost'|'reload'} phase
+     * @property {'loading'|'presented'|'ready'|'failed'|'renderer-lost'|'reload'} phase
      * @property {number} elapsedMs Monotonic time since the first retained process event.
-     * @property {number} durationMs Startup elapsed time for ready/failure; zero otherwise.
+     * @property {number} durationMs Startup elapsed time for presentation/readiness/failure; zero otherwise.
      */
     /**
      * @typedef {object} AndroidBuildIdentity
@@ -5375,7 +5375,12 @@ declare module "oro:diagnostics/runtime" {
      * @property {string} cliVersion CLI that generated this application's init shim.
      * @property {string} assetManifestSha256 SHA-256 of asset and build evidence bound into the native init shim; not the APK digest.
      * @property {string|null} applicationInputSha256 Staged Android native files, normalized settings, SDK inventory and toolchain input fingerprint; null for older or unbound evidence. APK digest and signing certificate identify the exact compiled artifact.
-     * @property {number} androidBridgeProtocol Native bridge contract version.
+     * @property {number} androidBridgeProtocol Native bridge version.
+     * @property {number} [nativeCallbacksProtocol] Android compiled callback adapter version; 1 for the native C++ facade.
+     * @property {number} [nativeRecordsProtocol] Native C++ encrypted record format; distinct from Kotlin v1 storage and migration.
+     * @property {number} [nativePushJournalRecoveryProtocol] Native installation-scoped unreadable push-journal quarantine protocol.
+     * @property {number} [nativeServicesProtocol] Owned native service, v1 interoperability and child-execution SDK protocol.
+     * @property {number} [nativeWorkflowsProtocol] Packaged declarative read-and-notify executor protocol.
      * @property {string} abi Compiled architecture.
      * @property {boolean} debug
      * @property {number} sdk Device SDK.
@@ -5416,6 +5421,10 @@ declare module "oro:diagnostics/runtime" {
      * @property {boolean} applicationBackHandling Document-owned Back handler with native fallback.
      * @property {boolean} periodicDeferredReads Configured periodic native read scheduling.
      * @property {boolean} nativeDeferredMaintenance Registered retry-safe cleanup/revocation scheduling; general queued writes remain unavailable.
+     * @property {boolean} nativeForegroundExecution Configured user-started dataSync executor service; query oro:foreground for current admission and registered executors.
+     * @property {boolean} nativeContinuousExecution Configured user-started specialUse monitoring; query oro:foreground/continuous for current admission.
+     * @property {boolean} nativeTransactionalRecords Native-only encrypted identity-bound CAS records and migration; not exposed through JavaScript.
+     * @property {boolean} nativeCoordination Native-only conditional intents, records and uncertain-outcome coordination; external authorization remains application-owned.
      * @property {boolean} biometricSecretUnlock
      * @property {boolean} namedLauncherDestinations
      * @property {boolean} nativeDeferredReads Configured native read/reconciliation scheduler; query registered executors separately.
@@ -5424,6 +5433,8 @@ declare module "oro:diagnostics/runtime" {
      * @property {boolean} nativePasswordSelection Explicit Android 14+ framework password chooser; separate from Autofill and passkeys.
      * @property {boolean} nativeNotificationPresentation Channel/group/public-version submission with shared response receipts.
      * @property {boolean} systemTextScaling Android interactive WebViews apply absolute system text zoom before navigation and on configuration changes; webview.text_zoom can select fixed or manual ownership. Linear WebView zoom is not Android nonlinear native text scaling.
+     * @property {boolean} nativeStartupPresentation Android can reveal a verified bundled startup screen through the current window's markPresented() without acknowledging readiness or stopping native recovery deadlines.
+     * @property {boolean} systemGestureExclusion Bounded document-owned edge requests; Android retains mandatory navigation policy.
      * @property {boolean} nativeExtensions Configured compiled native extension lifecycle and document-owned operations.
      * @property {boolean} pointerCapture
      * @property {boolean} historicalProcessExits
@@ -6117,13 +6128,13 @@ declare module "oro:diagnostics/runtime" {
          * Runtime window index.
          */
         index: number;
-        phase: "loading" | "ready" | "failed" | "renderer-lost" | "reload";
+        phase: "loading" | "presented" | "ready" | "failed" | "renderer-lost" | "reload";
         /**
          * Monotonic time since the first retained process event.
          */
         elapsedMs: number;
         /**
-         * Startup elapsed time for ready/failure; zero otherwise.
+         * Startup elapsed time for presentation/readiness/failure; zero otherwise.
          */
         durationMs: number;
     };
@@ -6149,9 +6160,29 @@ declare module "oro:diagnostics/runtime" {
          */
         applicationInputSha256: string | null;
         /**
-         * Native bridge contract version.
+         * Native bridge version.
          */
         androidBridgeProtocol: number;
+        /**
+         * Android compiled callback adapter version; 1 for the native C++ facade.
+         */
+        nativeCallbacksProtocol?: number;
+        /**
+         * Native C++ encrypted record format; distinct from Kotlin v1 storage and migration.
+         */
+        nativeRecordsProtocol?: number;
+        /**
+         * Native installation-scoped unreadable push-journal quarantine protocol.
+         */
+        nativePushJournalRecoveryProtocol?: number;
+        /**
+         * Owned native service, v1 interoperability and child-execution SDK protocol.
+         */
+        nativeServicesProtocol?: number;
+        /**
+         * Packaged declarative read-and-notify executor protocol.
+         */
+        nativeWorkflowsProtocol?: number;
         /**
          * Compiled architecture.
          */
@@ -6267,6 +6298,22 @@ declare module "oro:diagnostics/runtime" {
          * Registered retry-safe cleanup/revocation scheduling; general queued writes remain unavailable.
          */
         nativeDeferredMaintenance: boolean;
+        /**
+         * Configured user-started dataSync executor service; query oro:foreground for current admission and registered executors.
+         */
+        nativeForegroundExecution: boolean;
+        /**
+         * Configured user-started specialUse monitoring; query oro:foreground/continuous for current admission.
+         */
+        nativeContinuousExecution: boolean;
+        /**
+         * Native-only encrypted identity-bound CAS records and migration; not exposed through JavaScript.
+         */
+        nativeTransactionalRecords: boolean;
+        /**
+         * Native-only conditional intents, records and uncertain-outcome coordination; external authorization remains application-owned.
+         */
+        nativeCoordination: boolean;
         biometricSecretUnlock: boolean;
         namedLauncherDestinations: boolean;
         /**
@@ -6293,6 +6340,14 @@ declare module "oro:diagnostics/runtime" {
          * Android interactive WebViews apply absolute system text zoom before navigation and on configuration changes; webview.text_zoom can select fixed or manual ownership. Linear WebView zoom is not Android nonlinear native text scaling.
          */
         systemTextScaling: boolean;
+        /**
+         * Android can reveal a verified bundled startup screen through the current window's markPresented() without acknowledging readiness or stopping native recovery deadlines.
+         */
+        nativeStartupPresentation: boolean;
+        /**
+         * Bounded document-owned edge requests; Android retains mandatory navigation policy.
+         */
+        systemGestureExclusion: boolean;
         /**
          * Configured compiled native extension lifecycle and document-owned operations.
          */
@@ -9363,6 +9418,20 @@ declare module "oro:internal/share-files" {
     export const MAX_SHARE_FILES: 16;
 }
 
+declare module "oro:internal/platform-request" {
+    /**
+     * Runs a bounded document-owned native operation and cancels its native work
+     * when the caller aborts. Native deadlines also release callers that disappear.
+     * @param {string} feature
+     * @param {string} action
+     * @param {object} options
+     * @param {AbortSignal} [signal]
+     * @returns {Promise<any>}
+     */
+    export function platformRequest(feature: string, action: string, options: object, signal?: AbortSignal): Promise<any>;
+    export default platformRequest;
+}
+
 declare module "oro:window" {
     /**
      * @typedef {object} FullscreenState
@@ -9523,16 +9592,19 @@ declare module "oro:window" {
         getStatus(): number;
         /**
          * Close the window
+         * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
          * @return {Promise<object>} - the options of the window
          */
         close(): Promise<object>;
         /**
          * Shows the window
+         * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
          * @return {Promise<ipc.Result>}
          */
         show(): Promise<ipc.Result>;
         /**
          * Hides the window
+         * Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
          * @return {Promise<ipc.Result>}
          */
         hide(): Promise<ipc.Result>;
@@ -9605,12 +9677,24 @@ declare module "oro:window" {
         /**
          * Acknowledges that this window has a usable application screen. Call after
          * mounting the UI and loading required styles. Android apps configured with
-         * `[webview] require_ready = true` retain native startup recovery until this
+         * `[webview] require_ready = true` keep native startup recovery armed until this
          * acknowledgement. Only the current window can acknowledge its own readiness.
          * This does not replay operations or establish application authorization.
          * @returns {Promise<void>}
          */
         markReady(): Promise<void>;
+        /**
+         * Reveals this Android window's verified bundled startup screen after a native
+         * visual-state fence. Call after installing its inline styles and startup UI.
+         * This does not acknowledge application readiness or stop the 30-second native
+         * watchdog. Keep application controls inert until the usable screen calls
+         * markReady(). Failed startup restores native recovery and its Reload control.
+         * Requires the current trusted top-level document; foreign origins, headless
+         * windows and stale documents cannot reveal a startup screen. Other platforms
+         * reject with ENOSYS. Hidden windows do not gain focus from this call.
+         * @returns {Promise<void>}
+         */
+        markPresented(): Promise<void>;
         /**
          * Sets the background color of the window
          * @param {object} opts - an options object
@@ -9896,6 +9980,8 @@ declare module "oro:application" {
     export function getCurrentWindowIndex(): number;
     /**
      * Creates a new window and returns an instance of ApplicationWindow.
+     * Android rejects with `ENOTREADY` after Activity state is saved or while the
+     * Activity is unavailable. Retry the intended creation after application resume.
      * @param {object} opts - an options object
      * @param {string=} opts.aspectRatio - a string (split on ':') provides two float values which set the window's aspect ratio.
      * @param {boolean=} opts.closable - deterime if the window can be closed.
@@ -10462,24 +10548,10 @@ declare module "oro:async_hooks" {
     export { AsyncLocalStorage, AsyncResource, executionAsyncResource, executionAsyncId, triggerAsyncId, createHook };
 }
 
-declare module "oro:internal/platform-request" {
-    /**
-     * Runs a bounded document-owned Android operation and cancels its native work
-     * when the caller aborts. Native deadlines also release callers that disappear.
-     * @param {string} feature
-     * @param {string} action
-     * @param {object} options
-     * @param {AbortSignal} [signal]
-     * @returns {Promise<any>}
-     */
-    export function platformRequest(feature: string, action: string, options: object, signal?: AbortSignal): Promise<any>;
-    export default platformRequest;
-}
-
 declare module "oro:authentication" {
     /**
      * Reads policy/enrollment availability without prompting or creating keys.
-     * Other platforms reject with ENOSYS.
+     * Missing or platform-restricted backends return unavailable status; operational calls still reject with ENOSYS.
      * @param {AuthenticationOptions} [options]
      * @returns {Promise<AuthenticationStatus>}
      */
@@ -10495,8 +10567,10 @@ declare module "oro:authentication" {
      */
     export function seal(value: string | Uint8Array | ArrayBuffer, options: ProtectedKeyOptions): Promise<ProtectedSecret>;
     /**
-     * Decrypts only through a user-authenticated native Cipher operation. Returns
-     * bytes; decoding or restoring an application session remains app-owned.
+     * Decrypts through an Android authenticated Cipher or Linux authenticated hardware
+     * unwrap followed by native AES-GCM. Linux ephemeral AES keys exist briefly in
+     * native memory and are erased after use; long-lived private keys stay in the
+     * provider. Returns bytes; application session recovery remains app-owned.
      * @param {ProtectedSecret} sealed
      * @param {ProtectedKeyOptions} options
      * @returns {Promise<Uint8Array>}
@@ -10535,7 +10609,7 @@ declare module "oro:authentication" {
     export type AuthenticationPolicy = "biometric" | "biometric-or-device";
     export type AuthenticationOptions = {
         /**
-         * Strong biometric, optionally device credential fallback. The fallback policy does not invalidate on biometric enrollment changes.
+         * Strong biometric; Android optionally allows device credentials. Linux requires explicit biometric-or-device and a key-provider PIN/protected path. That policy does not invalidate on biometric enrollment changes.
          */
         policy?: AuthenticationPolicy;
         /**
@@ -10561,10 +10635,34 @@ declare module "oro:authentication" {
          * Base64 ciphertext and authentication tag. Store this sealed record, not plaintext.
          */
         ciphertext: string;
+        /**
+         * Linux schema 2: RSA-OAEP-SHA256 wrapped ephemeral AES key. Preserve the whole record.
+         */
+        wrappedKey?: string;
+        /**
+         * Linux schema 2: application, key and provider binding.
+         */
+        binding?: string;
+        /**
+         * Linux schema 2: hardware RSA key size. Records are platform-specific.
+         */
+        wrappingKeyBits?: number;
     };
     export type AuthenticationStatus = {
         /**
-         * Android API 30+.
+         * Present on an unavailable cross-platform support result.
+         */
+        platform?: string;
+        /**
+         * Missing runtime backend or platform restriction; not a permission denial.
+         */
+        implementation?: "missing" | "restricted";
+        /**
+         * Stable unavailable reason.
+         */
+        reason?: string;
+        /**
+         * Platform implements this policy; Android requires API 30+.
          */
         supported: boolean;
         /**
@@ -10581,11 +10679,51 @@ declare module "oro:authentication" {
         statusCode: number;
         policy: AuthenticationPolicy;
         cryptographicOperationsOnly: boolean;
+        /**
+         * 1 when the Android historical migration endpoints are compiled in; query oro:migration.getSupport for project configuration.
+         */
+        historicalMigrationProtocol?: number;
         serverVerificationRequired: boolean;
         /**
          * At most one native prompt per process.
          */
         busy: boolean;
+        /**
+         * Linux reports false; a provider PIN is not biometric attestation.
+         */
+        biometricOnlySupported?: boolean;
+        /**
+         * Linux reports key-provider-pin, including providers with a protected authentication path.
+         */
+        credentialType?: string;
+        /**
+         * Available Linux provider families: tpm2 or pkcs11. Discovery does not authenticate.
+         */
+        providers?: string[];
+        /**
+         * Linux auto preference is tpm2-then-hardware-pkcs11. Saved keys never switch providers automatically.
+         */
+        providerPreference?: string;
+        /**
+         * Linux reports false; trusted modules declare hardware slot support.
+         */
+        hardwareAttestationProvided?: boolean;
+        /**
+         * Provider advertises supported signing mechanisms; actual key policy is checked at use.
+         */
+        signingAvailable?: boolean;
+        /**
+         * Provider advertises supported wrapping mechanisms; actual key policy is checked at use.
+         */
+        sealingAvailable?: boolean;
+        /**
+         * Configured RSA size for newly created Linux secret keys.
+         */
+        newWrappingKeyBits?: number;
+        /**
+         * Stable native discovery error when no eligible Linux provider is available.
+         */
+        providerStatusCode?: string;
     };
     /**
      * `authority` is an exact HTTPS origin, including a self-hosted IP origin when
@@ -18780,13 +18918,19 @@ declare module "oro:credentials" {
      */
     /**
      * @typedef {object} PasswordSelectionStatus
+     * @property {string} [platform] Present on an unavailable cross-platform support result.
+     * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform API restriction; not a permission denial.
+     * @property {string} [reason] Stable unavailable reason.
      * @property {boolean} supported Platform implements native password selection.
      * @property {boolean} enabled Application opted into selection.
      * @property {boolean} busy A selection request is active.
+     * @property {'secret-service'} [provider] Linux provider backend.
+     * @property {'application-attribute'} [association] Linux searches exact application and optional username attributes.
+     * @property {boolean} [autofill] False on Linux; selection does not install WebKit Autofill.
      */
     /**
      * Queries support without opening a provider or reading a credential.
-     * Other platforms reject with ENOSYS.
+     * Missing or platform-restricted backends return unavailable status; operational calls still reject with ENOSYS.
      * @returns {Promise<PasswordSelectionStatus>}
      */
     export function getStatus(): Promise<PasswordSelectionStatus>;
@@ -18799,6 +18943,11 @@ declare module "oro:credentials" {
      * A provider result waits at most five seconds for the requesting Activity to
      * resume, then revalidates document ownership and the foreground window.
      * Cancellation, navigation, activity stop and the original deadline still apply.
+     * Linux shows at most 64 matching Secret Service accounts in a native modal. Items
+     * must carry `application=<bundle identifier>` and `username` attributes. Only
+     * the chosen item is unlocked/read. These lookup attributes are not an attested
+     * app association. Secret Service providers and locked-keyring prompts require
+     * desktop qualification; no browser-origin association or automatic fill is added.
      * @param {PasswordSelectionOptions} [options]
      * @returns {Promise<SelectedPassword>}
      */
@@ -18830,6 +18979,18 @@ declare module "oro:credentials" {
     };
     export type PasswordSelectionStatus = {
         /**
+         * Present on an unavailable cross-platform support result.
+         */
+        platform?: string;
+        /**
+         * Missing runtime backend or platform API restriction; not a permission denial.
+         */
+        implementation?: "missing" | "restricted";
+        /**
+         * Stable unavailable reason.
+         */
+        reason?: string;
+        /**
          * Platform implements native password selection.
          */
         supported: boolean;
@@ -18841,6 +19002,18 @@ declare module "oro:credentials" {
          * A selection request is active.
          */
         busy: boolean;
+        /**
+         * Linux provider backend.
+         */
+        provider?: "secret-service";
+        /**
+         * Linux searches exact application and optional username attributes.
+         */
+        association?: "application-attribute";
+        /**
+         * False on Linux; selection does not install WebKit Autofill.
+         */
+        autofill?: boolean;
     };
 }
 
@@ -19503,6 +19676,164 @@ declare module "oro:fetch" {
     import fetch from "oro:fetch/index";
 }
 
+declare module "oro:foreground" {
+    /**
+     * Reports configuration, registered executors and current notification policy.
+     * Missing or platform-restricted backends return unavailable status; operational calls still reject with ENOSYS.
+     * @returns {Promise<ForegroundSupport>}
+     */
+    export function getSupport(): Promise<ForegroundSupport>;
+    /**
+     * Starts from the current foreground document after an explicit user action.
+     * Linux additionally requires an action-capable freedesktop notification server
+     * for its public Stop control. It does not install a daemon or restart work.
+     * Returns durable admission, not completion. Navigation or an aborted/lost reply
+     * can race admission: inspect the ID before another attempt. The admitted native
+     * operation survives Home/navigation and has its own Stop notification/deadline.
+     * Task removal, OS timeout and stop record uncertainty; no work auto-restarts.
+     * @param {ForegroundOptions} options
+     * @param {ForegroundRequestOptions} [requestOptions]
+     * @returns {Promise<ForegroundStatus>}
+     */
+    export function start(options: ForegroundOptions, requestOptions?: ForegroundRequestOptions): Promise<ForegroundStatus>;
+    /**
+     * Reads the retained status without restarting work.
+     * @param {string} id
+     * @returns {Promise<ForegroundStatus>}
+     */
+    export function getStatus(id: string): Promise<ForegroundStatus>;
+    /**
+     * Lists at most sixteen retained, redacted operation statuses.
+     * @returns {Promise<ForegroundStatus[]>}
+     */
+    export function list(): Promise<ForegroundStatus[]>;
+    /**
+     * Requests stop for one exact generation. An uncertain remote outcome stays
+     * unknown. Cancellation does not undo an already completed remote operation.
+     * @param {string} id
+     * @param {string} expectedGeneration
+     * @returns {Promise<ForegroundStatus>}
+     */
+    export function stop(id: string, expectedGeneration: string): Promise<ForegroundStatus>;
+    /**
+     * Releases a terminal journal entry after app reconciliation. Resource cleanup
+     * must finish before the operation ID can be released or a new executor started.
+     * @param {string} id
+     * @param {string} expectedGeneration
+     * @returns {Promise<void>}
+     */
+    export function release(id: string, expectedGeneration: string): Promise<void>;
+    namespace _default {
+        export { getSupport };
+        export { start };
+        export { getStatus };
+        export { list };
+        export { stop };
+        export { release };
+    }
+    export default _default;
+    export type ForegroundOptions = {
+        /**
+         * Opaque operation ID; retained until explicitly released.
+         */
+        id: string;
+        /**
+         * Registered compiled native executor.
+         */
+        kind: string;
+        /**
+         * Opaque saved authority reference.
+         */
+        authorityRef: string;
+        /**
+         * Opaque saved account reference.
+         */
+        accountRef: string;
+        /**
+         * Opaque saved target reference.
+         */
+        targetRef: string;
+        /**
+         * Opaque compiled operation reference.
+         */
+        operationRef: string;
+        /**
+         * Assert that this call follows an explicit user action.
+         */
+        userInitiated: true;
+        /**
+         * 1,000..1,800,000 milliseconds, subject to Android limits.
+         */
+        durationMs?: number;
+    };
+    export type ForegroundStatus = {
+        id: string;
+        kind: string;
+        /**
+         * Exact generation required for stop/release.
+         */
+        generation: string;
+        phase: "starting" | "running" | "completed" | "unauthorized" | "unknown" | "failed" | "rejected";
+        /**
+         * Executor assertion, not independent server verification.
+         */
+        outcome: "unknown" | "completed" | "unauthorized" | "failed" | "not-started";
+        /**
+         * Unix milliseconds.
+         */
+        updatedAt: number;
+        durationMs: number;
+    };
+    export type ForegroundSupport = {
+        /**
+         * Present on an unavailable cross-platform support result.
+         */
+        platform?: string;
+        /**
+         * Missing runtime backend or platform API restriction; not a permission denial.
+         */
+        implementation?: "missing" | "restricted";
+        /**
+         * Stable unavailable reason.
+         */
+        reason?: string;
+        /**
+         * Configured native backend; OS admission remains separate.
+         */
+        available: boolean;
+        /**
+         * Notification permission/channel policy permits an attempt; OS admission can still reject.
+         */
+        canStart: boolean;
+        registeredKinds: string[];
+        maximumDurationMs: number;
+        /**
+         * Retained journal entries, including terminal outcomes.
+         */
+        maximumTasks: number;
+        /**
+         * One, including a cancelled executor awaiting resource cleanup.
+         */
+        maximumConcurrentExecutors: number;
+        automaticRestart: false;
+        backgroundJavaScript: false;
+        /**
+         * Linux executes only while the application process lives.
+         */
+        executionScope?: "application-process";
+        /**
+         * False on Linux; a desktop process is not a boot service.
+         */
+        survivesProcessExit?: boolean;
+    };
+    export type ForegroundRequestOptions = {
+        /**
+         * Cancels the request, not an already admitted operation; query its durable ID after an uncertain reply.
+         */
+        signal?: AbortSignal;
+    };
+}
+
 declare module "oro:haptics" {
     /**
      * @typedef {object} HapticOptions
@@ -19980,6 +20311,9 @@ declare module "oro:launcher" {
      */
     /**
      * @typedef {object} LauncherStatus
+     * @property {string} [platform] Present on an unavailable cross-platform support result.
+     * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform contract restriction; not a permission denial.
+     * @property {string} [reason] Stable unavailable reason.
      * @property {boolean} available
      * @property {boolean} pinSupported
      * @property {number} maximumPerActivity Android's quota, shared with app-owned shortcuts.
@@ -20003,14 +20337,17 @@ declare module "oro:launcher" {
     export function getStatus(): Promise<LauncherStatus>;
     /**
      * Replaces this runtime's dynamic destinations, preserving unrelated app
-     * shortcuts. Removed targets are disabled, including pinned copies. At most
+     * shortcuts. Linux publishes a separate owned desktop entry containing actions;
+     * it does not overwrite the installed app entry or request pinning. Changed
+     * publications invalidate old routing generations, including copied entries.
+     * Removed Android targets are disabled, including pinned copies. At most
      * 16 entries and Android's per-activity quota. Must run from a visible window.
      * @param {LauncherDestination[]} destinations
      * @returns {Promise<LauncherPublicationResult>}
      */
     export function replace(destinations: LauncherDestination[]): Promise<LauncherPublicationResult>;
     /**
-     * Requests Android's user-controlled pin flow for an existing destination.
+     * Requests Android's user-controlled pin flow for an existing destination. Linux rejects ENOSYS.
      * Submission is not confirmation that the user pinned the shortcut.
      * @param {string} id
      * @returns {Promise<LauncherPinResult>}
@@ -20071,6 +20408,18 @@ declare module "oro:launcher" {
         receivedAt: number;
     };
     export type LauncherStatus = {
+        /**
+         * Present on an unavailable cross-platform support result.
+         */
+        platform?: string;
+        /**
+         * Missing runtime backend or platform contract restriction; not a permission denial.
+         */
+        implementation?: "missing" | "restricted";
+        /**
+         * Stable unavailable reason.
+         */
+        reason?: string;
         available: boolean;
         pinSupported: boolean;
         /**
@@ -20611,6 +20960,391 @@ declare module "oro:mcp" {
     import mcp from "oro:mcp/index";
 }
 
+declare module "oro:migration" {
+    /**
+     * Probe without prompting, creating keys or reading legacy values. Other platforms
+     * and older runtimes report unavailable; operational calls still reject ENOSYS.
+     * Android implements this backend. iOS/iPadOS, macOS, Linux and Windows return
+     * reason migration-backend-unimplemented; older Android SDKs return
+     * migration-protocol-unavailable. A configured backend can be unavailable due
+     * to disabled/malformed bundled definitions; inspect error before enabling UI.
+     * @returns {Promise<MigrationSupport>}
+     */
+    export function getSupport(): Promise<MigrationSupport>;
+    /**
+     * @param {ProtectedSource} options
+     * @returns {Promise<ProtectedSourceStatus>}
+     */
+    export function inspectProtected(options: ProtectedSource): Promise<ProtectedSourceStatus>;
+    /**
+     * Opens the bundled historical envelope with its original key, then rewraps to
+     * an authentication-bound runtime key. Each protected cryptographic operation
+     * uses its own system prompt. No plaintext is returned. The original source
+     * digest is rechecked before commit; retry/discovery recovers an already committed import.
+     * After explicit user recovery, a fresh recoveryRef rewraps the still-readable
+     * original into a new key/handle while preserving earlier imports. Reuse that
+     * recoveryRef to reconcile a lost reply. Missing original keys are never replaced.
+     * @param {ProtectedImportOptions} options
+     * @param {MigrationRequestOptions} [settings]
+     * @returns {Promise<ProtectedImport>}
+     */
+    export function importProtected(options: ProtectedImportOptions, settings?: MigrationRequestOptions): Promise<ProtectedImport>;
+    /**
+     * Unlock a migrated value for the owning private interactive form. This always
+     * uses the new key's per-operation prompt, never a cached authentication boolean.
+     * @param {ProtectedOpenOptions} options
+     * @param {MigrationRequestOptions} [settings]
+     * @returns {Promise<ProtectedValue>}
+     */
+    export function openProtected(options: ProtectedOpenOptions, settings?: MigrationRequestOptions): Promise<ProtectedValue>;
+    /**
+     * @param {ProtectedIdentity} options
+     * @returns {Promise<ProtectedImport[]>}
+     */
+    export function discoverProtected(options: ProtectedIdentity): Promise<ProtectedImport[]>;
+    /**
+     * Read only a bundled noninteractive source explicitly marked exposure:
+     * private-document. Requires native foreground consent and returns Base64 to
+     * that private document. Authentication-bound sources always reject this path.
+     * Never expose the result through logs, assistant tools or background handlers.
+     * @param {UnprotectedReadOptions} options
+     * @param {MigrationRequestOptions} [settings]
+     * @returns {Promise<UnprotectedValue>}
+     */
+    export function readUnprotected(options: UnprotectedReadOptions, settings?: MigrationRequestOptions): Promise<UnprotectedValue>;
+    /**
+     * Read bounded opaque references captured from an allowlisted historical
+     * Activity action. Primary window only. Every entry is untrusted: authorize
+     * its destination in the current account before navigating or performing work.
+     * @param {HistoricalEntryOptions} options
+     * @returns {Promise<HistoricalEntry[]>}
+     */
+    export function getHistoricalEntries(options: HistoricalEntryOptions): Promise<HistoricalEntry[]>;
+    /**
+     * Acknowledge an owned routing entry after application validation. This does
+     * not acknowledge a source alarm, remote operation or notification delivery.
+     * @param {HistoricalEntryId} options
+     * @returns {Promise<HistoricalEntryAcknowledgement>}
+     */
+    export function acknowledgeHistoricalEntry(options: HistoricalEntryId): Promise<HistoricalEntryAcknowledgement>;
+    /**
+     * @param {HistoricalComponentSource} options
+     * @returns {Promise<HistoricalSourceStatus>}
+     */
+    export function inspectHandover(options: HistoricalComponentSource): Promise<HistoricalSourceStatus>;
+    /**
+     * Prepare an exact source/replacement binding after native consent. Pass an
+     * empty expectedGeneration only for an absent mapping. Bundled identity fields
+     * must match the already-authorized workflow binding; no server authority is inferred.
+     * @param {HandoverOptions} options
+     * @param {MigrationRequestOptions} [settings]
+     * @returns {Promise<HandoverStatus>}
+     */
+    export function prepareHandover(options: HandoverOptions, settings?: MigrationRequestOptions): Promise<HandoverStatus>;
+    /**
+     * Rediscover exact owned generations after an interrupted reply, including Stop.
+     * An existing historical reference cannot be rebound to another account/authority.
+     * @param {HandoverIdentity} options
+     * @returns {Promise<DiscoveredHandover[]>}
+     */
+    export function discoverHandovers(options: HandoverIdentity): Promise<DiscoveredHandover[]>;
+    /**
+     * Activate only the prepared generation after rechecking source and replacement.
+     * The original component names, job IDs/schedules and encrypted receipts remain.
+     * This neither unregisters old endpoints nor claims remote migration completion.
+     * @param {HandoverId} options
+     * @returns {Promise<HandoverStatus>}
+     */
+    export function activateHandover(options: HandoverId): Promise<HandoverStatus>;
+    /**
+     * @param {HandoverId} options
+     * @returns {Promise<HandoverStatus>}
+     */
+    export function getHandoverStatus(options: HandoverId): Promise<HandoverStatus>;
+    /**
+     * Fence this generation and cancel its admitted reads. Poll drained before
+     * treating owned cleanup as complete. Already-submitted effects stay uncertain.
+     * @param {HandoverId} options
+     * @returns {Promise<HandoverStatus>}
+     */
+    export function stopHandover(options: HandoverId): Promise<HandoverStatus>;
+    /**
+     * @param {HandoverId} options
+     * @returns {Promise<RetainedReceipt[]>}
+     */
+    export function getRetainedReceipts(options: HandoverId): Promise<RetainedReceipt[]>;
+    /**
+     * Record an application-verified result without claiming runtime verification of
+     * its server. Repeated identical resolutions are idempotent; changed ones conflict.
+     * @param {ReceiptResolution} options
+     * @returns {Promise<ReceiptResolutionResult>}
+     */
+    export function resolveRetainedReceipt(options: ReceiptResolution): Promise<ReceiptResolutionResult>;
+    /**
+     * Release only an explicitly resolved receipt. Unknown receipts never expire or
+     * disappear automatically; at capacity new admission returns ENOSPC.
+     * @param {RetainedReceiptId} options
+     * @returns {Promise<ReceiptReleaseResult>}
+     */
+    export function releaseRetainedReceipt(options: RetainedReceiptId): Promise<ReceiptReleaseResult>;
+    namespace _default {
+        export { getSupport };
+        export { inspectProtected };
+        export { importProtected };
+        export { openProtected };
+        export { discoverProtected };
+        export { readUnprotected };
+        export { getHistoricalEntries };
+        export { acknowledgeHistoricalEntry };
+        export { inspectHandover };
+        export { prepareHandover };
+        export { discoverHandovers };
+        export { activateHandover };
+        export { getHandoverStatus };
+        export { stopHandover };
+        export { getRetainedReceipts };
+        export { resolveRetainedReceipt };
+        export { releaseRetainedReceipt };
+    }
+    export default _default;
+    export type MigrationRequestOptions = {
+        /**
+         * Cancels owned prompts/work and discards late document replies.
+         */
+        signal?: AbortSignal;
+    };
+    export type MigrationSupport = {
+        available: boolean;
+        /**
+         * Current runtime platform.
+         */
+        platform: string;
+        /**
+         * Backend inventory, not device qualification.
+         */
+        implementation: "implemented" | "missing";
+        /**
+         * Native backend name, empty when missing.
+         */
+        backend: string;
+        /**
+         * Fixed unavailable reason, empty when available.
+         */
+        reason: string;
+        /**
+         * protected-import-v1 on the configured Android backend.
+         */
+        protectedImport?: string;
+        /**
+         * retained-components-v1 on the configured Android backend.
+         */
+        retainedComponents?: string;
+        /**
+         * prefer-native-records-v1 when bounded source selection is implemented (Android only).
+         */
+        sourceSelection?: string;
+        /**
+         * android-json-pairs-sha256-v1 when aggregate ciphertext validation is implemented (Android only).
+         */
+        legacyProvenance?: string;
+        /**
+         * False for a bridge build retaining app-owned component classes and manifest entries.
+         */
+        generatedAdapters?: boolean;
+        /**
+         * Always false.
+         */
+        nativeIntegrationRequired: boolean;
+        /**
+         * Bundled protected source IDs; no aliases or saved values.
+         */
+        profiles: string[];
+        /**
+         * Bundled retained component IDs.
+         */
+        components: string[];
+        /**
+         * 16; encrypted bodies are committed in bounded native chunks.
+         */
+        maximumImports?: number;
+        /**
+         * 48, including unresolved historical input.
+         */
+        maximumReceipts?: number;
+        /**
+         * 15 untrusted routing entries.
+         */
+        maximumEntries?: number;
+        /**
+         * 262144 aggregate decoded native-state bytes.
+         */
+        maximumStoredBytes?: number;
+        /**
+         * Fixed unavailable/configuration code.
+         */
+        error?: string;
+    };
+    export type ProtectedSource = {
+        /**
+         * Bundled allowlist entry.
+         */
+        profile: string;
+        /**
+         * Bounded historical record reference, not a key or alias selector.
+         */
+        sourceRef: string;
+    };
+    export type ProtectedSourceStatus = {
+        profile: string;
+        /**
+         * Original ciphertext digest, or an opaque keyed source version for native records.
+         */
+        sourceSha256: string;
+        /**
+         * Always true.
+         */
+        originalsPreserved: boolean;
+    };
+    export type ProtectedIdentity = ProtectedSource & {
+        authorityRef: string;
+        accountRef: string;
+        targetRef: string;
+    };
+    export type ProtectedImportOptions = ProtectedIdentity & {
+        sourceSha256: string;
+        userInitiated: boolean;
+        recoveryRef?: string;
+    };
+    export type ProtectedImport = {
+        /**
+         * Opaque document-origin and identity-bound rewrapped record.
+         */
+        handle: string;
+        profile: string;
+        sourceSha256: string;
+        /**
+         * Always false for import/discovery.
+         */
+        valueExported: boolean;
+        /**
+         * Always true; there is no automatic deletion of old keys/ciphertext.
+         */
+        originalsPreserved: boolean;
+    };
+    export type ProtectedOpenOptions = {
+        handle: string;
+        /**
+         * Must follow explicit private interactive user action.
+         */
+        userInitiated: boolean;
+    };
+    export type ProtectedValue = {
+        /**
+         * Base64 bytes for the original requesting private form only. Never log or expose through assistant tooling.
+         */
+        value: string;
+    };
+    export type HistoricalComponentSource = {
+        /**
+         * Bundled retained component ID.
+         */
+        component: string;
+        /**
+         * Historical reference in that component's fixed source family.
+         */
+        sourceRef: string;
+    };
+    export type HistoricalSourceStatus = {
+        sourceSha256: string;
+        /**
+         * Bundled generation field, or envelope digest when no old generation field exists.
+         */
+        sourceGeneration: string;
+    };
+    export type HandoverOptions = HistoricalComponentSource & HistoricalSourceStatus & {
+        expectedGeneration: string;
+        bindingId: string;
+        bindingGeneration: string;
+        authorityRef: string;
+        accountRef: string;
+        targetRef: string;
+        userInitiated: boolean;
+    };
+    export type HandoverId = {
+        id: string;
+        /**
+         * Exact native handover generation.
+         */
+        generation: string;
+    };
+    export type HandoverStatus = HandoverId & HistoricalSourceStatus & {
+        phase: "prepared" | "active" | "stopped";
+        originalsPreserved: boolean;
+        remoteRevocationConfirmed: boolean;
+        drained: boolean;
+    };
+    export type HandoverIdentity = {
+        authorityRef: string;
+        accountRef: string;
+        targetRef: string;
+    };
+    export type DiscoveredHandover = HandoverStatus & HistoricalComponentSource;
+    export type RetainedReceipt = {
+        receiptId: string;
+        sourceGeneration: string;
+        kind: "receiver" | "job";
+        /**
+         * A local read does not confirm the old delivery, mutation or server acknowledgement.
+         */
+        outcome: "unknown" | "read-completed";
+        receivedAt: number;
+    };
+    export type RetainedReceiptId = HandoverId & {
+        receiptId: string;
+    };
+    export type ReceiptResolution = RetainedReceiptId & {
+        outcome: "applied" | "not-applied";
+        receiptSha256: string;
+        userInitiated: boolean;
+    };
+    export type ReceiptResolutionResult = {
+        resolvedLocally: boolean;
+        /**
+         * Always false. The application must verify its authenticated server receipt.
+         */
+        remoteOutcomeVerifiedByRuntime: boolean;
+    };
+    export type ReceiptReleaseResult = {
+        released: boolean;
+    };
+    export type UnprotectedReadOptions = ProtectedSource & {
+        userInitiated: boolean;
+    };
+    export type UnprotectedValue = ProtectedValue & {
+        originalsPreserved: boolean;
+    };
+    export type HistoricalEntryOptions = {
+        /**
+         * Bundled Activity alias profile.
+         */
+        component: string;
+    };
+    export type HistoricalEntryId = HistoricalEntryOptions & {
+        entryId: string;
+    };
+    export type HistoricalEntry = HistoricalEntryId & {
+        action: string;
+        references: {
+            [x: string]: string;
+        };
+        receivedAt: number;
+        untrusted: boolean;
+    };
+    export type HistoricalEntryAcknowledgement = {
+        acknowledged: boolean;
+    };
+}
+
 declare module "oro:module" {
     export const builtinModules: any;
     export default Module;
@@ -20624,36 +21358,6 @@ declare module "oro:module" {
     import builtins from "oro:commonjs/builtins";
     import { isBuiltin } from "oro:commonjs/builtins";
     export { createRequire, Module, builtins, isBuiltin };
-}
-
-declare module "oro:native" {
-    /**
-     * @typedef {object} NativeRequestOptions
-     * @property {AbortSignal} [signal] Abort native work and discard a late result.
-     */
-    /**
-     * Invokes a narrowly named native operation with a JSON object payload. Requests
-     * require a foreground interactive document, expire after 90 seconds and share
-     * native capacity limits. Results are limited to 512 KiB. The extension must
-     * implement its own feature authorization; trusted origin is not server IAM.
-     * Unregistered extensions and other platforms reject with ENOSYS.
-     * @param {string} extension Configured extension name.
-     * @param {string} action Operation name.
-     * @param {object} [payload]
-     * @param {NativeRequestOptions} [options]
-     * @returns {Promise<any>}
-     */
-    export function request(extension: string, action: string, payload?: object, options?: NativeRequestOptions): Promise<any>;
-    namespace _default {
-        export { request };
-    }
-    export default _default;
-    export type NativeRequestOptions = {
-        /**
-         * Abort native work and discard a late result.
-         */
-        signal?: AbortSignal;
-    };
 }
 
 declare module "oro:navigation/navigation" {
@@ -20914,16 +21618,19 @@ declare module "oro:net" {
 declare module "oro:network-status" {
     /**
      * @typedef {object} NetworkStatus
-     * @property {boolean} available Whether Android permits reading network state.
+     * @property {string} [platform] Linux reports its platform explicitly.
+     * @property {boolean} available Whether the OS permits reading network state.
      * @property {boolean} connected Whether a default network exists.
-     * @property {boolean} validated Whether Android validated Internet connectivity.
+     * @property {boolean} validated Whether the OS monitor reports full Internet connectivity.
      * @property {boolean} captivePortal Whether Android detected a captive portal.
      * @property {boolean} metered Whether the current path is metered.
      * @property {string[]} transports Reported wifi, cellular, ethernet, bluetooth, or vpn transports.
      * @property {'online'|'offline'} name Online means the path is validated.
+     * @property {boolean} [transportDetailsAvailable] False on Linux; transports is empty rather than inferred.
+     * @property {boolean} [serverReachabilityKnown] False on Linux. Application servers require their own probes.
      */
     /**
-     * Reads Android's current default path without making a network request.
+     * Reads the OS monitor's current default path without making a network request.
      * Other platforms and disabled monitoring reject with `ENOSYS`.
      * @returns {Promise<NetworkStatus>}
      */
@@ -20943,7 +21650,11 @@ declare module "oro:network-status" {
     export default _default;
     export type NetworkStatus = {
         /**
-         * Whether Android permits reading network state.
+         * Linux reports its platform explicitly.
+         */
+        platform?: string;
+        /**
+         * Whether the OS permits reading network state.
          */
         available: boolean;
         /**
@@ -20951,7 +21662,7 @@ declare module "oro:network-status" {
          */
         connected: boolean;
         /**
-         * Whether Android validated Internet connectivity.
+         * Whether the OS monitor reports full Internet connectivity.
          */
         validated: boolean;
         /**
@@ -20970,6 +21681,14 @@ declare module "oro:network-status" {
          * Online means the path is validated.
          */
         name: "online" | "offline";
+        /**
+         * False on Linux; transports is empty rather than inferred.
+         */
+        transportDetailsAvailable?: boolean;
+        /**
+         * False on Linux. Application servers require their own probes.
+         */
+        serverReachabilityKnown?: boolean;
     };
 }
 
@@ -21116,9 +21835,14 @@ declare module "oro:notification" {
      * @property {string} id
      * @property {boolean} submitted OS submission succeeded.
      * @property {boolean} presentationObserved False; submission is not proof of display, sound or user attention.
+     * @property {string} [visibilityPolicy] Linux uses publicVersion on every surface when supplied; otherwise all supplied content must be public.
+     * @property {boolean} [groupingSupported] False on Linux; Android grouping policies reject there.
      */
     /**
-     * Registers at most 32 immutable named Android channels. Reusing an ID with
+     * Registers at most 32 immutable named policies. Android uses OS channels;
+     * Linux stores application policy without changing desktop user preferences.
+     * Linux supports default/none sound, no vibration, and no badge guarantee.
+     * Reusing an ID with
      * changed defaults rejects EEXIST; choose a new versioned ID instead. Existing
      * user changes are preserved. Requires notification capability; does not prompt.
      * @param {AndroidNotificationChannel[]} channels
@@ -21129,7 +21853,11 @@ declare module "oro:notification" {
      * Submits an Android notification with channel/group/public-version policy.
      * Reads and acknowledgement use getResponses()/acknowledgeResponse(). This
      * function does not establish account authority or deduplicate server events.
-     * Other platforms reject ENOSYS. Compiled native executors can use the same
+     * Linux uses freedesktop notifications in the GUI or configured native host. It cannot enforce
+     * lock-screen visibility: publicVersion replaces all content on every surface;
+     * otherwise supply only public content. Group summaries/group alert policies
+     * reject ENOSYS. Other unimplemented platforms reject ENOSYS.
+     * Compiled Android executors can use the same
      * NativeNotifications.submit(Context, JSONObject) implementation without a WebView.
      * @param {AndroidNotificationOptions} options
      * @returns {Promise<AndroidNotificationSubmission>}
@@ -21144,12 +21872,50 @@ declare module "oro:notification" {
      * notifications are allowed. It does not create a dismissal receipt, revoke
      * server state or acknowledge existing responses. Compiled receivers can use
      * NativeNotifications.cancel(Context, id, tag) without an Activity or WebView.
-     * Other platforms reject with ENOSYS.
+     * Linux also supports exact ID/tag cancellation. Other backends may reject ENOSYS.
      * @param {string} id
      * @param {AndroidNotificationCancelOptions} [options]
      * @returns {Promise<void>}
      */
     export function cancel(id: string, options?: AndroidNotificationCancelOptions): Promise<void>;
+    /**
+     * @typedef {object} AndroidNotificationStatusOptions
+     * @property {string[]} [channels] At most 32 exact channel IDs; no channel is created.
+     */
+    /**
+     * @typedef {AndroidNotificationChannelStatus & { exists: boolean }} AndroidExistingNotificationChannel
+     */
+    /**
+     * @typedef {object} AndroidNotificationStatus
+     * @property {boolean} enabled Current OS package notification setting.
+     * @property {AndroidExistingNotificationChannel[]} channels Current requested channel settings.
+     */
+    /**
+     * @typedef {object} AndroidActiveNotification
+     * @property {string} id Opaque application ID.
+     * @property {string} tag Exact tag used for cancellation.
+     * @property {string} channel
+     * @property {string} group
+     * @property {boolean} summary
+     * @property {boolean} private Private lock-screen visibility was requested.
+     * @property {boolean} openAction A content PendingIntent exists; this is not authorization to navigate.
+     */
+    /**
+     * Read Android package/channel settings without prompting or changing channels.
+     * Other platform metadata backends may reject ENOSYS. An enabled setting is
+     * not proof that a notification was displayed or heard.
+     * @param {AndroidNotificationStatusOptions} [options]
+     * @returns {Promise<AndroidNotificationStatus>}
+     */
+    export function getStatus(options?: AndroidNotificationStatusOptions): Promise<AndroidNotificationStatus>;
+    /**
+     * Read bounded Android OS metadata for this application's runtime notifications.
+     * Content, private target references and legacy non-runtime tags are excluded.
+     * Existing private correlation and historical compatibility inspection remain
+     * native-only SDK operations. Other metadata backends may reject ENOSYS.
+     * @returns {Promise<AndroidActiveNotification[]>}
+     */
+    export function getActive(): Promise<AndroidActiveNotification[]>;
     /**
      * @typedef {object} NotificationResponseReceipt
      * @property {string} receiptId Opaque identity used to acknowledge this receipt.
@@ -21158,17 +21924,23 @@ declare module "oro:notification" {
      * @property {number} receivedAt Unix timestamp in milliseconds.
      */
     /**
-     * Reads Android notification responses retained across process restarts. Call
+     * Reads Android or Linux notification responses retained across process restarts. Call
      * after restoring authorization, resolve IDs against authorized application
      * state, then acknowledge handled or obsolete receipts. Reading does not remove
      * receipts. At most 64 responses are retained for seven days. Notification
-     * content and arbitrary `data` are not persisted. Other platforms reject with
+     * content and arbitrary `data` are not persisted. Linux actions require the
+     * notification-owning process to remain alive; saved receipts survive its restart.
+     * A native session host can receive actions while the GUI is closed and launch
+     * it with an opaque receipt hint. A `notificationresponse` hint with
+     * `requiresRefresh: true` means query these retained receipts after restoring
+     * authorization; it does not carry the complete response or authorize opening.
+     * Other unimplemented platforms reject with
      * `ENOSYS`. A receipt does not establish authorization or verified presentation.
      * @returns {Promise<NotificationResponseReceipt[]>}
      */
     export function getResponses(): Promise<NotificationResponseReceipt[]>;
     /**
-     * Removes an Android response after application reconciliation. Repeated
+     * Removes an Android or Linux response after application reconciliation. Repeated
      * acknowledgements are allowed. Other platforms reject with `ENOSYS`.
      * @param {string} receiptId Opaque identity returned by `getResponses()`.
      * @returns {Promise<void>}
@@ -21185,10 +21957,12 @@ declare module "oro:notification" {
      * @property {boolean} vibration Whether channel vibration is enabled.
      * @property {boolean} canSubmit Current permission/channel state permits submission.
      * @property {'submission-only'} deliveryBoundary Submission never proves presentation or delivery.
-     * @property {false} pushAvailable No unattended push transport is configured by this runtime.
+     * @property {boolean} pushAvailable Configured native transport, not a trusted subscription or guaranteed delivery.
+     * @property {boolean} [systemChannel] False on Linux; policies are application-local.
+     * @property {boolean} [systemPolicyKnown] False on Linux; DND, audio and presentation decisions remain desktop-owned.
      */
     /**
-     * Reads Android application/channel policy without asking for consent. Refresh
+     * Reads Android application/channel or Linux application/transport policy without asking for consent. Refresh
      * after resume because the user can change it in Settings. Other platforms
      * reject with `ENOSYS`; a true `canSubmit` does not establish server authorization.
      * @param {string} [channel='default'] Native channel ID, or the application's default.
@@ -21714,12 +22488,60 @@ declare module "oro:notification" {
          * False; submission is not proof of display, sound or user attention.
          */
         presentationObserved: boolean;
+        /**
+         * Linux uses publicVersion on every surface when supplied; otherwise all supplied content must be public.
+         */
+        visibilityPolicy?: string;
+        /**
+         * False on Linux; Android grouping policies reject there.
+         */
+        groupingSupported?: boolean;
     };
     export type AndroidNotificationCancelOptions = {
         /**
          * Exact tag used for submission.
          */
         tag?: string;
+    };
+    export type AndroidNotificationStatusOptions = {
+        /**
+         * At most 32 exact channel IDs; no channel is created.
+         */
+        channels?: string[];
+    };
+    export type AndroidExistingNotificationChannel = AndroidNotificationChannelStatus & {
+        exists: boolean;
+    };
+    export type AndroidNotificationStatus = {
+        /**
+         * Current OS package notification setting.
+         */
+        enabled: boolean;
+        /**
+         * Current requested channel settings.
+         */
+        channels: AndroidExistingNotificationChannel[];
+    };
+    export type AndroidActiveNotification = {
+        /**
+         * Opaque application ID.
+         */
+        id: string;
+        /**
+         * Exact tag used for cancellation.
+         */
+        tag: string;
+        channel: string;
+        group: string;
+        summary: boolean;
+        /**
+         * Private lock-screen visibility was requested.
+         */
+        private: boolean;
+        /**
+         * A content PendingIntent exists; this is not authorization to navigate.
+         */
+        openAction: boolean;
     };
     export type NotificationResponseReceipt = {
         /**
@@ -21774,12 +22596,127 @@ declare module "oro:notification" {
          */
         deliveryBoundary: "submission-only";
         /**
-         * No unattended push transport is configured by this runtime.
+         * Configured native transport, not a trusted subscription or guaranteed delivery.
          */
-        pushAvailable: false;
+        pushAvailable: boolean;
+        /**
+         * False on Linux; policies are application-local.
+         */
+        systemChannel?: boolean;
+        /**
+         * False on Linux; DND, audio and presentation decisions remain desktop-owned.
+         */
+        systemPolicyKnown?: boolean;
     };
     import { Enumeration } from "oro:enumeration";
     import URL from "oro:url";
+}
+
+declare module "oro:platform" {
+    /**
+     * @typedef {object} PlatformRequestOptions
+     * @property {AbortSignal} [signal] Abort native work and discard a late result.
+     */
+    /**
+     * Invokes a narrowly named native operation with a JSON object payload. Requests
+     * require a foreground interactive document, expire after 90 seconds and share
+     * native capacity limits. Results are limited to 512 KiB. The extension must
+     * implement its own feature authorization; trusted origin is not server IAM.
+     * Unregistered extensions and unimplemented platforms reject with ENOSYS.
+     * @param {string} extension Configured extension name.
+     * @param {string} action Operation name.
+     * @param {object} [payload]
+     * @param {PlatformRequestOptions} [options]
+     * @returns {Promise<any>}
+     */
+    export function request(extension: string, action: string, payload?: object, options?: PlatformRequestOptions): Promise<any>;
+    /**
+     * @typedef {'authentication'|'credentials'|'foreground'|'foreground.continuous'|'deferred'|'push'|'launcher'|'extension'|'back'|'gestures'|'notifications'|'records'|'coordination'|'secure-storage'|'background'|'workflows'} PlatformFeature
+     */
+    /**
+     * @typedef {object} PlatformFeatureSupport
+     * @property {number} schema Descriptor schema version, currently 1.
+     * @property {'android'|'ios'|'macos'|'linux'|'windows'|'unknown'} platform iPadOS uses the ios backend.
+     * @property {PlatformFeature} feature
+     * @property {'implemented'|'missing'|'restricted'} implementation Missing is unimplemented runtime work; restricted is a platform API limitation.
+     * @property {string} backend Native implementation family, empty when absent.
+     * @property {string} reason Stable unavailable reason, empty for an implemented backend.
+     * @property {boolean} requiresRuntimeCheck An implemented backend still needs the feature's runtime support, permission, hardware and configuration checks.
+     */
+    /**
+     * @typedef {object} PlatformCapabilities
+     * @property {number} schema Currently 1.
+     * @property {string} platform
+     * @property {Object<string, PlatformFeatureSupport>} features Inventory of the new native operation interfaces. This does not describe every existing Oro API.
+     */
+    /**
+     * Reads the compiled backend inventory on every platform without prompting,
+     * loading extensions or accessing saved data. An implemented backend is not
+     * proof of hardware, OS admission, current permission or device qualification.
+     * @returns {Promise<PlatformCapabilities>}
+     */
+    export function getCapabilities(): Promise<PlatformCapabilities>;
+    /**
+     * Reads one compiled native feature descriptor without prompting. Query the
+     * feature's own support/status API before starting an operation. Missing and
+     * OS-restricted features are separate results; operational calls still reject.
+     * @param {PlatformFeature} feature
+     * @returns {Promise<PlatformFeatureSupport>}
+     */
+    export function getSupport(feature: PlatformFeature): Promise<PlatformFeatureSupport>;
+    namespace _default {
+        export { request };
+        export { getCapabilities };
+        export { getSupport };
+    }
+    export default _default;
+    export type PlatformRequestOptions = {
+        /**
+         * Abort native work and discard a late result.
+         */
+        signal?: AbortSignal;
+    };
+    export type PlatformFeature = "authentication" | "credentials" | "foreground" | "foreground.continuous" | "deferred" | "push" | "launcher" | "extension" | "back" | "gestures" | "notifications" | "records" | "coordination" | "secure-storage" | "background" | "workflows";
+    export type PlatformFeatureSupport = {
+        /**
+         * Descriptor schema version, currently 1.
+         */
+        schema: number;
+        /**
+         * iPadOS uses the ios backend.
+         */
+        platform: "android" | "ios" | "macos" | "linux" | "windows" | "unknown";
+        feature: PlatformFeature;
+        /**
+         * Missing is unimplemented runtime work; restricted is a platform API limitation.
+         */
+        implementation: "implemented" | "missing" | "restricted";
+        /**
+         * Native implementation family, empty when absent.
+         */
+        backend: string;
+        /**
+         * Stable unavailable reason, empty for an implemented backend.
+         */
+        reason: string;
+        /**
+         * An implemented backend still needs the feature's runtime support, permission, hardware and configuration checks.
+         */
+        requiresRuntimeCheck: boolean;
+    };
+    export type PlatformCapabilities = {
+        /**
+         * Currently 1.
+         */
+        schema: number;
+        platform: string;
+        /**
+         * Inventory of the new native operation interfaces. This does not describe every existing Oro API.
+         */
+        features: {
+            [x: string]: PlatformFeatureSupport;
+        };
+    };
 }
 
 declare module "oro:protocol-handlers" {
@@ -21806,15 +22743,21 @@ declare module "oro:protocol-handlers" {
 declare module "oro:push" {
     /**
      * @typedef {object} PushSupport
+     * @property {string} [platform] Present on an unavailable cross-platform support result.
+     * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform API restriction; not a permission denial.
+     * @property {string} [reason] Stable unavailable reason.
      * @property {boolean} available Whether the compiled transport is enabled.
-     * @property {string} provider unifiedpush.
-     * @property {string} selectedDistributor Selected Android package, or an empty string.
+     * @property {string|null} provider unifiedpush, or null when the backend is unavailable.
+     * @property {string} selectedDistributor Selected Android package or Linux D-Bus service, or an empty string.
      * @property {string[]} registeredKinds Compiled native handler names.
      * @property {number} maximumRegistrations 16.
      * @property {number} maximumPendingMessages 64 across all registrations.
      * @property {number} maximumMessageBytes 4096 encrypted bytes.
      * @property {boolean} backgroundJavaScript False.
      * @property {boolean} survivesForceStop False.
+     * @property {boolean} [coldActivationConfigured] False for the Linux application-process connector.
+     * @property {string[]} [availableDistributors] Discovered Linux distributor service names.
+     * @property {boolean} [serverEnrollmentRequired] True on Linux; transport registration does not enroll a trusted server.
      */
     /**
      * @typedef {object} PushRegistrationOptions
@@ -21824,7 +22767,7 @@ declare module "oro:push" {
      * @property {string} accountRef Opaque account identity.
      * @property {string} targetRef Opaque native application state identity.
      * @property {string} applicationServerKey Base64url uncompressed P-256 VAPID public key.
-     * @property {string} [description] Short public registration label, at most 128 UTF-8 bytes.
+     * @property {string} [description] Short public label: at most 128 UTF-8 bytes on Android or 100 on Linux.
      */
     /**
      * @typedef {object} PushEnrollmentKeys
@@ -21837,7 +22780,7 @@ declare module "oro:push" {
      * @property {string} kind
      * @property {string} phase registering, registered, registration-failed, unregistered or temporarily-unavailable.
      * @property {string} endpoint HTTPS push endpoint, empty until registration succeeds.
-     * @property {string} distributor Selected Android package.
+     * @property {string} distributor Selected Android package or Linux D-Bus service.
      * @property {string} applicationServerKey
      * @property {string} generation Endpoint generation used to acknowledge server enrollment.
      * @property {boolean} enrollmentPending Whether this endpoint still needs application server enrollment.
@@ -21852,13 +22795,26 @@ declare module "oro:push" {
     /** @returns {Promise<PushSupport>} */
     export function getSupport(): Promise<PushSupport>;
     /**
+     * @typedef {object} DistributorSelectionOptions
+     * @property {string} [distributor] Linux D-Bus distributor name. Omit on Android to open its system chooser.
+     */
+    /**
+     * Lists Linux UnifiedPush distributor service names, including activatable services.
+     * Other platforms reject with ENOSYS. This does not select or register a provider.
+     * @returns {Promise<string[]>}
+     */
+    export function getDistributors(): Promise<string[]>;
+    /**
      * Opens the system distributor chooser. Existing registrations must first be
      * unregistered. Returns after launch; listen for pushchange and reread support
      * when the activity resumes. Selection is bound to the originating document and
      * expires after 90 seconds. Cancellation leaves the previous selection intact.
+     * On Linux, pass a name from getDistributors(), configure push.distributor, or
+     * select the only installed distributor. Multiple unselected providers reject EAGAIN.
+     * @param {DistributorSelectionOptions} [options]
      * @returns {Promise<PushSubmission>}
      */
-    export function selectDistributor(): Promise<PushSubmission>;
+    export function selectDistributor(options?: DistributorSelectionOptions): Promise<PushSubmission>;
     /**
      * Begins or renews transport registration. An endpoint arrives asynchronously;
      * read getRegistration after foreground resume or pushchange. Identical IDs and
@@ -21902,6 +22858,7 @@ declare module "oro:push" {
     export function retryPending(): Promise<PushSubmission>;
     namespace _default {
         export { getSupport };
+        export { getDistributors };
         export { selectDistributor };
         export { register };
         export { getRegistration };
@@ -21912,15 +22869,27 @@ declare module "oro:push" {
     export default _default;
     export type PushSupport = {
         /**
+         * Present on an unavailable cross-platform support result.
+         */
+        platform?: string;
+        /**
+         * Missing runtime backend or platform API restriction; not a permission denial.
+         */
+        implementation?: "missing" | "restricted";
+        /**
+         * Stable unavailable reason.
+         */
+        reason?: string;
+        /**
          * Whether the compiled transport is enabled.
          */
         available: boolean;
         /**
-         * unifiedpush.
+         * unifiedpush, or null when the backend is unavailable.
          */
-        provider: string;
+        provider: string | null;
         /**
-         * Selected Android package, or an empty string.
+         * Selected Android package or Linux D-Bus service, or an empty string.
          */
         selectedDistributor: string;
         /**
@@ -21947,6 +22916,18 @@ declare module "oro:push" {
          * False.
          */
         survivesForceStop: boolean;
+        /**
+         * False for the Linux application-process connector.
+         */
+        coldActivationConfigured?: boolean;
+        /**
+         * Discovered Linux distributor service names.
+         */
+        availableDistributors?: string[];
+        /**
+         * True on Linux; transport registration does not enroll a trusted server.
+         */
+        serverEnrollmentRequired?: boolean;
     };
     export type PushRegistrationOptions = {
         /**
@@ -21974,7 +22955,7 @@ declare module "oro:push" {
          */
         applicationServerKey: string;
         /**
-         * Short public registration label, at most 128 UTF-8 bytes.
+         * Short public label: at most 128 UTF-8 bytes on Android or 100 on Linux.
          */
         description?: string;
     };
@@ -22000,7 +22981,7 @@ declare module "oro:push" {
          */
         endpoint: string;
         /**
-         * Selected Android package.
+         * Selected Android package or Linux D-Bus service.
          */
         distributor: string;
         applicationServerKey: string;
@@ -22030,6 +23011,12 @@ declare module "oro:push" {
          * Native processing or chooser launch was submitted, not completed.
          */
         submitted: boolean;
+    };
+    export type DistributorSelectionOptions = {
+        /**
+         * Linux D-Bus distributor name. Omit on Android to open its system chooser.
+         */
+        distributor?: string;
     };
 }
 
@@ -23343,6 +24330,986 @@ declare module "oro:worker" {
     export { SharedWorker, ServiceWorker, Worker };
 }
 
+declare module "oro:foreground/continuous" {
+    /**
+     * Reports configuration, registered executors and current notification policy.
+     * Missing or platform-restricted backends return unavailable status; operational calls still reject with ENOSYS.
+     * @returns {Promise<ContinuousSupport>}
+     */
+    export function getSupport(): Promise<ContinuousSupport>;
+    /**
+     * Starts from the current foreground document after an explicit user action.
+     * Returns durable admission, not completion. Navigation or an aborted/lost reply
+     * can race admission: inspect the ID before another attempt. The admitted native
+     * operation survives Home/navigation and has its own public Stop notification.
+     * Removing the Android app task keeps monitoring active. Linux uses a live application process and an
+     * action-capable desktop notification server; closing that process ends work.
+     * Stop or process loss records uncertainty. Reopen/reboot never restarts work;
+     * a new explicit start is required.
+     * @param {ContinuousOptions} options
+     * @param {ContinuousRequestOptions} [requestOptions]
+     * @returns {Promise<ContinuousStatus>}
+     */
+    export function start(options: ContinuousOptions, requestOptions?: ContinuousRequestOptions): Promise<ContinuousStatus>;
+    /**
+     * Reads the retained status without restarting work.
+     * @param {string} id
+     * @returns {Promise<ContinuousStatus>}
+     */
+    export function getStatus(id: string): Promise<ContinuousStatus>;
+    /**
+     * Lists at most sixteen retained, redacted monitoring statuses.
+     * @returns {Promise<ContinuousStatus[]>}
+     */
+    export function list(): Promise<ContinuousStatus[]>;
+    /**
+     * Requests stop for one exact generation. An uncertain remote outcome stays
+     * unknown. Cancellation does not undo an already completed remote operation.
+     * @param {string} id
+     * @param {string} expectedGeneration
+     * @returns {Promise<ContinuousStatus>}
+     */
+    export function stop(id: string, expectedGeneration: string): Promise<ContinuousStatus>;
+    /**
+     * Releases a terminal journal entry after app reconciliation. Resource cleanup
+     * must finish before the operation ID can be released or a new executor started.
+     * @param {string} id
+     * @param {string} expectedGeneration
+     * @returns {Promise<void>}
+     */
+    export function release(id: string, expectedGeneration: string): Promise<void>;
+    namespace _default {
+        export { getSupport };
+        export { start };
+        export { getStatus };
+        export { list };
+        export { stop };
+        export { release };
+    }
+    export default _default;
+    export type ContinuousOptions = {
+        /**
+         * Opaque operation ID; retained until explicitly released.
+         */
+        id: string;
+        /**
+         * Registered compiled native executor.
+         */
+        kind: string;
+        /**
+         * Opaque saved authority reference.
+         */
+        authorityRef: string;
+        /**
+         * Opaque saved account reference.
+         */
+        accountRef: string;
+        /**
+         * Opaque saved target reference.
+         */
+        targetRef: string;
+        /**
+         * Opaque compiled operation reference.
+         */
+        operationRef: string;
+        /**
+         * Assert that this call follows an explicit user action.
+         */
+        userInitiated: true;
+    };
+    export type ContinuousStatus = {
+        id: string;
+        kind: string;
+        /**
+         * Exact generation required for stop/release.
+         */
+        generation: string;
+        phase: "starting" | "running" | "completed" | "unauthorized" | "unknown" | "failed" | "rejected";
+        /**
+         * Executor assertion, not independent server verification.
+         */
+        outcome: "unknown" | "completed" | "unauthorized" | "failed" | "not-started";
+        /**
+         * Unix milliseconds.
+         */
+        updatedAt: number;
+    };
+    export type ContinuousSupport = {
+        /**
+         * Present on an unavailable cross-platform support result.
+         */
+        platform?: string;
+        /**
+         * Missing runtime backend or platform API restriction; not a permission denial.
+         */
+        implementation?: "missing" | "restricted";
+        /**
+         * Stable unavailable reason.
+         */
+        reason?: string;
+        /**
+         * Configured native backend; OS admission remains separate.
+         */
+        available: boolean;
+        /**
+         * Notification permission/channel policy permits an attempt; OS admission can still reject.
+         */
+        canStart: boolean;
+        registeredKinds: string[];
+        /**
+         * No runtime duration cap; the OS can stop the process.
+         */
+        maximumDurationMs: null;
+        /**
+         * Retained journal entries, including terminal outcomes.
+         */
+        maximumTasks: number;
+        /**
+         * One, including a cancelled executor awaiting resource cleanup.
+         */
+        maximumConcurrentExecutors: number;
+        automaticRestart: false;
+        backgroundJavaScript: false;
+        /**
+         * Linux work ends with the application process.
+         */
+        executionScope?: "application-process";
+        /**
+         * False on Linux.
+         */
+        survivesProcessExit?: boolean;
+    };
+    export type ContinuousRequestOptions = {
+        /**
+         * Cancels the request, not an already admitted operation; query its durable ID after an uncertain reply.
+         */
+        signal?: AbortSignal;
+    };
+}
+
+declare module "oro:background/deferred" {
+    /**
+     * @typedef {object} DeferredReadOptions
+     * @property {string} id Stable task identity, 1..128 letters/digits/underscores/hyphens.
+     * @property {string} kind Name registered by compiled native app code.
+     * @property {string} authorityRef Opaque configured server identity, never a URL or credential.
+     * @property {string} accountRef Opaque account identity; authorization is rechecked at execution.
+     * @property {string} targetRef Opaque resource identity.
+     * @property {string} operationRef Opaque operation identity for read-only status/reconciliation.
+     * @property {'any'|'unmetered'} [network='unmetered'] OS path constraint, not server availability.
+     * @property {boolean} [requiresCharging=false]
+     * @property {boolean} [requiresBatteryNotLow=true]
+     * @property {number} [delayMs=0] Minimum delay, at most seven days. OS/process availability controls timing.
+     * @property {number} [intervalMs=0] Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
+     * @property {number} [flexMs] Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
+     */
+    /**
+     * @typedef {DeferredReadOptions & { schema: number, generation: string, jobId: number, mode?: 'read'|'maintenance', phase: string, attempts: number, updatedAt: number, lastOutcome?: string, completedRuns?: number }} DeferredReadState
+     */
+    /**
+     * @typedef {object} DeferredReadSupport
+     * @property {string} [platform] Present on an unavailable cross-platform support result.
+     * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform API restriction; not a permission denial.
+     * @property {string} [reason] Stable unavailable reason.
+     * @property {boolean} available
+     * @property {string[]} registeredKinds
+     * @property {number} maximumTasks 32, including terminal records until explicitly released.
+     * @property {number} maximumAttempts 5 with exponential backoff starting at 30 seconds.
+     * @property {boolean} readOnly True for enqueue. Maintenance uses a separate explicitly registered contract.
+     * @property {boolean} queuedWrites False.
+     * @property {boolean} backgroundJavaScript False.
+     * @property {boolean} survivesForceStop False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
+     * @property {boolean} periodicReads True. Successful cycles reset their attempt budget; terminal failures suspend recurrence.
+     * @property {number} minimumIntervalMs 900000.
+     * @property {number} minimumFlexMs 300000.
+     * @property {string[]} registeredMaintenanceKinds Explicitly registered native maintenance executors.
+     * @property {Object<string, string[]>} maintenanceOperations Allowed cleanup/revoke operations per maintenance kind.
+     * @property {'application-process'} [executionScope] Linux scheduling scope.
+     * @property {boolean} [survivesProcessExit] False on Linux; durable records require explicit interruption reconciliation.
+     */
+    /** @returns {Promise<DeferredReadSupport>} */
+    export function getSupport(): Promise<DeferredReadSupport>;
+    /**
+     * Schedules an authorized native read/reconciliation. Reusing the same task ID
+     * with identical options returns its current state, without duplicate delivery.
+     * Changing an existing task returns EEXIST. Each attempt has a 60-second result
+     * deadline; a blocked native executor can still occupy the single worker.
+     * @param {DeferredReadOptions} options
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function enqueue(options: DeferredReadOptions): Promise<DeferredReadState>;
+    /**
+     * @typedef {Omit<DeferredReadOptions, 'operationRef'|'intervalMs'|'flexMs'> & { operationRef: 'cleanup'|'revoke' }} DeferredMaintenanceOptions
+     */
+    /**
+     * Schedules one registered cleanup/revocation task. Registration must explicitly
+     * assert retry safety in native code. The executor reauthorizes every attempt
+     * and owns idempotency, prerequisites and uncertain-outcome reconciliation.
+     * General mutations, credentials, request bodies and periodic maintenance are
+     * rejected. Uses the same journal, five-attempt budget and cancellation rules.
+     * @param {DeferredMaintenanceOptions} options
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function enqueueMaintenance(options: DeferredMaintenanceOptions): Promise<DeferredReadState>;
+    /** @returns {Promise<DeferredReadState[]>} */
+    export function list(): Promise<DeferredReadState[]>;
+    /**
+     * Reads retained OS scheduling state and the durable last outcome. Interrupted
+     * state is explicit and is never silently rescheduled.
+     * @param {string} id
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function status(id: string): Promise<DeferredReadState>;
+    /**
+     * Explicitly resumes an interrupted task after app reconciliation. Preserves
+     * the five-attempt budget and replaces its generation, so obsolete callbacks
+     * cannot complete the resumed task. The native executor reauthorizes it again.
+     * @param {string} id
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function resume(id: string): Promise<DeferredReadState>;
+    /**
+     * Cancels scheduling and signals a running native executor. An already-running
+     * read can finish; its result cannot complete a cancelled or replaced task.
+     * @param {string} id
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function cancel(id: string): Promise<DeferredReadState>;
+    /**
+     * Cancels and releases a retained task record. Preserve any required application
+     * receipt before releasing. A later enqueue of this ID starts a new generation.
+     * @param {string} id
+     * @returns {Promise<DeferredReadState>}
+     */
+    export function release(id: string): Promise<DeferredReadState>;
+    namespace _default {
+        export { getSupport };
+        export { enqueue };
+        export { enqueueMaintenance };
+        export { list };
+        export { status };
+        export { resume };
+        export { cancel };
+        export { release };
+    }
+    export default _default;
+    export type DeferredReadOptions = {
+        /**
+         * Stable task identity, 1..128 letters/digits/underscores/hyphens.
+         */
+        id: string;
+        /**
+         * Name registered by compiled native app code.
+         */
+        kind: string;
+        /**
+         * Opaque configured server identity, never a URL or credential.
+         */
+        authorityRef: string;
+        /**
+         * Opaque account identity; authorization is rechecked at execution.
+         */
+        accountRef: string;
+        /**
+         * Opaque resource identity.
+         */
+        targetRef: string;
+        /**
+         * Opaque operation identity for read-only status/reconciliation.
+         */
+        operationRef: string;
+        /**
+         * OS path constraint, not server availability.
+         */
+        network?: "any" | "unmetered";
+        requiresCharging?: boolean;
+        requiresBatteryNotLow?: boolean;
+        /**
+         * Minimum delay, at most seven days. OS/process availability controls timing.
+         */
+        delayMs?: number;
+        /**
+         * Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
+         */
+        intervalMs?: number;
+        /**
+         * Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
+         */
+        flexMs?: number;
+    };
+    export type DeferredReadState = DeferredReadOptions & {
+        schema: number;
+        generation: string;
+        jobId: number;
+        mode?: "read" | "maintenance";
+        phase: string;
+        attempts: number;
+        updatedAt: number;
+        lastOutcome?: string;
+        completedRuns?: number;
+    };
+    export type DeferredReadSupport = {
+        /**
+         * Present on an unavailable cross-platform support result.
+         */
+        platform?: string;
+        /**
+         * Missing runtime backend or platform API restriction; not a permission denial.
+         */
+        implementation?: "missing" | "restricted";
+        /**
+         * Stable unavailable reason.
+         */
+        reason?: string;
+        available: boolean;
+        registeredKinds: string[];
+        /**
+         * 32, including terminal records until explicitly released.
+         */
+        maximumTasks: number;
+        /**
+         * 5 with exponential backoff starting at 30 seconds.
+         */
+        maximumAttempts: number;
+        /**
+         * True for enqueue. Maintenance uses a separate explicitly registered contract.
+         */
+        readOnly: boolean;
+        /**
+         * False.
+         */
+        queuedWrites: boolean;
+        /**
+         * False.
+         */
+        backgroundJavaScript: boolean;
+        /**
+         * False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
+         */
+        survivesForceStop: boolean;
+        /**
+         * True. Successful cycles reset their attempt budget; terminal failures suspend recurrence.
+         */
+        periodicReads: boolean;
+        /**
+         * 900000.
+         */
+        minimumIntervalMs: number;
+        /**
+         * 300000.
+         */
+        minimumFlexMs: number;
+        /**
+         * Explicitly registered native maintenance executors.
+         */
+        registeredMaintenanceKinds: string[];
+        /**
+         * Allowed cleanup/revoke operations per maintenance kind.
+         */
+        maintenanceOperations: {
+            [x: string]: string[];
+        };
+        /**
+         * Linux scheduling scope.
+         */
+        executionScope?: "application-process";
+        /**
+         * False on Linux; durable records require explicit interruption reconciliation.
+         */
+        survivesProcessExit?: boolean;
+    };
+    export type DeferredMaintenanceOptions = Omit<DeferredReadOptions, "operationRef" | "intervalMs" | "flexMs"> & {
+        operationRef: "cleanup" | "revoke";
+    };
+}
+
+declare module "oro:workflows" {
+    /**
+     * @typedef {object} WorkflowRequestOptions
+     * @property {AbortSignal} [signal]
+     */
+    /**
+     * @typedef {object} WorkflowSupport
+     * @property {boolean} available
+     * @property {string} [platform] Current platform on an unavailable backend result.
+     * @property {'missing'|'restricted'} [implementation] Unavailable backend inventory.
+     * @property {string} [reason] Fixed unavailable reason, including workflow-backend-unimplemented.
+     * @property {string} [backend] Native backend name when reported.
+     * @property {string[]} workflows Bundled definition IDs.
+     * @property {boolean} nativeIntegrationRequired Always false for these workflows.
+     * @property {boolean} backgroundJavaScript Always false.
+     * @property {string} [readRetryPolicy] bounded-read-backoff-v1 when supported.
+     * @property {number} [maximumReadAttempts] Five attempts including the initial GET.
+     * @property {number} [minimumReadCycleCooldownMs] Continuous monitors wait at least this long after exhausting transient read retries.
+     * @property {number} [maximumReadBudgetMs] Total read retry budget, excluding notification submission.
+     * @property {string} [executorComposition] workflow-namespace-v1 reserves independent registry capacity.
+     * @property {number} [maximumDefinitions] Bundled definitions, independent of binding capacity.
+     * @property {number} [maximumApplicationHandlersPerType] Application handlers coexist with bundled workflows.
+     * @property {string} [correlationVersion] workflow-events-v1 identifies event/notification correlation.
+     * @property {boolean} [approvedBasePaths] Bundled allowApprovedBasePath permits a native-approved prefix.
+     * @property {number} maximumBindings
+     * @property {number} maximumRetainedEventsPerBinding
+     * @property {string} [error] Fixed configuration error, empty when valid.
+     */
+    /**
+     * @typedef {object} WorkflowIdentity
+     * @property {string} workflow Bundled definition ID.
+     * @property {string} authorityRef Application-resolved opaque authority.
+     * @property {string} accountRef Application-resolved opaque account.
+     * @property {string} targetRef Application-resolved opaque target.
+     * @property {string} [authorityHandle] Required for a definition using an approved destination.
+     * @property {boolean} userInitiated Must be true after the application's explicit user action.
+     */
+    /**
+     * @typedef {WorkflowIdentity & { expiresAt?: number }} WorkflowCredentialOptions
+     */
+    /**
+     * @typedef {WorkflowIdentity & { credentialHandle?: string }} WorkflowBindingOptions
+     */
+    /**
+     * @typedef {object} WorkflowId
+     * @property {string} id Opaque installation binding ID.
+     */
+    /**
+     * @typedef {object} WorkflowCredential
+     * @property {string} credentialHandle Opaque native-only credential reference.
+     * @property {boolean} valueExported Always false.
+     */
+    /**
+     * @typedef {object} WorkflowStatus
+     * @property {string} id
+     * @property {string} workflow
+     * @property {string} generation
+     * @property {boolean} enabled
+     * @property {'idle'|'running'|'unknown'} state
+     * @property {string} lastOutcome A completed read/submission is not presentation or server acknowledgement.
+     * @property {boolean} running
+     * @property {boolean} drained False while an owned worker still holds resources.
+     * @property {string} interruptedOutcome Retained unknown outcome after process loss.
+     * @property {number} [readAttempts] Attempts in the current or most recent read cycle.
+     * @property {number} [retryAt] Next wall-clock retry time, zero when no backoff is pending.
+     * @property {boolean} pendingRead A durable push hint awaits a read; this does not establish delivery.
+     * @property {number} retainedEvents
+     * @property {number} uncertainEvents Held without automatic resubmission.
+     */
+    /**
+     * @typedef {WorkflowId & { userInitiated: boolean, durationMs?: number }} WorkflowRunOptions
+     */
+    /**
+     * @typedef {WorkflowId & { intervalMs?: number, network?: 'any'|'unmetered', requiresCharging?: boolean, requiresBatteryNotLow?: boolean }} WorkflowScheduleOptions
+     */
+    /**
+     * @typedef {object} WorkflowPushOptions
+     * @property {string} id
+     * @property {string} kind
+     * @property {string} authorityRef
+     * @property {string} accountRef
+     * @property {string} targetRef Native workflow binding reference.
+     */
+    /**
+     * @typedef {object} WorkflowResponse
+     * @property {string} receiptId
+     * @property {string} [notificationId] Notification identifier under correlationVersion workflow-events-v1.
+     * @property {string} eventHandle Opaque correlation; contains no server payload.
+     * @property {string} action
+     * @property {number} receivedAt
+     */
+    /**
+     * @typedef {object} WorkflowRevokeOptions
+     * @property {string} credentialHandle
+     */
+    /**
+     * @typedef {object} WorkflowRevokeResult
+     * @property {boolean} revokedLocally
+     * @property {boolean} serverRevocationConfirmed Always false.
+     */
+    /**
+     * Probe configuration and implementation without reading saved credentials.
+     * An unavailable platform is runtime implementation work, not a requirement for
+     * product Kotlin/C++ adapters.
+     * @returns {Promise<WorkflowSupport>}
+     */
+    export function getSupport(): Promise<WorkflowSupport>;
+    /**
+     * @typedef {WorkflowIdentity & { origin: string, basePath?: string }} WorkflowAuthorityOptions
+     */
+    /**
+     * @typedef {object} WorkflowAuthority
+     * @property {string} authorityHandle
+     * @property {string} [basePath] Native-approved immutable prefix, empty for root-mounted gateways.
+     * @property {string} origin Approved HTTPS origin; this does not approve its certificate or server IAM.
+     */
+    /**
+     * @typedef {object} WorkflowAuthorityId
+     * @property {string} authorityHandle
+     */
+    /**
+     * Request native foreground confirmation for a self-hosted HTTPS origin. Only
+     * definitions declaring authority: "approved" accept it. The path and operation
+     * remain fixed by the bundled definition. A basePath requires the bundled request
+     * to opt into allowApprovedBasePath; consent shows the full fixed read URL. Cancellation leaves no new approval.
+     * @param {WorkflowAuthorityOptions} options
+     * @param {WorkflowRequestOptions} [request]
+     * @returns {Promise<WorkflowAuthority>}
+     */
+    export function approveAuthority(options: WorkflowAuthorityOptions, request?: WorkflowRequestOptions): Promise<WorkflowAuthority>;
+    /**
+     * Disable this locally approved destination and cancel its active calls. Server
+     * grants, transport registrations and certificate trust remain separate.
+     * @param {WorkflowAuthorityId} options
+     * @returns {Promise<WorkflowRevokeResult>}
+     */
+    export function revokeAuthority(options: WorkflowAuthorityId): Promise<WorkflowRevokeResult>;
+    /**
+     * Release a revoked destination after releasing all its bindings and credential
+     * copies. Original sign-in storage and remote registrations are unchanged.
+     * @param {WorkflowAuthorityId} options
+     * @returns {Promise<WorkflowReleaseResult>}
+     */
+    export function releaseAuthority(options: WorkflowAuthorityId): Promise<WorkflowReleaseResult>;
+    /**
+     * @typedef {object} WorkflowDiscoveryOptions
+     * @property {string} workflow
+     * @property {string} authorityRef
+     * @property {string} accountRef
+     * @property {string} targetRef
+     */
+    /**
+     * @typedef {object} WorkflowDiscovery
+     * @property {WorkflowStatus[]} bindings
+     * @property {(WorkflowCredential & { enabled: boolean, authorityHandle: string })[]} credentials
+     * @property {(WorkflowAuthority & { enabled: boolean })[]} authorities
+     */
+    /**
+     * Recover bounded local handles for an exact application-resolved identity and
+     * the invoking document origin. No values, cursors or server payloads are
+     * exported. Rediscovery does not establish server authorization.
+     * @param {WorkflowDiscoveryOptions} options
+     * @returns {Promise<WorkflowDiscovery>}
+     */
+    export function discover(options: WorkflowDiscoveryOptions): Promise<WorkflowDiscovery>;
+    /**
+     * Imports a bearer credential from the definition's fixed secure-storage key in
+     * this application's origin. Sign-in and setItem happen in the application's
+     * foreground authentication flow; this API accepts no secret value or arbitrary
+     * key/alias selector. Restoring an opaque handle does not prove server IAM.
+     * @param {WorkflowCredentialOptions} options
+     * @param {WorkflowRequestOptions} [request]
+     * @returns {Promise<WorkflowCredential>}
+     */
+    export function importCredential(options: WorkflowCredentialOptions, request?: WorkflowRequestOptions): Promise<WorkflowCredential>;
+    /**
+     * Create an explicitly authorized installation binding. Scope must exactly match
+     * its native credential. No plaintext credential or response is returned.
+     * @param {WorkflowBindingOptions} options
+     * @param {WorkflowRequestOptions} [request]
+     * @returns {Promise<WorkflowStatus>}
+     */
+    export function bind(options: WorkflowBindingOptions, request?: WorkflowRequestOptions): Promise<WorkflowStatus>;
+    /**
+     * Start one visible, user-requested read using the shared finite foreground
+     * controller. Admission returns its durable ID/generation, not read completion.
+     * @param {WorkflowRunOptions} options
+     * @param {WorkflowRequestOptions} [request]
+     * @returns {Promise<import('./foreground.js').ForegroundStatus>}
+     */
+    export function run(options: WorkflowRunOptions, request?: WorkflowRequestOptions): Promise<import("oro:foreground").ForegroundStatus>;
+    /**
+     * @typedef {WorkflowId & { userInitiated: boolean }} WorkflowMonitorOptions
+     */
+    /**
+     * Start an explicitly user-requested continuous read session when the bundled
+     * definition declares pollIntervalMs and the project opts into continuous
+     * foreground admission. There is no boot/force-stop restart. Stop remains
+     * available through the shared public notification/controller.
+     * @param {WorkflowMonitorOptions} options
+     * @param {WorkflowRequestOptions} [request]
+     * @returns {Promise<import('./foreground/continuous.js').ContinuousStatus>}
+     */
+    export function monitor(options: WorkflowMonitorOptions, request?: WorkflowRequestOptions): Promise<import("oro:foreground/continuous").ContinuousStatus>;
+    /**
+     * Schedule read-only catch-up using the shared OS scheduler. No custom native
+     * executor is needed. The platform's periodic interval/permission limits apply.
+     * @param {WorkflowScheduleOptions} options
+     * @param {WorkflowRequestOptions} [request]
+     * @returns {Promise<import('./background/deferred.js').DeferredReadState>}
+     */
+    export function schedule(options: WorkflowScheduleOptions, request?: WorkflowRequestOptions): Promise<import("oro:background/deferred").DeferredReadState>;
+    /**
+     * Return references for oro:push.register. JavaScript performs authenticated
+     * server enrollment and acknowledges its exact endpoint generation through
+     * oro:push; receipt of a push only triggers the fixed approved read.
+     * @param {WorkflowId} options
+     * @returns {Promise<WorkflowPushOptions>}
+     */
+    export function getPushOptions(options: WorkflowId): Promise<WorkflowPushOptions>;
+    /**
+     * Read bounded local outcome/count metadata. Credentials, cursors and server
+     * payloads are excluded. Process loss retains unknown attempts without replay.
+     * @param {WorkflowId} options
+     * @returns {Promise<WorkflowStatus>}
+     */
+    export function getStatus(options: WorkflowId): Promise<WorkflowStatus>;
+    /**
+     * Persist local disablement, cancel active work and remove scheduled reads.
+     * Check drained before claiming cleanup finished. Remote enrollment/revocation
+     * and existing notification cancellation remain separate explicit operations.
+     * @param {WorkflowId} options
+     * @returns {Promise<WorkflowStatus>}
+     */
+    export function stop(options: WorkflowId): Promise<WorkflowStatus>;
+    /**
+     * Disable a native credential and cancel its active workflow calls. This does
+     * not revoke the server token or erase historical encrypted originals.
+     * @param {WorkflowRevokeOptions} options
+     * @returns {Promise<WorkflowRevokeResult>}
+     */
+    export function revokeCredential(options: WorkflowRevokeOptions): Promise<WorkflowRevokeResult>;
+    /**
+     * Read this authorized binding's opaque notification responses. Recheck current
+     * account/navigation policy, then acknowledge through oro:notification. Private
+     * server event payloads and credential values are never returned.
+     * @param {WorkflowId} options
+     * @returns {Promise<WorkflowResponse[]>}
+     */
+    export function getResponses(options: WorkflowId): Promise<WorkflowResponse[]>;
+    /**
+     * @typedef {WorkflowId & { generation: string }} WorkflowReleaseOptions
+     */
+    /**
+     * @typedef {WorkflowReleaseOptions & { eventHandles: string[] }} WorkflowReleaseEventsOptions
+     */
+    /**
+     * @typedef {object} WorkflowEventOutcome
+     * @property {string} eventHandle
+     * @property {string} [notificationId] Scoped notification ID; no source event payload is included.
+     * @property {'attempting'|'submitted'|'unknown'} outcome Submission is never proof of human attention.
+     */
+    /**
+     * @typedef {object} WorkflowReleaseResult
+     * @property {boolean} released
+     * @property {boolean} serverRevocationConfirmed Always false.
+     */
+    /**
+     * Read opaque local event outcomes, including uncertainty retained after a lost
+     * submission reply. Response bodies and source server IDs are not exported.
+     * @param {WorkflowId} options
+     * @returns {Promise<WorkflowEventOutcome[]>}
+     */
+    export function getEvents(options: WorkflowId): Promise<WorkflowEventOutcome[]>;
+    /**
+     * Explicitly consume selected dedup/outcome records only after application
+     * reconciliation. This permits the same server IDs to become eligible again;
+     * it does not acknowledge or revoke server state. Running bindings reject EBUSY.
+     * No automatic pruning removes this protection.
+     * @param {WorkflowReleaseEventsOptions} options
+     * @returns {Promise<WorkflowStatus>}
+     */
+    export function releaseEvents(options: WorkflowReleaseEventsOptions): Promise<WorkflowStatus>;
+    /**
+     * Release a disabled, drained binding after consuming its outcomes and handling
+     * transport/server cleanup through oro:push and the authenticated server.
+     * The fixed source secure-storage key and its originals are untouched.
+     * @param {WorkflowReleaseOptions} options
+     * @returns {Promise<WorkflowReleaseResult>}
+     */
+    export function release(options: WorkflowReleaseOptions): Promise<WorkflowReleaseResult>;
+    /**
+     * Release a locally revoked credential after all referencing bindings have
+     * stopped and drained. This does not delete the source secure-storage item.
+     * @param {WorkflowRevokeOptions} options
+     * @returns {Promise<WorkflowReleaseResult>}
+     */
+    export function releaseCredential(options: WorkflowRevokeOptions): Promise<WorkflowReleaseResult>;
+    namespace _default {
+        export { getSupport };
+        export { approveAuthority };
+        export { revokeAuthority };
+        export { releaseAuthority };
+        export { discover };
+        export { importCredential };
+        export { bind };
+        export { run };
+        export { monitor };
+        export { schedule };
+        export { getPushOptions };
+        export { getStatus };
+        export { stop };
+        export { revokeCredential };
+        export { getResponses };
+        export { getEvents };
+        export { releaseEvents };
+        export { release };
+        export { releaseCredential };
+    }
+    export default _default;
+    export type WorkflowRequestOptions = {
+        signal?: AbortSignal;
+    };
+    export type WorkflowSupport = {
+        available: boolean;
+        /**
+         * Current platform on an unavailable backend result.
+         */
+        platform?: string;
+        /**
+         * Unavailable backend inventory.
+         */
+        implementation?: "missing" | "restricted";
+        /**
+         * Fixed unavailable reason, including workflow-backend-unimplemented.
+         */
+        reason?: string;
+        /**
+         * Native backend name when reported.
+         */
+        backend?: string;
+        /**
+         * Bundled definition IDs.
+         */
+        workflows: string[];
+        /**
+         * Always false for these workflows.
+         */
+        nativeIntegrationRequired: boolean;
+        /**
+         * Always false.
+         */
+        backgroundJavaScript: boolean;
+        /**
+         * bounded-read-backoff-v1 when supported.
+         */
+        readRetryPolicy?: string;
+        /**
+         * Five attempts including the initial GET.
+         */
+        maximumReadAttempts?: number;
+        /**
+         * Continuous monitors wait at least this long after exhausting transient read retries.
+         */
+        minimumReadCycleCooldownMs?: number;
+        /**
+         * Total read retry budget, excluding notification submission.
+         */
+        maximumReadBudgetMs?: number;
+        /**
+         * workflow-namespace-v1 reserves independent registry capacity.
+         */
+        executorComposition?: string;
+        /**
+         * Bundled definitions, independent of binding capacity.
+         */
+        maximumDefinitions?: number;
+        /**
+         * Application handlers coexist with bundled workflows.
+         */
+        maximumApplicationHandlersPerType?: number;
+        /**
+         * workflow-events-v1 identifies event/notification correlation.
+         */
+        correlationVersion?: string;
+        /**
+         * Bundled allowApprovedBasePath permits a native-approved prefix.
+         */
+        approvedBasePaths?: boolean;
+        maximumBindings: number;
+        maximumRetainedEventsPerBinding: number;
+        /**
+         * Fixed configuration error, empty when valid.
+         */
+        error?: string;
+    };
+    export type WorkflowIdentity = {
+        /**
+         * Bundled definition ID.
+         */
+        workflow: string;
+        /**
+         * Application-resolved opaque authority.
+         */
+        authorityRef: string;
+        /**
+         * Application-resolved opaque account.
+         */
+        accountRef: string;
+        /**
+         * Application-resolved opaque target.
+         */
+        targetRef: string;
+        /**
+         * Required for a definition using an approved destination.
+         */
+        authorityHandle?: string;
+        /**
+         * Must be true after the application's explicit user action.
+         */
+        userInitiated: boolean;
+    };
+    export type WorkflowCredentialOptions = WorkflowIdentity & {
+        expiresAt?: number;
+    };
+    export type WorkflowBindingOptions = WorkflowIdentity & {
+        credentialHandle?: string;
+    };
+    export type WorkflowId = {
+        /**
+         * Opaque installation binding ID.
+         */
+        id: string;
+    };
+    export type WorkflowCredential = {
+        /**
+         * Opaque native-only credential reference.
+         */
+        credentialHandle: string;
+        /**
+         * Always false.
+         */
+        valueExported: boolean;
+    };
+    export type WorkflowStatus = {
+        id: string;
+        workflow: string;
+        generation: string;
+        enabled: boolean;
+        state: "idle" | "running" | "unknown";
+        /**
+         * A completed read/submission is not presentation or server acknowledgement.
+         */
+        lastOutcome: string;
+        running: boolean;
+        /**
+         * False while an owned worker still holds resources.
+         */
+        drained: boolean;
+        /**
+         * Retained unknown outcome after process loss.
+         */
+        interruptedOutcome: string;
+        /**
+         * Attempts in the current or most recent read cycle.
+         */
+        readAttempts?: number;
+        /**
+         * Next wall-clock retry time, zero when no backoff is pending.
+         */
+        retryAt?: number;
+        /**
+         * A durable push hint awaits a read; this does not establish delivery.
+         */
+        pendingRead: boolean;
+        retainedEvents: number;
+        /**
+         * Held without automatic resubmission.
+         */
+        uncertainEvents: number;
+    };
+    export type WorkflowRunOptions = WorkflowId & {
+        userInitiated: boolean;
+        durationMs?: number;
+    };
+    export type WorkflowScheduleOptions = WorkflowId & {
+        intervalMs?: number;
+        network?: "any" | "unmetered";
+        requiresCharging?: boolean;
+        requiresBatteryNotLow?: boolean;
+    };
+    export type WorkflowPushOptions = {
+        id: string;
+        kind: string;
+        authorityRef: string;
+        accountRef: string;
+        /**
+         * Native workflow binding reference.
+         */
+        targetRef: string;
+    };
+    export type WorkflowResponse = {
+        receiptId: string;
+        /**
+         * Notification identifier under correlationVersion workflow-events-v1.
+         */
+        notificationId?: string;
+        /**
+         * Opaque correlation; contains no server payload.
+         */
+        eventHandle: string;
+        action: string;
+        receivedAt: number;
+    };
+    export type WorkflowRevokeOptions = {
+        credentialHandle: string;
+    };
+    export type WorkflowRevokeResult = {
+        revokedLocally: boolean;
+        /**
+         * Always false.
+         */
+        serverRevocationConfirmed: boolean;
+    };
+    export type WorkflowAuthorityOptions = WorkflowIdentity & {
+        origin: string;
+        basePath?: string;
+    };
+    export type WorkflowAuthority = {
+        authorityHandle: string;
+        /**
+         * Native-approved immutable prefix, empty for root-mounted gateways.
+         */
+        basePath?: string;
+        /**
+         * Approved HTTPS origin; this does not approve its certificate or server IAM.
+         */
+        origin: string;
+    };
+    export type WorkflowAuthorityId = {
+        authorityHandle: string;
+    };
+    export type WorkflowDiscoveryOptions = {
+        workflow: string;
+        authorityRef: string;
+        accountRef: string;
+        targetRef: string;
+    };
+    export type WorkflowDiscovery = {
+        bindings: WorkflowStatus[];
+        credentials: (WorkflowCredential & {
+            enabled: boolean;
+            authorityHandle: string;
+        })[];
+        authorities: (WorkflowAuthority & {
+            enabled: boolean;
+        })[];
+    };
+    export type WorkflowMonitorOptions = WorkflowId & {
+        userInitiated: boolean;
+    };
+    export type WorkflowReleaseOptions = WorkflowId & {
+        generation: string;
+    };
+    export type WorkflowReleaseEventsOptions = WorkflowReleaseOptions & {
+        eventHandles: string[];
+    };
+    export type WorkflowEventOutcome = {
+        eventHandle: string;
+        /**
+         * Scoped notification ID; no source event payload is included.
+         */
+        notificationId?: string;
+        /**
+         * Submission is never proof of human attention.
+         */
+        outcome: "attempting" | "submitted" | "unknown";
+    };
+    export type WorkflowReleaseResult = {
+        released: boolean;
+        /**
+         * Always false.
+         */
+        serverRevocationConfirmed: boolean;
+    };
+}
+
 declare module "oro:xpc" {
     /**
      * Retrieves XPC availability information for the current platform.
@@ -24146,217 +26113,6 @@ declare module "oro:application/update" {
      */
     /** @type {UpdateModule} */
     const api: UpdateModule;
-}
-
-declare module "oro:background/deferred" {
-    /**
-     * @typedef {object} DeferredReadOptions
-     * @property {string} id Stable task identity, 1..128 letters/digits/underscores/hyphens.
-     * @property {string} kind Name registered by compiled native app code.
-     * @property {string} authorityRef Opaque configured server identity, never a URL or credential.
-     * @property {string} accountRef Opaque account identity; authorization is rechecked at execution.
-     * @property {string} targetRef Opaque resource identity.
-     * @property {string} operationRef Opaque operation identity for read-only status/reconciliation.
-     * @property {'any'|'unmetered'} [network='unmetered'] Android scheduling constraint, not server availability.
-     * @property {boolean} [requiresCharging=false]
-     * @property {boolean} [requiresBatteryNotLow=true]
-     * @property {number} [delayMs=0] Minimum delay, at most seven days. Timing is controlled by Android.
-     * @property {number} [intervalMs=0] Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
-     * @property {number} [flexMs] Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
-     */
-    /**
-     * @typedef {DeferredReadOptions & { schema: number, generation: string, jobId: number, mode?: 'read'|'maintenance', phase: string, attempts: number, updatedAt: number, lastOutcome?: string, completedRuns?: number }} DeferredReadState
-     */
-    /**
-     * @typedef {object} DeferredReadSupport
-     * @property {boolean} available
-     * @property {string[]} registeredKinds
-     * @property {number} maximumTasks 32, including terminal records until explicitly released.
-     * @property {number} maximumAttempts 5 with Android exponential backoff starting at 30 seconds.
-     * @property {boolean} readOnly True for enqueue. Maintenance uses a separate explicitly registered contract.
-     * @property {boolean} queuedWrites False.
-     * @property {boolean} backgroundJavaScript False.
-     * @property {boolean} survivesForceStop False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
-     * @property {boolean} periodicReads True. Successful cycles reset their attempt budget; terminal failures suspend recurrence.
-     * @property {number} minimumIntervalMs 900000.
-     * @property {number} minimumFlexMs 300000.
-     * @property {string[]} registeredMaintenanceKinds Explicitly registered native maintenance executors.
-     * @property {Object<string, string[]>} maintenanceOperations Allowed cleanup/revoke operations per maintenance kind.
-     */
-    /** @returns {Promise<DeferredReadSupport>} */
-    export function getSupport(): Promise<DeferredReadSupport>;
-    /**
-     * Schedules an authorized native read/reconciliation. Reusing the same task ID
-     * with identical options returns its current state, without duplicate delivery.
-     * Changing an existing task returns EEXIST. Each attempt has a 60-second result
-     * deadline; a blocked native executor can still occupy the single worker.
-     * @param {DeferredReadOptions} options
-     * @returns {Promise<DeferredReadState>}
-     */
-    export function enqueue(options: DeferredReadOptions): Promise<DeferredReadState>;
-    /**
-     * @typedef {Omit<DeferredReadOptions, 'operationRef'|'intervalMs'|'flexMs'> & { operationRef: 'cleanup'|'revoke' }} DeferredMaintenanceOptions
-     */
-    /**
-     * Schedules one registered cleanup/revocation task. Registration must explicitly
-     * assert retry safety in native code. The executor reauthorizes every attempt
-     * and owns idempotency, prerequisites and uncertain-outcome reconciliation.
-     * General mutations, credentials, request bodies and periodic maintenance are
-     * rejected. Uses the same journal, five-attempt budget and cancellation rules.
-     * @param {DeferredMaintenanceOptions} options
-     * @returns {Promise<DeferredReadState>}
-     */
-    export function enqueueMaintenance(options: DeferredMaintenanceOptions): Promise<DeferredReadState>;
-    /** @returns {Promise<DeferredReadState[]>} */
-    export function list(): Promise<DeferredReadState[]>;
-    /**
-     * Reads retained OS scheduling state and the durable last outcome. Interrupted
-     * state is explicit and is never silently rescheduled.
-     * @param {string} id
-     * @returns {Promise<DeferredReadState>}
-     */
-    export function status(id: string): Promise<DeferredReadState>;
-    /**
-     * Explicitly resumes an interrupted task after app reconciliation. Preserves
-     * the five-attempt budget and replaces its generation, so obsolete callbacks
-     * cannot complete the resumed task. The native executor reauthorizes it again.
-     * @param {string} id
-     * @returns {Promise<DeferredReadState>}
-     */
-    export function resume(id: string): Promise<DeferredReadState>;
-    /**
-     * Cancels scheduling and signals a running native executor. An already-running
-     * read can finish; its result cannot complete a cancelled or replaced task.
-     * @param {string} id
-     * @returns {Promise<DeferredReadState>}
-     */
-    export function cancel(id: string): Promise<DeferredReadState>;
-    /**
-     * Cancels and releases a retained task record. Preserve any required application
-     * receipt before releasing. A later enqueue of this ID starts a new generation.
-     * @param {string} id
-     * @returns {Promise<DeferredReadState>}
-     */
-    export function release(id: string): Promise<DeferredReadState>;
-    namespace _default {
-        export { getSupport };
-        export { enqueue };
-        export { enqueueMaintenance };
-        export { list };
-        export { status };
-        export { resume };
-        export { cancel };
-        export { release };
-    }
-    export default _default;
-    export type DeferredReadOptions = {
-        /**
-         * Stable task identity, 1..128 letters/digits/underscores/hyphens.
-         */
-        id: string;
-        /**
-         * Name registered by compiled native app code.
-         */
-        kind: string;
-        /**
-         * Opaque configured server identity, never a URL or credential.
-         */
-        authorityRef: string;
-        /**
-         * Opaque account identity; authorization is rechecked at execution.
-         */
-        accountRef: string;
-        /**
-         * Opaque resource identity.
-         */
-        targetRef: string;
-        /**
-         * Opaque operation identity for read-only status/reconciliation.
-         */
-        operationRef: string;
-        /**
-         * Android scheduling constraint, not server availability.
-         */
-        network?: "any" | "unmetered";
-        requiresCharging?: boolean;
-        requiresBatteryNotLow?: boolean;
-        /**
-         * Minimum delay, at most seven days. Timing is controlled by Android.
-         */
-        delayMs?: number;
-        /**
-         * Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
-         */
-        intervalMs?: number;
-        /**
-         * Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
-         */
-        flexMs?: number;
-    };
-    export type DeferredReadState = DeferredReadOptions & {
-        schema: number;
-        generation: string;
-        jobId: number;
-        mode?: "read" | "maintenance";
-        phase: string;
-        attempts: number;
-        updatedAt: number;
-        lastOutcome?: string;
-        completedRuns?: number;
-    };
-    export type DeferredReadSupport = {
-        available: boolean;
-        registeredKinds: string[];
-        /**
-         * 32, including terminal records until explicitly released.
-         */
-        maximumTasks: number;
-        /**
-         * 5 with Android exponential backoff starting at 30 seconds.
-         */
-        maximumAttempts: number;
-        /**
-         * True for enqueue. Maintenance uses a separate explicitly registered contract.
-         */
-        readOnly: boolean;
-        /**
-         * False.
-         */
-        queuedWrites: boolean;
-        /**
-         * False.
-         */
-        backgroundJavaScript: boolean;
-        /**
-         * False. The app must relaunch, reconcile interrupted state and explicitly resume supported work.
-         */
-        survivesForceStop: boolean;
-        /**
-         * True. Successful cycles reset their attempt budget; terminal failures suspend recurrence.
-         */
-        periodicReads: boolean;
-        /**
-         * 900000.
-         */
-        minimumIntervalMs: number;
-        /**
-         * 300000.
-         */
-        minimumFlexMs: number;
-        /**
-         * Explicitly registered native maintenance executors.
-         */
-        registeredMaintenanceKinds: string[];
-        /**
-         * Allowed cleanup/revoke operations per maintenance kind.
-         */
-        maintenanceOperations: {
-            [x: string]: string[];
-        };
-    };
-    export type DeferredMaintenanceOptions = Omit<DeferredReadOptions, "operationRef" | "intervalMs" | "flexMs"> & {
-        operationRef: "cleanup" | "revoke";
-    };
 }
 
 declare module "oro:child_process/worker" {
@@ -26240,6 +27996,53 @@ declare module "oro:vm/world" {
 
 declare module "oro:window/appearance" {
     /**
+     * @typedef {object} GestureExclusionRegion
+     * @property {'left'|'right'} edge Visible handle's edge in the native WebView.
+     * @property {number} top Fraction of native client height in [0, 1).
+     * @property {number} height Positive fraction of native client height; top + height must be <= 1.
+     */
+    /**
+     * @typedef {object} GestureExclusionRect
+     * @property {number} left Native view pixels.
+     * @property {number} top Native view pixels.
+     * @property {number} right Native view pixels.
+     * @property {number} bottom Native view pixels.
+     */
+    /**
+     * @typedef {object} GestureExclusionState
+     * @property {boolean} supported Android 10+ supports requesting exclusion.
+     * @property {boolean} active This document owns a current native request, not proof that Android accepted it.
+     * @property {number} viewportWidth Native WebView width in pixels.
+     * @property {number} viewportHeight Native WebView height in pixels.
+     * @property {number} density Native display density.
+     * @property {number} maximumRegions Four regions in total.
+     * @property {number} maximumWidthDp Fixed maximum edge-strip width: 24dp, also capped at a quarter of the viewport.
+     * @property {number} maximumEdgeHeightDp Maximum combined height per edge: 200dp, also capped at half the viewport.
+     * @property {boolean} osAcceptanceKnown Always false; Android owns the effective gesture policy.
+     * @property {GestureExclusionRect[]} rects Registered, clipped rectangles in native view pixels.
+     */
+    /**
+     * Requests system-gesture exclusion for up to four small visible edge handles
+     * in the current trusted foreground document. Fractions refer to native client
+     * height, so app code must map its handle geometry after layout. Android retains
+     * mandatory navigation gestures and may further restrict or ignore a request.
+     * Empty regions clear this document's request. Navigation, pause, hiding, focus
+     * loss, detachment or native geometry/configuration changes clear it; returning
+     * to the app never restores it automatically. Reapply only for a visible handle.
+     * Oversized requests reject without replacing the existing request. Other
+     * platforms reject with ENOSYS; nonempty requests below Android 10 use ENOTSUP.
+     * @param {GestureExclusionRegion[]} regions
+     * @returns {Promise<GestureExclusionState>}
+     */
+    export function setGestureExclusion(regions: GestureExclusionRegion[]): Promise<GestureExclusionState>;
+    /**
+     * Reads this document's exclusion request without renewing its ownership.
+     * Rectangles describe registered view regions, not OS acceptance or a gesture
+     * navigation mode. App drawer/focus/animation behavior remains application code.
+     * @returns {Promise<GestureExclusionState>}
+     */
+    export function getGestureExclusion(): Promise<GestureExclusionState>;
+    /**
      * Observes changes after `ApplicationWindow.setSystemAppearance()` selects an
      * inset owner. An `end` event also covers interrupted platform IME animations;
      * use the reported inset values as the current state, not the target fraction.
@@ -26259,8 +28062,84 @@ declare module "oro:window/appearance" {
     namespace _default {
         export { onInsetsChange };
         export { onBackGesture };
+        export { setGestureExclusion };
+        export { getGestureExclusion };
     }
     export default _default;
+    export type GestureExclusionRegion = {
+        /**
+         * Visible handle's edge in the native WebView.
+         */
+        edge: "left" | "right";
+        /**
+         * Fraction of native client height in [0, 1).
+         */
+        top: number;
+        /**
+         * Positive fraction of native client height; top + height must be <= 1.
+         */
+        height: number;
+    };
+    export type GestureExclusionRect = {
+        /**
+         * Native view pixels.
+         */
+        left: number;
+        /**
+         * Native view pixels.
+         */
+        top: number;
+        /**
+         * Native view pixels.
+         */
+        right: number;
+        /**
+         * Native view pixels.
+         */
+        bottom: number;
+    };
+    export type GestureExclusionState = {
+        /**
+         * Android 10+ supports requesting exclusion.
+         */
+        supported: boolean;
+        /**
+         * This document owns a current native request, not proof that Android accepted it.
+         */
+        active: boolean;
+        /**
+         * Native WebView width in pixels.
+         */
+        viewportWidth: number;
+        /**
+         * Native WebView height in pixels.
+         */
+        viewportHeight: number;
+        /**
+         * Native display density.
+         */
+        density: number;
+        /**
+         * Four regions in total.
+         */
+        maximumRegions: number;
+        /**
+         * Fixed maximum edge-strip width: 24dp, also capped at a quarter of the viewport.
+         */
+        maximumWidthDp: number;
+        /**
+         * Maximum combined height per edge: 200dp, also capped at half the viewport.
+         */
+        maximumEdgeHeightDp: number;
+        /**
+         * Always false; Android owns the effective gesture policy.
+         */
+        osAcceptanceKnown: boolean;
+        /**
+         * Registered, clipped rectangles in native view pixels.
+         */
+        rects: GestureExclusionRect[];
+    };
     export type WindowInsets = {
         /**
          * Which layer consumes the insets.
@@ -26325,6 +28204,9 @@ declare module "oro:window/back" {
      * renderer replacement invalidates registration; install again in the new page.
      * Application code decides modal, drawer and router priority. Gesture progress
      * remains available through the existing backgesture event.
+     * The original live document can remove its registration while hidden or while
+     * its Activity is paused. Removal never grants foreground access or disables a
+     * replacement document's handler.
      * @param {(request: BackRequest) => boolean|Promise<boolean>} handler
      * @param {BackHandlerOptions} [options]
      * @returns {Promise<() => Promise<void>>} Idempotent handler removal.

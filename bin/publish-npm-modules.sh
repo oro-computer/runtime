@@ -43,10 +43,14 @@ Options:
                          Preserve the npm staging directory before the run
       --yes-deps         Accept supported installer dependency prompts while
                          rebuilding the staged runtime
-      --link             Link packages globally for local development
+      --link             Publish a copied Linux SDK/API generation and atomically
+                         link its stable launcher (other hosts use npm linking)
       --                 Pass all remaining options to npm pack
 
 Set ORO_NPM_STAGING_HOME to stage under build/npm or a temporary directory.
+Linux --link builds in a fresh staging directory, then publishes outside build/.
+ORO_LOCAL_SDK_HOME defaults to .local/share/oro-sdk/linux in this checkout.
+Linux --link --no-rebuild publishes an already complete staged package pair.
 NO_ANDROID and NO_IOS are independent source-build presence flags inherited by
 the installer. A non-empty NO_ANDROID disables only Android artifacts; a
 non-empty NO_IOS disables only iOS/iOS Simulator artifacts on macOS. Values
@@ -78,7 +82,7 @@ function _stage_platform_oroc_binary() {
   if (( do_global_link )); then
     ln -sf "$cli_source" "$dest/bin/$cli_name"
   else
-    cp -f "$cli_source" "$dest/bin/$cli_name"
+    cp -f "$cli_source" "$dest/bin/$cli_name" || exit $?
   fi
 }
 
@@ -216,7 +220,7 @@ function stage_cli_package () {
 
   if (( do_global_link )); then
     mkdir -p "$dest/bin" "$dest/docs"
-    cp -rf "$root/npm/bin"/* "$dest/bin"
+    cp -rf "$root/npm/bin"/* "$dest/bin" || exit $?
 
     ln -sf "$source"/* "$dest"
     rm -rf "$dest/src"
@@ -229,18 +233,18 @@ function stage_cli_package () {
     ln -sf "$root/api"/* "$dest"
   else
     mkdir -p "$dest/docs"
-    cp -rf "$source"/. "$dest"
+    cp -rf "$source"/. "$dest" || exit $?
     mkdir -p "$dest/bin"
-    cp -rf "$root/npm/bin"/* "$dest/bin"
-    cp -rf "$root/npm/src" "$dest/src"
-    cp -f "$root/LICENSE.txt" "$dest"
-    cp -f "$root/NOTICE" "$dest"
-    cp -f "$root/THIRD_PARTY_NOTICES.md" "$dest"
-    cp -f "$root/README.md" "$dest/README-RUNTIME.md"
-    cp -f "$root/docs/BUILD_ENVIRONMENT.md" "$dest/docs/BUILD_ENVIRONMENT.md"
-    cp -rf "$root/api"/* "$dest"
-    cp -f "$root/api/README.md" "$dest/API.md"
-    cp -f "$root/README.md" "$dest/README.md"
+    cp -rf "$root/npm/bin"/* "$dest/bin" || exit $?
+    cp -rf "$root/npm/src" "$dest/src" || exit $?
+    cp -f "$root/LICENSE.txt" "$dest" || exit $?
+    cp -f "$root/NOTICE" "$dest" || exit $?
+    cp -f "$root/THIRD_PARTY_NOTICES.md" "$dest" || exit $?
+    cp -f "$root/README.md" "$dest/README-RUNTIME.md" || exit $?
+    cp -f "$root/docs/BUILD_ENVIRONMENT.md" "$dest/docs/BUILD_ENVIRONMENT.md" || exit $?
+    cp -rf "$root/api"/* "$dest" || exit $?
+    cp -f "$root/api/README.md" "$dest/API.md" || exit $?
+    cp -f "$root/README.md" "$dest/README.md" || exit $?
   fi
 
   rm -f "$dest/global.d.ts"
@@ -267,8 +271,8 @@ function package_platform_variant () {
 
   if (( do_global_link )); then
     mkdir -p "$dest/assets" "$dest/bin" "$dest/docs" "$dest/include" "$dest/lib" "$dest/objects" "$dest/src"
-    cp -rf "$root/npm/src"/* "$dest/src"
-    cp -rf "$root/npm/bin"/* "$dest/bin"
+    cp -rf "$root/npm/src"/* "$dest/src" || exit $?
+    cp -rf "$root/npm/bin"/* "$dest/bin" || exit $?
 
     ln -sf "$source"/* "$dest"
     ln -sf "$root/assets"/* "$dest/assets"
@@ -322,56 +326,60 @@ function package_platform_variant () {
     fi
   else
     mkdir -p "$dest/uv" "$dest/bin" "$dest/docs" "$dest/src" "$dest/include" "$dest/lib" "$dest/objects"
-    cp -rf "$source"/. "$dest"
+    cp -rf "$source"/. "$dest" || exit $?
 
-    cp -rf "$root/npm/bin"/* "$dest/bin"
-    cp -rf "$root/npm/src"/* "$dest/src"
-    cp -f "$root/LICENSE.txt" "$dest"
-    cp -f "$root/NOTICE" "$dest"
-    cp -f "$root/THIRD_PARTY_NOTICES.md" "$dest"
-    cp -f "$root/README.md" "$dest"
-    cp -f "$root/docs/BUILD_ENVIRONMENT.md" "$dest/docs/BUILD_ENVIRONMENT.md"
+    cp -rf "$root/npm/bin"/* "$dest/bin" || exit $?
+    cp -rf "$root/npm/src"/* "$dest/src" || exit $?
+    cp -f "$root/LICENSE.txt" "$dest" || exit $?
+    cp -f "$root/NOTICE" "$dest" || exit $?
+    cp -f "$root/THIRD_PARTY_NOTICES.md" "$dest" || exit $?
+    cp -f "$root/README.md" "$dest" || exit $?
+    cp -f "$root/docs/BUILD_ENVIRONMENT.md" "$dest/docs/BUILD_ENVIRONMENT.md" || exit $?
 
     mkdir -p "$dest/assets"
-    cp -rf "$root/assets"/* "$dest/assets"
+    cp -rf "$root/assets"/* "$dest/assets" || exit $?
 
-    cp -rf "$ORO_HOME/uv"/* "$dest/uv"
-    cp -rf "$ORO_HOME/bin"/* "$dest/bin"
-    cp -rf "$ORO_HOME/src"/* "$dest/src"
-    cp -rf "$ORO_HOME/include"/* "$dest/include"
+    cp -rf "$ORO_HOME/uv"/* "$dest/uv" || exit $?
+    cp -rf "$ORO_HOME/bin"/* "$dest/bin" || exit $?
+    cp -rf "$ORO_HOME/src"/* "$dest/src" || exit $?
+    cp -rf "$ORO_HOME/include"/* "$dest/include" || exit $?
 
     if test -d "$ORO_HOME/pkgconfig"; then
-      cp -rf "$ORO_HOME/pkgconfig" "$dest/pkgconfig"
+      cp -rf "$ORO_HOME/pkgconfig" "$dest/pkgconfig" || exit $?
     fi
 
     if [[ -z "${NO_ANDROID:-}" ]]; then
       for android_lib_dir in "$ORO_HOME"/lib/*-android; do
         if [[ -d "$android_lib_dir" ]]; then
-          cp -rf "$android_lib_dir" "$dest/lib"
+          cp -rf "$android_lib_dir" "$dest/lib" || exit $?
           rm -rf "$dest/lib/$(basename "$android_lib_dir")/objs-debug"
         fi
       done
     fi
 
     for lib_dir in "$ORO_HOME"/lib/"$arch"-*; do
+      # Android directories were copied above; copying twice can overwrite read-only staged files.
+      if [[ "$lib_dir" == *-android ]]; then
+        continue
+      fi
       if [[ -e "$lib_dir" ]] && should_stage_target_directory "$lib_dir"; then
-        cp -rf "$lib_dir" "$dest/lib"
+        cp -rf "$lib_dir" "$dest/lib" || exit $?
       fi
     done
     for objects_dir in "$ORO_HOME"/objects/"$arch"-*; do
       if [[ -e "$objects_dir" ]] && should_stage_target_directory "$objects_dir"; then
-        cp -rf "$objects_dir" "$dest/objects"
+        cp -rf "$objects_dir" "$dest/objects" || exit $?
       fi
     done
 
     if [[ "$platform" = "darwin" ]] && [[ -z "${NO_IOS:-}" ]]; then
       if [ "$(uname -m)" == "arm64" ]; then
-        cp -rf "$ORO_HOME/lib/x86_64-iPhoneSimulator" "$dest/lib"
-        cp -rf "$ORO_HOME/objects/x86_64-iPhoneSimulator" "$dest/objects"
+        cp -rf "$ORO_HOME/lib/x86_64-iPhoneSimulator" "$dest/lib" || exit $?
+        cp -rf "$ORO_HOME/objects/x86_64-iPhoneSimulator" "$dest/objects" || exit $?
       fi
       if [ "$(uname -m)" == "x86_64" ]; then
-        cp -rf "$ORO_HOME/lib/arm64-iPhoneOS" "$dest/lib"
-        cp -rf "$ORO_HOME/objects/arm64-iPhoneOS" "$dest/objects"
+        cp -rf "$ORO_HOME/lib/arm64-iPhoneOS" "$dest/lib" || exit $?
+        cp -rf "$ORO_HOME/objects/arm64-iPhoneOS" "$dest/objects" || exit $?
       fi
     fi
   fi
@@ -384,7 +392,11 @@ function package_platform_variant () {
   fi
 
   if [ "$platform" = "win32" ]; then
-    cp -rap "$ORO_HOME/bin"/.vs* "$dest/bin"
+    for visual_studio_file in "$ORO_HOME/bin"/.vs*; do
+      if [[ -e "$visual_studio_file" ]]; then
+        cp -rap "$visual_studio_file" "$dest/bin" || exit $?
+      fi
+    done
   fi
 
   cd "$dest" || exit $?
@@ -392,7 +404,7 @@ function package_platform_variant () {
 
   _pack_or_link
 
-  if (( do_global_link )); then
+  if (( do_global_link )) && [[ "$platform" != "linux" ]]; then
     npm link --no-fund --no-audit --offline --force || exit $?
   fi
 }
@@ -413,7 +425,7 @@ function publish_cli_package () {
 
   _pack_or_link
 
-  if (( do_global_link )); then
+  if (( do_global_link )) && [[ "$platform" != "linux" ]]; then
     for arch in "${archs[@]}"; do
       local normalized_arch="${arch/x86_64/x64}"
       local platform_package="$scope/${name}-$platform-$normalized_arch"
@@ -544,8 +556,59 @@ if (( only_platforms && only_top_level )); then
   exit 2
 fi
 
-if (( do_global_link )); then
-  # Keep staging under build/npm, but let install.sh recreate the global CLI symlink.
+declare prior_link_staging_home="$ORO_HOME"
+declare stable_sdk_home="${ORO_LOCAL_SDK_HOME:-$root/.local/share/oro-sdk/linux}"
+
+function publish_stable_linux_pair() {
+  local normalized_arch="${archs[0]/x86_64/x64}"
+  python3 "$root/bin/publish-runtime-sdk.py" \
+    --sdk "$ORO_HOME/packages/@oro-computer/runtime-linux-$normalized_arch" \
+    --api "$ORO_HOME/packages/@oro-computer/runtime" \
+    --stable-home "$stable_sdk_home" --legacy-prefix "$prior_link_staging_home" \
+    --activate-local --global-prefix "$global_prefix"
+}
+
+if (( do_global_link )) && [[ "$platform" == "linux" ]]; then
+  stable_sdk_home="$(resolve_absolute_path "$stable_sdk_home")" || exit $?
+  if (( only_platforms || only_top_level )); then
+    echo >&2 "not ok - Linux --link publishes a complete SDK/API pair; partial package selections are not supported"
+    exit 2
+  fi
+  if (( no_rebuild )); then
+    publish_stable_linux_pair
+    exit $?
+  fi
+  # The currently installed SDK remains usable while this private candidate builds.
+  mkdir -p "$root/build/npm"
+  python3 "$root/bin/sdk-cache.py" gc --home "$stable_sdk_home" --quiet || exit $?
+  mkdir -p "$stable_sdk_home/leases"
+  exec {sdk_publication_fd}>"$stable_sdk_home/.publication.lock"
+  flock -x "$sdk_publication_fd" || exit $?
+  sdk_build_lease="$(mktemp "$stable_sdk_home/leases/build-XXXXXXXX")" || exit 1
+  exec {sdk_build_fd}>"$sdk_build_lease"
+  flock -s "$sdk_build_fd" || exit $?
+  ORO_HOME="$(python3 "$root/bin/sdk-cache.py" stage --home "$stable_sdk_home" \
+    --parent "$root/build/npm" --lease-fd "$sdk_build_fd" --lease-path "$sdk_build_lease" \
+    --publication-fd "$sdk_publication_fd")" || exit 1
+  flock -u "$sdk_publication_fd"
+  exec {sdk_publication_fd}>&-
+  # Native children inherit this descriptor. Node child-process calls explicitly
+  # carry it through the source-only preload, including detached descendants.
+  export ORO_SDK_LEASES
+  ORO_SDK_LEASES="$(python3 -c 'import json,os,sys; print(json.dumps(json.loads(os.environ.get("ORO_SDK_LEASES", "[]")) + [{"fd":int(sys.argv[1]),"path":sys.argv[2]}]))' "$sdk_build_fd" "$sdk_build_lease")"
+  sdk_preload_option="$(python3 -c 'import json,sys; print("--require " + json.dumps(sys.argv[1]))' "$root/bin/sdk-lease.cjs")"
+  export NODE_OPTIONS="${NODE_OPTIONS:-} $sdk_preload_option"
+  function collect_link_staging_on_exit() {
+    local status=$?
+    exec {sdk_build_fd}>&-
+    python3 "$root/bin/sdk-cache.py" gc --home "$stable_sdk_home" --quiet || \
+      echo >&2 "SDK staging cleanup is pending; inspect $stable_sdk_home/gc-status.json"
+    return "$status"
+  }
+  trap collect_link_staging_on_exit EXIT
+  PREFIX="$ORO_HOME"
+  remove_oro_home=0
+elif (( do_global_link )); then
   PREFIX="$global_prefix"
 fi
 
@@ -559,7 +622,7 @@ export ORO_HOME
 export PREFIX
 
 if (( !only_top_level && !no_rebuild )) ; then
-  if (( do_global_link )); then
+  if (( do_global_link )) && [[ "$platform" != "linux" ]]; then
     "$root/bin/install.sh" --link "${install_args[@]}" || exit $?
   else
     "$root/bin/install.sh" "${install_args[@]}" || exit $?
@@ -663,4 +726,8 @@ if (( !only_platforms || only_top_level )); then
     IFS=':' read -r scope name <<< "$spec"
     publish_cli_package "$scope" "$name"
   done
+fi
+
+if (( do_global_link )) && [[ "$platform" == "linux" ]]; then
+  publish_stable_linux_pair || exit $?
 fi

@@ -1,15 +1,18 @@
 /**
  * @typedef {object} NetworkStatus
- * @property {boolean} available Whether Android permits reading network state.
+ * @property {string} [platform] Linux reports its platform explicitly.
+ * @property {boolean} available Whether the OS permits reading network state.
  * @property {boolean} connected Whether a default network exists.
- * @property {boolean} validated Whether Android validated Internet connectivity.
+ * @property {boolean} validated Whether the OS monitor reports full Internet connectivity.
  * @property {boolean} captivePortal Whether Android detected a captive portal.
  * @property {boolean} metered Whether the current path is metered.
  * @property {string[]} transports Reported wifi, cellular, ethernet, bluetooth, or vpn transports.
  * @property {'online'|'offline'} name Online means the path is validated.
+ * @property {boolean} [transportDetailsAvailable] False on Linux; transports is empty rather than inferred.
+ * @property {boolean} [serverReachabilityKnown] False on Linux. Application servers require their own probes.
  */
 /**
- * Reads Android's current default path without making a network request.
+ * Reads the OS monitor's current default path without making a network request.
  * Other platforms and disabled monitoring reject with `ENOSYS`.
  * @returns {Promise<NetworkStatus>}
  */
@@ -29,7 +32,11 @@ declare namespace _default {
 export default _default;
 export type NetworkStatus = {
     /**
-     * Whether Android permits reading network state.
+     * Linux reports its platform explicitly.
+     */
+    platform?: string;
+    /**
+     * Whether the OS permits reading network state.
      */
     available: boolean;
     /**
@@ -37,7 +44,7 @@ export type NetworkStatus = {
      */
     connected: boolean;
     /**
-     * Whether Android validated Internet connectivity.
+     * Whether the OS monitor reports full Internet connectivity.
      */
     validated: boolean;
     /**
@@ -56,4 +63,12 @@ export type NetworkStatus = {
      * Online means the path is validated.
      */
     name: "online" | "offline";
+    /**
+     * False on Linux; transports is empty rather than inferred.
+     */
+    transportDetailsAvailable?: boolean;
+    /**
+     * False on Linux. Application servers require their own probes.
+     */
+    serverReachabilityKnown?: boolean;
 };

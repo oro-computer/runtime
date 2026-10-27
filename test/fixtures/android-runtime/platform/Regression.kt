@@ -22,9 +22,16 @@ internal object ProtectedAuthentication {
 }
 internal object LauncherDestinations { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }
 internal object DeferredSync { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }
+internal object ForegroundTasks { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }
+internal object NativeGestures {
+  fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() }
+  fun invalidate(window: oro.runtime.window.Window) {}
+}
+class NativeStateException(val code: String) : Exception(code)
 internal object PasswordCredentials { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }
 internal object NativeExtensions { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }
 internal object NativeNotifications { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }
+internal object NativePush { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }
 fun main() {
   val app = App(); val fragment = Fragment(0); val owner = Window(app.activity, fragment)
   fragment.window = owner; app.activity.windowFragmentManager.fragments.add(fragment)
@@ -80,8 +87,22 @@ fun main() {
   check(!app.results.containsKey(303))
   PlatformOperations.cancelWindow(owner)
   check(code(303) == "ABORT_ERR")
+  for ((token, paused) in listOf(350L to true, 351L to false)) {
+    if (paused) app.activity.lifecycle.currentState = Lifecycle.State.STARTED
+    else fragment.isHidden = true
+    PlatformOperations.start(app, token, 0, "back", "disable", "{\"registration\":\"public\"}",
+      "back-cleanup-$token", owner.platformDocumentToken)
+    check(app.results[token]?.has("data") == true) { "Background cleanup failed: ${code(token)}" }
+    PlatformOperations.start(app, token + 10, 0, "authentication", "status", "{}",
+      "private-background-$token", owner.platformDocumentToken)
+    check(code(token + 10) == "ENOTREADY")
+    app.activity.lifecycle.currentState = Lifecycle.State.RESUMED
+    fragment.isHidden = false
+  }
   val field = PlatformOperations::class.java.getDeclaredField("deadlines")
   field.isAccessible = true
   val deadlines = field.get(PlatformOperations) as java.util.concurrent.ScheduledThreadPoolExecutor
   check(deadlines.queue.isEmpty())
 }
+
+internal object NativeWorkflows { fun request(call: PlatformCall, action: String, options: JSONObject) { call.success() } }

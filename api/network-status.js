@@ -1,23 +1,26 @@
 /**
  * @module network-status
- * Android network path state. Connectivity never establishes server health,
+ * Android and Linux network path state. Connectivity never establishes server health,
  * account authorization, or permission to retry an uncertain operation.
  */
 import ipc from './ipc.js'
 
 /**
  * @typedef {object} NetworkStatus
- * @property {boolean} available Whether Android permits reading network state.
+ * @property {string} [platform] Linux reports its platform explicitly.
+ * @property {boolean} available Whether the OS permits reading network state.
  * @property {boolean} connected Whether a default network exists.
- * @property {boolean} validated Whether Android validated Internet connectivity.
+ * @property {boolean} validated Whether the OS monitor reports full Internet connectivity.
  * @property {boolean} captivePortal Whether Android detected a captive portal.
  * @property {boolean} metered Whether the current path is metered.
  * @property {string[]} transports Reported wifi, cellular, ethernet, bluetooth, or vpn transports.
  * @property {'online'|'offline'} name Online means the path is validated.
+ * @property {boolean} [transportDetailsAvailable] False on Linux; transports is empty rather than inferred.
+ * @property {boolean} [serverReachabilityKnown] False on Linux. Application servers require their own probes.
  */
 
 /**
- * Reads Android's current default path without making a network request.
+ * Reads the OS monitor's current default path without making a network request.
  * Other platforms and disabled monitoring reject with `ENOSYS`.
  * @returns {Promise<NetworkStatus>}
  */

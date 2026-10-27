@@ -7,8 +7,23 @@ import * as module from 'oro:window/appearance'
 .fi
 .SH DESCRIPTION
 .PP
-Android inset and predictive Back observations for the current window.
+Android insets, predictive Back and bounded edge gesture requests for the current document.
 .SH REFERENCE
+.TP
+\fBsetGestureExclusion(regions)\fR
+Requests system\-gesture exclusion for up to four small visible edge handles in the current trusted foreground document. Fractions refer to native client height, so app code must map its handle geometry after layout. Android retains mandatory navigation gestures and may further restrict or ignore a request. Empty regions clear this document's request. Navigation, pause, hiding, focus loss, detachment or native geometry/configuration changes clear it; returning to the app never restores it automatically. Reapply only for a visible handle. Oversized requests reject without replacing the existing request. Other platforms reject with ENOSYS; nonempty requests below Android 10 use ENOTSUP.
+\fBParameters:\fR
+.br
+\fIregions\fR (GestureExclusionRegion[]; required)
+\fBReturns:\fR
+.br
+\fIPromise<GestureExclusionState>\fR
+.TP
+\fBgetGestureExclusion()\fR
+Reads this document's exclusion request without renewing its ownership. Rectangles describe registered view regions, not OS acceptance or a gesture navigation mode. App drawer/focus/animation behavior remains application code.
+\fBReturns:\fR
+.br
+\fIPromise<GestureExclusionState>\fR
 .TP
 \fBonInsetsChange(callback)\fR
 Observes changes after `ApplicationWindow.setSystemAppearance()` selects an inset owner. An `end` event also covers interrupted platform IME animations; use the reported inset values as the current state, not the target fraction.

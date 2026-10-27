@@ -137,11 +137,9 @@ namespace oro::runtime::loop {
       bool pause ();
 
       /**
-       * Dispatches a callback to be called asynchronously on the loop thread.
-       * This function will attempt to start the loop if it hasn't been started
-       * such that it is not already in a `Paused` or `Shutdown` state.
-       * This function returns `true` if the loop is in an "active" state
-       * such that `state > State::Init && state < State::Paused`.
+       * Dispatches a callback asynchronously on the loop thread, starting an
+       * uninitialized loop when needed. A paused loop retains work until resume.
+       * Returns true when work is accepted; stopped/shutdown loops reject it.
        */
       bool dispatch (const DispatchCallback&);
 

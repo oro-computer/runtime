@@ -26,6 +26,11 @@ extern "C" {
       {"cliVersion", oro_runtime_init_get_cli_version()},
       {"assetManifestSha256", oro_runtime_init_get_asset_manifest_sha256()},
       {"androidBridgeProtocol", 5},
+      {"nativeCallbacksProtocol", 1},
+      {"nativeRecordsProtocol", 2},
+      {"nativePushJournalRecoveryProtocol", 1},
+      {"nativeServicesProtocol", 1},
+      {"nativeWorkflowsProtocol", 1},
       {"abi", platform.arch},
       {"debug", isDebugEnabled()}
     };

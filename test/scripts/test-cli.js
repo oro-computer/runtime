@@ -33,14 +33,14 @@ function assert (cond, msg) {
   assert((stdout || '').trim().length > 0, 'oroc --prefix should print a path')
 }
 
-// 2) oroc --help includes usage/subcommands
+// 2) oroc --help includes usage and commands
 {
   const { status, stdout } = runOroc(['--help'])
   assert(status === 0, 'oroc --help should exit 0')
   const out = (stdout || '').toLowerCase()
   assert(
-    out.includes('usage') && out.includes('subcommands'),
-    'oroc --help should include usage and subcommands'
+    out.includes('usage:') && out.includes('commands:'),
+    'oroc --help should include usage and commands'
   )
 }
 

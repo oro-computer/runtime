@@ -6,9 +6,9 @@
 /**
  * @typedef {object} AndroidLifecycleEvent
  * @property {number} index Runtime window index.
- * @property {'loading'|'ready'|'failed'|'renderer-lost'|'reload'} phase
+ * @property {'loading'|'presented'|'ready'|'failed'|'renderer-lost'|'reload'} phase
  * @property {number} elapsedMs Monotonic time since the first retained process event.
- * @property {number} durationMs Startup elapsed time for ready/failure; zero otherwise.
+ * @property {number} durationMs Startup elapsed time for presentation/readiness/failure; zero otherwise.
  */
 /**
  * @typedef {object} AndroidBuildIdentity
@@ -17,7 +17,12 @@
  * @property {string} cliVersion CLI that generated this application's init shim.
  * @property {string} assetManifestSha256 SHA-256 of asset and build evidence bound into the native init shim; not the APK digest.
  * @property {string|null} applicationInputSha256 Staged Android native files, normalized settings, SDK inventory and toolchain input fingerprint; null for older or unbound evidence. APK digest and signing certificate identify the exact compiled artifact.
- * @property {number} androidBridgeProtocol Native bridge contract version.
+ * @property {number} androidBridgeProtocol Native bridge version.
+ * @property {number} [nativeCallbacksProtocol] Android compiled callback adapter version; 1 for the native C++ facade.
+ * @property {number} [nativeRecordsProtocol] Native C++ encrypted record format; distinct from Kotlin v1 storage and migration.
+ * @property {number} [nativePushJournalRecoveryProtocol] Native installation-scoped unreadable push-journal quarantine protocol.
+ * @property {number} [nativeServicesProtocol] Owned native service, v1 interoperability and child-execution SDK protocol.
+ * @property {number} [nativeWorkflowsProtocol] Packaged declarative read-and-notify executor protocol.
  * @property {string} abi Compiled architecture.
  * @property {boolean} debug
  * @property {number} sdk Device SDK.
@@ -58,6 +63,10 @@
  * @property {boolean} applicationBackHandling Document-owned Back handler with native fallback.
  * @property {boolean} periodicDeferredReads Configured periodic native read scheduling.
  * @property {boolean} nativeDeferredMaintenance Registered retry-safe cleanup/revocation scheduling; general queued writes remain unavailable.
+ * @property {boolean} nativeForegroundExecution Configured user-started dataSync executor service; query oro:foreground for current admission and registered executors.
+ * @property {boolean} nativeContinuousExecution Configured user-started specialUse monitoring; query oro:foreground/continuous for current admission.
+ * @property {boolean} nativeTransactionalRecords Native-only encrypted identity-bound CAS records and migration; not exposed through JavaScript.
+ * @property {boolean} nativeCoordination Native-only conditional intents, records and uncertain-outcome coordination; external authorization remains application-owned.
  * @property {boolean} biometricSecretUnlock
  * @property {boolean} namedLauncherDestinations
  * @property {boolean} nativeDeferredReads Configured native read/reconciliation scheduler; query registered executors separately.
@@ -66,6 +75,8 @@
  * @property {boolean} nativePasswordSelection Explicit Android 14+ framework password chooser; separate from Autofill and passkeys.
  * @property {boolean} nativeNotificationPresentation Channel/group/public-version submission with shared response receipts.
  * @property {boolean} systemTextScaling Android interactive WebViews apply absolute system text zoom before navigation and on configuration changes; webview.text_zoom can select fixed or manual ownership. Linear WebView zoom is not Android nonlinear native text scaling.
+ * @property {boolean} nativeStartupPresentation Android can reveal a verified bundled startup screen through the current window's markPresented() without acknowledging readiness or stopping native recovery deadlines.
+ * @property {boolean} systemGestureExclusion Bounded document-owned edge requests; Android retains mandatory navigation policy.
  * @property {boolean} nativeExtensions Configured compiled native extension lifecycle and document-owned operations.
  * @property {boolean} pointerCapture
  * @property {boolean} historicalProcessExits
@@ -759,13 +770,13 @@ export type AndroidLifecycleEvent = {
      * Runtime window index.
      */
     index: number;
-    phase: "loading" | "ready" | "failed" | "renderer-lost" | "reload";
+    phase: "loading" | "presented" | "ready" | "failed" | "renderer-lost" | "reload";
     /**
      * Monotonic time since the first retained process event.
      */
     elapsedMs: number;
     /**
-     * Startup elapsed time for ready/failure; zero otherwise.
+     * Startup elapsed time for presentation/readiness/failure; zero otherwise.
      */
     durationMs: number;
 };
@@ -791,9 +802,29 @@ export type AndroidBuildIdentity = {
      */
     applicationInputSha256: string | null;
     /**
-     * Native bridge contract version.
+     * Native bridge version.
      */
     androidBridgeProtocol: number;
+    /**
+     * Android compiled callback adapter version; 1 for the native C++ facade.
+     */
+    nativeCallbacksProtocol?: number;
+    /**
+     * Native C++ encrypted record format; distinct from Kotlin v1 storage and migration.
+     */
+    nativeRecordsProtocol?: number;
+    /**
+     * Native installation-scoped unreadable push-journal quarantine protocol.
+     */
+    nativePushJournalRecoveryProtocol?: number;
+    /**
+     * Owned native service, v1 interoperability and child-execution SDK protocol.
+     */
+    nativeServicesProtocol?: number;
+    /**
+     * Packaged declarative read-and-notify executor protocol.
+     */
+    nativeWorkflowsProtocol?: number;
     /**
      * Compiled architecture.
      */
@@ -909,6 +940,22 @@ export type RuntimeCapabilities = {
      * Registered retry-safe cleanup/revocation scheduling; general queued writes remain unavailable.
      */
     nativeDeferredMaintenance: boolean;
+    /**
+     * Configured user-started dataSync executor service; query oro:foreground for current admission and registered executors.
+     */
+    nativeForegroundExecution: boolean;
+    /**
+     * Configured user-started specialUse monitoring; query oro:foreground/continuous for current admission.
+     */
+    nativeContinuousExecution: boolean;
+    /**
+     * Native-only encrypted identity-bound CAS records and migration; not exposed through JavaScript.
+     */
+    nativeTransactionalRecords: boolean;
+    /**
+     * Native-only conditional intents, records and uncertain-outcome coordination; external authorization remains application-owned.
+     */
+    nativeCoordination: boolean;
     biometricSecretUnlock: boolean;
     namedLauncherDestinations: boolean;
     /**
@@ -935,6 +982,14 @@ export type RuntimeCapabilities = {
      * Android interactive WebViews apply absolute system text zoom before navigation and on configuration changes; webview.text_zoom can select fixed or manual ownership. Linear WebView zoom is not Android nonlinear native text scaling.
      */
     systemTextScaling: boolean;
+    /**
+     * Android can reveal a verified bundled startup screen through the current window's markPresented() without acknowledging readiness or stopping native recovery deadlines.
+     */
+    nativeStartupPresentation: boolean;
+    /**
+     * Bounded document-owned edge requests; Android retains mandatory navigation policy.
+     */
+    systemGestureExclusion: boolean;
     /**
      * Configured compiled native extension lifecycle and document-owned operations.
      */

@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "Node16",
+    "types": ["node", "vscode"]
+  },
+  "include": ["extension.cjs"]
+}

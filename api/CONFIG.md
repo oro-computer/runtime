@@ -66,6 +66,7 @@ Build-time bundling, output, and environment forwarding.
 | name | "{{project_name}}" | Required: CLI build name (also used as binary name) Must contain only letters, numbers, dashes, or underscores |
 | copy | "src" | Resource directory copied into the app bundle and served by the `oro:` scheme. Most apps keep HTML, JS, CSS, icons, and service workers under `src`. |
 | output | "build" | Build output directory (relative to the project root). Safe to delete and regenerate. |
+| cache | false | Opt in to supported build result caches. Platform and cache-specific settings can override this. |
 | env | ["USER", "TMPDIR", "PWD"] | Environment variables forwarded from your shell into the runtime at launch. Use `.ororc` or `[env]`/`env_*` overrides when values differ per machine. |
 
 ### `meta`

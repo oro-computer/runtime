@@ -739,6 +739,7 @@ namespace oro::runtime::window {
       SharedPointer<ManagedWindow> getOrCreateWindow (int index, const Window::Options&);
       WindowStatus getWindowStatus (int index);
 
+      bool canMutateWindows ();
       SharedPointer<ManagedWindow> createWindow (const Window::Options&);
       SharedPointer<ManagedWindow> createDefaultWindow (const Window::Options&);
 

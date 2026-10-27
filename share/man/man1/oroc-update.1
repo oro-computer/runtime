@@ -8,7 +8,7 @@ oroc update <subcommand> [options]
 .SH DESCRIPTION
 .PP
 Update tooling for manifests, signatures, and bundles.
-.SH SUBCOMMANDS
+.SH COMMANDS
 .TP
 \fBkeygen\fR
 generate an Ed25519 keypair for update manifests
@@ -36,9 +36,15 @@ extract an update bundle tar archive into a directory
 .TP
 \fBvalidate\fR
 validate a manifest.json file against the update manifest schema shape
+.SH OPTIONS
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-All subcommands support '\-\-log\-file=<path>' to mirror logs to a JSON file. Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '\-\-manifest\-name' on relevant subcommands to override the default manifest.json filename (and derived sidecar names).
+All subcommands support '\-\-log\-file=<path>' to mirror logs to a JSON file.
+.PP
+Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '\-\-manifest\-name' on relevant subcommands to override the default manifest.json filename (and derived sidecar names).
 .SH EXAMPLES
 .TP
 \fBoroc update init\fR

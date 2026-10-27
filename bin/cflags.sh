@@ -71,7 +71,7 @@ if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then
   fi
 else
   source "$root/bin/android-functions.sh"
-  android_fte > /dev/null
+  android_fte > /dev/null || exit $?
   cflags+=("-DANDROID -pthread -fexceptions -fPIC -frtti -fsigned-char -D_FILE_OFFSET_BITS=64 -Wno-invalid-command-line-argument -Wno-unused-command-line-argument")
   cflags+=("$(android_clang_target "$arch")")
   cflags+=($(android_arch_includes "$arch"))

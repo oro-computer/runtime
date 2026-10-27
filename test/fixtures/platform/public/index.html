@@ -1,0 +1,22 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Public platform check</title>
+<h1>Public platform check</h1>
+<p id="result">Starting public checks.</p>
+<script type="module">
+import platform from 'oro:platform'
+import application from 'oro:application'
+await (await application.getCurrentWindow()).markReady()
+while (!document.hasFocus()) await new Promise(resolve => setTimeout(resolve, 100))
+try {
+  const inventory = await platform.getCapabilities()
+  const extension = await platform.getSupport('extension')
+  const missing = await platform.request('public.unregistered', 'probe', {}).then(() => 'accepted', error => error.code)
+  const removedModuleUnavailable = await import('oro:native').then(() => false, () => true)
+  window.publicPlatformResult = { inventory, extension, missing, removedModuleUnavailable }
+  document.querySelector('#result').textContent = 'Public platform checks completed.'
+} catch (error) {
+  window.publicPlatformResult = { error: error.code || error.name }
+  document.querySelector('#result').textContent = 'Public check failed: ' + (error.code || error.name)
+}
+</script>

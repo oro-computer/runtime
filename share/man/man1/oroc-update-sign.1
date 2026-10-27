@@ -3,7 +3,7 @@
 oroc\-update\-sign \- Sign an update manifest and emit a detached manifest.sig file.
 .SH SYNOPSIS
 .nf
-oroc update sign [\-\-manifest=<path>] (\-\-keys=<file> | \-\-private\-key=<hex>) [options]
+oroc update sign (\-\-keys=<file> | \-\-private\-key=<hex>) [options]
 .fi
 .SH DESCRIPTION
 .PP
@@ -30,9 +30,16 @@ output path for manifest.sig (default: <manifest\-without\-extension>.sig, e.g. 
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-The signature file is JSON containing "schemaVersion", "algorithm", "keyId", and "signature" fields. Clients verify manifest bytes against manifest.sig and the configured public key(s). Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '\-\-manifest\-name' to change the default manifest filename.
+The signature file is JSON containing "schemaVersion", "algorithm", "keyId", and "signature" fields.
+.PP
+Clients verify manifest bytes against manifest.sig and the configured public key(s).
+.PP
+Advanced: set ORO_UPDATE_MANIFEST_FILENAME or pass '\-\-manifest\-name' to change the default manifest filename.
 .SH EXAMPLES
 .TP
 \fBoroc update sign \-\-keys key.json \-\-manifest manifest.json\fR

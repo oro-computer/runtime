@@ -2,6 +2,7 @@ import test from 'oro:test'
 
 import { NotificationAction, NotificationOptions, getResponses, acknowledgeResponse } from 'oro:notification'
 import os from 'oro:os'
+import platform from 'oro:platform'
 
 test('notification receipt acknowledgements validate identity', async (t) => {
   for (const id of ['', null, 42, 'x'.repeat(257)]) {
@@ -16,6 +17,11 @@ test('notification receipt acknowledgements validate identity', async (t) => {
 
 test('notification receipts report unsupported platforms', async (t) => {
   if (os.platform() === 'android') return
+  const descriptor = await platform.getSupport('notifications')
+  if (descriptor.implementation === 'implemented') {
+    t.equal(descriptor.platform, os.platform(), 'notification receipt backend identifies its supported platform')
+    return
+  }
   for (const request of [() => getResponses(), () => acknowledgeResponse('opaque-receipt')]) {
     try {
       await request()

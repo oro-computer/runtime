@@ -57,6 +57,16 @@ Do not edit `build/`, `tmp/`, or generated declaration files. Public `oro:*` mod
 - Do not hand-edit generated declaration artifacts such as `api/index.d.ts` or `api/index.tmp.d.ts`.
 - If `npm run lint` changes generated files, review and keep those updates with the source edits that required them.
 
+## API evolution and compatibility
+
+Deprecation is reserved for APIs available in a previous published release. Confirm that
+availability from the published release; an API appearing in Git history, a local SDK, or
+unreleased documentation does not establish that it shipped.
+
+During unreleased API exploration, rename or remove obsolete entry points directly, without
+compatibility shims or deprecation notices. Update imports, examples, JSDoc, generated types and
+manuals, SDK packaging, and tests together so obsolete APIs do not remain accidentally available.
+
 ## Commit and release signing
 
 Contributors should follow the target branch's active signature requirements; this guide does not

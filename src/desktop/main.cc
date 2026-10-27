@@ -20,6 +20,8 @@
 #include <atomic>
 #include <mutex>
 #include "extension.hh"
+#include "../runtime/native/desktop_host.hh"
+extern "C" void oro_runtime_native_initialize(oro::runtime::Runtime*) __attribute__((weak));
 #endif
 
 //
@@ -156,6 +158,7 @@ void signalHandler (int signum) {
 static void handleApplicationURLEvent (const String& url) {
   auto app = App::sharedApplication();
   if (app != nullptr && url.size() > 0) {
+    if (app->runtime.services.platform.nativeLinux()->receiveLauncherURI(url)) return;
     for (auto window : app->runtime.windowManager.windows) {
       if (window != nullptr) {
         window->handleApplicationURL(url);
@@ -343,6 +346,9 @@ static const String ERROR_STATE = "1";
 MAIN {
   try {
 #if ORO_RUNTIME_PLATFORM_LINUX
+  if (argc == 2 && String(argv[1]) == "--oro-native-service") {
+    return oro::runtime::native::runDesktopNativeHost(getUserConfig(), oro_runtime_native_initialize);
+  }
   // use 'SIGPWR' instead of the default 'SIGUSR1' handler
   // see https://github.com/WebKit/WebKit/blob/2fd8f81aac4e867ffe107c0e1b3e34b1628c0953/Source/WTF/wtf/posix/ThreadingPOSIX.cpp#L185
   // env::set("JSC_SIGNAL_FOR_GC", "30");
@@ -685,6 +691,9 @@ MAIN {
   registerWindowsURISchemeInRegistry();
 #endif
 
+#if ORO_RUNTIME_PLATFORM_LINUX
+  if (oro_runtime_native_initialize) oro_runtime_native_initialize(&app.runtime);
+#endif
   for (auto const arg : std::span(argv, argc)) {
     auto s = String(arg);
 

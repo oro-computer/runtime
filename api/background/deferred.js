@@ -1,10 +1,16 @@
 /**
  * @module background/deferred
- * Durable Android reads and registered cleanup/revocation through native executors.
+ * Durable Android and Linux reads and registered cleanup/revocation through native executors.
  * Requires `[background] deferred_enabled = true` and native registration from
- * Application.onCreate. Executors resolve references and recheck current server
+ * application startup. Linux scheduling requires the native process to remain
+ * alive; an explicitly configured native session host can outlive the GUI.
+ * Installing/enabling its user service is a deployment step, and interrupted
+ * work still needs explicit reconciliation/resume. Executors recheck current server
  * IAM at every attempt. No credentials, request bodies, JS closures or queued
  * arbitrary mutations are accepted. Private origins remain subject to LAN/VPN reachability.
+ * iOS/iPadOS, macOS and Windows backends for this API are not implemented.
+ * Support probes report unavailable with a platform/reason; operational calls
+ * reject ENOSYS. Schedule acceptance does not guarantee OS dispatch or completion.
  */
 import request from '../internal/platform-request.js'
 
@@ -16,10 +22,10 @@ import request from '../internal/platform-request.js'
  * @property {string} accountRef Opaque account identity; authorization is rechecked at execution.
  * @property {string} targetRef Opaque resource identity.
  * @property {string} operationRef Opaque operation identity for read-only status/reconciliation.
- * @property {'any'|'unmetered'} [network='unmetered'] Android scheduling constraint, not server availability.
+ * @property {'any'|'unmetered'} [network='unmetered'] OS path constraint, not server availability.
  * @property {boolean} [requiresCharging=false]
  * @property {boolean} [requiresBatteryNotLow=true]
- * @property {number} [delayMs=0] Minimum delay, at most seven days. Timing is controlled by Android.
+ * @property {number} [delayMs=0] Minimum delay, at most seven days. OS/process availability controls timing.
  * @property {number} [intervalMs=0] Read recurrence: 0 for one-shot, or 15 minutes through seven days. Requires delayMs=0.
  * @property {number} [flexMs] Periodic execution window: at least five minutes or 5% of intervalMs, whichever is larger. Defaults to that minimum; at most intervalMs. Omit for one-shot reads.
  */
@@ -28,10 +34,13 @@ import request from '../internal/platform-request.js'
  */
 /**
  * @typedef {object} DeferredReadSupport
+ * @property {string} [platform] Present on an unavailable cross-platform support result.
+ * @property {'missing'|'restricted'} [implementation] Missing runtime backend or platform API restriction; not a permission denial.
+ * @property {string} [reason] Stable unavailable reason.
  * @property {boolean} available
  * @property {string[]} registeredKinds
  * @property {number} maximumTasks 32, including terminal records until explicitly released.
- * @property {number} maximumAttempts 5 with Android exponential backoff starting at 30 seconds.
+ * @property {number} maximumAttempts 5 with exponential backoff starting at 30 seconds.
  * @property {boolean} readOnly True for enqueue. Maintenance uses a separate explicitly registered contract.
  * @property {boolean} queuedWrites False.
  * @property {boolean} backgroundJavaScript False.
@@ -41,6 +50,8 @@ import request from '../internal/platform-request.js'
  * @property {number} minimumFlexMs 300000.
  * @property {string[]} registeredMaintenanceKinds Explicitly registered native maintenance executors.
  * @property {Object<string, string[]>} maintenanceOperations Allowed cleanup/revoke operations per maintenance kind.
+ * @property {'application-process'} [executionScope] Linux scheduling scope.
+ * @property {boolean} [survivesProcessExit] False on Linux; durable records require explicit interruption reconciliation.
  */
 
 /** @returns {Promise<DeferredReadSupport>} */

@@ -1674,6 +1674,38 @@ export async function request (command, value, options = null) {
   const params = new IPCSearchParams(value, Date.now())
   const uri = `ipc://${command}?${params}`
 
+  // Linux native operations use a top-frame isolated world. Its private proof
+  // is added there, so a nested frame cannot forge document ownership through
+  // the ordinary script-message or XHR transports.
+  if ((command === 'runtime.platform' || command === 'runtime.platform.support') && globalThis.__oroLinuxNativeBridge === true) {
+    if (uri.length > 1048576) {
+      const error = new RangeError('Native request URI exceeds one MiB')
+      error.code = 'E2BIG'
+      return Result.from(null, error, command)
+    }
+    return new Promise((resolve) => {
+      const eventName = `resolve-${params.get('index')}-${params.get('seq')}`
+      const signal = options?.signal
+      let deadline = null
+      let settled = false
+      function finish (result) {
+        if (settled) return
+        settled = true
+        clearTimeout(deadline)
+        globalThis.removeEventListener(eventName, response)
+        signal?.removeEventListener('abort', abort)
+        resolve(result)
+      }
+      function response (event) { finish(Result.from(event.detail, null, command)) }
+      function abort () { finish(Result.from(null, new AbortError(signal), command)) }
+      if (signal?.aborted) { abort(); return }
+      globalThis.addEventListener(eventName, response)
+      signal?.addEventListener('abort', abort, { once: true })
+      deadline = setTimeout(() => finish(Result.from(null, new TimeoutError('Native request timed out'), command)), options?.timeout ?? 95000)
+      globalThis.postMessage({ __oroNativeRequest: uri }, '*')
+    })
+  }
+
   if (
     typeof globalThis.__global_ipc_extension_handler === 'function' &&
     usesExtensionTransport(command, params, options)

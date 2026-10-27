@@ -1,0 +1,48 @@
+.TH OROC-TOOLING-CPP 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-tooling\-cpp \- Export C, C++, Objective\-C and Objective\-C++ compiler commands.
+.SH SYNOPSIS
+.nf
+oroc tooling cpp [options] [<project\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Export C, C++, Objective\-C and Objective\-C++ compiler commands.
+.SH OPTIONS
+.TP
+\fB\-\-platform=<name>\fR
+desktop, linux, mac, win, android, ios or ios\-simulator
+.TP
+\fB\-\-arch=<name>\fR
+target architecture (host by default; arm64 for Android/iOS)
+.TP
+\fB\-\-prod\fR
+select release compiler flags
+.TP
+\fB\-\-prepare\fR
+build explicitly configured CMake preparation targets
+.TP
+\fB\-\-refresh\fR
+allocate a fresh editor generation
+.TP
+\fB\-\-offline\fR
+disable CMake FetchContent downloads and updates
+.TP
+\fB\-\-config=<path>\fR
+use an explicit oro.toml or oro.ini
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Uses Oro extension declarations, an existing compilation database, or a configured CMake project.
+.PP
+Generated commands target original source files and live under build.output/.oro\-tooling.
+.PP
+Apple SDK discovery requires macOS and Xcode; Android requires the selected NDK.
+.PP
+Custom scripts and generated dependency headers require a build\-system compilation database or CMake provider.
+.PP
+See docs/LANGUAGE_SERVER.md for configuration and editor examples.
+.SH SEE ALSO
+oroc(1), oroc\-tooling(1)

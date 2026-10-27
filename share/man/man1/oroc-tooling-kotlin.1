@@ -1,0 +1,41 @@
+.TH OROC-TOOLING-KOTLIN 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.SH NAME
+oroc\-tooling\-kotlin \- Export and prepare Oro editor compilation models.
+.SH SYNOPSIS
+.nf
+oroc tooling kotlin [options] [<project\-dir>]
+.fi
+.SH DESCRIPTION
+.PP
+Export and prepare Oro editor compilation models.
+.SH OPTIONS
+.TP
+\fB\-\-prepare\fR
+compile resources and JVM classes for analysis
+.TP
+\fB\-\-variant=<name>\fR
+Android variant (default devDebug)
+.TP
+\fB\-\-refresh\fR
+regenerate the Android editor project
+.TP
+\fB\-\-offline\fR
+resolve dependencies without network access
+.TP
+\fB\-\-config=<path>\fR
+explicit oro.toml or oro.ini
+.TP
+\fB\-\-classpath\fR
+print only the resolved editor classpath
+.TP
+\fB\-h, \-\-help\fR
+show help
+.SH NOTES
+.PP
+Prints the versioned JSON model by default. Uses Oro configuration and Gradle task providers.
+.PP
+Preparation does not assemble, sign, install, or compile native libraries.
+.PP
+Gradle, a compatible JDK, Android SDK packages and dependency artifacts must be installed.
+.SH SEE ALSO
+oroc(1), oroc\-tooling(1)

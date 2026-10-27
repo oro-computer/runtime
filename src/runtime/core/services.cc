@@ -145,6 +145,8 @@ namespace oro::runtime::core {
     Lock lock(this->mutex);
     struct NamedService { const char* name; Service* svc; };
     const auto services = Vector<NamedService> {
+      // Drain compiled native workers while their I/O and key services are alive.
+      NamedService{"platform", &this->platform},
       NamedService{"background", &this->backgroundService},
       NamedService{"ai", &this->ai},
       NamedService{"conduit", &this->conduit},
@@ -161,7 +163,6 @@ namespace oro::runtime::core {
       NamedService{"otp", &this->otp},
       NamedService{"os", &this->os},
       NamedService{"permissions", &this->permissions},
-      NamedService{"platform", &this->platform},
       NamedService{"process", &this->process},
       NamedService{"sqlite", &this->sqlite},
       NamedService{"secureStorage", &this->secureStorage},

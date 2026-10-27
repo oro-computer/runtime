@@ -1,0 +1,39 @@
+[build]
+name = "public_native_callbacks"
+output = "out"
+copy_map = "copy-map.toml"
+
+[meta]
+bundle_identifier = "oro.runtime.qualification.callbacks"
+version = "1.0.0"
+title = "Public C++ callback verification"
+
+[android]
+runtime_protocol = "5"
+sources = "Receiver.kt"
+manifests = "manifest.xml"
+
+[android.native]
+callbacks_enabled = true
+callback_sources = "NativeCallbacks.cc"
+initializers = "initialize_public_callbacks"
+
+[foreground]
+enabled = true
+continuous_enabled = true
+continuous_subtype = "Public C++ service callback lifecycle verification"
+
+[background]
+deferred_enabled = true
+
+[push]
+enabled = true
+provider = "unifiedpush"
+
+[permissions]
+allow_usb = false
+allow_bluetooth = false
+allow_notifications = true
+
+[webview]
+require_ready = true

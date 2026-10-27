@@ -31,6 +31,9 @@ data class NativePushRegistration (val id: String, val kind: String, val authori
 interface NativePushHandler {
   /** Recheck current app authorization for every delivery. No foreground Activity is required. */
   fun authorize (context: Context, registration: NativePushRegistration): Boolean
+  /** Existing handlers keep their authorization path; C++ adapters also observe bounded native cancellation. */
+  fun authorize (context: Context, registration: NativePushRegistration, cancellation: CancellationSignal): Boolean =
+    authorize(context, registration)
   /** Return true only after durable application handling. Repeated delivery must be safe. */
   fun onMessage (context: Context, registration: NativePushRegistration, message: ByteArray,
     cancellation: CancellationSignal): Boolean
@@ -48,6 +51,7 @@ object NativePush {
   private const val TTL = 7 * 24 * 60 * 60 * 1000L
   private val handlers = mutableMapOf<String, NativePushHandler>()
   private val active = mutableMapOf<String, CancellationSignal>()
+  private val running = mutableSetOf<CancellationSignal>()
   private data class Selection (val window: Window, val document: String, val time: Long)
   private var selection: Selection? = null
   private var selectionDeadline: java.util.concurrent.ScheduledFuture<*>? = null
@@ -60,7 +64,7 @@ object NativePush {
 
   fun available (context: Context): Boolean = App.getInstance().getUserConfigValue("push_enabled") == "true" &&
     App.getInstance().getUserConfigValue("push_provider") == "unifiedpush"
-  private fun store (context: Context) = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
+  private fun store (context: Context) = NativePushJournal.preferences(context)
   private fun digest (value: String) = MessageDigest.getInstance("SHA-256")
     .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
   private fun identifier (value: String): String {
@@ -69,17 +73,79 @@ object NativePush {
   }
   private fun keys (context: Context, prefix: String): List<String> = store(context).all.keys.filter { it.startsWith(prefix) }.sorted()
   private fun read (context: Context, key: String): JSONObject? = store(context).getString(key, null)
-    ?.let { PushCryptography.open(it, key) }
+    ?.let { PushCryptography.open(it, key, NativePushJournal.alias(context)) }
   private fun save (context: Context, key: String, value: JSONObject) {
     val create = keys(context, "registration.").isEmpty() && keys(context, "event.").isEmpty()
-    check(store(context).edit().putString(key, PushCryptography.seal(value, key, create)).commit())
+    val editor = store(context).edit().putString(key, PushCryptography.seal(value, key, create, NativePushJournal.alias(context)))
+    if (key.startsWith("registration.")) editor.putString("recovery.${key.removePrefix("registration.")}", UUID.randomUUID().toString())
+    NativePushJournal.commit(context, editor)
+  }
+
+  /** Native policy calls only after current account authorization and explicit product recovery consent. */
+  @Synchronized
+  fun discoverRegistrations (context: Context, authorityRef: String, accountRef: String, kind: String): JSONArray {
+    identifier(authorityRef); identifier(accountRef)
+    require(Regex("[a-z][a-z0-9.-]{0,63}").matches(kind))
+    val result = JSONArray()
+    val editor = store(context).edit()
+    var changed = false
+    for (key in keys(context, "registration.")) {
+      val record = read(context, key) ?: continue
+      if (record.getString("authorityRef") != authorityRef || record.getString("accountRef") != accountRef ||
+          record.getString("kind") != kind) continue
+      val id = identifier(record.getString("id"))
+      val revisionKey = "recovery.$id"
+      val revision = store(context).getString(revisionKey, null) ?: UUID.randomUUID().toString().also {
+        editor.putString(revisionKey, it); changed = true
+      }
+      result.put(JSONObject().put("id", id).put("kind", kind).put("phase", record.getString("phase")).put("revision", revision))
+      check(result.length() <= 16)
+    }
+    if (changed) NativePushJournal.commit(context, editor)
+    return result
+  }
+
+  /** Fences stale recovery against renewal, endpoint changes, acknowledgements and ID reuse. No server revocation. */
+  @Synchronized
+  fun unregisterIfCurrent (context: Context, authorityRef: String, accountRef: String, kind: String,
+    id: String, revision: String): Boolean {
+    identifier(authorityRef); identifier(accountRef); identifier(id)
+    require(Regex("[a-z][a-z0-9.-]{0,63}").matches(kind) && UUID.fromString(revision).toString() == revision)
+    val record = read(context, "registration.$id") ?: return false
+    if (record.getString("authorityRef") != authorityRef || record.getString("accountRef") != accountRef ||
+        record.getString("kind") != kind || store(context).getString("recovery.$id", null) != revision) {
+      throw PlatformFailure("EAGAIN")
+    }
+    unregister(context, id)
+    return true
+  }
+
+  /** Installation-wide native policy only. Never an account-scoped reset or a server revocation receipt. */
+  @Synchronized
+  fun inspectJournalRecovery (context: Context): JSONObject = NativePushJournal.inspect(context)
+
+  @Synchronized
+  fun quarantineUnreadableJournal (context: Context, options: JSONObject): JSONObject {
+    try {
+      val result = NativePushJournal.quarantine(context, options, running.isEmpty())
+      if (result.getBoolean("changed")) {
+        selection = null
+        selectionDeadline?.cancel(false)
+        selectionDeadline = null
+      }
+      return result
+    } catch (error: PlatformFailure) {
+      if (error.code == "EBUSY" && options.optBoolean("installationScopeConfirmed") &&
+          options.optBoolean("archiveAndStopLocalDeliveryConfirmed")) running.forEach { cancelSignal(it) }
+      throw error
+    }
   }
   private fun registration (value: JSONObject) = NativePushRegistration(value.getString("id"), value.getString("kind"),
     value.getString("authorityRef"), value.getString("accountRef"), value.getString("targetRef"))
 
   @Synchronized
   fun registerHandler (kind: String, handler: NativePushHandler) {
-    require(Regex("[a-z][a-z0-9.-]{0,63}").matches(kind) && !handlers.containsKey(kind) && handlers.size < 16)
+    require(Regex("[a-z][a-z0-9.-]{0,63}").matches(kind) && !handlers.containsKey(kind) && handlers.keys.count { it.startsWith("workflow.") == kind.startsWith("workflow.") } < 16)
     handlers[kind] = handler
   }
 
@@ -235,7 +301,7 @@ object NativePush {
       val name = proof?.creatorPackage ?: return
       if (name == activity.packageName || activity.packageManager.getApplicationInfo(name, 0).uid != proof.creatorUid) return
       if (keys(activity, "registration.").isNotEmpty()) return
-      check(store(activity).edit().putString("distributor", name).commit())
+      NativePushJournal.commit(activity, store(activity).edit().putString("distributor", name))
       window.bridge.emit("pushchange", JSONObject().put("distributorSelected", true).toString())
     }
   }
@@ -246,10 +312,10 @@ object NativePush {
     val key = "registration.${identifier(id)}"
     val record = read(context, key) ?: return
     active.remove(id)?.let { cancelSignal(it) }
-    val editor = store(context).edit().remove(key)
+    val editor = store(context).edit().remove(key).remove("recovery.$id")
     for (event in keys(context, "event.")) if (read(context, event)?.optString("registration") == id) editor.remove(event)
-    check(editor.commit())
-    send(context, record, "UNREGISTER")
+    NativePushJournal.commit(context, editor)
+    try { send(context, record, "UNREGISTER") } catch (_: Exception) { throw PlatformFailure("EUNKNOWN") }
   }
 
   /** Persists authenticated transport input before ACK. No receiver starts a WebView. */
@@ -328,26 +394,36 @@ object NativePush {
     }
     val seen = keys(context, "seen.").sortedByDescending { store(context).getLong(it, 0) }
     for ((index, key) in seen.withIndex()) if (index >= 256 || now - store(context).getLong(key, 0) !in 0..TTL) editor.remove(key)
-    check(editor.commit())
+    NativePushJournal.commit(context, editor)
   }
 
   /** Retries retained input on startup, new transport input or an explicit retryPending call. */
   fun start (context: Context) {
     val app = context.applicationContext
     if (!available(app)) return
-    execute { signal, deadline -> drain(app, signal, deadline) }
+    execute(app) { signal, deadline -> drain(app, signal, deadline) }
   }
 
   private fun markHandled (context: Context, key: String) {
     val editor = store(context).edit().remove(key)
       .putLong("seen.${key.removePrefix("event.")}", System.currentTimeMillis())
     for (old in keys(context, "seen.").sortedByDescending { store(context).getLong(it, 0) }.drop(255)) editor.remove(old)
-    check(editor.commit())
+    NativePushJournal.commit(context, editor)
   }
 
   private fun checkActive (signal: CancellationSignal, deadline: Long) {
     signal.throwIfCanceled()
     if (android.os.SystemClock.elapsedRealtime() >= deadline) throw android.os.OperationCanceledException()
+  }
+
+  @Synchronized
+  private fun bindActive (context: Context, record: JSONObject, signal: CancellationSignal, deadline: Long): Boolean {
+    val id = record.getString("id")
+    val current = read(context, "registration.$id") ?: return false
+    if (current.optString("token") != record.optString("token") || current.optString("generation") != record.optString("generation") ||
+        signal.isCanceled || android.os.SystemClock.elapsedRealtime() >= deadline) return false
+    active[id] = signal
+    return true
   }
 
   private fun drain (context: Context, signal: CancellationSignal, deadline: Long) {
@@ -366,22 +442,23 @@ object NativePush {
       } ?: continue
       val (record, handler) = snapshot
       val reference = registration(record)
-      if (!runCatching { handler.authorize(context, reference) }.getOrDefault(false)) continue
-      val accepted = synchronized(this) {
-        val current = read(context, key)
-        if (current?.optString("generation") != record.getString("generation") || signal.isCanceled ||
-            android.os.SystemClock.elapsedRealtime() >= deadline) false
-        else {
-          save(context, key, current.put("enrollmentAttempts", current.optInt("enrollmentAttempts") + 1))
-          active[reference.id] = signal
-          true
-        }
-      }
-      if (!accepted) continue
+      if (!bindActive(context, record, signal, deadline)) continue
       try {
+        if (!runCatching { handler.authorize(context, reference, signal) }.getOrDefault(false)) continue
+        val accepted = synchronized(this) {
+          val current = read(context, key)
+          if (current?.optString("generation") != record.getString("generation") || signal.isCanceled ||
+              android.os.SystemClock.elapsedRealtime() >= deadline) false
+          else {
+            save(context, key, current.put("enrollmentAttempts", current.optInt("enrollmentAttempts") + 1))
+            active[reference.id] = signal
+            true
+          }
+        }
+        if (!accepted) continue
         val handled = handler.onRegistrationChanged(context, reference, getRegistration(context, reference.id), signal)
         checkActive(signal, deadline)
-        if (handled && handler.authorize(context, reference)) synchronized(this) {
+        if (handled && handler.authorize(context, reference, signal)) synchronized(this) {
           val current = read(context, key)
           if (current?.optString("generation") == record.getString("generation")) {
             checkActive(signal, deadline)
@@ -410,24 +487,25 @@ object NativePush {
       } ?: continue
       val (event, record, handler) = snapshot
       val reference = registration(record)
-      if (!runCatching { handler.authorize(context, reference) }.getOrDefault(false)) continue
-      val accepted = synchronized(this) {
-        val current = read(context, "registration.${reference.id}")
-        if (current?.optString("token") != event.getString("token") || !store(context).contains(key) || signal.isCanceled ||
-            android.os.SystemClock.elapsedRealtime() >= deadline) false
-        else {
-          event.put("attempts", event.optInt("attempts") + 1)
-          save(context, key, event)
-          active[reference.id] = signal
-          true
-        }
-      }
-      if (!accepted) continue
+      if (!bindActive(context, record, signal, deadline)) continue
       try {
+        if (!runCatching { handler.authorize(context, reference, signal) }.getOrDefault(false)) continue
+        val accepted = synchronized(this) {
+          val current = read(context, "registration.${reference.id}")
+          if (current?.optString("token") != event.getString("token") || !store(context).contains(key) || signal.isCanceled ||
+              android.os.SystemClock.elapsedRealtime() >= deadline) false
+          else {
+            event.put("attempts", event.optInt("attempts") + 1)
+            save(context, key, event)
+            active[reference.id] = signal
+            true
+          }
+        }
+        if (!accepted) continue
         val bytes = PushCryptography.decrypt(PushCryptography.decode(event.getString("payload")), record.getJSONObject("keys"))
         val handled = try { handler.onMessage(context, reference, bytes, signal) } finally { bytes.fill(0) }
         checkActive(signal, deadline)
-        if (handled && handler.authorize(context, reference)) synchronized(this) {
+        if (handled && handler.authorize(context, reference, signal)) synchronized(this) {
           val current = read(context, "registration.${reference.id}")
           if (current?.optString("token") == event.getString("token") && store(context).contains(key)) {
             checkActive(signal, deadline)
@@ -445,7 +523,9 @@ object NativePush {
     try { cancellations.execute { signal.cancel() } } catch (_: java.util.concurrent.RejectedExecutionException) {}
   }
 
-  private fun execute (finish: () -> Unit = {}, action: (CancellationSignal, Long) -> Unit) {
+  private fun execute (context: Context, finish: () -> Unit = {}, action: (CancellationSignal, Long) -> Unit) {
+    val epoch = try { synchronized(this) { NativePushJournal.epoch(context) } }
+      catch (_: Exception) { finish(); return }
     val signal = CancellationSignal()
     val expiresAt = android.os.SystemClock.elapsedRealtime() + 8000
     val done = AtomicBoolean(false)
@@ -457,11 +537,16 @@ object NativePush {
     try {
       worker.execute {
         try {
-          checkActive(signal, expiresAt)
+          synchronized(this) {
+            checkActive(signal, expiresAt)
+            if (epoch != NativePushJournal.epoch(context)) throw android.os.OperationCanceledException()
+            running.add(signal)
+          }
           action(signal, expiresAt)
         } catch (_: Exception) {
           // Invalid input and provider failures never expose payloads or key material.
         } finally {
+          synchronized(this) { running.remove(signal) }
           deadline.cancel(false)
           complete()
         }
@@ -473,7 +558,7 @@ object NativePush {
   }
 
   internal fun receiveAsync (context: Context, intent: Intent, senderUid: Int, finish: () -> Unit) {
-    execute(finish) { signal, deadline ->
+    execute(context, finish) { signal, deadline ->
       receive(context, intent, senderUid)
       drain(context, signal, deadline)
     }

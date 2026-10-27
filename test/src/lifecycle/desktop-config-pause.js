@@ -20,7 +20,7 @@ async function write (file, data) {
 // enforce a real pause/resume at native level (FS watchers stopped while minimized).
 // This test is enabled only when ORO_LIFECYCLE_TEST_STRICT=1 to avoid modifying
 // the primary CI build. The desktop test runner will execute a second pass with
-// this env var and a modified oro.ini.
+// this env var and modified project configuration.
 if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
   test.desktop(
     'lifecycle (desktop config): real pause/resume when always_running=false',
@@ -49,7 +49,7 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       await sleep(100)
 
       let pausedOk = false
-      await Promise.race([
+      const pausedChange = Promise.race([
         new Promise((resolve) =>
           setTimeout(() => {
             pausedOk = true
@@ -62,10 +62,14 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
           )
         )
       ])
+      // Native writes remain pending until the loop resumes.
+      const pausedWrite = write(file, 'change-while-paused')
+      await pausedChange
       t.equal(pausedOk, true, 'no change observed while paused')
 
       // Restore (resume) and re-create watcher; then verify changes fire
       await win.restore()
+      await pausedWrite
       await sleep(200)
 
       const watcher2 = new fs.Watcher(file)
@@ -83,7 +87,12 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       t.equal(await secondChange, true, 'watcher restarted after resume')
 
       await watcher2.close()
-      await watcher.close()
+      try {
+        await watcher.close()
+        t.fail('pause must release the original native watcher')
+      } catch (error) {
+        t.equal(error.code, 'NOT_FOUND_ERR', 'pause released the original native watcher')
+      }
       await fs.promises.unlink(file)
     }
   )

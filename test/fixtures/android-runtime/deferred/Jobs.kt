@@ -41,7 +41,7 @@ open class JobService : Context() {
   fun jobFinished(parameters: JobParameters, retry: Boolean) {
     val scheduler = JobScheduler.instance
     scheduler.finishes.add(parameters to retry)
-    if (retry) scheduler.schedule(JobInfo(parameters.jobId, parameters.extras, true, 1))
+    if (retry) scheduler.getPendingJob(parameters.jobId)?.let { scheduler.schedule(it) }
     else if (scheduler.getPendingJob(parameters.jobId)?.interval == 0L &&
         scheduler.getPendingJob(parameters.jobId)?.extras?.getString("generation") == parameters.extras.getString("generation")) {
       scheduler.cancel(parameters.jobId)

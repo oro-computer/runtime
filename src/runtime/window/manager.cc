@@ -199,6 +199,28 @@ namespace oro::runtime::window {
     }
   }
 
+  bool Manager::canMutateWindows () {
+    if (this->destroyed) return false;
+  #if ORO_RUNTIME_PLATFORM_ANDROID
+    if (!this->context.android.activity) return false;
+    const auto attachment = android::JNIEnvironmentAttachment(this->context.android.jvm);
+    const auto allowed = CallClassMethodFromAndroidEnvironment(
+      attachment.env,
+      Boolean,
+      this->context.android.activity,
+      "canMutateWindows",
+      "()Z"
+    );
+    if (attachment.env->ExceptionCheck()) {
+      attachment.env->ExceptionClear();
+      return false;
+    }
+    return allowed;
+  #else
+    return true;
+  #endif
+  }
+
   SharedPointer<Manager::ManagedWindow> Manager::createWindow (
     const Window::Options& options
   ) {
@@ -215,6 +237,9 @@ namespace oro::runtime::window {
     if (this->windows[options.index] != nullptr) {
       return this->windows[options.index];
     }
+
+    // Fragment transactions cannot be committed after Android saves Activity state.
+    if (!this->canMutateWindows()) return nullptr;
 
     auto screen = Window::getScreenSize();
 
@@ -618,6 +643,14 @@ namespace oro::runtime::window {
   }
 
   bool Manager::ManagedWindow::emit (const String& event, const JSON::Any& json) {
+  #if ORO_RUNTIME_PLATFORM_LINUX && !ORO_RUNTIME_DESKTOP_EXTENSION
+    if (this->webview && (event == "applicationpause" || event == "applicationresume")) {
+      // The WebProcess owns its filesystem runtime independently of the UI loop.
+      // Deliver lifecycle over WebKit's native channel, independent of page JavaScript.
+      auto message = webkit_user_message_new("oro.runtime.lifecycle", g_variant_new_string(event.c_str()));
+      webkit_web_view_send_message_to_page(WEBKIT_WEB_VIEW(this->webview), message, nullptr, nullptr, nullptr);
+    }
+  #endif
     return this->bridge && this->bridge->emit(event, json);
   }
 

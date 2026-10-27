@@ -7,10 +7,12 @@ oroc run [options] [<project\-or\-source>]
 .fi
 .SH DESCRIPTION
 .PP
-Run application. Provide a project directory, HTML file, or JavaScript module. When no oro.toml is found, oroc infers a minimal configuration automatically.
+Run application.
+.PP
+Provide a project directory, HTML file, or JavaScript module. When no oro.toml is found, oroc infers a minimal configuration automatically.
 .SH OPTIONS
 .TP
-\fB\-\-headless\fR
+\fB\-H, \-\-headless\fR
 run application in headless mode (without frame or window)
 .TP
 \fB\-\-platform=<platform>\fR
@@ -36,11 +38,11 @@ load "index.html" from a specific port (if host is not specified, defaults to lo
 \fB\-\-host=<host>\fR
 load "index.html" from a specific host (if port is not specified, defaults to 80)
 .TP
-\fB\-\-prod\fR
+\fB\-P, \-\-prod\fR
 build for production (disables debugging info, inspector, etc.)
 .TP
-\fB\-\-test[=path]\fR
-indicate test mode, optionally importing a test file relative to resource files
+\fB\-t, \-\-test=<path>\fR
+enable test mode and import a test file relative to resource files
 .TP
 \fB\-D, \-\-debug\fR
 enable debug mode
@@ -48,7 +50,7 @@ enable debug mode
 \fB\-q, \-\-quiet\fR
 hint for less log output
 .TP
-\fB\-E, \-\-env\fR
+\fB\-E, \-\-env=<name[=value]>\fR
 add environment variables
 .TP
 \fB\-V, \-\-verbose\fR
@@ -62,6 +64,15 @@ write NSS TLS key log lines to <path> (OpenSSL provider)
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-\-remote\-debugging\-port=<port>\fR
+set the remote debugging port
+.TP
+\fB\-\-sanitizers\fR
+enable desktop ASan/UBSan sanitizers
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH ENVIRONMENT
 .TP
 \fBORO_DEBUG\fR
@@ -74,7 +85,9 @@ enable verbose logs (like \-V)
 Android targets use \-\-device, then ANDROID_SERIAL, then the first ready device listed by `adb devices`. The android\-emulator target selects the first ready emulator.
 .SH COMMON ERRORS
 .PP
-For CI/Linux headless, install `xvfb\-run` or set a custom headless runner in your config. Use `\-\-test=path` to run tests bundled with your app.
+For CI/Linux headless, install `xvfb\-run` or set a custom headless runner in your config.
+.PP
+Use `\-\-test=path` to run tests bundled with your app.
 .SH EXAMPLES
 .TP
 \fBoroc run .\fR

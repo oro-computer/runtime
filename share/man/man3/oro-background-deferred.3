@@ -7,7 +7,7 @@ import * as module from 'oro:background/deferred'
 .fi
 .SH DESCRIPTION
 .PP
-Durable Android reads and registered cleanup/revocation through native executors. Requires `[background] deferred_enabled = true` and native registration from Application.onCreate. Executors resolve references and recheck current server IAM at every attempt. No credentials, request bodies, JS closures or queued arbitrary mutations are accepted. Private origins remain subject to LAN/VPN reachability.
+Durable Android and Linux reads and registered cleanup/revocation through native executors. Requires `[background] deferred_enabled = true` and native registration from application startup. Linux scheduling requires the native process to remain alive; an explicitly configured native session host can outlive the GUI. Installing/enabling its user service is a deployment step, and interrupted work still needs explicit reconciliation/resume. Executors recheck current server IAM at every attempt. No credentials, request bodies, JS closures or queued arbitrary mutations are accepted. Private origins remain subject to LAN/VPN reachability. iOS/iPadOS, macOS and Windows backends for this API are not implemented. Support probes report unavailable with a platform/reason; operational calls reject ENOSYS. Schedule acceptance does not guarantee OS dispatch or completion.
 .SH REFERENCE
 .TP
 \fBgetSupport()\fR

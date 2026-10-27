@@ -1,0 +1,105 @@
+{
+  "name": "oro-language-server",
+  "displayName": "Oro Language Server",
+  "description": "Use Oro project models with installed language servers.",
+  "version": "0.1.0",
+  "publisher": "oro-computer",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./extension.cjs",
+  "activationEvents": [
+    "onLanguage:kotlin",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:objective-c",
+    "onLanguage:objective-cpp",
+    "onLanguage:swift"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "oro.languageServer.restart",
+        "title": "Oro: Restart Language Servers"
+      }
+    ],
+    "configuration": {
+      "title": "Oro Language Server",
+      "properties": {
+        "oro.languageServer.executable": {
+          "type": "string",
+          "default": "oroc",
+          "scope": "machine-overridable",
+          "description": "Installed Oro CLI executable."
+        },
+        "oro.languageServer.arguments": {
+          "type": "object",
+          "default": {},
+          "description": "Additional argument arrays keyed by kotlin, typescript, cpp or swift, such as a Kotlin variant.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "oro.languageServer.environment": {
+          "type": "object",
+          "default": {},
+          "scope": "machine-overridable",
+          "description": "Launch environment, including JAVA_HOME when needed. Keep machine paths in user settings.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "oro.languageServer.languages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "kotlin",
+              "typescript",
+              "cpp",
+              "swift"
+            ]
+          },
+          "default": [
+            "kotlin",
+            "typescript",
+            "cpp",
+            "swift"
+          ],
+          "description": "Language families managed in Oro projects. Disable overlapping providers for these projects.",
+          "uniqueItems": true
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/vscode": "1.90.0",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "check": "tsc --project tsconfig.json"
+  },
+  "extensionKind": [
+    "workspace"
+  ]
+}

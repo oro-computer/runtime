@@ -33,9 +33,18 @@ treat unknown or unset keys as errors (non\-zero exit)
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-Keys may be provided in flattened form (e.g., "filesystem_sandbox_enabled") or as TOML\-style paths (e.g., "filesystem.sandbox_enabled"). A bare argument after 'config' is treated as a key query (for example, 'oroc config filesystem.sandbox_enabled'). Unknown keys are printed when present in the active configuration but are marked as undocumented. `\-\-format` prints the merged effective configuration after applying oro.toml, local .ororc overrides, and CLI\-selected config sources. Use '\-\-log\-file=<path>' instead of the global 'oroc \-\-json ...' flag when you need structured config output on stdout and logs at the same time.
+Keys may be provided in flattened form (e.g., "filesystem_sandbox_enabled") or as TOML\-style paths (e.g., "filesystem.sandbox_enabled").
+.PP
+A bare argument after 'config' is treated as a key query (for example, 'oroc config filesystem.sandbox_enabled').
+.PP
+Unknown keys are printed when present in the active configuration but are marked as undocumented. `\-\-format` prints the merged effective configuration after applying oro.toml, local .ororc overrides, and CLI\-selected config sources.
+.PP
+Use '\-\-log\-file=<path>' instead of the global 'oroc \-\-json ...' flag when you need structured config output on stdout and logs at the same time.
 .SH EXAMPLES
 .TP
 \fBoroc config \-\-list\fR

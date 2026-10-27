@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Public native runtime verification</title>
+<p>Public native runtime verification</p>
+<script type="module">
+  import platform from 'oro:platform'
+  import back from 'oro:window/back'
+  const report = message => webkit.messageHandlers.external.postMessage(message)
+  const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+  const check = (value, reason) => { if (!value) throw new Error(reason) }
+  try {
+    if (!sessionStorage.getItem('public-native-scale')) {
+      const before = { width: innerWidth, ratio: devicePixelRatio }
+      check(Math.abs(innerWidth - 640 / 1.5) < 3 && Math.abs(devicePixelRatio - 1.5) < 0.05,
+        'initial OS DPI scaling ' + JSON.stringify(before))
+      report('PUBLIC_UI_SCALE_RESET')
+      await delay(500)
+      check(Math.abs(innerWidth - 640) < 3 && Math.abs(devicePixelRatio - 1) < 0.05,
+        'changed OS DPI scaling ' + JSON.stringify({ width: innerWidth, ratio: devicePixelRatio }))
+      sessionStorage.setItem('public-native-scale', 'true')
+      report('PUBLIC_UI_STAGE:os-dpi')
+    } else check(Math.abs(innerWidth - 640) < 3, 'duplicate scaling after reload')
+    const capability = await platform.getSupport('extension')
+    check(capability?.implementation === 'implemented', 'capability descriptor ' + JSON.stringify(capability))
+    let backCalls = 0
+    const removeBack = await back.setHandler(() => { backCalls++; return true })
+    report('PUBLIC_UI_BACK_PRESS')
+    for (let attempt = 0; attempt < 100 && !backCalls; attempt++) await delay(10)
+    check(backCalls === 1, 'native Back did not reach the registered document')
+    await removeBack()
+    await removeBack()
+    report('PUBLIC_UI_STAGE:back')
+    for (const stalled of [false, true]) {
+      history.pushState({ publicBack: true }, '', stalled ? '#public-stalled-back' : '#public-native-back')
+      const popped = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('native Back fallback timed out')), 3000)
+        addEventListener('popstate', () => { clearTimeout(timeout); resolve() }, { once: true })
+      })
+      const remove = await back.setHandler(() => stalled ? new Promise(() => {}) : false)
+      report('PUBLIC_UI_BACK_PRESS')
+      await popped
+      await remove()
+      report(stalled ? 'PUBLIC_UI_STAGE:back-timeout' : 'PUBLIC_UI_STAGE:back-history')
+    }
+    const state = await platform.request('public.metadata', 'read', { padding: ' '.repeat(150000) })
+    check(state.public === true, 'native result')
+    report('PUBLIC_UI_STAGE:read')
+    if (sessionStorage.getItem('public-native-crash')) {
+      await delay(100)
+      report('PUBLIC_UI_PASSED')
+    } else if (sessionStorage.getItem('public-native-reload')) {
+      sessionStorage.setItem('public-native-crash', 'true')
+      platform.request('public.metadata', 'wait', {}).then(() => report('PUBLIC_UI_FAILED:late crash result'), () => {})
+      await delay(100)
+      report('PUBLIC_UI_CRASH')
+    } else {
+      const iframe = document.createElement('iframe')
+      iframe.src = './public-frame.html'
+      const nested = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('nested check timed out')), 5000)
+        addEventListener('message', event => { if (event.data?.publicNested) { clearTimeout(timeout); resolve(event.data.publicNested) } })
+      })
+      document.body.append(iframe)
+      check(await nested === 'ABORT_ERR', 'nested native request accepted')
+      iframe.remove()
+      report('PUBLIC_UI_STAGE:nested')
+      const controller = new AbortController()
+      const pending = platform.request('public.metadata', 'wait', {}, { signal: controller.signal })
+      await delay(100)
+      controller.abort()
+      try { await pending; throw new Error('cancel accepted a result') } catch (error) { check(error.name === 'AbortError', 'cancel error') }
+      sessionStorage.setItem('public-native-reload', 'true')
+      report('PUBLIC_UI_STAGE:cancelled')
+      platform.request('public.metadata', 'wait', {}).then(() => report('PUBLIC_UI_FAILED:late result'), () => {})
+      await delay(100)
+      report('PUBLIC_UI_RELOAD')
+    }
+  } catch (error) { report('PUBLIC_UI_FAILED:' + error.name + ':' + error.message) }
+</script>

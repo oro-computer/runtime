@@ -42,9 +42,18 @@ hash algorithm to use for the bundle payload (default: sha256 when libsodium is 
 .TP
 \fB\-\-log\-file=<path>\fR
 mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
-The archive is a plain tar file (no compression) built using the runtime's native tar implementation. Directory layout and basic metadata (mode bits, mtime) are preserved. When omitted, '\-\-input' defaults to the project directory (app source), and '\-\-output' defaults to "<build_name>\-<version>.tar" derived from your oro.toml metadata. When '\-\-manifest' or '\-\-manifest\-name' (or ORO_UPDATE_MANIFEST_FILENAME) is provided, the manifest is updated with a new target entry describing this bundle (including length and hash).
+The archive is a plain tar file (no compression) built using the runtime's native tar implementation.
+.PP
+Directory layout and basic metadata (mode bits, mtime) are preserved.
+.PP
+When omitted, '\-\-input' defaults to the project directory (app source), and '\-\-output' defaults to "<build_name>\-<version>.tar" derived from your oro.toml metadata.
+.PP
+When '\-\-manifest' or '\-\-manifest\-name' (or ORO_UPDATE_MANIFEST_FILENAME) is provided, the manifest is updated with a new target entry describing this bundle (including length and hash).
 .SH EXAMPLES
 .TP
 \fBoroc update bundle\fR

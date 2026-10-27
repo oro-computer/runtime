@@ -19,6 +19,7 @@ test('native Web Push decrypts RFC 8291 section 5 and rejects altered ciphertext
   const source = readFileSync(new URL('../../src/runtime/app/push_crypto.kt', import.meta.url), 'utf8')
     .replace(/^import android\..*\n/gm, '')
   writeFileSync(filename, source + `
+class PlatformFailure(val code: String): Exception(code)
 object Base64 {
   const val URL_SAFE = 1; const val NO_WRAP = 2; const val NO_PADDING = 4
   fun encodeToString(value: ByteArray, flags: Int) = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(value)
@@ -36,6 +37,8 @@ class KeyGenParameterSpec: java.security.spec.AlgorithmParameterSpec {
   }
 }
 fun main() {
+  check(PushCryptography::class.java.getDeclaredMethod("open", String::class.java, String::class.java) != null)
+  check(PushCryptography::class.java.getDeclaredMethod("seal", JSONObject::class.java, String::class.java, Boolean::class.javaPrimitiveType) != null)
   // Interoperability vector: https://www.rfc-editor.org/rfc/rfc8291.html#section-5
   val parameters = AlgorithmParameters.getInstance("EC").apply { init(ECGenParameterSpec("secp256r1")) }
     .getParameterSpec(ECParameterSpec::class.java)

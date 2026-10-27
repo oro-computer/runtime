@@ -532,6 +532,11 @@ object NativeHttps {
     }
   }
 
+  /** SDK-owned native worker: never returns before its connection and listener finish cleanup. */
+  internal fun requestOwned(context: Context, url: String, method: String, headers: Map<String, String>, body: ByteArray?,
+    cancellation: CancellationSignal, timeoutMs: Int, maximumResponseBytes: Int): NativeHttpsResponse =
+    execute(context.applicationContext, url, method, headers, body, cancellation, timeoutMs, maximumResponseBytes, SystemClock.elapsedRealtime())
+
   private fun execute (
     context: Context,
     url: String,

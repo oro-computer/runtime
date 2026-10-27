@@ -82,19 +82,19 @@ Get the status of the window
 \fInumber\fR the status of the window
 .TP
 \fBclose()\fR
-Close the window
+Close the window Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 \fBReturns:\fR
 .br
 \fIPromise<object>\fR the options of the window
 .TP
 \fBshow()\fR
-Shows the window
+Shows the window Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 \fBReturns:\fR
 .br
 \fIPromise<ipc.Result>\fR
 .TP
 \fBhide()\fR
-Hides the window
+Hides the window Android rejects with `ENOTREADY` while Activity state is saved or unavailable.
 \fBReturns:\fR
 .br
 \fIPromise<ipc.Result>\fR
@@ -180,7 +180,13 @@ Opens the Web Inspector for the window (desktop only).
 \fIPromise<object>\fR
 .TP
 \fBmarkReady()\fR
-Acknowledges that this window has a usable application screen. Call after mounting the UI and loading required styles. Android apps configured with `[webview] require_ready = true` retain native startup recovery until this acknowledgement. Only the current window can acknowledge its own readiness. This does not replay operations or establish application authorization.
+Acknowledges that this window has a usable application screen. Call after mounting the UI and loading required styles. Android apps configured with `[webview] require_ready = true` keep native startup recovery armed until this acknowledgement. Only the current window can acknowledge its own readiness. This does not replay operations or establish application authorization.
+\fBReturns:\fR
+.br
+\fIPromise<void>\fR
+.TP
+\fBmarkPresented()\fR
+Reveals this Android window's verified bundled startup screen after a native visual\-state fence. Call after installing its inline styles and startup UI. This does not acknowledge application readiness or stop the 30\-second native watchdog. Keep application controls inert until the usable screen calls markReady(). Failed startup restores native recovery and its Reload control. Requires the current trusted top\-level document; foreign origins, headless windows and stale documents cannot reveal a startup screen. Other platforms reject with ENOSYS. Hidden windows do not gain focus from this call.
 \fBReturns:\fR
 .br
 \fIPromise<void>\fR

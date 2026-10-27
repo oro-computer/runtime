@@ -423,6 +423,7 @@ namespace oro::runtime::tcp {
 
   int Socket::readStop () {
     Lock lock(this->mutex);
+    this->remove(TCP_STATE_PAUSED_RECV);
     if (!this->has(TCP_STATE_RECV_STARTED)) return 0;
     int err = uv_read_stop(reinterpret_cast<uv_stream_t*>(&this->handle.tcp));
     if (!err) this->remove(TCP_STATE_RECV_STARTED);
@@ -430,12 +431,34 @@ namespace oro::runtime::tcp {
   }
 
   int Socket::pause () {
-    int err = this->readStop();
+    Lock lock(this->mutex);
+    if (this->has(TCP_STATE_PAUSED) || this->isClosing()) {
+      return 0;
+    }
+    const bool reading = this->has(TCP_STATE_RECV_STARTED);
+    const int err = this->readStop();
+    if (err < 0) {
+      return err;
+    }
+    if (reading) {
+      this->add(TCP_STATE_PAUSED_RECV);
+    }
     this->add(TCP_STATE_PAUSED);
-    return err;
+    return 0;
   }
 
   int Socket::resume () {
+    Lock lock(this->mutex);
+    if (!this->has(TCP_STATE_PAUSED) || this->isClosing()) {
+      return 0;
+    }
+    if (this->has(TCP_STATE_PAUSED_RECV) && this->onread) {
+      const int err = this->readStart(this->onread);
+      if (err < 0 && err != UV_EALREADY) {
+        return err;
+      }
+    }
+    this->remove(TCP_STATE_PAUSED_RECV);
     this->remove(TCP_STATE_PAUSED);
     return 0;
   }
@@ -519,6 +542,24 @@ namespace oro::runtime::tcp {
     for (auto& entry : sockets) {
       auto s = entry.second;
       if (s) s->pause();
+    }
+  }
+
+  void SocketManager::resumeOnLoopThread () {
+    types::Vector<SharedPointer<Socket>> pending;
+    {
+      Lock lock(this->mutex);
+      for (const auto& entry : this->sockets) {
+        pending.push_back(entry.second);
+      }
+    }
+    for (const auto& socket : pending) {
+      if (socket) {
+        const int err = socket->resume();
+        if (err < 0 && socket->onread) {
+          socket->onread(err, nullptr);
+        }
+      }
     }
   }
 }

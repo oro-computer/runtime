@@ -3,14 +3,14 @@
 oroc\-print\-build\-dir \- Print the build directory path
 .SH SYNOPSIS
 .nf
-oroc print\-build\-dir [\-\-platform=<platform>] [\-\-prod] [\-\-root] [<project\-dir>]
+oroc print\-build\-dir [options] [<project\-dir>]
 .fi
 .SH DESCRIPTION
 .PP
 Print the build directory path
 .SH OPTIONS
 .TP
-\fB\-\-platform\fR
+\fB\-\-platform=<platform>\fR
 platform to print build directory for (defaults to host):
 .br
 \(bu android
@@ -21,11 +21,20 @@ platform to print build directory for (defaults to host):
 .br
 \(bu ios\-simulator
 .TP
-\fB\-\-prod\fR
+\fB\-P, \-\-prod\fR
 indicate production build directory
 .TP
 \fB\-\-root\fR
 print the root build directory
+.TP
+\fB\-V, \-\-verbose\fR
+enable verbose output
+.TP
+\fB\-\-log\-file=<path>\fR
+mirror logs to a JSON file
+.TP
+\fB\-h, \-\-help\fR
+show help
 .SH NOTES
 .PP
 This is useful for scripts that need to locate packaged artifacts, intermediate bundles, or platform\-specific staging directories without reimplementing Oro's path logic.

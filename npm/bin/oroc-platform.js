@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process'
 let exiting = false
 
 const child = spawn(installation.bin.oroc, process.argv.slice(2), {
-  env: { ...installation.env, ...process.env, ORO_ENV_FILE: installation.env.ORO_ENV_FILE },
+  env: { ...installation.env, ...process.env, ORO_NODE_EXECUTABLE: process.env.ORO_NODE_EXECUTABLE || process.execPath, ORO_ENV_FILE: installation.env.ORO_ENV_FILE },
   stdio: 'inherit',
   windowsHide: true
 })
@@ -28,6 +28,10 @@ child.once('error', (err) => {
 
 process.on('SIGTERM', () => {
   child.kill('SIGTERM')
+})
+
+process.on('SIGINT', () => {
+  child.kill('SIGINT')
 })
 
 process.on('exit', () => {

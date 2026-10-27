@@ -1,0 +1,22 @@
+[build]
+name = "continuous_qualification"
+output = "build"
+copy = "public"
+[meta]
+bundle_identifier = "oro.runtime.qualification.continuous"
+version = "1.0.0"
+title = "Public monitoring verification"
+[android]
+runtime_protocol = "5"
+sources = "../extensions/StateQualification.kt"
+extensions = "oro.runtime.qualification.extensions.StateQualificationExtension"
+manifests = "public-manifest.xml"
+[foreground]
+enabled = true
+continuous_enabled = true
+continuous_subtype = "Public runtime monitoring verification & cancellation"
+[permissions]
+allow_usb = false
+allow_notifications = true
+[webview]
+require_ready = true

@@ -1,6 +1,6 @@
 # Android runtime reliability
 
-This guide documents runtime contracts, configuration and compatibility limits.
+This guide documents runtime behavior, configuration and compatibility limits.
 Application delivery plans and deployment-specific qualification records belong
 with their owning applications. Source implementation and successful builds do
 not establish production release or supported-device acceptance.
@@ -172,6 +172,13 @@ import application from 'oro:application'
 const window = await application.getCurrentWindow()
 await window.markReady()
 ```
+
+Android also supports `window.markPresented()` after the bundled inline startup
+screen and its styles are installed. This reveals that screen after a native
+visual-state fence while retaining the readiness gate, startup deadline and
+native failure recovery. Keep unfinished application controls inert until
+`markReady()`. See [startup presentation and readiness](./ANDROID_NATIVE_INTEGRATION.md#startup-presentation-and-readiness)
+for ownership, package and navigation constraints.
 
 Only a top-level application window can acknowledge its own readiness. Hidden runtime service windows use runtime initialization rather than a visible-screen acknowledgement. On other
 desktop platforms the acknowledgement succeeds without an Android loading
@@ -457,7 +464,7 @@ accessibility, server authorization, or measured performance.
 `applicationInputSha256` separately identifies staged Android native inputs:
 Kotlin/Java and native sources/headers, application resources, the main manifest
 and manifest-library inputs, Gradle/NDK build files, normalized configuration,
-SDK source/API contract, native archives and declared toolchain versions. Build,
+SDK source/API metadata, native archives and declared toolchain versions. Build,
 application and SDK directory prefixes are normalized before hashing generated
 build files and settings. Configuration values are represented by one combined
 digest, never returned by diagnostics. The release verifier recomputes the
@@ -497,11 +504,12 @@ physical-device performance evidence.
 
 ## Distribution consistency
 
-`oroc --android-runtime-contract` validates the installed Android source catalog
-and required API modules, checks their bridge protocol, and prints their SHA-256
-digests along with hashes of the compiled Gradle and manifest templates. Android
-project generation uses that same compiled catalog and rejects missing or empty
-inputs. The application asset evidence includes this distribution contract and
+Android builds, editor setup and SDK packaging automatically validate the installed
+Android source catalog and required API modules, check their bridge protocol, and
+record their SHA-256 digests along with hashes of the compiled Gradle and manifest
+templates. Android project generation uses that same compiled catalog and rejects
+missing or empty inputs. These checks require no separate CLI option or manual
+validation command. The application asset evidence includes this SDK metadata and
 the native archive inventory; its digest remains bound into the native init shim.
 
 The source installer embeds a fingerprint of CLI-owned sources and headers and
@@ -521,7 +529,7 @@ reproducibility and execution of the intended artifact require separate checks.
 Run `npm run release:verify-npm -- <version> <commit> <platform.tgz> <node.tgz>
 <runtime.tgz>` against the actual packed artifacts. The verifier installs all
 three packages into separate local and global temporary prefixes, checks the
-installed distribution inventory and CLI contract, and builds a consumer app
+installed distribution inventory and CLI metadata, and builds a consumer app
 through each installed command. It uses its own temporary npm cache and excludes
 source-checkout overrides from the child environment. Passing a source-tree CLI
 check alone does not establish that npm installed the intended artifacts.
@@ -673,7 +681,7 @@ hooks are forwarded without a custom Activity subclass. Register modern Activity
 Result launchers during the activity-created hook. Intent hooks receive untrusted
 Android inputs and must validate their action, sender and payload independently.
 
-`oro:native.request(name, action, payload, { signal })` uses the existing trusted
+`oro:platform.request(name, action, payload, { signal })` uses the existing trusted
 main-frame/document-token route, capacity/deadline/result bounds and cancellation
 on navigation, renderer loss and activity stop. Extensions must implement their
 own feature and server authorization. `NativeExtensionCall.onCancel()` installs

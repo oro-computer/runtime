@@ -11,7 +11,7 @@ This document is the source of truth for what Oro’s CDP server:
 
 - **Connectivity-complete**: stable HTTP + WebSocket endpoints, sane errors, no crashes.
 - **Tooling-complete**: enough protocol coverage for real-world Playwright/Puppeteer automation flows.
-- **Safe by default**: bind to loopback by default; make “remote debugging” clearly insecure when exposed off-machine.
+- **Safe by default**: bind to loopback by default; make "remote debugging” clearly insecure when exposed off-machine.
 
 Non-goals:
 - Full Chrome/Chromium CDP parity.
@@ -81,11 +81,11 @@ Notes:
 - `Runtime.evaluate` / `Runtime.callFunctionOn` provide a compatibility-focused subset and do not aim to emulate Chromium/V8 evaluation semantics in full (some edge cases around multi-statement inputs may differ).
 - `Runtime.executionContextCreated` includes `auxData.frameId` and `auxData.isDefault`, and isolated worlds created via `Page.createIsolatedWorld` surface as distinct execution contexts via `context.name` (required for Puppeteer/Playwright frame/world bookkeeping).
 - `DOM.describeNode` includes `node.frameId` for iframe/frame elements (content frame id) and `documentElement` nodes so Puppeteer/Playwright can map handles to frames.
-- Network instrumentation covers in-page `fetch`/`XMLHttpRequest` plus runtime-handled scheme requests (SchemeHandlers). This is still not full “subresource parity” with Chromium.
+- Network instrumentation covers in-page `fetch`/`XMLHttpRequest` plus runtime-handled scheme requests (SchemeHandlers). This is still not full "subresource parity” with Chromium.
 - Fetch interception (`Fetch.*`) supports runtime-handled scheme requests and in-page `fetch()` requests (instrumented). It does not intercept browser-network subresources and it does not currently intercept `XMLHttpRequest`.
 - Input injection is implemented via in-page event synthesis (DOM/Pointer events + `element.click()` for default actions), not native OS-level input; some sites may behave differently.
 - Frame model: `Page.getFrameTree` includes iframe entries discovered in the DOM, but frames do not have separate CDP sessions, and iframe execution contexts are compatibility-only (treat the top-level frame as the only fully addressable context).
-- `Page.addScriptToEvaluateOnNewDocument`: scripts are applied at the start of a document load (via `readystatechange`), but this does not guarantee true Chromium “pre-page-script” semantics on all platforms.
+- `Page.addScriptToEvaluateOnNewDocument`: scripts are applied at the start of a document load (via `readystatechange`), but this does not guarantee true Chromium "pre-page-script” semantics on all platforms.
 - CDP discovery endpoints accept a trailing slash (e.g. Playwright probes `GET /json/version/`).
 
 ### Safety limits
@@ -340,7 +340,7 @@ This CDP server is intended to support:
 - Puppeteer connecting via `browserWSEndpoint` or `browserURL` (HTTP endpoint).
 - Playwright connecting via `chromium.connectOverCDP(<httpEndpoint>)`.
 
-Important: Playwright’s “CDP mode” is Chromium-oriented; Oro provides a CDP-compatible surface for automation, but it is not a Chromium engine and some features may behave differently or remain stubbed.
+Important: Playwright’s "CDP mode” is Chromium-oriented; Oro provides a CDP-compatible surface for automation, but it is not a Chromium engine and some features may behave differently or remain stubbed.
 
 ### Expectations checklist (what tools typically do)
 
@@ -358,7 +358,7 @@ This section is a practical checklist of the CDP surface that Puppeteer/Playwrig
 - `Target.setAutoAttach` is accepted (Oro does not model worker/serviceworker subtargets today).
 - `Target.sendMessageToTarget` works for flattened sessions (messages are processed as if they were sent with that `sessionId`).
 
-**“Enable” dance + initial events**
+**"Enable” dance + initial events**
 - Automation clients typically issue many `*.enable` calls; Oro accepts them as no-ops unless explicitly implemented.
 - `Runtime.enable` returns `{}` and emits `Runtime.executionContextCreated` for the attached page/session.
 - `Page.enable` returns `{}` and emits `Page.frameNavigated` for the attached page/session.

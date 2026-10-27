@@ -1,0 +1,153 @@
+name: Native platform parity
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-host:
+    name: Android Kotlin behavior on JVM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install checksum-pinned host fixtures
+        run: node bin/install-native-test-tools.js "$RUNNER_TEMP/native-host-tools"
+      - name: Require configured Kotlin and Android fixtures
+        run: |
+          kotlinc -version
+          node -e 'const fs = require("node:fs"); for (const key of ["ORO_KOTLIN_STDLIB", "ORO_TEST_JSON_JAR", "ORO_TEST_SQLITE_JAR", "ORO_TEST_SLF4J_JAR", "ORO_TEST_XML_JAR", "ORO_TEST_ANDROID_JAR"]) if (!process.env[key] || !fs.statSync(process.env[key]).isFile()) throw Error("Missing required fixture: " + key)'
+      - name: Compile and execute Android behavior with test-only OS facades
+        run: >-
+          node --test --test-concurrency=2
+          test/unit/android-back-handling.test.js
+          test/unit/android-gesture-exclusion.test.js
+          test/unit/android-native-extensions.test.js
+          test/unit/android-native-https.test.js
+          test/unit/android-native-state.test.js
+          test/unit/android-push-crypto.test.js
+          test/unit/android-push-journal.test.js
+          test/unit/android-startup-presentation.test.js
+          test/unit/android-window-creation.test.js
+          test/unit/migration-policy.test.js
+          test/unit/migration-source-selection.test.js
+          test/unit/migration-storage.test.js
+          test/unit/native-push-recovery.test.js
+          test/unit/push-distributor-state.test.js
+          test/unit/workflow-consent.test.js
+          test/unit/workflow-policy.test.js
+          test/unit/workflow-retry.test.js
+  unix-core:
+    name: Shared native core (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Install Linux core prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang pkg-config libsodium-dev libsqlite3-dev libglib2.0-dev libmbedtls-dev dbus-daemon libgtk-3-dev libsecret-1-0 gnome-keyring xvfb systemd
+      - name: Install macOS core prerequisites
+        if: runner.os == 'macOS'
+        run: brew install libsodium sqlite pkg-config
+      - name: Compile and execute shared native behavior
+        shell: bash
+        env:
+          ORO_REQUIRE_NATIVE_PARITY_TESTS: 1
+        run: |
+          ORO_TEST_SODIUM_INCLUDE="$(pkg-config --variable=includedir libsodium)"
+          export ORO_TEST_SODIUM_INCLUDE
+          ORO_TEST_SODIUM_LIBRARY="$(pkg-config --variable=libdir libsodium)/libsodium.a"
+          export ORO_TEST_SODIUM_LIBRARY
+          node --test test/unit/native-support.test.js test/unit/native-records.test.js test/unit/native-key-backend.test.js test/unit/native-execution.test.js test/unit/native-callbacks.test.js test/unit/native-children.test.js test/unit/native-unicode.test.js test/unit/native-push-journal.test.js
+      - name: Compile and execute Linux desktop transports
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          ORO_REQUIRE_NATIVE_PARITY_TESTS: 1
+          ORO_TEST_MBEDTLS_INCLUDE: /usr/include
+        run: |
+          ORO_TEST_SODIUM_INCLUDE="$(pkg-config --variable=includedir libsodium)"
+          export ORO_TEST_SODIUM_INCLUDE
+          ORO_TEST_SODIUM_LIBRARY="$(pkg-config --variable=libdir libsodium)/libsodium.a"
+          export ORO_TEST_SODIUM_LIBRARY
+          ORO_TEST_MBEDCRYPTO_LIBRARY="$(c++ -print-file-name=libmbedcrypto.a)"
+          export ORO_TEST_MBEDCRYPTO_LIBRARY
+          node --test test/unit/native-desktop.test.js test/unit/native-web-push.test.js test/unit/native-linux-build.test.js test/unit/native-credentials.test.js
+  linux-sdk:
+    name: Linux source SDK retention and release packing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Verify retention, interrupted commands, rollback and real npm tarballs
+        run: node --test test/unit/sdk-publication.test.js test/unit/sdk-cache.test.js test/unit/activate-runtime-sdk.test.js test/unit/readonly-sdk-staging.test.js test/unit/migration.test.js test/unit/migration-source-selection.test.js test/unit/platform-api.test.js
+  linux-protected-keys:
+    name: Linux protected-key providers (software TPM)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Install software TPM and native build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang pkg-config curl libsodium-dev libsqlite3-dev libmbedtls-dev libuv1-dev libwebkit2gtk-4.1-dev nlohmann-json3-dev swtpm tpm2-tools tpm2-abrmd libtss2-tcti-tabrmd0 libtpm2-pkcs11-1 python3-tpm2-pkcs11-tools softhsm2 dbus-daemon libglib2.0-bin
+      - name: Compile and exercise protected keys with real provider and failure adapter
+        shell: bash
+        run: |
+          ORO_TEST_SODIUM_INCLUDE="$(pkg-config --variable=includedir libsodium)"
+          export ORO_TEST_SODIUM_INCLUDE
+          ORO_TEST_SODIUM_LIBRARY="$(pkg-config --variable=libdir libsodium)/libsodium.a"
+          export ORO_TEST_SODIUM_LIBRARY
+          ORO_TEST_MBEDTLS_INCLUDE=/usr/include
+          export ORO_TEST_MBEDTLS_INCLUDE
+          ORO_TEST_MBEDCRYPTO_LIBRARY="$(c++ -print-file-name=libmbedcrypto.a)"
+          export ORO_TEST_MBEDCRYPTO_LIBRARY
+          node test/scripts/test-native-protected-keys.js
+  windows-core:
+    name: Shared native core (Windows)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-libsodium
+            mingw-w64-ucrt-x86_64-sqlite3
+            mingw-w64-ucrt-x86_64-nodejs
+            mingw-w64-ucrt-x86_64-pkgconf
+      - name: Compile and execute shared native behavior
+        shell: msys2 {0}
+        env:
+          ORO_REQUIRE_NATIVE_PARITY_TESTS: 1
+          ORO_TEST_CXX: g++
+        run: |
+          ORO_TEST_SODIUM_INCLUDE="$(cygpath -w "$(pkg-config --variable=includedir libsodium)")"
+          export ORO_TEST_SODIUM_INCLUDE
+          ORO_TEST_SODIUM_LIBRARY="$(cygpath -w "$(pkg-config --variable=libdir libsodium)/libsodium.a")"
+          export ORO_TEST_SODIUM_LIBRARY
+          node --test test/unit/native-support.test.js test/unit/native-records.test.js test/unit/native-key-backend.test.js test/unit/native-execution.test.js test/unit/native-callbacks.test.js test/unit/native-children.test.js test/unit/native-unicode.test.js test/unit/native-push-journal.test.js

@@ -66,11 +66,14 @@ namespace oro::runtime::loop {
   // then finally back to `State::Idle`
   static void onAsyncThread (uv_async_t* async) {
     auto loop = reinterpret_cast<Loop*>(async->data);
+    if (loop->state == Loop::State::Paused) {
+      return;
+    }
     Loop::DispatchCallback callback = nullptr;
     // transition to `State::Polling` while waiting
     loop->state = Loop::State::Polling;
 
-    while (true) {
+    while (loop->state != Loop::State::Paused) {
       do {
         Lock lock(loop->mutex);
         // dequeue dispatched callback
@@ -279,6 +282,9 @@ namespace oro::runtime::loop {
         this->gtk.functions.check = [](GSource* source) -> gboolean {
           const auto loop = reinterpret_cast<UVSource*>(source)->loop;
           const auto tag = reinterpret_cast<UVSource *>(source)->tag;
+          if (!loop->started()) {
+            return false;
+          }
           const auto timeout = loop->timeout();
 
           if (timeout == 0) {
@@ -298,9 +304,14 @@ namespace oro::runtime::loop {
           gpointer user_data
         ) -> gboolean {
           const auto loop = reinterpret_cast<UVSource*>(source)->loop;
+          if (!loop->started()) {
+            return G_SOURCE_CONTINUE;
+          }
           loop->state = Loop::State::Polling;
           loop->uv.run(UV_RUN_NOWAIT);
-          loop->state = Loop::State::Idle;
+          if (loop->state == Loop::State::Polling) {
+            loop->state = Loop::State::Idle;
+          }
           return G_SOURCE_CONTINUE;
         };
 
@@ -406,7 +417,12 @@ namespace oro::runtime::loop {
       return this->start();
     } else if (this->state == State::Paused) {
       this->state = State::Init;
-      return this->start();
+      if (!this->start()) {
+        return false;
+      }
+      // Wake work retained while paused, including a consumed async notification.
+      uv_async_send(&this->uv.async);
+      return true;
     }
 
     debug("Loop::resume(): 'Resuming -> Resumed' failed");
@@ -450,7 +466,7 @@ namespace oro::runtime::loop {
   bool Loop::dispatch (const DispatchCallback& callback) {
     if (callback == nullptr) {
       return false;
-    } else if (this->state > State::Polling) {
+    } else if (this->state > State::Paused) {
       return false;
     } else if (this->state < State::Idle && !this->kick()) {
       return false;
@@ -461,8 +477,11 @@ namespace oro::runtime::loop {
       this->queue.push(callback);
     } while (0);
 
-    uv_async_send(&this->uv.async);
-    return this->state == State::Idle || this->state == State::Polling;
+    if (this->state != State::Paused) {
+      uv_async_send(&this->uv.async);
+    }
+    // A paused loop retains accepted work until resume; stopped loops reject it.
+    return this->state >= State::Idle && this->state <= State::Paused;
   }
 
   bool Loop::shutdown () {

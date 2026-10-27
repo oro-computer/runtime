@@ -874,7 +874,7 @@ function Asn1ExampleApp () {
       return h(EmptyState, {
         title: 'Source text not requested',
         description:
-          'Enable “Include source text” before parsing to view the captured module.'
+          'Enable "Include source text” before parsing to view the captured module.'
       })
     }
 
