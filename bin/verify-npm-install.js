@@ -3,10 +3,11 @@
 import assert from 'node:assert/strict'
 import androidSdk from '../src/cli/android-sdk.cjs'
 import { qualifyEditorInstall } from './qualify-editor-install.js'
+import { createQualificationDirectory } from './qualification-directory.js'
+import { installSmokePackages } from './npm-smoke-install.js'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -18,7 +19,7 @@ assert(npmCli && fs.existsSync(npmCli), 'Run this verifier through npm run relea
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const platformPackage = `@oro-computer/runtime-${process.platform}-${process.arch}`
 const expectedVersion = `${version} (${commit.slice(0, 8)})`
-const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'oro npm install '))
+const smokeRoot = createQualificationDirectory('oro npm install ')
 const environment = { ...process.env }
 console.log(`Smoke installations retained for inspection: ${smokeRoot}`)
 
@@ -143,16 +144,7 @@ for (const globalInstall of [false, true]) {
   const project = path.join(smokeRoot, `${mode} consumer project`)
   const prefix = globalInstall ? path.join(smokeRoot, 'global prefix') : project
   fs.mkdirSync(project, { recursive: true })
-  const scripts = {
-    cli: 'oroc',
-    build: 'oroc build --prod -V',
-    resources: 'oroc print-build-dir --prod'
-  }
-  fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ private: true, scripts }))
-  npm([
-    'install', ...(globalInstall ? ['--global'] : []), '--prefix', prefix,
-    '--no-package-lock', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts=false', ...tarballs
-  ], project)
+  installSmokePackages({ project, prefix, tarballs, globalInstall, npm })
 
   const modulesRoot = path.join(prefix, globalInstall && process.platform !== 'win32' ? 'lib/node_modules' : 'node_modules')
   const metaRoot = path.join(modulesRoot, '@oro-computer/runtime')

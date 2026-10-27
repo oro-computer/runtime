@@ -686,6 +686,32 @@ namespace oro::runtime::core::services {
     Conduit::Client::CloseCallback callback = nullptr;
   };
 
+  void Conduit::Client::terminate (const CloseCallback callback) {
+    this->isClosing = true;
+    auto handle = reinterpret_cast<uv_handle_t*>(this->handle);
+    uv_read_stop(reinterpret_cast<uv_stream_t*>(handle));
+    uv_handle_set_data(handle, new ClientCloseContext { this, callback });
+    uv_close(handle, [](uv_handle_t* handle) {
+      auto context = static_cast<ClientCloseContext*>(uv_handle_get_data(handle));
+      auto client = context->client;
+      auto callback = context->callback;
+      client->isClosed = true;
+      client->isClosing = false;
+      client->handle = nullptr;
+      uv_handle_set_data(handle, nullptr);
+      delete reinterpret_cast<uv_tcp_t*>(handle);
+      delete context;
+
+      if (callback != nullptr) {
+        // Cancelled writes enqueue their callbacks before the close callback.
+        // Release the client after those callbacks have finished using it.
+        if (!client->conduit->loop.dispatch(callback)) {
+          callback();
+        }
+      }
+    });
+  }
+
   void Conduit::Client::close (const CloseCallback callback) {
     auto handle = reinterpret_cast<uv_handle_t*>(this->handle);
 
@@ -791,6 +817,35 @@ namespace oro::runtime::core::services {
   }
 
   bool Conduit::start (const StartCallback callback) {
+    if (this->loop.paused() || this->loop.stopped() ||
+        this->loop.state == loop::Loop::State::Shutdown) {
+      if (callback != nullptr) {
+        this->dispatcher.dispatch(callback);
+      }
+      return false;
+    }
+    if (this->loop.isOnLoopThread()) {
+      return this->startOnLoop(callback);
+    }
+
+    auto completed = std::make_shared<std::promise<bool>>();
+    auto result = completed->get_future();
+    if (!this->loop.dispatch([this, callback, completed]() {
+      try {
+        completed->set_value(this->startOnLoop(callback));
+      } catch (...) {
+        completed->set_exception(std::current_exception());
+      }
+    })) {
+      if (callback != nullptr) {
+        this->dispatcher.dispatch(callback);
+      }
+      return false;
+    }
+    return result.get();
+  }
+
+  bool Conduit::startOnLoop (const StartCallback callback) {
     if (this->isActive()) {
       if (callback != nullptr) {
         this->loop.dispatch(callback);
@@ -828,30 +883,50 @@ namespace oro::runtime::core::services {
       } catch (...) {}
     }
 
-    uv_ip4_addr(this->hostname.c_str(), port, &this->addr);
-    uv_tcp_init(loop.get(), &this->socket);
-    uv_tcp_bind(
-      &this->socket,
+    const auto fail = [this, callback](int status) {
+      debug("Conduit: Start error %s", uv_strerror(status));
+      this->port = 0;
+      this->isStarting = false;
+      if (this->socket != nullptr) {
+        auto handle = reinterpret_cast<uv_handle_t*>(this->socket);
+        this->socket = nullptr;
+        uv_handle_set_data(handle, nullptr);
+        uv_close(handle, [](uv_handle_t* handle) {
+          delete reinterpret_cast<uv_tcp_t*>(handle);
+        });
+      }
+      if (callback != nullptr) {
+        this->loop.dispatch(callback);
+      }
+      return false;
+    };
+
+    if (port < 0 || port > 65535) {
+      return fail(UV_EINVAL);
+    }
+    const int addressStatus = uv_ip4_addr(this->hostname.c_str(), port, &this->addr);
+    if (addressStatus != 0) {
+      return fail(addressStatus);
+    }
+
+    auto socket = new uv_tcp_t {};
+    const int initStatus = uv_tcp_init(this->loop.get(), socket);
+    if (initStatus != 0) {
+      delete socket;
+      return fail(initStatus);
+    }
+    this->socket = socket;
+    uv_handle_set_data(reinterpret_cast<uv_handle_t*>(socket), this);
+    const int bindStatus = uv_tcp_bind(
+      socket,
       reinterpret_cast<const struct sockaddr*>(&this->addr),
       0
     );
+    if (bindStatus != 0) {
+      return fail(bindStatus);
+    }
 
-    struct sockaddr_in sockname;
-    int namelen = sizeof(sockname);
-    uv_tcp_getsockname(
-      &this->socket,
-      reinterpret_cast<struct sockaddr *>(&sockname),
-      reinterpret_cast<int*>(&namelen)
-    );
-
-    uv_handle_set_data(
-      reinterpret_cast<uv_handle_t*>(&this->socket),
-      this
-    );
-
-    this->port = ntohs(sockname.sin_port);
-
-    const auto result = uv_listen(reinterpret_cast<uv_stream_t*>(&this->socket), 128, [](uv_stream_t* stream, int status) {
+    const auto result = uv_listen(reinterpret_cast<uv_stream_t*>(this->socket), 128, [](uv_stream_t* stream, int status) {
       if (status < 0) {
         return;
       }
@@ -861,10 +936,17 @@ namespace oro::runtime::core::services {
       auto client = new Conduit::Client(conduit);
       auto loop = uv_handle_get_loop(reinterpret_cast<uv_handle_t*>(stream));
 
-      uv_tcp_init(
+      const int initStatus = uv_tcp_init(
         loop,
         client->handle
       );
+      if (initStatus != 0) {
+        delete client->handle;
+        client->handle = nullptr;
+        client->isClosed = true;
+        delete client;
+        return;
+      }
 
       const auto accepted = uv_accept(
         stream,
@@ -878,14 +960,15 @@ namespace oro::runtime::core::services {
           reinterpret_cast<uv_handle_t *>(client->handle),
           [](uv_handle_t* h) {
             auto client = static_cast<Conduit::Client*>(uv_handle_get_data(h));
+            uv_handle_set_data(h, nullptr);
             if (client) {
               if (client->handle) {
                 delete client->handle;
                 client->handle = nullptr;
               }
+              client->isClosed = true;
               delete client;
             }
-            uv_handle_set_data(h, nullptr);
           }
         );
         return;
@@ -953,10 +1036,21 @@ namespace oro::runtime::core::services {
       );
     });
 
-    if (result) {
-      debug("Conduit: Listen error %s\n", uv_strerror(result));
+    if (result != 0) {
+      return fail(result);
     }
 
+    struct sockaddr_in sockname {};
+    int namelen = sizeof(sockname);
+    const int nameStatus = uv_tcp_getsockname(
+      this->socket,
+      reinterpret_cast<struct sockaddr*>(&sockname),
+      &namelen
+    );
+    if (nameStatus != 0) {
+      return fail(nameStatus);
+    }
+    this->port = ntohs(sockname.sin_port);
     this->isStarting.store(false);
 
     if (callback != nullptr) {
@@ -967,170 +1061,71 @@ namespace oro::runtime::core::services {
   }
 
   bool Conduit::stop () {
-    this->port = 0;
-      this->isStarting.store(false);
-
-      if (!this->isActive()) {
-        return true;
-      }
-
-  #if ORO_RUNTIME_PLATFORM_LINUX
-    // Non-blocking scheduling of shutdown on Linux.
-    this->loop.dispatch([this]() {
-      Lock lock(this->mutex);
-      auto handle = reinterpret_cast<uv_handle_t*>(&this->socket);
-      const auto closeHandle = [=, this] () {
-        if (!uv_is_closing(handle)) {
-          auto shutdown = new uv_shutdown_t;
-          uv_handle_set_data(
-            reinterpret_cast<uv_handle_t*>(shutdown),
-            this
-          );
-
-          uv_shutdown(
-            shutdown,
-            reinterpret_cast<uv_stream_t*>(&this->socket),
-            [](uv_shutdown_t* shutdown, int /*status*/) {
-              auto data = uv_handle_get_data(reinterpret_cast<uv_handle_t*>(shutdown));
-              auto conduit = reinterpret_cast<Conduit*>(data);
-              delete shutdown;
-              conduit->loop.dispatch([=]() {
-                uv_close(
-                  reinterpret_cast<uv_handle_t*>(&conduit->socket),
-                  [](uv_handle_t* /*h*/) {}
-                );
-              });
-            }
-          );
-        }
-      };
-
-      if (this->clients.size() == 0) {
-        if (!uv_is_closing(handle)) {
-          closeHandle();
-        }
-      } else {
-        auto closed_counter = std::make_shared<std::atomic<size_t>>(this->clients.size());
-
-        std::vector<uint64_t> client_ids;
-        client_ids.reserve(this->clients.size());
-        for (const auto& entry : this->clients) {
-          client_ids.push_back(entry.first);
-        }
-
-        auto on_client_closed = [this, closed_counter, closeHandle, client_ids]() {
-          if (--(*closed_counter) == 0) {
-            Lock lock(this->mutex);
-
-            for (const auto id : client_ids) {
-              if (this->clients.count(id)) {
-                delete this->clients.at(id);
-              }
-            }
-            this->clients.clear();
-            closeHandle();
-          }
-        };
-
-        for (const auto id : client_ids) {
-          if (this->clients.count(id)) {
-            auto client = this->clients.at(id);
-            client->close(on_client_closed);
-          }
-        }
-      }
-    });
-    return true;
-  #else
-    // Ensure shutdown is scheduled on the loop thread before returning
-    std::promise<void> scheduled;
-    auto ready = scheduled.get_future();
-    const bool posted = this->loop.dispatch([this, &scheduled]() {
-      Lock lock(this->mutex);
-      auto handle = reinterpret_cast<uv_handle_t*>(&this->socket);
-      const auto closeHandle = [=, this] () {
-        if (!uv_is_closing(handle)) {
-          auto shutdown = new uv_shutdown_t;
-          uv_handle_set_data(
-            reinterpret_cast<uv_handle_t*>(shutdown),
-            this
-          );
-
-          uv_shutdown(
-            shutdown,
-            reinterpret_cast<uv_stream_t*>(&this->socket),
-            [](uv_shutdown_t* shutdown, int /*status*/) {
-              auto data = uv_handle_get_data(reinterpret_cast<uv_handle_t*>(shutdown));
-              auto conduit = reinterpret_cast<Conduit*>(data);
-
-              delete shutdown;
-
-              conduit->loop.dispatch([=]() {
-                uv_close(
-                  reinterpret_cast<uv_handle_t*>(&conduit->socket),
-                  [](uv_handle_t* /*h*/) {
-                  }
-                );
-              });
-            }
-          );
-        }
-      };
-
-      if (this->clients.size() == 0) {
-        if (!uv_is_closing(handle)) {
-          closeHandle();
-        }
-      } else {
-        auto closed_counter = std::make_shared<std::atomic<size_t>>(this->clients.size());
-
-        std::vector<uint64_t> client_ids;
-        client_ids.reserve(this->clients.size());
-        for (const auto& entry : this->clients) {
-          client_ids.push_back(entry.first);
-        }
-
-        auto on_client_closed = [this, closed_counter, closeHandle, client_ids]() {
-          if (--(*closed_counter) == 0) {
-            Lock lock(this->mutex);
-
-            // Delete all the client objects.
-            for (const auto id : client_ids) {
-              if (this->clients.count(id)) {
-                delete this->clients.at(id);
-              }
-            }
-
-            this->clients.clear();
-            closeHandle();
-          }
-        };
-
-        for (const auto id : client_ids) {
-          if (this->clients.count(id)) {
-            auto client = this->clients.at(id);
-            client->close(on_client_closed);
-          }
-        }
-      }
-
-      // We've scheduled shutdown/close operations; signal the caller
-      scheduled.set_value();
-    });
-    if (posted) {
-      ready.wait();
+    if (this->loop.stopped() || this->loop.state == loop::Loop::State::Shutdown) {
+      return !this->isActive() && !this->isStarting;
+    }
+    if (this->loop.isOnLoopThread()) {
+      this->stopOnLoop();
       return true;
     }
-    return false;
+    if (this->loop.paused()) {
+      return this->loop.dispatch([this]() { this->stopOnLoop(); });
+    }
+
+  #if ORO_RUNTIME_PLATFORM_LINUX
+    // GTK must remain free to pump a loop that does not own a thread.
+    if (!this->loop.options.dedicatedThread) {
+      return this->loop.dispatch([this]() { this->stopOnLoop(); });
+    }
   #endif
+
+    auto completed = std::make_shared<std::promise<void>>();
+    auto result = completed->get_future();
+    if (!this->loop.dispatch([this, completed]() {
+      this->stopOnLoop();
+      completed->set_value();
+    })) {
+      return false;
+    }
+    result.get();
+    return true;
+  }
+
+  void Conduit::stopOnLoop () {
+    this->port = 0;
+    this->isStarting = false;
+
+    // Detach the listener before closing it. Resume can allocate a new handle
+    // while libuv is still delivering the previous listener's close callback.
+    auto socket = this->socket;
+    this->socket = nullptr;
+    if (socket != nullptr) {
+      auto handle = reinterpret_cast<uv_handle_t*>(socket);
+      uv_handle_set_data(handle, nullptr);
+      uv_close(handle, [](uv_handle_t* handle) {
+        delete reinterpret_cast<uv_tcp_t*>(handle);
+      });
+    }
+
+    Vector<Client*> clients;
+    {
+      Lock lock(this->mutex);
+      for (const auto& entry : this->clients) {
+        clients.push_back(entry.second);
+      }
+      this->clients.clear();
+    }
+    for (auto client : clients) {
+      client->terminate([client]() {
+        if (client->isClosed) {
+          delete client;
+        }
+      });
+    }
   }
 
   bool Conduit::isActive () {
-    Lock lock(this->mutex);
-    return (
-      this->port > 0 &&
-      uv_is_active(reinterpret_cast<uv_handle_t*>(&this->socket)) &&
-      !uv_is_closing(reinterpret_cast<uv_handle_t*>(&this->socket))
-    );
+    // Handle state is confined to the loop; callers only read published status.
+    return this->port.load() > 0;
   }
 }

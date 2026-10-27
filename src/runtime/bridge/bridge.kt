@@ -138,10 +138,27 @@ open class Bridge (
 
   override fun shouldInterceptRequest (
     view: WebView,
-    request: WebResourceRequest
+    resourceRequest: WebResourceRequest
   ): WebResourceResponse? {
-    val uri = request.url
     val bundle = App.getInstance().getUserConfigValue("meta_bundle_identifier")
+    val resourceUri = resourceRequest.url
+    // Workers use the application's HTTPS origin to avoid mixed-content blocking.
+    // Normalize before authentication so the endpoint uses the ordinary IPC policy.
+    val request = if (resourceUri.scheme == "https" && resourceUri.host.equals(bundle, ignoreCase = true) &&
+        resourceUri.port in setOf(-1, 443) && resourceUri.userInfo == null &&
+        resourceUri.path?.startsWith("/__oro_ipc__/") == true) {
+      val command = resourceUri.path!!.removePrefix("/__oro_ipc__/")
+      if (!Regex("[A-Za-z0-9_.]+").matches(command)) {
+        return WebResourceResponse("text/plain", "UTF-8", 400, "Bad Request", emptyMap(), ByteArrayInputStream(byteArrayOf()))
+      }
+      val ipcUri = Uri.parse("ipc://$command" + (resourceUri.encodedQuery?.let { "?$it" } ?: ""))
+      object : WebResourceRequest by resourceRequest {
+        override fun getUrl (): Uri = ipcUri
+      }
+    } else {
+      resourceRequest
+    }
+    val uri = request.url
     val internalResource = uri.scheme in setOf("oro", "node", "npm") ||
       (uri.scheme in setOf("http", "https") && uri.host.equals(bundle, ignoreCase = true))
     val resourceOrigin = request.requestHeaders.entries.firstOrNull { it.key.equals("Origin", true) }?.value

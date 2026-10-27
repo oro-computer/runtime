@@ -85,7 +85,7 @@
             "cpp",
             "swift"
           ],
-          "description": "Language families managed in Oro projects. Disable overlapping providers for these projects.",
+          "description": "Language families managed in Oro projects. The cpp family is unavailable on Windows workspace hosts in this release. Disable overlapping providers only for families Oro manages.",
           "uniqueItems": true
         }
       }

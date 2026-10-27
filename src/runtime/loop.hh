@@ -79,6 +79,7 @@ namespace oro::runtime::loop {
     #endif
 
       const Options options;
+      const std::thread::id ownerThread = std::this_thread::get_id();
       Queue<DispatchCallback> queue;
       Thread thread;
       Mutex mutex;
@@ -142,6 +143,12 @@ namespace oro::runtime::loop {
        * Returns true when work is accepted; stopped/shutdown loops reject it.
        */
       bool dispatch (const DispatchCallback&);
+
+      /**
+       * Returns true on the loop's dispatch queue, dedicated thread, or the
+       * creating thread of a loop driven by the platform event pump.
+       */
+      bool isOnLoopThread () const;
 
       /**
        * Shuts down the loop, transitioning it into a state that cannot be

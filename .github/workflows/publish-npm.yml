@@ -192,6 +192,40 @@ jobs:
           node-version: 24.x
           registry-url: https://registry.npmjs.org
 
+      - name: Check qualification and npm lifecycle before native packaging
+        run: node --test test/unit/editor-test-tools.test.js test/unit/qualification-paths.test.js test/unit/native-language-launch.test.js test/unit/npm-smoke-scripts.test.js test/unit/language-server-session.test.js test/unit/language-server-editing.test.js
+
+      - name: Select Swift 6 toolchain on macOS 14
+        if: matrix.os == 'macos-14'
+        shell: bash
+        run: |
+          oro_editor_developer_dir=/Applications/Xcode_16.2.app/Contents/Developer
+          test -d "$oro_editor_developer_dir"
+          echo "DEVELOPER_DIR=$oro_editor_developer_dir" >> "$GITHUB_ENV"
+
+      - name: Setup Java for Android editor qualification
+        if: ${{ matrix.build_android }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install editor qualification backends
+        shell: bash
+        run: |
+          editor_args=()
+          if [[ "${{ matrix.build_android }}" == "true" ]]; then editor_args+=(--android); fi
+          node bin/install-editor-test-tools.js "$RUNNER_TEMP/editor-tools" "${editor_args[@]}"
+
+      - name: Verify installed native backend integration before native builds
+        # Windows C/C++ language-server support is deferred; npm and TypeScript checks remain required.
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          languages=(c cpp)
+          if [[ "$RUNNER_OS" == 'macOS' ]]; then languages+=(objc objcpp swift); fi
+          node test/scripts/test-native-language-backends.js "${languages[@]}"
+
       - name: Setup Go for libipfs
         if: ${{ !inputs.reuse_release_artifacts }}
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -440,20 +474,6 @@ jobs:
           name: npm-pack-${{ inputs.version }}-top-level
           path: ${{ runner.temp }}/npm-smoke-packs
 
-      - name: Setup Java for Android editor qualification
-        if: ${{ matrix.build_android }}
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Install editor qualification backends
-        shell: bash
-        run: |
-          editor_args=()
-          if [[ "${{ matrix.build_android }}" == "true" ]]; then editor_args+=(--android); fi
-          node bin/install-editor-test-tools.js "$RUNNER_TEMP/editor-tools" "${editor_args[@]}"
-
       - name: Smoke install exact package family on native runner
         shell: bash
         env:
@@ -527,10 +547,15 @@ jobs:
 
   verify-packages:
     name: Verify complete npm package family
-    needs: [platform-packages, top-level-packages]
+    needs: [validate-source, platform-packages, top-level-packages]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - name: Checkout validated package source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.validate-source.outputs.commit_sha }}
+
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -565,6 +590,8 @@ jobs:
             exit 1
           fi
 
+          node ./bin/verify-npm-package-size.js "${archives[@]}"
+
           for entry in "${expected[@]}"; do
             package="${entry%%|*}"
             archive="${entry#*|}"
@@ -593,6 +620,11 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Checkout validated package source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.validate-source.outputs.commit_sha }}
+
       - name: Setup Node.js with npm trusted publishing support
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -623,20 +655,44 @@ jobs:
             "@oro-computer/runtime|oro-computer-runtime-$RELEASE_VERSION.tgz"
           )
 
+          archives=()
+          for entry in "${packages[@]}"; do
+            archives+=("$pack_dir/${entry#*|}")
+          done
+          node ./bin/verify-npm-package-size.js "${archives[@]}"
+
+          # Check every registry version before publishing any package. Only an
+          # explicit E404 means absent; failed lookups must stop the release.
+          pending=()
           for entry in "${packages[@]}"; do
             package="${entry%%|*}"
             archive="$pack_dir/${entry#*|}"
             local_integrity="sha512-$(openssl dgst -sha512 -binary "$archive" | base64 -w 0)"
-            published_integrity="$(npm view "$package@$RELEASE_VERSION" dist.integrity 2>/dev/null || true)"
-
-            if [[ -n "$published_integrity" ]]; then
+            if lookup="$(npm view "$package@$RELEASE_VERSION" dist.integrity --json)"; then
+              published_integrity="$(node -e '
+                const integrity = JSON.parse(process.argv[1])
+                if (typeof integrity !== "string" || !integrity) {
+                  throw new Error("Published package has no valid dist.integrity")
+                }
+                process.stdout.write(integrity)
+              ' "$lookup")"
               if [[ "$published_integrity" != "$local_integrity" ]]; then
                 echo >&2 "$package@$RELEASE_VERSION already exists with different package contents"
                 exit 1
               fi
               echo "$package@$RELEASE_VERSION is already published with the verified integrity; skipping"
-              continue
+            else
+              if ! node -e '
+                const response = JSON.parse(process.argv[1])
+                if (response?.error?.code !== "E404") process.exit(1)
+              ' "$lookup"; then
+                echo >&2 "Cannot verify registry state for $package@$RELEASE_VERSION; refusing to publish"
+                exit 1
+              fi
+              pending+=("$archive")
             fi
+          done
 
+          for archive in "${pending[@]}"; do
             npm publish "$archive" --access public
           done

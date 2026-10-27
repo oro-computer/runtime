@@ -11108,7 +11108,6 @@ int main (int argc, char* argv[]) {
               << " -DORO_RUNTIME_VERSION=" << VERSION_STRING
               << " -DORO_RUNTIME_VERSION_HASH=" << VERSION_HASH_STRING
               << " -target " << (flagBuildForSimulator ? platform.arch + "-apple-ios-simulator": "arm64-apple-ios")
-              << " -fembed-bitcode"
               << " -fPIC"
               << " " << trim(compilerFlags + " " + (flagDebugMode ? compilerDebugFlags : ""))
               << " " << (flagBuildForSimulator ? "-mios-simulator-version-min=" : "-miphoneos-version-min=") + env::get("IPHONEOS_VERSION_MIN", "15.0")
@@ -11275,7 +11274,6 @@ int main (int argc, char* argv[]) {
             << " -framework Accelerate"
             << " -framework WebKit"
             << " -framework UIKit"
-            << " -fembed-bitcode"
             << " -std=c++2a"
             << " -ObjC++"
             << " -shared"

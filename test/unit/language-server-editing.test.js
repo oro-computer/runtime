@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { applyTextEdits, applyWorkspaceEdit, qualifyEditing } from '../scripts/lsp-client.js'
+import { applyTextEdits, applyWorkspaceEdit, qualifyEditing, waitForSwiftIndex } from '../scripts/lsp-client.js'
 import { scopeGuard } from '../../src/cli/tooling/scope.cjs'
 
 const edit = (line, start, end, newText) => ({ range: { start: { line, character: start }, end: { line, character: end } }, newText })
@@ -67,4 +67,31 @@ test('code-action validation checks protocol edits without interpreting opaque T
   assert.throws(() => scope.validate({ result: [action] }, 'textDocument/codeAction'), /outside the declared/)
   assert.throws(() => scope.validate({ result: action }, 'codeAction/resolve'), /outside the declared/)
   assert.throws(() => scope.validate({ method: 'workspace/applyEdit', params: { edit: action.edit } }), /outside the declared/)
+})
+
+test('reference qualification accepts indexed point locations and rejects incorrect positions and ranges', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'oro-reference-oracle-'))
+  const filename = path.join(root, 'main.swift')
+  const uri = pathToFileURL(filename).href
+  const text = 'let editorValue = 1\nlet mirror = editorValue\n'
+  writeFileSync(filename, text)
+  const fixture = { language: 'test', version: 1, symbol: 'editorValue' }
+  const qualify = range => qualifyEditing({ request: async () => [{ uri, range }] }, { referencesProvider: true }, uri, text, { line: 0, character: 5 }, [uri], fixture)
+  for (const end of [4, 15]) assert.equal((await qualify(edit(0, 4, end, '').range)).features.references, 'passed')
+  await assert.rejects(qualify(edit(0, 0, 0, '').range), /editorValue/)
+  await assert.rejects(qualify(edit(0, 4, 7, '').range), /Reference range/)
+})
+
+test('Swift index synchronization supports protocol versions without hiding indexing failures', async () => {
+  for (const legacy of [false, true]) {
+    const calls = []
+    await waitForSwiftIndex({
+      request: async (method, params) => {
+        calls.push({ method, params })
+        if (legacy && method === 'workspace/synchronize') throw Object.assign(new Error('method not found'), { code: -32601 })
+      }
+    })
+    assert.deepEqual(calls, [{ method: 'workspace/synchronize', params: { index: true } }, ...(legacy ? [{ method: 'workspace/_pollIndex', params: {} }] : [])])
+  }
+  await assert.rejects(waitForSwiftIndex({ request: async () => { throw new Error('Index unavailable') } }), /Index unavailable/)
 })

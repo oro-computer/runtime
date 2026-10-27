@@ -6,6 +6,52 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
 
+for (const platform of ['win32', 'linux', 'darwin']) {
+  test(`VS Code manages supported language families on ${platform} workspace hosts`, async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'oro-vscode-platform-'))
+    writeFileSync(path.join(root, 'oro.toml'), '')
+    const clients = []
+    let onOpen
+    const settings = { languages: ['cpp', 'typescript'], arguments: {}, environment: {}, executable: 'oroc' }
+    const vscode = {
+      workspace: {
+        isTrusted: true,
+        textDocuments: [],
+        getConfiguration: () => ({ get: name => settings[name] }),
+        onDidOpenTextDocument: callback => { onOpen = callback; return {} },
+        onDidChangeConfiguration: () => ({})
+      },
+      commands: { registerCommand: () => ({}) },
+      window: { showErrorMessage: message => assert.fail(message) },
+      Uri: { file: fsPath => ({ scheme: 'file', fsPath }) }
+    }
+    const languageClient = {
+      LanguageClient: class {
+        constructor (id, name, server) { this.server = server; clients.push(this) }
+        async start () { this.started = true }
+        async dispose () { this.stopped = true }
+      },
+      ErrorAction: { Shutdown: 1 },
+      CloseAction: { DoNotRestart: 1 }
+    }
+    const module = { exports: {} }
+    vm.runInNewContext(readFileSync(new URL('../../editors/vscode/extension.cjs', import.meta.url), 'utf8'), {
+      module,
+      process: { platform, env: process.env },
+      require: name => ({ vscode, 'vscode-languageclient/node': languageClient, 'node:fs/promises': fs, 'node:path': path })[name]
+    })
+    module.exports.activate({ subscriptions: [] })
+    try {
+      for (const languageId of ['c', 'cpp', 'objective-c', 'objective-cpp', 'typescript', 'javascript']) {
+        await onOpen({ languageId, uri: { scheme: 'file', fsPath: path.join(root, languageId) } })
+      }
+      assert.deepEqual(clients.map(client => client.server.args[2]), platform === 'win32' ? ['typescript'] : ['cpp', 'typescript'])
+      assert.ok(clients.every(client => client.started))
+    } finally { await module.exports.deactivate() }
+    assert.ok(clients.every(client => client.stopped))
+  })
+}
+
 test('VS Code starts one client per nearest Oro root and language, leaving ordinary projects alone', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'oro-vscode-'))
   const project = path.join(root, 'application [one]')

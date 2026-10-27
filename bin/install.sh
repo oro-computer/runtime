@@ -1286,6 +1286,11 @@ function _prepare {
     die ${rc:-1} "not ok - unable to obtain libsodium sources (set LIBSODIUM_SOURCE_DIR to a local checkout or enable network)"
   fi
 
+  if [[ "$host" == "Win32" ]]; then
+    # Source checks run before MSBuild's pre-build event creates version.h.
+    _stage_libsodium_headers "$BUILD_DIR/libsodium" "$BUILD_DIR/$(host_arch)-desktop/include"
+  fi
+
   if [ ! -d "$BUILD_DIR/zlib" ]; then
     local rc=1
     if [[ -n "$ZLIB_SOURCE_DIR" ]] && [ -d "$ZLIB_SOURCE_DIR" ]; then
@@ -2634,11 +2639,11 @@ function _compile_libuv {
   export STRIP="$(xcrun -sdk $sdk -find strip)"
   export LD="$(xcrun -sdk $sdk -find ld)"
   export CPP="$CC -E"
-  export CFLAGS="-fembed-bitcode -arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION"
+  export CFLAGS="-arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION"
   export AR=$(xcrun -sdk $sdk -find ar)
   export RANLIB=$(xcrun -sdk $sdk -find ranlib)
-  export CPPFLAGS="-fembed-bitcode -arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION"
-  export LDFLAGS="-Wc,-fembed-bitcode -arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
+  export CPPFLAGS="-arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk -m$sdk-version-min=$SDKMINVERSION"
+  export LDFLAGS="-arch ${target} -isysroot $PLATFORMPATH/$platform.platform/Developer/SDKs/$platform$SDKVERSION.sdk"
 
   if ! test -f Makefile; then
     quiet ./configure --prefix="$BUILD_DIR/$target-$platform" --host="$hosttarget-apple-darwin"
@@ -2788,7 +2793,7 @@ function _compile_whisper {
     if [[ "$platform" == "iPhoneSimulator" ]]; then
       target_triple="$target-apple-ios-simulator"
     fi
-    local cflags="--target=$target_triple -isysroot $sdkroot -m$sdk-version-min=$SDKMINVERSION -fembed-bitcode"
+    local cflags="--target=$target_triple -isysroot $sdkroot -m$sdk-version-min=$SDKMINVERSION"
     if [ "$platform" == "iPhoneOS" ]; then
       cflags+=" -march=armv8.2-a+dotprod"
     elif [ "$target" == "arm64" ]; then
@@ -3968,6 +3973,21 @@ function _compile_libusb_android {
   return
 }
 
+function _stage_libsodium_headers {
+  local source_dir="$1"
+  local include_dir="$2"
+  mkdir -p "$include_dir"
+  cp -R "$source_dir/src/libsodium/include/." "$include_dir/"
+  die $? "not ok - libsodium header staging ($host)"
+  if [[ "$host" == "Win32" && -f "$source_dir/builds/msvc/version.h" ]]; then
+    cp -f "$source_dir/builds/msvc/version.h" "$include_dir/sodium/version.h"
+    die $? "not ok - libsodium version header staging ($host)"
+  fi
+  if [[ ! -f "$include_dir/sodium.h" || ! -f "$include_dir/sodium/version.h" ]]; then
+    die 1 "not ok - libsodium headers are incomplete ($host)"
+  fi
+}
+
 function _compile_libsodium {
   local target=$1
   local platform=$2
@@ -3978,7 +3998,49 @@ function _compile_libsodium {
   fi
 
   if [[ "$platform" == "desktop" && "$host" == "Win32" ]]; then
-    echo "warn - libsodium build for Win32 not implemented; skipping"
+    local config="Release"
+    local suffix=""
+    if [[ -n "$DEBUG" ]]; then
+      config="Debug"
+      suffix="d"
+    fi
+    local msbuild_platform=""
+    case "$target" in
+      x86_64|amd64) msbuild_platform="x64" ;;
+      arm64|aarch64) msbuild_platform="ARM64" ;;
+      x86|i686) msbuild_platform="Win32" ;;
+      *) die 1 "not ok - unsupported Windows libsodium architecture: $target" ;;
+    esac
+    local staging_dir="$BUILD_DIR/$target-$platform/libsodium"
+    local runtime_props="$root/bin/windows-dll-runtime.props"
+    local output_lib="$BUILD_DIR/$target-$platform/lib$suffix/libsodium.lib"
+    if [[ ! -d "$staging_dir" ]]; then
+      mkdir -p "$staging_dir"
+      cp -R "$BUILD_DIR/libsodium/." "$staging_dir/"
+      die $? "not ok - libsodium source staging (Win32)"
+    fi
+    if [[ ! -f "$output_lib" || "$runtime_props" -nt "$output_lib" ]]; then
+      local project="$staging_dir/builds/msvc/vs2022/libsodium/libsodium.vcxproj"
+      if [[ ! -f "$project" ]]; then
+        die 1 "not ok - libsodium MSBuild project not found at $project"
+      fi
+      quiet command -v MSBuild.exe
+      die $? "not ok - missing MSBuild.exe; install the Visual C++ build tools"
+      quiet MSBuild.exe "$project" \
+        "-m:$CPU_CORES" \
+        "-p:Configuration=${config}LIB" \
+        "-p:Platform=$msbuild_platform" \
+        "-p:ForceImportBeforeCppTargets=$(cygpath -w "$runtime_props")"
+      die $? "not ok - libsodium MSBuild build (Win32)"
+      local archive="$staging_dir/bin/$msbuild_platform/$config/v143/static/libsodium.lib"
+      if [[ ! -f "$archive" ]]; then
+        die 1 "not ok - libsodium static library not found at $archive"
+      fi
+      mkdir -p "$(dirname "$output_lib")"
+      copy_if_newer "$archive" "$output_lib"
+      die $? "not ok - libsodium library staging (Win32)"
+    fi
+    _stage_libsodium_headers "$staging_dir" "$BUILD_DIR/$target-$platform/include"
     return
   fi
 
@@ -4049,7 +4111,7 @@ function _compile_libsodium {
       min_flag="-mios-simulator-version-min=$SDKMINVERSION"
     fi
 
-    export CFLAGS="-O2 -fembed-bitcode -arch $target -isysroot $sdk_path $min_flag"
+    export CFLAGS="-O2 -arch $target -isysroot $sdk_path $min_flag"
     export CXXFLAGS="$CFLAGS"
     export LDFLAGS="-arch $target -isysroot $sdk_path $min_flag"
     export CPPFLAGS="$CFLAGS"

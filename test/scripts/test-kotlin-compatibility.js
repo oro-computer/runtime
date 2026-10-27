@@ -1,14 +1,14 @@
 // Exercise the shipped metadata checker with real JVM classfiles.
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execute } from '../../src/cli/tooling/process.cjs'
 import { preflightKotlin } from '../../src/cli/tooling/kotlin.cjs'
 import { resolveProgram } from '../../src/cli/tooling/servers.cjs'
+import { createQualificationDirectory } from '../../bin/qualification-directory.js'
 
-const root = mkdtempSync(path.join(tmpdir(), 'oro-kotlin-compatibility-'))
+const root = createQualificationDirectory('oro-kotlin-compatibility-')
 const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'java.exe' : 'java') : 'java'
 const javac = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'javac.exe' : 'javac') : 'javac'
 const checker = fileURLToPath(new URL('../../src/cli/tooling/KotlinCompatibility.java', import.meta.url))

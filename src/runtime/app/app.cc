@@ -191,6 +191,7 @@ namespace oro::runtime::app {
       return;
     }
 
+    UniqueLock lock(this->lifecycleMutex);
   #if ORO_RUNTIME_PLATFORM_DESKTOP
     const bool alwaysRunning = (
       this->runtime.userConfig.contains("lifecycle_desktop_always_running")
@@ -210,13 +211,17 @@ namespace oro::runtime::app {
       return;
     }
     this->lastResumeEmitMs.store(tnow, std::memory_order_relaxed);
+    // Native notifications can overlap window actions. Only the latest
+    // requested state may change the runtime when its UI callback executes.
   #if !ORO_RUNTIME_PLATFORM_DESKTOP
-    if (this->paused()) {
-      this->isPaused = false;
+    if (this->isPaused.exchange(false, std::memory_order_acq_rel)) {
+      const auto revision = ++this->lifecycleRevision;
       this->runtime.windowManager.emit("applicationresume");
 
-      this->dispatch([this]() {
-        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+      lock.unlock();
+      this->dispatch([this, revision]() {
+        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped() ||
+            this->lifecycleRevision.load() != revision || this->paused()) {
           return;
         }
 
@@ -225,11 +230,13 @@ namespace oro::runtime::app {
     }
   #else
     // Desktop but not always-running: perform real resume semantics
-    if (this->paused()) {
-      this->isPaused = false;
+    if (this->isPaused.exchange(false, std::memory_order_acq_rel)) {
+      const auto revision = ++this->lifecycleRevision;
       this->runtime.windowManager.emit("applicationresume");
-      this->dispatch([this]() {
-        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+      lock.unlock();
+      this->dispatch([this, revision]() {
+        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped() ||
+            this->lifecycleRevision.load() != revision || this->paused()) {
           return;
         }
 
@@ -244,6 +251,7 @@ namespace oro::runtime::app {
       return;
     }
 
+    UniqueLock lock(this->lifecycleMutex);
   #if ORO_RUNTIME_PLATFORM_DESKTOP
     const bool alwaysRunning = (
       this->runtime.userConfig.contains("lifecycle_desktop_always_running")
@@ -269,13 +277,16 @@ namespace oro::runtime::app {
       return;
     }
     this->lastPauseEmitMs.store(tnow, std::memory_order_relaxed);
+    // Claim the transition before another lifecycle caller can enqueue it.
   #if !ORO_RUNTIME_PLATFORM_DESKTOP
-    if (!this->paused()) {
-      this->isPaused = true;
+    if (!this->isPaused.exchange(true, std::memory_order_acq_rel)) {
+      const auto revision = ++this->lifecycleRevision;
       this->runtime.windowManager.emit("applicationpause");
 
-      this->dispatch([this]() {
-        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+      lock.unlock();
+      this->dispatch([this, revision]() {
+        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped() ||
+            this->lifecycleRevision.load() != revision || !this->paused()) {
           return;
         }
 
@@ -284,11 +295,13 @@ namespace oro::runtime::app {
     }
   #else
     // Desktop but not always-running: perform real pause semantics
-    if (!this->paused()) {
-      this->isPaused = true;
+    if (!this->isPaused.exchange(true, std::memory_order_acq_rel)) {
+      const auto revision = ++this->lifecycleRevision;
       this->runtime.windowManager.emit("applicationpause");
-      this->dispatch([this]() {
-        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped()) {
+      lock.unlock();
+      this->dispatch([this, revision]() {
+        if (this->shouldExit.load(std::memory_order_acquire) || this->stopped() ||
+            this->lifecycleRevision.load() != revision || !this->paused()) {
           return;
         }
 

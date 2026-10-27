@@ -217,17 +217,27 @@ for variant in "${ld_platform_variants[@]}"; do
 done
 
 have_sodium=0
+sodium_archive=""
 for variant in "${ld_platform_variants[@]}"; do
   for libdir in "$root/build/$arch-$variant/lib$d" "$root/build/$arch-$variant/lib" "$root/build/$arch-$variant/lib64$d" "$root/build/$arch-$variant/lib64"; do
-    if [[ -f "$libdir/libsodium.a" ]] || [[ -f "$libdir/libsodium.lib" ]]; then
+    if [[ "$host" == "Win32" && -f "$libdir/libsodium.lib" ]]; then
       have_sodium=1
+      sodium_archive="$libdir/libsodium.lib"
+      break 2
+    elif [[ -f "$libdir/libsodium.a" ]]; then
+      have_sodium=1
+      sodium_archive="$libdir/libsodium.a"
       break 2
     fi
   done
 done
 
 if (( have_sodium )); then
-  ldflags+=("-lsodium")
+  if [[ "$host" == "Win32" ]]; then
+    ldflags+=("$sodium_archive")
+  else
+    ldflags+=("-lsodium")
+  fi
 fi
 
 # Prefer a vendored zlib build when available. Only add -lz when a candidate

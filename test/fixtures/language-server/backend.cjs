@@ -3,7 +3,12 @@
 const { Messages, encode } = require('../../../src/cli/tooling/lsp.cjs')
 const documents = new Map()
 let indexed = !process.env.ORO_TEST_INDEX_DELAY
-const send = message => process.stdout.write(encode({ jsonrpc: '2.0', ...message }))
+const send = message => {
+  if (process.env.ORO_TEST_ENCODED_URIS && message.method === 'textDocument/publishDiagnostics') {
+    message.params.uri = message.params.uri.replace('main.kt', '%6dain.kt').replace(/^file:\/\/\/([a-z]):/i, (_, drive) => `file:///${drive.toLowerCase()}%3A`)
+  }
+  process.stdout.write(encode({ jsonrpc: '2.0', ...message }))
+}
 const input = new Messages(message => {
   if (message.method === 'initialize') {
     send({ id: message.id, result: { capabilities: { textDocumentSync: 2, hoverProvider: true, renameProvider: true, completionProvider: {} } } })

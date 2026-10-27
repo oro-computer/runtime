@@ -88,7 +88,10 @@ function _stage_platform_oroc_binary() {
 
 function _pack_or_link () {
   if (( !do_global_link )); then
-    npm pack "${args[@]}" || exit $?
+    local pack_report
+    pack_report="$(npm pack "${args[@]}" --json --foreground-scripts=false)" || exit $?
+    printf '%s\n' "$pack_report" | node "$root/bin/verify-npm-package-size.js" --pack-json || exit $?
+    printf '%s\n' "$pack_report"
   fi
 }
 

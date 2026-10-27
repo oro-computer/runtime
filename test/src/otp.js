@@ -73,8 +73,8 @@ test('credentials.get validates options object', async (t) => {
   )
 
   await t.rejects(
-    () => credentials.get({}),
+    () => credentials.get({}, async () => ({})),
     (err) => err instanceof DOMException && err.name === 'NotSupportedError',
-    'throws when otp option missing'
+    'OTP adapter throws when otp option missing'
   )
 })

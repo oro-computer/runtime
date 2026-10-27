@@ -176,6 +176,9 @@ Android Emulator or any system image. Those downloads are test/run
 dependencies, not build dependencies. `npm run test:android-emulator` installs
 only missing emulator components and exactly one Google APIs system image
 matching the host architecture, then creates a versioned AVD when it is absent.
+The test AVD uses a 6 GiB data partition for Google APIs initialization and APK
+installation. Its name includes the data size so older, smaller userdata images
+are not reused.
 Setup and boot waits emit progress and have bounded timeouts. Likewise, an
 application build for `android-emulator` requests one host-compatible image,
 while an `android` device build does not.

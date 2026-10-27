@@ -1,6 +1,5 @@
 #include "timers.hh"
 #include "../../debug.hh"
-#include <future>
 
 using oro::runtime::crypto::rand64;
 
@@ -39,9 +38,7 @@ namespace oro::runtime::core::services {
   }
 
   bool Timers::stop () {
-  #if ORO_RUNTIME_PLATFORM_LINUX
-    // Non-blocking on Linux to avoid deadlocks with GTK-driven loop pumping.
-    this->loop.dispatch([this]() {
+    const auto stopTimers = [this]() {
       Vector<ID> ids;
       {
         Lock lock(this->mutex);
@@ -75,51 +72,13 @@ namespace oro::runtime::core::services {
 
         closeTimerOnLoop(handle);
       }
-    });
-    return true;
-  #else
-    // Synchronous elsewhere so timers close before pausing the loop
-    auto done = std::make_shared<std::promise<void>>();
-    auto fut = done->get_future();
-    this->loop.dispatch([=, this]() {
-      Vector<ID> ids;
-      {
-        Lock lock(this->mutex);
-        ids.reserve(this->handles.size());
-        for (auto const &tuple : this->handles) {
-          ids.push_back(tuple.first);
-        }
-      }
-      for (const auto id : ids) {
-        SharedPointer<Timer> handle = nullptr;
-        {
-          Lock lock(this->mutex);
-          auto it = this->handles.find(id);
-          if (it == this->handles.end()) {
-            continue;
-          }
+    };
 
-          handle = it->second;
-          if (handle == nullptr || !handle->initialized) {
-            this->handles.erase(it);
-            continue;
-          }
-
-          handle->cancelled = true;
-          if (handle->closing) {
-            continue;
-          }
-
-          handle->closing = true;
-        }
-
-        closeTimerOnLoop(handle);
-      }
-      done->set_value();
-    });
-    fut.wait();
-    return true;
-  #endif
+    if (this->loop.isOnLoopThread()) {
+      stopTimers();
+      return true;
+    }
+    return this->loop.dispatch(stopTimers);
   }
 
   Timers::Timer::Timer (Timers* timers, ID id, Callback callback)

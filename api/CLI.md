@@ -175,6 +175,10 @@ Configure [language_server.<language>] command and args in oro.toml.
 
 Defaults: kotlin-language-server; typescript-language-server --stdio; clangd; sourcekit-lsp.
 
+The sourcekit adapter requires Swift 6.0+ (Xcode 16+ on macOS) for compiler settings, rename, and formatting support.
+
+C-family language servers are unavailable on Windows in this release. TypeScript editing, tooling cpp model export, and Windows runtime builds remain available.
+
 Kotlin Android uses the fwcd adapter; adapter="stdio" delegates discovery to another backend.
 
 Stdout is reserved for LSP. Build and adapter messages go to stderr.

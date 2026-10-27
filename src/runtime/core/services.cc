@@ -1,5 +1,6 @@
 #include "services.hh"
 #include "../debug.hh"
+#include "../env.hh"
 
 namespace oro::runtime::core {
   Services::Services (
@@ -212,7 +213,17 @@ namespace oro::runtime::core {
       if (!service->enabled) {
         continue;
       }
+    #if defined(DEBUG)
+      if (env::has("ORO_DEBUG_LIFECYCLE")) {
+        debug("Services::stop(): stopping %s", entry.name);
+      }
+    #endif
       const bool ok = service->stop();
+    #if defined(DEBUG)
+      if (env::has("ORO_DEBUG_LIFECYCLE")) {
+        debug("Services::stop(): stopped %s result=%d", entry.name, ok);
+      }
+    #endif
       if (!ok) {
         return false;
       }

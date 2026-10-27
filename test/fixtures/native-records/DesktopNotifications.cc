@@ -72,7 +72,10 @@ int main (int argc, char** argv) {
       } else if (method == "TestNoActions") {
         actions = false; g_dbus_method_invocation_return_value(reply, g_variant_new("()"));
       } else if (method == "TestStop") {
+        const auto connection = g_dbus_method_invocation_get_connection(reply);
         g_dbus_method_invocation_return_value(reply, g_variant_new("()"));
+        // Flush the shutdown reply before closing the server's connection.
+        assert(g_dbus_connection_flush_sync(connection, nullptr, nullptr));
         g_main_loop_quit(loop);
       }
     });

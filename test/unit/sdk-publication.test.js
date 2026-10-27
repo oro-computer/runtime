@@ -143,8 +143,9 @@ def write(name,text,executable=False):
  target=root/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_text(text)
  if executable:target.chmod(0o755)
 write('bin/publish-npm-modules.sh',(source/'bin/publish-npm-modules.sh').read_text(),True)
-for name in ['sdk-cache.py','sdk-lease.cjs']:
+for name in ['sdk-cache.py','sdk-lease.cjs','verify-npm-package-size.js']:
  write('bin/'+name,(source/'bin'/name).read_text())
+write('package.json',json.dumps({'type':'module'}))
 write('bin/android-functions.sh','android_supported_abis() { echo arm64-v8a x86_64; }\n')
 write('bin/functions.sh','host_arch() { echo x86_64; }\nhost_os() { echo Linux; }\n')
 write('bin/runtime-artifacts.sh','ORO_RUNTIME_ARTIFACT_NAME=oro-runtime\n')
@@ -212,6 +213,7 @@ release_env={**env,'npm_config_cache':str(root/'npm-cache'),'ORO_NPM_STAGING_HOM
 for selection in ['--only-platforms','--only-top-level']:
  result=subprocess.run(['bash',str(root/'bin/publish-npm-modules.sh'),selection,'--no-rebuild','--no-remove-oro-home','--dry-run','--pack-destination',str(output)],cwd=root,env=release_env,capture_output=True,text=True,timeout=20000)
  assert result.returncode==0,result.stdout+result.stderr
+ assert 'Verified npm package size:' in result.stdout,result.stdout+result.stderr
 assert not pathlib.Path(release_env['ORO_LOCAL_SDK_HOME']).exists()
 archives=list(output.glob('*.tgz'));assert len(archives)==3,[str(item) for item in archives]
 for archive in archives:

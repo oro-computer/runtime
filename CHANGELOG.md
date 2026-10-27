@@ -6,6 +6,8 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-27
+
 ### Added
 
 - Expose platform extension requests and backend support discovery through

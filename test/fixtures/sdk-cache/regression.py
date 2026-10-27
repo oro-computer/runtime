@@ -29,11 +29,28 @@ export async function run () {
  const [mode, latch] = process.argv.slice(2)
  if (!mode) return console.log('public CLI ready')
  fs.writeFileSync(latch + '.parents', JSON.stringify([process.pid, process.ppid]))
- const source = `if(process.disconnect)process.disconnect();const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(latch + '.ready')},String(process.pid));setInterval(()=>{if(fs.existsSync(${JSON.stringify(latch + '.release')}))process.exit(0)},10)`
+ const source = `
+if (process.disconnect) process.disconnect()
+const fs = require('node:fs')
+const ready = ${JSON.stringify(latch + '.ready')}
+// Existence signals a complete PID; staging and publication share a directory.
+fs.writeFileSync(ready + '.pending', String(process.pid), {flag:'wx'})
+const publish = () => fs.renameSync(ready + '.pending', ready)
+if (${mode === 'readiness'}) {
+ fs.writeFileSync(${JSON.stringify(latch + '.staged')}, '')
+ const publication = setInterval(() => {
+  if (fs.existsSync(${JSON.stringify(latch + '.publish')})) {
+   clearInterval(publication)
+   publish()
+  }
+ }, 10)
+} else publish()
+setInterval(() => { if (fs.existsSync(${JSON.stringify(latch + '.release')})) process.exit(0) }, 10)
+`
  const childFile = latch + '.cjs'
  fs.writeFileSync(childFile, source)
  const options = {stdio:'ignore', detached:true, env:{PATH:process.env.PATH}}
- if(mode==='spawn') cp.spawn(process.execPath, [childFile], options).unref()
+ if(['spawn','readiness'].includes(mode)) cp.spawn(process.execPath, [childFile], options).unref()
  if(mode==='fork') cp.fork(childFile, [], options).unref()
  if(mode==='execFile') cp.execFile(process.execPath, [childFile], options).unref()
  if(mode==='exec') cp.exec(`"${process.execPath}" "${childFile}"`, options).unref()
@@ -120,6 +137,27 @@ elif case == "retention":
     (unowned / "public").write_text("not registered")
     c.collect(home)
     assert unowned.exists()
+elif case == "readiness":
+    publish("atomic child readiness")
+    latch = base / "readiness"
+    ready = Path(str(latch) + ".ready")
+    pending = Path(str(ready) + ".pending")
+    process = subprocess.Popen([str(home / "bin/oroc.cjs"), "readiness", str(latch)],
+                               env=clean_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        # The producer confirms that staging is complete and then waits for
+        # permission to publish. File existence cannot expose a partial PID.
+        wait_for(Path(str(latch) + ".staged"))
+        staged_pid = pending.read_text()
+        assert int(staged_pid) > 0, staged_pid
+        assert not ready.exists(), "Readiness became visible before publication"
+        Path(str(latch) + ".publish").write_text("")
+        wait_for(ready)
+        assert ready.read_text() == staged_pid
+        assert not pending.exists()
+    finally:
+        Path(str(latch) + ".release").write_text("public")
+        assert process.wait(timeout=10) == 0, process.stderr.read().decode()
 elif case == "descendants":
     for mode in ["spawn", "fork", "execFile", "exec", "spawnSync", "execFileSync", "execSync", "native", "killed"]:
         held = Path(publish("held " + mode)["generation"])
@@ -131,10 +169,10 @@ elif case == "descendants":
         process = subprocess.Popen([str(home / "bin/oroc.cjs"), mode, str(latch)], env=env,
                                    pass_fds=[work_fd], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         os.close(work_fd)
-        wait_for(Path(str(latch) + ".ready"))
-        parents = json.loads(Path(str(latch) + ".parents").read_text())
-        child_pid = int(Path(str(latch) + ".ready").read_text())
         try:
+            wait_for(Path(str(latch) + ".ready"))
+            parents = json.loads(Path(str(latch) + ".parents").read_text())
+            child_pid = int(Path(str(latch) + ".ready").read_text())
             if mode in ["killed", "execFile", "exec"]:
                 # Kill both supervisors and the SDK root; only the descendant's
                 # inherited kernel lock may protect its generation now.

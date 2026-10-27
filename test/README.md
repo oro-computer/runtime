@@ -25,6 +25,11 @@ variable for a mobile target you intend to test. See
 The Android emulator target installs the emulator and one Google APIs system
 image matching the host architecture if its versioned AVD is not already
 available. A normal runtime build or relink does not download emulator packages.
+The guest defaults to API 36, independently of the API 37 build SDK. The API 37
+Google APIs image currently crashes in `mapper.ranchu` during color-buffer
+readback and restarts the Android framework. Set
+`ORO_ANDROID_EMULATOR_API_LEVEL` to select another guest API (for example, `34`
+or `37.0` when qualifying a repaired image); CI explicitly selects `36`.
 With `ORO_ANDROID_CI` set, the test APK is installed with runtime permissions
 granted so unattended runs do not wait on permission dialogs.
 

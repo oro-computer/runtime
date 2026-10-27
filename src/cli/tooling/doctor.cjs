@@ -2,7 +2,7 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
-const { serverSettings, resolveProgram } = require('./servers.cjs')
+const { serverSettings, resolveProgram, preflightSourceKit } = require('./servers.cjs')
 const { setting, freshness } = require('./model.cjs')
 const { execute } = require('./process.cjs')
 
@@ -40,7 +40,14 @@ async function doctor (options, project, producers, inspectKotlin) {
     try { settings = serverSettings(project.config, language, project.root) } catch (error) { record(language, 'error', error.message); continue }
     if (inspected.has(settings.family)) continue
     inspected.add(settings.family)
-    try { record(`${language}.server`, 'ok', resolveProgram(settings.command, project.env)) } catch (error) { record(`${language}.server`, 'error', error.message) }
+    try {
+      const executable = resolveProgram(settings.command, project.env)
+      if (settings.adapter === 'sourcekit') await preflightSourceKit(executable, project.env)
+      record(`${language}.server`, 'ok', executable)
+    } catch (error) {
+      record(`${language}.server`, 'error', error.message)
+      if (settings.adapter === 'sourcekit') continue
+    }
     if (settings.adapter === 'stdio') {
       record(`${language}.model`, 'ok', 'Backend owns project discovery (adapter=stdio).')
       continue

@@ -1,7 +1,5 @@
 #include "../../string.hh"
 #include "../../http.hh"
-#include <future>
-#include <thread>
 #include "../../json.hh"
 #include "../../config.hh"
 #include "../../url.hh"
@@ -34,52 +32,31 @@ namespace oro::runtime::core::services {
   bool FS::stop () {
   #if ORO_RUNTIME_PLATFORM_ANDROID
     return true;
-  #elif ORO_RUNTIME_PLATFORM_LINUX
-    // Non-blocking on Linux to avoid deadlocks with GTK-driven pumping.
-    Vector<SharedPointer<filesystem::Watcher>> list;
-    {
-      Lock lock(this->mutex);
-      for (auto &entry : this->watchers) {
-        if (entry.second) list.push_back(entry.second);
-      }
-      this->watchers.clear();
-    }
-    if (!list.empty()) {
-      #if defined(DEBUG)
-        debug("FS::stop(): Linux scheduling %zu watcher(s) to stop; returning immediately", list.size());
-      #endif
-      this->loop.dispatch([list = std::move(list)]() mutable {
-        for (const auto &w : list) {
-          if (w) w->stop(w);
-        }
-      });
-    } else {
-      #if defined(DEBUG)
-        debug("FS::stop(): Linux no watchers; returning immediately");
-      #endif
-    }
-    return true;
   #else
-    // Stop all active watchers on the loop thread before pausing the loop
-    auto done = std::make_shared<std::promise<void>>();
-    auto fut = done->get_future();
-    this->loop.dispatch([=, this]() {
+    const auto stopWatchers = [this]() {
       Vector<SharedPointer<filesystem::Watcher>> list;
       {
         Lock lock(this->mutex);
-        for (auto &entry : this->watchers) {
-          if (entry.second) list.push_back(entry.second);
+        for (const auto& entry : this->watchers) {
+          if (entry.second) {
+            list.push_back(entry.second);
+          }
         }
         this->watchers.clear();
       }
 
-      for (const auto &w : list) {
-        if (w) w->stop(w);
+      for (const auto& watcher : list) {
+        watcher->stop(watcher);
       }
-      done->set_value();
-    });
-    fut.wait();
-    return true;
+    };
+
+    // Lifecycle shutdown can run on the loop itself. Other callers queue
+    // cleanup before Loop::pause()/stop() without blocking the UI event pump.
+    if (this->loop.isOnLoopThread()) {
+      stopWatchers();
+      return true;
+    }
+    return this->loop.dispatch(stopWatchers);
   #endif
   }
   JSON::Object getStatsJSON (const String& source, uv_stat_t* stats) {

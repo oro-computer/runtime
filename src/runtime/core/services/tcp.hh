@@ -22,20 +22,13 @@ namespace oro::runtime::core::services {
       bool start () override;
 
       bool stop () override {
-      #if ORO_RUNTIME_PLATFORM_LINUX
-        // Non-blocking on Linux to avoid GTK deadlocks
-        this->loop.dispatch([this]{ manager.pauseOnLoopThread(); });
-        return true;
-      #else
-        std::promise<void> done;
-        auto fut = done.get_future();
-        this->loop.dispatch([this, &done] {
-          manager.pauseOnLoopThread();
-          done.set_value();
+        if (this->loop.isOnLoopThread()) {
+          this->manager.pauseOnLoopThread();
+          return true;
+        }
+        return this->loop.dispatch([this]() {
+          this->manager.pauseOnLoopThread();
         });
-        fut.wait();
-        return true;
-      #endif
       }
 
       // API surface

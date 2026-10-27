@@ -5,30 +5,49 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { execute } from '../src/cli/tooling/process.cjs'
+import { preflightSourceKit, resolveProgram } from '../src/cli/tooling/servers.cjs'
+import { stageEditorBackends } from './editor-test-tools.js'
 
 const directory = process.argv[2]
 if (!directory || !process.env.GITHUB_PATH) throw new Error('Usage in CI: install-editor-test-tools.js <temporary-directory>')
 fs.mkdirSync(directory, { recursive: true })
+const sourcekit = process.platform === 'darwin'
+  ? (await execute('xcrun', ['--find', 'sourcekit-lsp'], { timeout: 30000 })).trim()
+  : null
+if (sourcekit) await preflightSourceKit(sourcekit, process.env)
+if (process.platform === 'linux') {
+  try {
+    resolveProgram('clang', process.env)
+    resolveProgram('clang++', process.env)
+  } catch {
+    await execute('sudo', ['apt-get', 'update'], { log: true })
+    await execute('sudo', ['apt-get', 'install', '-y', 'clang'], { log: true })
+  }
+}
 const npmCli = process.env.npm_execpath || path.join(path.dirname(process.execPath), process.platform === 'win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js')
 await execute(process.execPath, [npmCli, 'install', '--prefix', directory, '--no-save', '--no-package-lock', '--no-audit', '--no-fund', 'typescript@5.9.3', 'typescript-language-server@6.0.2'], { log: true })
 const paths = [path.join(directory, 'node_modules', '.bin')]
-const platform = { linux: 'linux', darwin: 'mac', win32: 'windows' }[process.platform]
+const platform = { linux: 'linux', darwin: 'mac' }[process.platform]
+const backends = {}
+// Windows C/C++ language-server support is deferred for this release.
 if (process.platform === 'linux' && process.arch === 'arm64') {
   await execute('sudo', ['apt-get', 'update'], { log: true })
   await execute('sudo', ['apt-get', 'install', '-y', 'clangd'], { log: true })
+  backends.clangd = resolveProgram('clangd', process.env)
 } else if (process.platform === 'darwin' && process.arch === 'arm64') {
   await execute('brew', ['install', 'llvm'], { log: true })
-  paths.push(path.join((await execute('brew', ['--prefix', 'llvm'])).trim(), 'bin'))
-} else {
+  backends.clangd = path.join((await execute('brew', ['--prefix', 'llvm'])).trim(), 'bin', 'clangd')
+} else if (process.platform !== 'win32') {
   const archive = path.join(directory, 'clangd.zip')
   const clangd = await fetch(`https://github.com/clangd/clangd/releases/download/19.1.2/clangd-${platform}-19.1.2.zip`)
   if (!clangd.ok) throw new Error(`clangd download failed: ${clangd.status}`)
   fs.writeFileSync(archive, Buffer.from(await clangd.arrayBuffer()))
-  if (process.platform === 'win32') await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:ORO_EDITOR_ARCHIVE -DestinationPath $env:ORO_EDITOR_DEST'], { log: true, env: { ...process.env, ORO_EDITOR_ARCHIVE: archive, ORO_EDITOR_DEST: directory } })
-  else await execute('unzip', ['-q', archive, '-d', directory], { log: true })
-  paths.push(path.join(directory, 'clangd_19.1.2', 'bin'))
+  await execute('unzip', ['-q', archive, '-d', directory], { log: true })
+  backends.clangd = path.join(directory, 'clangd_19.1.2', 'bin', 'clangd')
 }
-if (process.platform === 'darwin') paths.push(path.dirname((await execute('xcrun', ['--find', 'sourcekit-lsp'])).trim()))
+if (sourcekit) backends['sourcekit-lsp'] = sourcekit
+const backendPath = stageEditorBackends(directory, backends)
+if (backendPath) paths.push(backendPath)
 if (process.argv.includes('--android')) {
   // Read the same Gradle pin used by the SDK bootstrap, including artifact reuse.
   const bootstrap = fs.readFileSync(new URL('./android-functions.sh', import.meta.url), 'utf8')

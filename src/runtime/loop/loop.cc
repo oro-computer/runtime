@@ -10,6 +10,20 @@ struct UVSource {
   oro::runtime::loop::Loop* loop = nullptr;
 };
 
+static void suspendGTKSource (oro::runtime::loop::Loop* loop) {
+  if (loop->gtk.source == nullptr) {
+    return;
+  }
+
+  auto source = reinterpret_cast<UVSource*>(loop->gtk.source);
+  if (source->tag != nullptr) {
+    // GLib marks unix-fd sources ready independently of their check callback.
+    // A readable backend left on a paused source would starve WebKit's IPC.
+    g_source_remove_unix_fd(loop->gtk.source, source->tag);
+    source->tag = nullptr;
+  }
+}
+
 static void detachGTKSource (oro::runtime::loop::Loop* loop) {
   if (loop->gtk.source == nullptr) {
     return;
@@ -22,6 +36,7 @@ static void detachGTKSource (oro::runtime::loop::Loop* loop) {
 #endif
 
 namespace oro::runtime::loop {
+  static thread_local Loop* currentLoop = nullptr;
   // in milliseconds
   constexpr int EVENT_LOOP_POLL_TIMEOUT = 32;
 
@@ -37,8 +52,8 @@ namespace oro::runtime::loop {
     );
   }
 
-  static bool isOnDispatchQueue (Loop* loop) {
-    return dispatch_get_specific(&LoopDispatchQueueKey) == static_cast<void*>(loop);
+  static bool isOnDispatchQueue (const Loop* loop) {
+    return dispatch_get_specific(&LoopDispatchQueueKey) == static_cast<const void*>(loop);
   }
 
   static void stopOnDispatchQueue (Loop* loop, Loop::State state) {
@@ -66,14 +81,16 @@ namespace oro::runtime::loop {
   // then finally back to `State::Idle`
   static void onAsyncThread (uv_async_t* async) {
     auto loop = reinterpret_cast<Loop*>(async->data);
-    if (loop->state == Loop::State::Paused) {
+    // A pending wakeup can be delivered by the final poll after stop/shutdown.
+    // Leave inactive states intact so a dedicated thread can finish and join.
+    if (!loop->started()) {
       return;
     }
     Loop::DispatchCallback callback = nullptr;
     // transition to `State::Polling` while waiting
     loop->state = Loop::State::Polling;
 
-    while (loop->state != Loop::State::Paused) {
+    while (loop->started()) {
       do {
         Lock lock(loop->mutex);
         // dequeue dispatched callback
@@ -99,6 +116,8 @@ namespace oro::runtime::loop {
 
   // `onLoopThread` is used by android/darwin/win32 while linux uses a gsoure
   static void onLoopThread (Loop* loop) {
+    const auto previousLoop = currentLoop;
+    currentLoop = loop;
     while (loop->started() && loop->alive()) {
       // transition to `State::Polling` while waiting
       loop->state = Loop::State::Polling;
@@ -114,6 +133,7 @@ namespace oro::runtime::loop {
       // this loop thread again
       loop->state = Loop::State::Init;
     }
+    currentLoop = previousLoop;
   }
 
   void Loop::UV::open (Loop* loop) {
@@ -268,6 +288,7 @@ namespace oro::runtime::loop {
           auto loop = reinterpret_cast<UVSource*>(source)->loop;
 
           if (!loop->started()) {
+            *timeout = -1;
             return false;
           }
 
@@ -345,6 +366,18 @@ namespace oro::runtime::loop {
       }
     }
 
+  #if ORO_RUNTIME_PLATFORM_LINUX
+    if (this->gtk.source != nullptr) {
+      auto source = reinterpret_cast<UVSource*>(this->gtk.source);
+      if (source->tag == nullptr) {
+        source->tag = g_source_add_unix_fd(
+          this->gtk.source,
+          uv_backend_fd(this->get()),
+          (GIOCondition) (G_IO_IN | G_IO_OUT | G_IO_ERR)
+        );
+      }
+    }
+  #endif
     this->state = State::Idle;
     Lock lock(this->mutex);
 
@@ -402,6 +435,9 @@ namespace oro::runtime::loop {
         this->thread.join();
       }
     } else {
+    #if ORO_RUNTIME_PLATFORM_LINUX
+      suspendGTKSource(this);
+    #endif
       this->state = State::Stopped;
       this->uv.stop();
     }
@@ -455,6 +491,9 @@ namespace oro::runtime::loop {
         this->thread.join();
       }
     } else {
+    #if ORO_RUNTIME_PLATFORM_LINUX
+      suspendGTKSource(this);
+    #endif
       this->state = State::Paused;
       this->uv.stop();
     }
@@ -482,6 +521,17 @@ namespace oro::runtime::loop {
     }
     // A paused loop retains accepted work until resume; stopped loops reject it.
     return this->state >= State::Idle && this->state <= State::Paused;
+  }
+
+  bool Loop::isOnLoopThread () const {
+  #if ORO_RUNTIME_PLATFORM_APPLE
+    return isOnDispatchQueue(this);
+  #else
+    return currentLoop == this || (
+      !this->options.dedicatedThread &&
+      this->ownerThread == std::this_thread::get_id()
+    );
+  #endif
   }
 
   bool Loop::shutdown () {

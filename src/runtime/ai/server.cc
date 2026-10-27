@@ -129,7 +129,11 @@ namespace oro::runtime::ai::server {
     }
   };
 
-  static RouteMetrics g_route_metrics;
+  // Defer configuration lookup until filesystem globals have been initialized.
+  static RouteMetrics& routeMetrics () {
+    static RouteMetrics metrics;
+    return metrics;
+  }
 
   static bool send_error_response(
     int code,
@@ -146,7 +150,7 @@ namespace oro::runtime::ai::server {
       "error", JSON::Object::Entries {{"code", (int64_t)code}, {"type", type}, {"message", message}}
     }}).str());
     if (routeTag.size() > 0) {
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
     }
     return true;
   }
@@ -683,7 +687,7 @@ namespace oro::runtime::ai::server {
     Map<String, uint64_t> routeCounts;
     Vector<String> routeRecent;
     Map<String, Map<String, uint64_t>> routeStatus;
-    g_route_metrics.snapshot(routeCounts, routeRecent, routeStatus);
+    routeMetrics().snapshot(routeCounts, routeRecent, routeStatus);
 
     // Apply top-K filtering to counts/status to keep health small
     Vector<std::pair<String, uint64_t>> pairs;
@@ -715,7 +719,7 @@ namespace oro::runtime::ai::server {
       };
       body = bytes::Buffer::from(JSON::Object(json).str());
       statusCode = 503;
-      g_route_metrics.recordStatus(this->options.routePrefix + "/health", statusCode);
+      routeMetrics().recordStatus(this->options.routePrefix + "/health", statusCode);
       return true;
     }
 
@@ -749,7 +753,7 @@ namespace oro::runtime::ai::server {
     };
     body = bytes::Buffer::from(JSON::Object(json).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(this->options.routePrefix + "/health", statusCode);
+    routeMetrics().recordStatus(this->options.routePrefix + "/health", statusCode);
     maybe_log_kv_metrics("/health", &llm);
     return true;
   }
@@ -793,7 +797,7 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "No model loaded"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -806,7 +810,7 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Missing 'text'"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -815,7 +819,7 @@ namespace oro::runtime::ai::server {
       statusCode = 413;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Text too large"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -868,7 +872,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(JSON::Object(out).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     return true;
   }
 
@@ -989,7 +993,7 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "No model loaded"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -1004,7 +1008,7 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Missing 'tokens'"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -1019,14 +1023,14 @@ namespace oro::runtime::ai::server {
       statusCode = 500;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Detokenization failed"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"text", String(out.data(), (size_t)wrote)}}).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     return true;
   }
 
@@ -1074,7 +1078,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "text/plain; version=0.0.4; charset=utf-8");
     body = bytes::Buffer::from(os.str());
     statusCode = 200;
-    g_route_metrics.recordStatus(this->options.routePrefix + "/metrics", statusCode);
+    routeMetrics().recordStatus(this->options.routePrefix + "/metrics", statusCode);
     return true;
   }
 
@@ -1152,7 +1156,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(JSON::Object(jsonOut).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(this->options.routePrefix + "/props", statusCode);
+    routeMetrics().recordStatus(this->options.routePrefix + "/props", statusCode);
     return true;
   }
 
@@ -1214,7 +1218,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(JSON::Object(jsonOut).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(this->options.routePrefix + "/api/show", statusCode);
+    routeMetrics().recordStatus(this->options.routePrefix + "/api/show", statusCode);
     return true;
   }
 
@@ -1352,7 +1356,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(responseStr);
     statusCode = 200;
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     return true;
   }
 
@@ -1409,7 +1413,7 @@ namespace oro::runtime::ai::server {
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(jsonOut).str());
       statusCode = 200;
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -1448,7 +1452,7 @@ namespace oro::runtime::ai::server {
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"released", true}}).str());
       statusCode = 200;
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -1471,7 +1475,7 @@ namespace oro::runtime::ai::server {
         headers.set("content-type", "application/json; charset=utf-8");
         body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"dropped", 0}}).str());
         statusCode = 200;
-        g_route_metrics.recordStatus(routeTag, statusCode);
+        routeMetrics().recordStatus(routeTag, statusCode);
         return true;
       }
       return send_error_response(400, "invalid_request_error", "No model loaded", statusCode, headers, body, routeTag);
@@ -1509,7 +1513,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"dropped", (int64_t)dropped}}).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     return true;
   }
 
@@ -1579,7 +1583,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"prompt", prompt}}).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     return true;
   }
 
@@ -1640,7 +1644,7 @@ namespace oro::runtime::ai::server {
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(jsonOut).str());
       statusCode = 200;
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -1756,7 +1760,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(JSON::Object(jsonOut).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     return true;
   }
 
@@ -1802,7 +1806,7 @@ namespace oro::runtime::ai::server {
 
     body = bytes::Buffer::from(JSON::Object(json).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(this->options.routePrefix + "/v1/models", statusCode);
+    routeMetrics().recordStatus(this->options.routePrefix + "/v1/models", statusCode);
     return true;
   }
 
@@ -1875,7 +1879,7 @@ namespace oro::runtime::ai::server {
 
     body = bytes::Buffer::from(JSON::Object(json).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(this->options.routePrefix + "/models", statusCode);
+    routeMetrics().recordStatus(this->options.routePrefix + "/models", statusCode);
     return true;
   }
 
@@ -1897,7 +1901,7 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "No model loaded"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -1970,7 +1974,7 @@ namespace oro::runtime::ai::server {
       statusCode = 413;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Prompt too large"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -2149,7 +2153,7 @@ namespace oro::runtime::ai::server {
           headers.set("content-type", "application/json; charset=utf-8");
           body = bytes::Buffer::from(JSON::Object(resp).str());
           statusCode = 200;
-          g_route_metrics.recordStatus(routeTag, statusCode);
+          routeMetrics().recordStatus(routeTag, statusCode);
           return true;
         }
       }
@@ -2167,7 +2171,7 @@ namespace oro::runtime::ai::server {
       statusCode = 500;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Failed to create context"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
 
@@ -2335,7 +2339,7 @@ namespace oro::runtime::ai::server {
     headers.set("content-type", "application/json; charset=utf-8");
     body = bytes::Buffer::from(JSON::Object(resp).str());
     statusCode = 200;
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     // context released by scope guard
     maybe_log_kv_metrics("/v1/chat/completions", &llm);
     return true;
@@ -2376,14 +2380,14 @@ namespace oro::runtime::ai::server {
     }
     if (prompt.size() == 0) {
       emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Missing 'prompt'"}}}}).str(), true);
-      g_route_metrics.recordStatus(routeTag, 400);
+      routeMetrics().recordStatus(routeTag, 400);
       return false;
     }
 
     const size_t kMaxPromptBytes = this->options.maxPromptBytes; // 128 KiB default
     if (prompt.size() > kMaxPromptBytes) {
       emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Prompt too large"}}}}).str(), true);
-      g_route_metrics.recordStatus(routeTag, 413);
+      routeMetrics().recordStatus(routeTag, 413);
       return false;
     }
 
@@ -2499,7 +2503,7 @@ namespace oro::runtime::ai::server {
     auto ctx = llm.acquirePooledContext(llm.models.at(model->name), copt);
     if (ctx == nullptr || ctx->context == nullptr) {
       emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Failed to create context"}}}}).str(), true);
-      g_route_metrics.recordStatus(routeTag, 500);
+      routeMetrics().recordStatus(routeTag, 500);
       return false;
     }
     ctx->options.temp = temperature;
@@ -2517,7 +2521,7 @@ namespace oro::runtime::ai::server {
     if (llama_tokenize(model->vocab, prompt.c_str(), (int32_t)prompt.size(), toks.data(), (int32_t)toks.size(), true, true) < 0) {
       emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Tokenization failed"}}}}).str(), true);
       __release_ctx();
-      g_route_metrics.recordStatus(routeTag, 500);
+      routeMetrics().recordStatus(routeTag, 500);
       return false;
     }
 
@@ -2564,13 +2568,13 @@ namespace oro::runtime::ai::server {
     if (ctx->used() + (size_t)batch.n_tokens > ctx->size()) {
       emit_delta("", true, "length");
       // context released by scope guard
-      g_route_metrics.recordStatus(routeTag, 200);
+      routeMetrics().recordStatus(routeTag, 200);
       return true;
     }
     if (llama_decode(ctx->context, batch)) {
       emit_delta("", true, "stop");
       // context released by scope guard
-      g_route_metrics.recordStatus(routeTag, 500);
+      routeMetrics().recordStatus(routeTag, 500);
       return true;
     }
     ctx->usedTokens.fetch_add((size_t)batch.n_tokens, std::memory_order_acq_rel);
@@ -2590,14 +2594,14 @@ namespace oro::runtime::ai::server {
       if (elapsed >= max_decode_ms) {
         emit_delta("", true, "timeout");
         // context released by scope guard
-        g_route_metrics.recordStatus(routeTag, 408);
+        routeMetrics().recordStatus(routeTag, 408);
         return true;
       }
       token = llama_sampler_sample(ctx->sampler, ctx->context, -1);
       if (llama_vocab_is_eog(model->vocab, token)) {
         emit_delta("", true, "stop");
         // context released by scope guard
-        g_route_metrics.recordStatus(routeTag, 200);
+        routeMetrics().recordStatus(routeTag, 200);
         return true;
       }
       static thread_local Vector<char> pieceBuf;
@@ -2620,7 +2624,7 @@ namespace oro::runtime::ai::server {
         if (max_stop > 0 && tail_has_stop(tail, stops)) {
           emit_delta("", true, "stop");
           __release_ctx();
-          g_route_metrics.recordStatus(routeTag, 200);
+          routeMetrics().recordStatus(routeTag, 200);
           return true;
         }
       }
@@ -2629,13 +2633,13 @@ namespace oro::runtime::ai::server {
       if (ctx->used() + (size_t)batch.n_tokens > ctx->size()) {
         emit_delta("", true, "length");
         __release_ctx();
-        g_route_metrics.recordStatus(routeTag, 200);
+        routeMetrics().recordStatus(routeTag, 200);
         return true;
       }
       if (llama_decode(ctx->context, batch)) {
         emit_delta("", true, "stop");
         __release_ctx();
-        g_route_metrics.recordStatus(routeTag, 500);
+        routeMetrics().recordStatus(routeTag, 500);
         return true;
       }
       ctx->usedTokens.fetch_add((size_t)batch.n_tokens, std::memory_order_acq_rel);
@@ -2644,7 +2648,7 @@ namespace oro::runtime::ai::server {
     // Reached token limit
     emit_delta("", true, "length");
     __release_ctx();
-    g_route_metrics.recordStatus(routeTag, 200);
+    routeMetrics().recordStatus(routeTag, 200);
     maybe_log_kv_metrics("/v1/chat/completions?stream=true", &llm);
     return true;
   }
@@ -2662,7 +2666,7 @@ namespace oro::runtime::ai::server {
     auto* model = select_model(llm, modelName, this->options.defaultModelName);
     if (!model || !model->vocab) {
       (void) emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "No model loaded"}}}}).str(), true);
-      g_route_metrics.recordStatus(this->options.routePrefix + "/v1/completions?stream=true", 400);
+      routeMetrics().recordStatus(this->options.routePrefix + "/v1/completions?stream=true", 400);
       return false;
     }
     maybe_log_kv_metrics("/v1/completions?stream=true", &llm);
@@ -2679,14 +2683,14 @@ namespace oro::runtime::ai::server {
     }
     if (prompt.size() == 0) {
       (void) emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Missing 'prompt'"}}}}).str(), true);
-      g_route_metrics.recordStatus(routeTag, 400);
+      routeMetrics().recordStatus(routeTag, 400);
       return false;
     }
 
     const size_t kMaxPromptBytes = this->options.maxPromptBytes;
     if (prompt.size() > kMaxPromptBytes) {
       (void) emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Prompt too large"}}}}).str(), true);
-      g_route_metrics.recordStatus(routeTag, 413);
+      routeMetrics().recordStatus(routeTag, 413);
       return false;
     }
 
@@ -2802,7 +2806,7 @@ namespace oro::runtime::ai::server {
     auto ctx = llm.acquirePooledContext(llm.models.at(model->name), copt);
     if (!ctx || !ctx->context) {
       (void) emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Failed to create context"}}}}).str(), true);
-      g_route_metrics.recordStatus(routeTag, 500);
+      routeMetrics().recordStatus(routeTag, 500);
       return false;
     }
     ctx->options.temp = temperature;
@@ -2831,7 +2835,7 @@ namespace oro::runtime::ai::server {
     if (llama_tokenize(model->vocab, prompt.c_str(), (int32_t)prompt.size(), toks.data(), (int32_t)toks.size(), true, true) < 0) {
       (void) emit("message", JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Tokenization failed"}}}}).str(), true);
       // context released by scope guard
-      g_route_metrics.recordStatus(routeTag, 500);
+      routeMetrics().recordStatus(routeTag, 500);
       return false;
     }
 
@@ -2872,13 +2876,13 @@ namespace oro::runtime::ai::server {
     if (ctx->used() + (size_t)batch.n_tokens > ctx->size()) {
       emit_delta("", true, "length");
       __release_ctx2();
-      g_route_metrics.recordStatus(routeTag, 200);
+      routeMetrics().recordStatus(routeTag, 200);
       return true;
     }
     if (llama_decode(ctx->context, batch)) {
       emit_delta("", true, "stop");
       __release_ctx2();
-      g_route_metrics.recordStatus(routeTag, 500);
+      routeMetrics().recordStatus(routeTag, 500);
       return true;
     }
 
@@ -2899,14 +2903,14 @@ namespace oro::runtime::ai::server {
       if (elapsed >= max_decode_ms) {
         emit_delta("", true, "timeout");
         // context released by scope guard
-        g_route_metrics.recordStatus(routeTag, 408);
+        routeMetrics().recordStatus(routeTag, 408);
         return true;
       }
       token = llama_sampler_sample(ctx->sampler, ctx->context, -1);
       if (llama_vocab_is_eog(model->vocab, token)) {
         emit_delta("", true, "stop");
         // context released by scope guard
-        g_route_metrics.recordStatus(routeTag, 200);
+        routeMetrics().recordStatus(routeTag, 200);
         return true;
       }
       static thread_local Vector<char> pieceBuf2;
@@ -2928,7 +2932,7 @@ namespace oro::runtime::ai::server {
         }
         if (max_stop > 0 && tail_has_stop(tail, stops)) {
           emit_delta("", true, "stop");
-          g_route_metrics.recordStatus(routeTag, 200);
+          routeMetrics().recordStatus(routeTag, 200);
           __release_ctx2();
           return true;
         }
@@ -2937,13 +2941,13 @@ namespace oro::runtime::ai::server {
       if (ctx->used() + (size_t)batch.n_tokens > ctx->size()) {
         emit_delta("", true, "length");
         __release_ctx2();
-        g_route_metrics.recordStatus(routeTag, 200);
+        routeMetrics().recordStatus(routeTag, 200);
         return true;
       }
       if (llama_decode(ctx->context, batch)) {
         emit_delta("", true, "stop");
         __release_ctx2();
-        g_route_metrics.recordStatus(routeTag, 500);
+        routeMetrics().recordStatus(routeTag, 500);
         return true;
       }
       ctx->usedTokens.fetch_add((size_t)batch.n_tokens, std::memory_order_acq_rel);
@@ -2951,7 +2955,7 @@ namespace oro::runtime::ai::server {
 
     emit_delta("", true, "length");
     __release_ctx2();
-    g_route_metrics.recordStatus(routeTag, 200);
+    routeMetrics().recordStatus(routeTag, 200);
     return true;
   }
 
@@ -2972,7 +2976,7 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "No model loaded"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     String input = req.url.searchParams.get("input").str();
@@ -3003,7 +3007,7 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Missing 'input'"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     // Total bytes guard across inputs
@@ -3012,7 +3016,7 @@ namespace oro::runtime::ai::server {
       statusCode = 413;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Input too large"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     // Cap number of inputs to prevent abuse
@@ -3028,7 +3032,7 @@ namespace oro::runtime::ai::server {
       statusCode = 500;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Failed to create context"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     // Ensure pooled context release on all paths in embeddings handler
@@ -3048,7 +3052,7 @@ namespace oro::runtime::ai::server {
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Tokenization failed"}}}}).str());
       __release_ctx_emb();
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
       Vector<llama_token> toks((size_t)n_tokens);
@@ -3057,7 +3061,7 @@ namespace oro::runtime::ai::server {
         headers.set("content-type", "application/json; charset=utf-8");
         body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Tokenization failed"}}}}).str());
         __release_ctx_emb();
-        g_route_metrics.recordStatus(routeTag, statusCode);
+        routeMetrics().recordStatus(routeTag, statusCode);
         return true;
       }
       llama_batch batch = llama_batch_get_one(toks.data(), (int32_t)toks.size());
@@ -3066,7 +3070,7 @@ namespace oro::runtime::ai::server {
         headers.set("content-type", "application/json; charset=utf-8");
         body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Context too small"}}}}).str());
         __release_ctx_emb();
-        g_route_metrics.recordStatus(routeTag, statusCode);
+        routeMetrics().recordStatus(routeTag, statusCode);
         return true;
       }
       if (llama_decode(ctx->context, batch)) {
@@ -3074,7 +3078,7 @@ namespace oro::runtime::ai::server {
         headers.set("content-type", "application/json; charset=utf-8");
         body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Decode failed"}}}}).str());
         __release_ctx_emb();
-        g_route_metrics.recordStatus(routeTag, statusCode);
+        routeMetrics().recordStatus(routeTag, statusCode);
         return true;
       }
       ctx->usedTokens.fetch_add((size_t)batch.n_tokens, std::memory_order_acq_rel);
@@ -3085,7 +3089,7 @@ namespace oro::runtime::ai::server {
         headers.set("content-type", "application/json; charset=utf-8");
         body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Embeddings unavailable"}}}}).str());
         __release_ctx_emb();
-        g_route_metrics.recordStatus(routeTag, statusCode);
+        routeMetrics().recordStatus(routeTag, statusCode);
         return true;
       }
       JSON::Array arr;
@@ -3103,7 +3107,7 @@ namespace oro::runtime::ai::server {
     statusCode = 200;
     // context released by scope guard
     maybe_log_kv_metrics("/v1/embeddings", &llm);
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     return true;
   }
 
@@ -3125,7 +3129,7 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "No model loaded"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     String prompt = req.url.searchParams.get("prompt").str();
@@ -3135,14 +3139,14 @@ namespace oro::runtime::ai::server {
       statusCode = 400;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Missing 'prompt'"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     if (prompt.size() > this->options.maxPromptBytes) {
       statusCode = 413;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Prompt too large"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     const int max_tokens = [&]() {
@@ -3216,7 +3220,7 @@ namespace oro::runtime::ai::server {
       statusCode = 500;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Failed to create context"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     // Ensure pooled context is released on all paths
@@ -3244,7 +3248,7 @@ namespace oro::runtime::ai::server {
       statusCode = 500;
       headers.set("content-type", "application/json; charset=utf-8");
       body = bytes::Buffer::from(JSON::Object(JSON::Object::Entries {{"error", JSON::Object::Entries {{"message", "Generation failed"}}}}).str());
-      g_route_metrics.recordStatus(routeTag, statusCode);
+      routeMetrics().recordStatus(routeTag, statusCode);
       return true;
     }
     const auto created = (int64_t)(time(nullptr));
@@ -3279,7 +3283,7 @@ namespace oro::runtime::ai::server {
     statusCode = 200;
     // context released by scope guard
     maybe_log_kv_metrics("/v1/completions", &llm);
-    g_route_metrics.recordStatus(routeTag, statusCode);
+    routeMetrics().recordStatus(routeTag, statusCode);
     return true;
   }
 }

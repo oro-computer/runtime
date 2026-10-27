@@ -250,6 +250,11 @@ namespace oro::runtime::webview {
         SchemeHandlers* handlers;
         PlatformRequest platformRequest;
 
+      #if ORO_RUNTIME_PLATFORM_APPLE
+        // Native callbacks can outlive WebKit cancellation and window closure.
+        SharedPointer<void> platformRequestOwner;
+      #endif
+
       #if ORO_RUNTIME_PLATFORM_WINDOWS
         ICoreWebView2Environment* env = nullptr;
       #endif

@@ -108,9 +108,10 @@ if [ ! -f "$sdkmanager" ]; then
   exit_and_write_code 1
 fi
 
-if [[ -z "$ANDROID_SDK_PLATFORM" ]]; then
-  ANDROID_SDK_PLATFORM="37.0"
-fi
+# The API 37 image aborts in mapper.ranchu during color-buffer readback,
+# restarting SurfaceFlinger and the framework. Keep the guest independent of
+# the build SDK so tests can use API 36 while applications compile with API 37.
+emulator_api_level="${ORO_ANDROID_EMULATOR_API_LEVEL:-36}"
 
 case "$(uname -m)" in
   arm64|aarch64) android_system_image_arch="arm64-v8a" ;;
@@ -121,9 +122,12 @@ case "$(uname -m)" in
     ;;
 esac
 
-avd_name="OROAVD_API_${ANDROID_SDK_PLATFORM//./_}_$android_system_image_arch"
-pkg="system-images;android-$ANDROID_SDK_PLATFORM;google_apis;$android_system_image_arch"
-system_image_dir="$ANDROID_HOME/system-images/android-$ANDROID_SDK_PLATFORM/google_apis/$android_system_image_arch"
+# Give Google APIs and the test APK room to initialize before installation.
+# A separate AVD identity avoids reusing an older, smaller userdata image.
+avd_data_size="6G"
+avd_name="OROAVD_API_${emulator_api_level//./_}_${android_system_image_arch}_data${avd_data_size}"
+pkg="system-images;android-$emulator_api_level;google_apis;$android_system_image_arch"
+system_image_dir="$ANDROID_HOME/system-images/android-$emulator_api_level/google_apis/$android_system_image_arch"
 avd_exists=""
 
 if "$avdmanager" list avd | grep -F "Name: $avd_name" >/dev/null; then
@@ -173,6 +177,20 @@ if [[ ! -f "$ANDROID_AVD_HOME/$avd_name.ini" ]]; then
   echo "not ok - Android AVD was not created at $ANDROID_AVD_HOME/$avd_name.ini"
   exit_and_write_code 1
 fi
+
+avd_config="$ANDROID_AVD_HOME/$avd_name.avd/config.ini"
+if [[ ! -f "$avd_config" ]]; then
+  echo "not ok - Android AVD configuration was not created at $avd_config"
+  exit_and_write_code 1
+fi
+avd_config_temp="$(mktemp "$avd_config.XXXXXX")" || exit_and_write_code 1
+awk -v size="$avd_data_size" '
+  /^[[:space:]]*disk[.]dataPartition[.]size[[:space:]]*=/ { next }
+  { print }
+  END { print "disk.dataPartition.size=" size }
+' "$avd_config" > "$avd_config_temp" && mv "$avd_config_temp" "$avd_config"
+rc=$?
+(( rc != 0 )) && exit_and_write_code "$rc"
 
 [[ -z "$EMULATOR_FLAGS" ]] && EMULATOR_FLAGS=()
 

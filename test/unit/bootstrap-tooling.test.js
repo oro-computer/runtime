@@ -375,12 +375,15 @@ test('npm publish workflow uses exact tarballs, OIDC, and the signed source', ()
     1,
     'package build jobs should not enter the protected publishing environment'
   )
-  assert.equal(
-    workflow.match(/ref: \$\{\{ needs\.validate-source\.outputs\.commit_sha \}\}/g)
-      ?.length,
-    2,
-    'publishing jobs should checkout the commit contained in the verified tag'
-  )
+  for (const name of ['platform-packages', 'top-level-packages', 'verify-packages', 'publish']) {
+    const job = workflow.replace(/\r\n/g, '\n').split(`\n  ${name}:\n`)[1]?.split(/\n {2}[a-z-]+:\n/)[0]
+    assert.ok(job, `Missing npm workflow job: ${name}`)
+    assert.match(
+      job,
+      /ref: \$\{\{ needs\.validate-source\.outputs\.commit_sha \}\}/,
+      `${name} should checkout the commit contained in the verified tag`
+    )
+  }
   assert.doesNotMatch(
     workflow,
     /NO_ANDROID: \$\{\{ matrix\./,
@@ -568,7 +571,7 @@ test('full branch preflight runs native npm consumers without authorizing public
   assert.match(caller, /publish: \$\{\{ startsWith\(github\.ref, 'refs\/tags\/'\) \}\}/)
   assert.match(caller, /reuse_release_artifacts: true/)
   const verification = npm.split('\n  verify-packages:\n')[1].split('\n  publish:')[0]
-  assert.match(verification, /needs: \[platform-packages, top-level-packages\]/)
+  assert.match(verification, /needs: \[validate-source, platform-packages, top-level-packages\]/)
   assert.doesNotMatch(verification, /if:|environment:|id-token:/)
   assert.match(verification, /Verify complete npm package set/)
   const publication = npm.split('\n  publish:\n')[1]
@@ -2198,27 +2201,12 @@ test('mobile CI gives each target the full CPU budget', () => {
     /RELEASE_SUPPORT" != "desktop"[\s\S]*ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS=1/,
     'mobile shards should build their runtime targets sequentially'
   )
-  assert.match(
-    workflow,
-    /BUILD_ANDROID" == "true"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY=1/,
-    'Android shards should request the reduced host CLI runtime'
-  )
-  assert.match(
-    runtimeBuilder,
-    /host" = "Linux" \|\| "\$host" = "Darwin"[\s\S]*platform" = "desktop"[\s\S]*ORO_RUNTIME_DESKTOP_CLI_ONLY[\s\S]*sources=\([\s\S]*runtime\/config\/config\.cc[\s\S]*runtime\/mcp\/tool\.cc[\s\S]*runtime\/process\/unix\.cc[\s\S]*runtime\/version\.cc[\s\S]*build\/sqlite\/sqlite3\.c[\s\S]*build\/llama\/src\/llama\.cpp/,
-    'the reduced host archive should retain every translation unit consumed by mobile build CLIs'
-  )
+  assert.doesNotMatch(workflow + runtimeBuilder, /ORO_RUNTIME_DESKTOP_CLI_ONLY/,
+    'mobile CI host CLIs need the complete runtime for native CLI commands')
   assert.match(
     readFile('bin/install.sh'),
     /runtime_target_count > 1[\s\S]*ORO_RUNTIME_SEQUENTIAL_TARGET_BUILDS[\s\S]*runtime_target_count > CPU_CORES[\s\S]*building mobile runtimes before the host runtime[\s\S]*runtime_index = 1[\s\S]*ORO_RUNTIME_BUILD_JOBS="\$CPU_CORES"[\s\S]*runtime_arches\[0\]/,
     'mobile CI should give each runtime build the full CPU budget without oversubscription'
-  )
-  assert.doesNotMatch(
-    runtimeBuilder.match(
-      /if \[\[ "\$host" = "Linux" \|\| "\$host" = "Darwin" \]\] &&[\s\S]*?building the mobile CI host CLI runtime surface"\nfi/
-    )?.[0] ?? '',
-    /runtime\/window\/linux\.cc|runtime\/core\/services\.cc|runtime\/serviceworker/,
-    'mobile packaging CLIs should not compile desktop UI and service backends'
   )
   assert.match(
     readFile('test/scripts/test-android.js'),
@@ -2675,9 +2663,11 @@ test('CI caches dependencies and runs focused platform coverage', () => {
   )
   assert.match(
     workflow,
-    /Restore Android emulator cache[\s\S]*system-images\/android-37\.0\/google_apis\/x86_64[\s\S]*~\/\.android\/avd/,
+    /Restore Android emulator cache[\s\S]*system-images\/android-\$\{\{ env\.ORO_ANDROID_EMULATOR_API_LEVEL \}\}\/google_apis\/x86_64[\s\S]*~\/\.android\/avd/,
     'the Android test lane should cache its emulator image and AVD separately'
   )
+  assert.match(workflow, /ORO_ANDROID_EMULATOR_API_LEVEL: '36'/)
+  assert.match(workflow, /key: android-emulator-v2-api\$\{\{ env\.ORO_ANDROID_EMULATOR_API_LEVEL \}\}/)
   assert.match(
     workflow,
     /Reclaim Android build disk[\s\S]*\/usr\/share\/dotnet[\s\S]*\$ANDROID_HOME\/system-images[\s\S]*Build Oro Runtime CLI \(Unix\)/,

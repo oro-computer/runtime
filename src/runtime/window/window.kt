@@ -296,19 +296,31 @@ open class Window (val fragment: WindowFragment) {
       // them. The prompt path validates the caller origin and a per-window nonce.
       bridgeScript = WebViewCompat.addDocumentStartJavaScript(this, """
         (() => {
-          if (globalThis.top !== globalThis) return
+          const isTopLevel = globalThis.top === globalThis
+          if (!isTopLevel) {
+            try {
+              if (globalThis.top.location.origin !== globalThis.location.origin) return
+            } catch {
+              return
+            }
+          }
           const prompt = globalThis.prompt.bind(globalThis)
-          const bridge = globalThis.__oroNativeBridge
-          const tokenBytes = new Uint8Array(16)
-          globalThis.crypto.getRandomValues(tokenBytes)
-          const documentToken = Array.from(tokenBytes, value => value.toString(16).padStart(2, '0')).join('')
-          Object.defineProperty(globalThis, '__oroNativeDocumentToken', { value: documentToken })
-          const announceDocument = () => bridge.postMessage('oro:document:' + documentToken)
-          announceDocument()
-          globalThis.addEventListener('pageshow', announceDocument)
+          // Same-origin frames use their top-level bridge without owning its document.
+          const bridge = isTopLevel ? globalThis.__oroNativeBridge : globalThis.top.external
+          if (isTopLevel) {
+            const tokenBytes = new Uint8Array(16)
+            globalThis.crypto.getRandomValues(tokenBytes)
+            const documentToken = Array.from(tokenBytes, value => value.toString(16).padStart(2, '0')).join('')
+            Object.defineProperty(globalThis, '__oroNativeDocumentToken', { value: documentToken })
+            const announceDocument = () => bridge.postMessage('oro:document:' + documentToken)
+            announceDocument()
+            globalThis.addEventListener('pageshow', announceDocument)
+          }
           const open = XMLHttpRequest.prototype.open
           const setHeader = XMLHttpRequest.prototype.setRequestHeader
           const URLConstructor = URL
+          // Runtime workers inherit this window's IPC authentication token.
+          Object.defineProperty(globalThis, '__oroNativeBridgeToken', { value: '$bridgeNonce' })
           XMLHttpRequest.prototype.open = function(method, url, ...args) {
             const destination = new URLConstructor(String(url), location.href)
             const result = open.call(this, method, destination.href, ...args)
@@ -323,6 +335,8 @@ open class Window (val fragment: WindowFragment) {
               if (typeof message !== 'string' || message.length > 1048576) {
                 throw new RangeError('IPC message exceeds the supported size')
               }
+              // Sandboxed runtime frames cannot open the synchronous body prompt.
+              if (!isTopLevel) return bridge.postMessage(message, bytes)
               if (bytes !== undefined && bytes !== null) {
                 const buffer = typeof bytes === 'string' ? new TextEncoder().encode(bytes)
                   : ArrayBuffer.isView(bytes) ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)

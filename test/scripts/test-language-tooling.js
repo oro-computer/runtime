@@ -2,12 +2,12 @@
 
 // Real backend qualification uses temporary original files and the selected SDK.
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { execute } from '../../src/cli/tooling/process.cjs'
+import { createQualificationDirectory } from '../../bin/qualification-directory.js'
 import { LspClient, qualifyEditing, editingCapabilities } from './lsp-client.js'
 
 const language = process.argv[2]
@@ -15,7 +15,7 @@ if (!['c', 'cpp', 'objc', 'objcpp', 'typescript', 'swift'].includes(language)) t
 const inferred = process.argv.includes('--inferred')
 if (inferred && language !== 'typescript') throw new Error('--inferred requires typescript')
 const oroc = process.env.OROC || 'oroc'
-const root = mkdtempSync(path.join(tmpdir(), `oro-${language}-lsp-`))
+const root = createQualificationDirectory(`oro-${language}-lsp-`)
 const web = language === 'typescript'
 const swift = language === 'swift'
 const objc = ['objc', 'objcpp'].includes(language)
@@ -37,9 +37,6 @@ writeFileSync(filename, source)
 writeFileSync(path.join(root, 'historical', path.basename(filename)), source)
 let configuration = '[meta]\nversion = "1.0.0"\nbundle_identifier = "computer.oro.editorqualification"\n[build]\nname = "editor_qualification"\noutput = "out with spaces"\n'
 if (web) {
-  const require = createRequire(import.meta.url)
-  const compiler = path.dirname(path.dirname(require.resolve('typescript/lib/typescript.js')))
-  configuration += `[tooling.typescript]\ntypescript = ${JSON.stringify(compiler)}\n`
   if (!inferred) writeFileSync(path.join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler', noEmit: true, skipLibCheck: true }, include: ['web/**/*.ts'] }))
 } else if (swift) configuration += '[tooling.swift]\nsources = ["native/main.swift"]\n'
 else configuration += `[build.extensions]\nprobe = "native/main.${extension}"\n`
@@ -76,9 +73,9 @@ try {
     diagnosticSuffix: web ? '\nconst oroEditingInvalid: number = "bad"\n' : swift ? '\nlet oroEditingInvalid: Int = "bad"\n' : '\nint oroEditingInvalid = "bad";\n',
     symbol: 'editorValue',
     unformatted: source + (web ? 'export function editorFormat( ){return 1}\n' : swift ? 'func editorFormat( ) -> Int {return 1}\n' : 'int editorFormat( void ){return 1;}\n'),
-    broken: web || swift ? source.replace('= editorValue', '= editorValu') : source + 'int needsSemicolon = 1\n',
-    actionTitle: web || swift ? /editorValue/ : /[Ss]emicolon|[Ii]nsert.*;/,
-    fixedText: web || swift ? /= editorValue\b/ : /int needsSemicolon = 1;/
+    broken: web ? source.replace('= editorValue', '= editorValu') : swift ? source + 'let needsSemicolon = 1 let anotherValue = 2\n' : source + 'int needsSemicolon = 1\n',
+    actionTitle: web ? /editorValue/ : /[Ss]emicolon|[Ii]nsert.*;/,
+    fixedText: web ? /= editorValue\b/ : swift ? /let needsSemicolon = 1;\s*let anotherValue/ : /int needsSemicolon = 1;/
   })
   const { features } = editing
   let version = editing.version
@@ -97,4 +94,7 @@ try {
   }
   assert.ok(!client.messages.some(message => message.method === 'textDocument/publishDiagnostics' && message.params.uri.includes('/historical/')))
   console.log(JSON.stringify({ language, sourceMode: model.sourceMode, platform: model.platform, diagnostics: 'passed', hover: 'passed', features, project: root }))
+} catch (error) {
+  console.error(client.context())
+  throw error
 } finally { await client.close() }

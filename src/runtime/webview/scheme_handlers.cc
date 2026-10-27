@@ -157,16 +157,62 @@ static inline String stringFromNSString (NSString* value) {
 
   [self enqueueTask: task withRequestID: request->id];
   const auto handled = self.handlers->handleRequest(request, [=](const auto& response) {
-    [self finalizeTask: task];
+    // Response notifications queued by native services must reach WebKit before
+    // removing the task. Cancellation can still remove it before delivery.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self finalizeTask: task];
+    });
   });
 
   if (!handled) {
     auto response = SchemeHandlers::Response(request, 404);
     response.finish();
-    [self finalizeTask: task];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self finalizeTask: task];
+    });
   }
 }
 @end
+
+static SharedPointer<void> retainSchemeTask (Task task) {
+#if __has_feature(objc_arc)
+  auto retained = (__bridge_retained void*) task;
+#else
+  auto retained = reinterpret_cast<void*>([task retain]);
+#endif
+  return SharedPointer<void>(retained, [](void* retained) {
+    // Release on the main queue without making the native loop wait for it.
+    dispatch_async(dispatch_get_main_queue(), ^{
+    #if __has_feature(objc_arc)
+      Task task = (__bridge_transfer Task) retained;
+      (void) task;
+    #else
+      [(Task) retained release];
+    #endif
+    });
+  });
+}
+
+static void dispatchSchemeTask (
+  Task task,
+  OROInternalWKURLSchemeHandler* handler,
+  void (^deliver)(Task)
+) {
+  // WebKit can synchronously wait for the main run loop even when its task API
+  // is called from a worker. Never let native I/O wait for a lifecycle callback
+  // that is itself draining the I/O loop. Always enqueue to preserve ordering.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (handler.handlers == nullptr || ![handler waitingForTask: task]) {
+      return;
+    }
+
+    @try {
+      deliver(task);
+    } @catch (::id) {
+      [handler finalizeTask: task];
+    }
+  });
+}
 #elif ORO_RUNTIME_PLATFORM_LINUX
 static const auto MAX_URI_SCHEME_REQUEST_BODY_BYTES = 4 * 1024 * 1024;
 static void onURISchemeRequest (WebKitURISchemeRequest* schemeRequest, gpointer userData) {
@@ -1668,7 +1714,9 @@ namespace oro::runtime::webview {
       tracer("webview::SchemeHandlers::Request") {
     this->platformRequest = platformRequest;
     if (this->platformRequest) {
-    #if ORO_RUNTIME_PLATFORM_LINUX
+    #if ORO_RUNTIME_PLATFORM_APPLE
+      this->platformRequestOwner = retainSchemeTask(platformRequest);
+    #elif ORO_RUNTIME_PLATFORM_LINUX
       g_object_ref(this->platformRequest);
     #endif
     }
@@ -1953,7 +2001,10 @@ namespace oro::runtime::webview {
           return false;
         }
 
-        [platformRequest didReceiveResponse: this->platformResponse];
+        const auto response = this->platformResponse;
+        dispatchSchemeTask(platformRequest, this->handlers->internals->schemeHandler, ^(Task task) {
+          [task didReceiveResponse: response];
+        });
         cdpEmitResponseReceived(this);
         return true;
       }
@@ -2142,12 +2193,10 @@ namespace oro::runtime::webview {
       Lock lock(this->mutex);
     #if ORO_RUNTIME_PLATFORM_APPLE
       const auto data = [NSData dataWithBytes: bytes.get() length: size];
-      @try {
-        [this->request->platformRequest didReceiveData: data];
-        success = true;
-      } @catch (::id) {
-        success = false;
-      }
+      dispatchSchemeTask(this->request->platformRequest, this->handlers->internals->schemeHandler, ^(Task task) {
+        [task didReceiveData: data];
+      });
+      success = true;
     #elif ORO_RUNTIME_PLATFORM_LINUX
       if (this->platformResponseOutput != nullptr) {
         GError* error = nullptr;
@@ -2346,9 +2395,9 @@ namespace oro::runtime::webview {
     Lock lock(this->mutex);
   #if ORO_RUNTIME_PLATFORM_APPLE
     if (requestActive) {
-      @try {
-        [this->request->platformRequest didFinish];
-      } @catch (::id) {}
+      dispatchSchemeTask(this->request->platformRequest, this->handlers->internals->schemeHandler, ^(Task task) {
+        [task didFinish];
+      });
     }
   #if !__has_feature(objc_arc)
     [this->platformResponse release];
@@ -2568,12 +2617,9 @@ namespace oro::runtime::webview {
             userInfo: @{NSLocalizedDescriptionKey: @(reason.c_str())}
     ];
 
-    @try {
-      [this->request->platformRequest didFailWithError: error];
-    } @catch (::id e) {
-      // ignore possible 'NSInternalInconsistencyException'
-      return false;
-    }
+    dispatchSchemeTask(this->request->platformRequest, this->handlers->internals->schemeHandler, ^(Task task) {
+      [task didFailWithError: error];
+    });
 
     // notify fail callback
     if (this->request->callbacks.fail != nullptr) {

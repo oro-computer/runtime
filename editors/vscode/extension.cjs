@@ -31,6 +31,7 @@ async function open (document) {
   if (stopping || !vscode.workspace.isTrusted) return
   const family = families[document.languageId]
   if (!family) return
+  if (process.platform === 'win32' && family === 'cpp') return
   const configuration = await configurationFor(document)
   if (!configuration || stopping) return
   if (restarting) { await restarting; return open(document) }

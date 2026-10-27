@@ -7,33 +7,71 @@ test('ipc: diagnostics.stream.sse emits and cancels', async (t) => {
 
   const received = []
   await new Promise((resolve, reject) => {
-    const es = new globalThis.EventSource(url)
+    // Runtime XHR attaches the Android bridge token. Native EventSource cannot
+    // supply that header and is rejected before the IPC route is reached.
+    const request = new globalThis.XMLHttpRequest()
+    let offset = 0
+    let settled = false
     const timeout = setTimeout(() => {
-      try {
-        es.close()
-      } catch {}
-      reject(new Error('SSE timeout'))
+      fail('SSE timeout')
     }, 3000)
 
-    es.addEventListener('test', (ev) => {
-      received.push(ev.data)
-      if (received.length === Math.ceil(count / 2)) {
-        // Cancel mid-stream
-        es.close()
-        clearTimeout(timeout)
-        resolve()
-      }
-    })
+    function finish (error) {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      // Aborting can synchronously dispatch a final progress event with status 0.
+      request.onprogress = null
+      request.onload = null
+      request.onerror = null
+      request.abort()
+      if (error) reject(error)
+      else resolve()
+    }
 
-    es.onerror = (err) => {
-      // Some platforms may emit error on close; ignore if we already received some
-      if (received.length === 0) {
-        clearTimeout(timeout)
-        reject(err)
+    function fail (message) {
+      finish(new Error(message))
+    }
+
+    function readEvents () {
+      if (settled) return
+      if (request.status !== 200) {
+        fail(`SSE request failed with HTTP ${request.status}`)
+        return
+      }
+
+      // Only consume complete records; progress callbacks may split an event
+      // or deliver several events together on a buffering webview backend.
+      const text = request.responseText
+      let end = text.indexOf('\n\n', offset)
+      while (end !== -1) {
+        const lines = text.slice(offset, end).split('\n')
+        offset = end + 2
+        if (lines.includes('event: test')) {
+          const data = lines.find(line => line.startsWith('data: '))
+          if (data) received.push(data.slice(6))
+        }
+        if (received.length === Math.ceil(count / 2)) {
+          finish()
+          return
+        }
+        end = text.indexOf('\n\n', offset)
       }
     }
+
+    request.onprogress = readEvents
+    request.onload = () => {
+      readEvents()
+      if (received.length < Math.ceil(count / 2)) {
+        fail('SSE stream ended before the expected events arrived')
+      }
+    }
+    request.onerror = () => fail('SSE network request failed')
+    request.open('GET', url, true)
+    request.responseType = 'text'
+    request.setRequestHeader('Accept', 'text/event-stream')
+    request.send()
   })
 
-  t.ok(received.length > 0, 'received some SSE events')
-  t.ok(received.length <= count, 'did not exceed planned event count')
+  t.deepEqual(received, ['0', '1', '2', '3'], 'received ordered SSE events before aborting')
 })

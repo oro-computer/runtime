@@ -706,13 +706,14 @@ extern "C" {
     const auto app = App::sharedApplication();
 
     if (!app) {
-      return ANDROID_THROW(env, "Missing 'App' in environment");
+      return;
     }
 
     const auto window = app->runtime.windowManager.getWindow(index);
 
     if (!window) {
-      return ANDROID_THROW(env, "Invalid window index (%d) requested", index);
+      // A WebView result can arrive after its native window has been destroyed.
+      return;
     }
 
     const auto token = android::StringWrap(env, tokenString).str();

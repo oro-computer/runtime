@@ -520,6 +520,7 @@ jobs:
       GDK_BACKEND: x11
       GSK_RENDERER: cairo
       LIBGL_ALWAYS_SOFTWARE: '1'
+      ORO_ANDROID_EMULATOR_API_LEVEL: '36'
       ORO_CI_APPLE_MOBILE_TARGETS: ${{ matrix.apple_mobile_targets }}
       ORO_CI_FAST_COMPILE: '1'
       ORO_CI_ID: ${{ matrix.id }}
@@ -792,7 +793,6 @@ jobs:
 
             if [[ "$BUILD_ANDROID" == "true" ]]; then
               echo "ORO_ANDROID_CI=1"
-              echo "ORO_RUNTIME_DESKTOP_CLI_ONLY=1"
               echo "ANDROID_SDK_MANAGER_ACCEPT_LICENSES=yes"
             fi
           } >> "$GITHUB_ENV"
@@ -984,9 +984,27 @@ jobs:
           node -e "const { spawnSync } = require('node:child_process'); const path = require('node:path'); const cli = path.join(process.env.ORO_HOME, 'bin', process.platform === 'win32' ? 'oroc.exe' : 'oroc'); const result = spawnSync(cli, ['help'], { stdio: 'inherit' }); process.exit(result.status ?? 1)"
 
       - name: Run desktop tests
+        id: desktop-tests
         if: ${{ always() && matrix.test_desktop && steps.smoke-test.outcome == 'success' }}
         timeout-minutes: 20
         run: npm test
+
+      - name: Capture macOS desktop hang stacks
+        if: ${{ failure() && runner.os == 'macOS' && steps.desktop-tests.outcome == 'failure' }}
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          diagnostics="$RUNNER_TEMP/macos-failure-logs"
+          mkdir -p "$diagnostics"
+          ps -axo pid,ppid,state,command > "$diagnostics/processes.txt"
+          # Timed-out apps can remain alive until job cleanup. Sample them
+          # before the simulator step, since a hang produces no crash report.
+          app_pids="$(pgrep -f '/oro-runtime-javascript-tests-dev.app/Contents/MacOS/oro-runtime-javascript-tests-dev' || true)"
+          while IFS= read -r app_pid; do
+            if [[ -n "$app_pid" ]]; then
+              sample "$app_pid" 5 10 -file "$diagnostics/desktop-$app_pid.sample.txt" || true
+            fi
+          done <<< "$app_pids"
 
       - name: Run child process integration tests
         if: ${{ always() && matrix.test_child_process && steps.smoke-test.outcome == 'success' }}
@@ -1021,7 +1039,7 @@ jobs:
           printf '[settings.ios]\nsimulator_uuid = "%s"\n' "$simulator_udid" > "$ORO_RC"
           npm run test:ios-simulator
 
-      - name: Upload macOS crash reports
+      - name: Upload macOS failure diagnostics
         if: ${{ failure() && runner.os == 'macOS' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -1029,6 +1047,7 @@ jobs:
           path: |
             ~/Library/Logs/DiagnosticReports/**/oro-runtime-javascript-tests*
             /Library/Logs/DiagnosticReports/**/oro-runtime-javascript-tests*
+            ${{ runner.temp }}/macos-failure-logs/**
           if-no-files-found: ignore
           retention-days: 7
 
@@ -1041,9 +1060,9 @@ jobs:
         with:
           path: |
             ${{ steps.android-sdk.outputs.root }}/emulator
-            ${{ steps.android-sdk.outputs.root }}/system-images/android-37.0/google_apis/x86_64
+            ${{ steps.android-sdk.outputs.root }}/system-images/android-${{ env.ORO_ANDROID_EMULATOR_API_LEVEL }}/google_apis/x86_64
             ~/.android/avd
-          key: android-emulator-v37.1.11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('test/scripts/bootstrap-android-emulator.sh') }}
+          key: android-emulator-v2-api${{ env.ORO_ANDROID_EMULATOR_API_LEVEL }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('test/scripts/bootstrap-android-emulator.sh') }}
 
       - name: Grant Android emulator KVM access
         id: android-kvm
@@ -1057,25 +1076,28 @@ jobs:
           sudo chmod a+rw /dev/kvm
 
       - name: Run Android emulator tests
+        id: android-tests
         if: ${{ always() && matrix.test_android && steps.android-emulator-cache.outcome == 'success' && steps.android-kvm.outcome == 'success' }}
         timeout-minutes: 20
         shell: bash
         run: npm run test:android-emulator
 
       - name: Capture Android failure logs
-        if: ${{ failure() && matrix.test_android }}
+        if: ${{ failure() && matrix.test_android && steps.android-tests.outcome == 'failure' }}
+        timeout-minutes: 2
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/android-failure-logs"
+          android_serial="${ANDROID_SERIAL:-emulator-${ORO_ANDROID_EMULATOR_PORT:-5554}}"
           if [[ ! -s "$RUNNER_TEMP/android-failure-logs/logcat.txt" ]]; then
-            "$ANDROID_HOME/platform-tools/adb" logcat -d -b all > "$RUNNER_TEMP/android-failure-logs/logcat.txt" 2>&1 || true
+            timeout --kill-after=5s 30s "$ANDROID_HOME/platform-tools/adb" -s "$android_serial" logcat -d -b all > "$RUNNER_TEMP/android-failure-logs/logcat.txt" 2>&1 || true
           fi
           if [[ ! -s "$RUNNER_TEMP/android-failure-logs/activities.txt" ]]; then
-            "$ANDROID_HOME/platform-tools/adb" shell dumpsys activity activities > "$RUNNER_TEMP/android-failure-logs/activities.txt" 2>&1 || true
+            timeout --kill-after=5s 30s "$ANDROID_HOME/platform-tools/adb" -s "$android_serial" shell dumpsys activity activities > "$RUNNER_TEMP/android-failure-logs/activities.txt" 2>&1 || true
           fi
 
       - name: Upload Android failure logs
-        if: ${{ failure() && matrix.test_android }}
+        if: ${{ failure() && matrix.test_android && steps.android-tests.outcome == 'failure' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: android-failure-logs-${{ runner.arch }}

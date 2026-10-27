@@ -1,4 +1,4 @@
-.TH OROC-LANGUAGE-SERVER 1 "" "Oro Runtime 0.1.8" "Oro Runtime Manual"
+.TH OROC-LANGUAGE-SERVER 1 "" "Oro Runtime 0.2.0" "Oro Runtime Manual"
 .SH NAME
 oroc\-language\-server \- Oro Language Server: editor\-independent build models and language adapters.
 .SH SYNOPSIS
@@ -62,6 +62,10 @@ An explicit \-\-config or project directory overrides editor root discovery.
 Configure [language_server.<language>] command and args in oro.toml.
 .PP
 Defaults: kotlin\-language\-server; typescript\-language\-server \-\-stdio; clangd; sourcekit\-lsp.
+.PP
+The sourcekit adapter requires Swift 6.0+ (Xcode 16+ on macOS) for compiler settings, rename, and formatting support.
+.PP
+C\-family language servers are unavailable on Windows in this release. TypeScript editing, tooling cpp model export, and Windows runtime builds remain available.
 .PP
 Kotlin Android uses the fwcd adapter; adapter="stdio" delegates discovery to another backend.
 .PP

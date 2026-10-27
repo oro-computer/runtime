@@ -15,7 +15,7 @@ supports:
 
 - **Desktop** (`x86_64-desktop`) – default path, verified.
 - **Windows** – produces `whisper.lib` (experimental; requires MS toolchain).
-- **iOS** (`iPhoneOS`/`iPhoneSimulator`) – uses `xcrun` clang/bitcode.
+- **iOS** (`iPhoneOS`/`iPhoneSimulator`) – uses `xcrun` clang with native machine code.
 - **Android** (NDK) – static `libwhisper.a` per ABI.
 
 Runtime source target exclusions are independent: any non-empty `NO_ANDROID`

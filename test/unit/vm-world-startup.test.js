@@ -140,3 +140,47 @@ test('VM context windows allow delayed readiness and still reject a missing ackn
     await pending
   }
 })
+
+test('SharedWorker context windows accept delayed startup and reject a missing acknowledgement', async () => {
+  const source = readFileSync(new URL('../../api/shared-worker/index.js', import.meta.url), 'utf8')
+  const start = source.indexOf('async function initializeContextWindow ()')
+  const end = source.indexOf('\nexport default', start)
+  for (const ready of [true, false]) {
+    const timers = new Map()
+    const channel = new EventTarget()
+    let onProbe
+    const probed = new Promise(resolve => { onProbe = resolve })
+    channel.postMessage = onProbe
+    const window = { index: 65, hide: async () => {} }
+    const context = vm.createContext({
+      contextWindow: null,
+      URL,
+      SHARED_WORKER_WINDOW_PATH: '/oro/shared-worker/index.html',
+      SHARED_WORKER_WINDOW_TITLE: 'oro:shared-worker',
+      location: { origin: 'https://computer.oro.runtime.tests' },
+      __args: { config: {} },
+      process: { env: {} },
+      channel,
+      application: { getWindows: async () => [], createWindow: async () => window },
+      setTimeout: (callback, delay) => { timers.set(callback, delay); return callback },
+      clearTimeout: callback => timers.delete(callback)
+    })
+    const initialized = vm.runInContext(`${source.slice(start, end)}; initializeContextWindow()`, context)
+    const pending = ready ? initialized : assert.rejects(initialized, /window 65 did not become ready/)
+    await probed
+    assert.equal(timers.size, 1)
+    for (const [callback, delay] of timers) {
+      assert.ok(delay > 15_000 && delay <= 60_000)
+      if (!ready) callback()
+    }
+    if (ready) {
+      const event = new Event('message')
+      event.data = { ready: 65 }
+      channel.dispatchEvent(event)
+      assert.equal(timers.size, 0)
+      assert.equal(await pending, window)
+    } else {
+      await pending
+    }
+  }
+})

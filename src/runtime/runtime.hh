@@ -47,6 +47,7 @@ namespace oro::runtime {
       Options options;
 #if ORO_RUNTIME_PLATFORM_LINUX
       std::thread pauseThread;
+      SharedPointer<Atomic<bool>> pendingPause;
 #endif
       Atomic<bool> destroyed = false;
 

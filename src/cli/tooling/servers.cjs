@@ -5,6 +5,7 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { watchModel } = require('./watch.cjs')
 const { scopeGuard } = require('./scope.cjs')
+const { execute } = require('./process.cjs')
 
 const defaults = {
   kotlin: { command: 'kotlin-language-server', args: [], adapter: 'fwcd' },
@@ -49,6 +50,9 @@ function serverSettings (config, language, root, override) {
   language = aliases[language] || language
   if (!/^[a-z][a-z0-9_]*$/.test(language)) throw new Error(`Invalid language name: ${language}`)
   const family = families[language] || language
+  if (process.platform === 'win32' && family === 'cpp') {
+    throw new Error('C/C++ language-server support on Windows is deferred to a future release. Use a Linux or macOS host for C/C++ editor integration.')
+  }
   const configured = { ...settingsFor(config, family), ...settingsFor(config, language) }
   const base = family === 'kotlin' && configured.adapter === 'kotlin-lsp' ? { command: 'kotlin-lsp', args: ['--stdio'], adapter: 'kotlin-lsp' } : defaults[family]
   const settings = { ...base, ...configured }
@@ -73,12 +77,18 @@ function serverSettings (config, language, root, override) {
 }
 
 /**
+ * @typedef {object} ProgramResolutionOptions
+ * @property {boolean} [preserveSymlinks] Preserve the executable name for multicall drivers.
+ */
+
+/**
  * Find the configured program without invoking a shell or installing packages.
  * @param {string} command
  * @param {object} environment
+ * @param {ProgramResolutionOptions} [options]
  * @returns {string}
  */
-function resolveProgram (command, environment) {
+function resolveProgram (command, environment, options = {}) {
   const directories = path.isAbsolute(command) ? [''] : (environment.PATH || '').split(path.delimiter)
   const extensions = process.platform === 'win32' && !path.extname(command)
     ? (environment.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').map(extension => extension.toLowerCase())
@@ -89,11 +99,26 @@ function resolveProgram (command, environment) {
       try {
         if (!fs.statSync(candidate).isFile()) continue
         fs.accessSync(candidate, process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK)
-        return fs.realpathSync(candidate)
+        return options.preserveSymlinks ? candidate : fs.realpathSync(candidate)
       } catch {}
     }
   }
   throw new Error(`Program '${command}' is unavailable. Install it on the editor's PATH. For a language server, set language_server.<language>.command in oro.toml; for a build tool, select its documented toolchain path. Oro does not download servers automatically.`)
+}
+
+/**
+ * Check the selected SourceKit-LSP supports Oro's compilation database setup.
+ * @param {string} command Resolved SourceKit-LSP executable.
+ * @param {object} environment Selected editor environment.
+ * @returns {Promise<void>}
+ */
+async function preflightSourceKit (command, environment) {
+  const help = await execute(command, ['--help'], { env: environment, timeout: 10000 })
+  const required = ['--default-workspace-type', '--compilation-db-search-path']
+  const missing = required.filter(option => !new RegExp(`(?:^|\\s)${option}(?:\\s|=|$)`).test(help))
+  if (missing.length) {
+    throw new Error(`Oro Swift editor integration requires SourceKit-LSP from Swift 6.0 or later (Xcode 16 or later on macOS). Selected backend: ${command}. Missing options: ${missing.join(', ')}. Select a supported toolchain with DEVELOPER_DIR or language_server.swift.command.`)
+  }
 }
 
 /** Build an editor-independent launch descriptor for the shared supervisor. */
@@ -102,6 +127,10 @@ function stdioLaunch (project, settings, model, options = {}) {
   if (settings.adapter === 'clangd' && model) {
     if (args.some(arg => arg.startsWith('--compile-commands-dir'))) throw new Error('Oro owns --compile-commands-dir. Select tooling.cpp.compilation_database or use adapter="stdio" to manage it yourself.')
     args.push(`--compile-commands-dir=${model.generation}`)
+  }
+  if (settings.adapter === 'sourcekit' && model) {
+    if (args.some(arg => /^--(?:compilation-db-search-path|default-workspace-type)(?:=|$)/.test(arg))) throw new Error('Oro owns the SourceKit-LSP workspace and compilation database options. Use adapter="stdio" to manage them yourself.')
+    args.push('--default-workspace-type', 'compilationDatabase', '--compilation-db-search-path', path.relative(project.root, model.generation))
   }
   const scope = model ? scopeGuard(model) : {}
   return {
@@ -133,7 +162,8 @@ function stdioLaunch (project, settings, model, options = {}) {
         message.params.initializationOptions = {
           ...initial,
           defaultWorkspaceType: 'compilationDatabase',
-          compilationDatabase: { ...initial.compilationDatabase, searchPaths: [model.generation] }
+          compilationDatabase: { ...initial.compilationDatabase, searchPaths: [path.relative(project.root, model.generation)] },
+          ...(model.indexStorePath ? { index: { ...initial.index, indexStorePath: model.indexStorePath, indexDatabasePath: model.indexDatabasePath } } : {})
         }
       }
       return message
@@ -141,4 +171,4 @@ function stdioLaunch (project, settings, model, options = {}) {
   }
 }
 
-module.exports = { serverSettings, resolveProgram, stdioLaunch }
+module.exports = { serverSettings, resolveProgram, preflightSourceKit, stdioLaunch }

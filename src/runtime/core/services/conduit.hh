@@ -89,6 +89,7 @@ namespace oro::runtime::core::services {
 
           bool write (const bytes::Buffer&, const WriteCallback = nullptr);
           void close (const CloseCallback callback = nullptr);
+          void terminate (const CloseCallback callback = nullptr);
       };
 
       // state
@@ -117,8 +118,11 @@ namespace oro::runtime::core::services {
       bool isActive ();
 
     private:
-      uv_tcp_t socket;
-      struct sockaddr_in addr;
+      uv_tcp_t* socket = nullptr;
+      struct sockaddr_in addr {};
+
+      bool startOnLoop (const StartCallback);
+      void stopOnLoop ();
 
       void handshake (Client*, const char*);
       void processFrame (Client*, const char*, ssize_t);

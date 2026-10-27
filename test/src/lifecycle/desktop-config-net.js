@@ -46,6 +46,7 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
 
       // minimize to trigger native pause
       const win = await application.getCurrentWindow()
+      t.comment('UDP: minimizing window')
       await win.minimize()
       await sleep(200)
 
@@ -53,6 +54,7 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       const pausedMessages = []
       const onPausedMessage = message => pausedMessages.push(String(message))
       server.on('message', onPausedMessage)
+      t.comment('UDP: queuing send while paused')
       const pausedSend = new Promise((resolve, reject) =>
         client.send('ok-2', port, address, error => error ? reject(error) : resolve())
       )
@@ -128,9 +130,11 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       t.equal(await waitFor(() => messages.join('').includes('hello-1')), true, 'tcp baseline receive ok')
 
       const win = await application.getCurrentWindow()
+      t.comment('TCP: minimizing window')
       await win.minimize()
       await sleep(200)
 
+      t.comment('TCP: queuing write while paused')
       client.write('hello-2')
       await sleep(600)
       t.equal(

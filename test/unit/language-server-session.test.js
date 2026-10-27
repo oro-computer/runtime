@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { PassThrough } from 'node:stream'
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, readFileSync, symlinkSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -135,7 +135,50 @@ test('native header edits follow project include directories from compilation co
   assert.ok(!scope.accepts(pathToFileURL(path.join(root, 'history', 'types.hh')).href))
 })
 
-test('diagnostics preserve editor symlink URIs and discard stale versions', async () => {
+test('source scope resolves symlinked model roots and preserves editor URIs', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'oro-model-alias-'))
+  const original = path.join(root, 'original')
+  const alias = path.join(root, 'editor')
+  mkdirSync(path.join(original, 'include', 'nested'), { recursive: true })
+  symlinkSync(original, alias, process.platform === 'win32' ? 'junction' : 'dir')
+  writeFileSync(path.join(original, 'main.cc'), 'int main() {}')
+  writeFileSync(path.join(original, 'include', 'nested', 'types.hh'), 'struct Example {};')
+  const uri = pathToFileURL(path.join(alias, 'main.cc')).href
+  const canonicalUri = pathToFileURL(realpathSync.native(path.join(original, 'main.cc'))).href
+  assert.notEqual(uri, canonicalUri, 'The editor must open an alias of the original source')
+  const model = {
+    projectRoot: alias,
+    originalSources: [path.join(alias, 'main.cc')],
+    headerRoots: [path.join(alias, 'include')],
+    generation: path.join(alias, 'generated', 'cpp', 'generation'),
+    language: 'cpp'
+  }
+  const scope = scopeGuard(model)
+  assert.ok(scope.accepts(uri))
+  assert.ok(scope.accepts(canonicalUri))
+  assert.ok(scope.accepts(pathToFileURL(path.join(alias, 'include', 'nested', 'types.hh')).href))
+  const message = { method: 'textDocument/didOpen', params: { textDocument: { uri } } }
+  scope.transform(message)
+  assert.equal(message.params.textDocument.uri, canonicalUri)
+  assert.equal(scope.outgoing({ params: { uri: message.params.textDocument.uri } }).params.uri, uri)
+  const creation = destination => ({ method: 'workspace/applyEdit', params: { edit: { documentChanges: [{ kind: 'create', uri: pathToFileURL(destination).href }] } } })
+  assert.doesNotThrow(() => scope.validate(creation(path.join(alias, 'created.cc'))))
+  assert.throws(() => scope.validate(creation(path.join(root, 'outside.cc'))), /declared source directory/)
+  assert.ok(!scope.accepts(pathToFileURL(path.join(root, 'outside.cc')).href))
+
+  const inferred = scopeGuard({ ...model, language: 'typescript', sourceMode: 'inferred' })
+  assert.ok(inferred.accepts(pathToFileURL(path.join(alias, 'new', 'unsaved.ts')).href))
+  assert.ok(!inferred.accepts(pathToFileURL(path.join(alias, 'generated', 'cpp', 'generated.ts')).href))
+  assert.ok(!inferred.accepts(pathToFileURL(path.join(alias, '.oro-tooling', 'cpp', 'generated.ts')).href))
+  assert.ok(!inferred.accepts(pathToFileURL(path.join(alias, 'node_modules', 'dependency.ts')).href))
+  assert.ok(!inferred.accepts(pathToFileURL(path.join(root, 'outside.ts')).href))
+  const external = path.join(root, 'external')
+  mkdirSync(external)
+  symlinkSync(external, path.join(original, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
+  assert.ok(!inferred.accepts(pathToFileURL(path.join(alias, 'escape', 'unsaved.ts')).href))
+})
+
+test('diagnostics preserve editor symlink URIs across backend encodings and discard stale versions', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'oro-lsp-alias-'))
   const original = path.join(root, 'original')
   const alias = path.join(root, 'editor')
@@ -146,7 +189,7 @@ test('diagnostics preserve editor symlink URIs and discard stale versions', asyn
   const uri = pathToFileURL(path.join(alias, 'main.kt')).href
   const client = await connection(async () => launch({
     ...scopeGuard({ language: 'kotlin', projectRoot: root, originalSources: [file] }),
-    env: { ...process.env, ORO_TEST_STALE_DIAGNOSTICS: '1' }
+    env: { ...process.env, ORO_TEST_STALE_DIAGNOSTICS: '1', ORO_TEST_ENCODED_URIS: '1' }
   }))
   try {
     await client.wait(message => message.id === 1)

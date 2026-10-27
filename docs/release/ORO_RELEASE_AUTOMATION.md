@@ -115,7 +115,11 @@ These checks cover the five native host/architecture combinations in the package
 not replace application launch tests, mobile simulator tests, or fresh-machine dependency setup
 validation. Smoke directories are retained on the runner for inspection. A
 separate verification job then downloads those same tarballs, requires all seven expected files,
-and verifies each embedded package name and version. This gate also runs during branch preflight.
+and verifies each embedded package name and version. Each compressed tarball must fit the
+repository's 190,000,000-byte upload budget. This leaves room for npm's base64 attachment and
+metadata; it is a repository budget, not a documented registry limit. The size check runs immediately
+after packing, before consumer smoke tests, and again over every archive before publication.
+These gates also run during branch preflight.
 Only after it passes does a tagged release enter the `npm-publish` GitHub environment and publish
 those tarballs in dependency order:
 
@@ -125,9 +129,25 @@ those tarballs in dependency order:
 
 The job uses npm trusted publishing with `id-token: write`; it has no long-lived `NPM_TOKEN` or
 `NODE_AUTH_TOKEN`. npm automatically attaches provenance when the repository and packages are
-public. If a workflow is rerun after a partial registry publication, it skips an existing version
-only when npm's published integrity exactly matches the local tarball; a mismatch stops the
-release.
+public. Before publishing anything, the job checks every package's registry integrity. Only an
+explicit not-found response allows a new upload; authentication, network, and invalid metadata
+responses stop the release. If a workflow is rerun after a partial registry publication, it skips
+an existing version only when npm's published integrity exactly matches the local tarball; a
+mismatch stops the release before any further uploads.
+
+Preserve the original tarballs after a partial publication. npm's publish-time scanning can delay
+public metadata after a successful upload, so a temporary not-found response does not establish
+that an accepted version can be replaced. Wait for those uploads to become visible before retrying.
+Rebuilt packages cannot replace accepted versions. Rerunning a signed-tag job also uses that tag's
+original workflow and artifacts; it cannot incorporate later fixes. A corrected rebuild normally
+requires a new signed release version. Completing a partially published version from corrected
+artifacts requires a separately reviewed recovery procedure that preserves the accepted tarballs
+and the source, signature, integrity, and publication-environment checks.
+
+Apple SDK builds omit deprecated embedded bitcode while retaining native code for every advertised
+device and simulator target. Packaging a pre-existing SDK does not rebuild its libraries: after
+changing compiler flags, use newly built SDK archives. The package size gate rejects oversized
+older SDKs rather than silently removing target libraries.
 
 The npm platform matrix also states both mobile controls explicitly. Linux x64
 enables Android by leaving `NO_ANDROID` empty, sets `NO_IOS=1`, opts into the

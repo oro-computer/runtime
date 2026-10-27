@@ -22,8 +22,39 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Lifecycle, cancellation, scope, cache, and workspace import
-        run: node --test test/unit/language-server-session.test.js test/unit/language-server-editing.test.js test/unit/language-server-vscode.test.js
+        run: node --test test/unit/editor-test-tools.test.js test/unit/qualification-paths.test.js test/unit/native-language-launch.test.js test/unit/npm-smoke-scripts.test.js test/unit/language-server-session.test.js test/unit/language-server-editing.test.js test/unit/language-server-vscode.test.js
       - name: Install pinned VS Code API types
         run: npm ci --ignore-scripts --prefix editors/vscode
       - name: Check the standard VS Code language-client interfaces
         run: npm run check --prefix editors/vscode
+
+  native-backends:
+    name: Native editor preflight (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows C/C++ language-server support is deferred for this release.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.x
+      - name: Select Swift 6 toolchain on macOS 14
+        if: matrix.os == 'macos-14'
+        shell: bash
+        run: |
+          oro_editor_developer_dir=/Applications/Xcode_16.2.app/Contents/Developer
+          test -d "$oro_editor_developer_dir"
+          echo "DEVELOPER_DIR=$oro_editor_developer_dir" >> "$GITHUB_ENV"
+      - name: Install pinned native language backends
+        shell: bash
+        run: node bin/install-editor-test-tools.js "$RUNNER_TEMP/editor-tools"
+      - name: Qualify native diagnostics, references and edits without an Oro SDK
+        shell: bash
+        run: |
+          languages=(c cpp)
+          if [[ "$RUNNER_OS" == 'macOS' ]]; then languages+=(objc objcpp swift); fi
+          node test/scripts/test-native-language-backends.js "${languages[@]}"

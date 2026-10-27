@@ -41,11 +41,24 @@ export class LspClient {
 
   send (message) { this.child.stdin.write(encode({ jsonrpc: '2.0', ...message })) }
 
+  context () {
+    const recent = this.messages.slice(-12).map(message => ({
+      method: message.method,
+      id: message.id,
+      uri: message.params?.uri,
+      version: message.params?.version,
+      diagnostics: message.params?.diagnostics?.map(item => ({ severity: item.severity, message: item.message })),
+      message: message.params?.message,
+      error: message.error
+    }))
+    return `Recent LSP messages: ${JSON.stringify(recent).slice(-16000)}\n${this.stderr}`
+  }
+
   async request (method, params, attempt = 0) {
     if (this.failure) return Promise.reject(this.failure)
     const id = ++this.sequence
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Timed out: ${method}\n${this.stderr}`)) }, 300000)
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Timed out: ${method}\n${this.context()}`)) }, 300000)
       this.pending.set(id, { resolve, reject, timer })
       this.send({ id, method, params })
     }).catch(async error => {
@@ -61,7 +74,7 @@ export class LspClient {
       const message = this.messages.find(predicate)
       if (message) return message
       if (this.failure) throw this.failure
-      if (Date.now() > deadline) throw new Error(`LSP notification timed out\n${this.stderr}`)
+      if (Date.now() > deadline) throw new Error(`LSP notification timed out\n${this.context()}`)
       await delay(50)
     }
   }
@@ -85,6 +98,18 @@ export const editingCapabilities = {
       codeActionLiteralSupport: { codeActionKind: { valueSet: ['quickfix'] } },
       resolveSupport: { properties: ['edit'] }
     }
+  }
+}
+
+/**
+ * Wait for SourceKit's index using the synchronization method it supports.
+ * @param {LspClient} client Connected Swift language client.
+ * @returns {Promise<void>}
+ */
+export async function waitForSwiftIndex (client) {
+  try { await client.request('workspace/synchronize', { index: true }) } catch (error) {
+    if (error.code !== -32601) throw error
+    await client.request('workspace/_pollIndex', {})
   }
 }
 
@@ -207,6 +232,7 @@ export async function qualifyEditing (client, capabilities, uri, text, position,
     if ([...restored].some(([target, value]) => value.text !== documents.get(target).text)) await apply(restored)
   }
   try {
+    if (fixture.language === 'swift') await waitForSwiftIndex(client)
     if (capabilities.completionProvider) {
       process.stderr.write(`Checking completion edits: ${uri}\n`)
       const result = await client.request('textDocument/completion', document)
@@ -216,11 +242,17 @@ export async function qualifyEditing (client, capabilities, uri, text, position,
     if (capabilities.referencesProvider) {
       process.stderr.write(`Checking references edits: ${uri}\n`)
       const result = await client.request('textDocument/references', { ...document, context: { includeDeclaration: true } })
-      assert.ok(Array.isArray(result) && result.some(item => item.uri === uri), 'References must include an original source location')
+      assert.ok(Array.isArray(result) && result.some(item => item.uri === uri), `References must include an original source location: ${JSON.stringify(result)}`)
       for (const location of result) {
-        assert.ok(documents.has(location.uri), 'Reference targets an unrelated source')
+        assert.ok(documents.has(location.uri), `Reference targets an unrelated source: ${JSON.stringify(location)}; allowed: ${JSON.stringify(allowed)}`)
         const source = documents.get(location.uri).text
-        assert.equal(source.slice(offset(source, location.range.start), offset(source, location.range.end)), fixture.symbol)
+        const start = offset(source, location.range.start)
+        const end = offset(source, location.range.end)
+        // Index-based servers may report a location without a token length.
+        // Its start must still identify the complete expected symbol.
+        assert.equal(source.slice(start, start + fixture.symbol.length), fixture.symbol)
+        assert.ok(!/\w/.test(source[start - 1] || '') && !/\w/.test(source[start + fixture.symbol.length] || ''), 'Reference must identify a complete symbol')
+        assert.ok(end === start || end === start + fixture.symbol.length, `Reference range does not identify ${fixture.symbol}: ${JSON.stringify(location)}`)
       }
       features.references = 'passed'
     } else features.references = 'not advertised by backend'
@@ -256,8 +288,8 @@ export async function qualifyEditing (client, capabilities, uri, text, position,
       const published = await diagnosticsSince(uri, after, diagnostics => diagnostics.some(item => item.severity === 1))
       const diagnostics = published.params.diagnostics
       const diagnostic = diagnostics.find(item => item.severity === 1)
-      const actions = await client.request('textDocument/codeAction', { textDocument: { uri }, range: diagnostic.range, context: { diagnostics, only: ['quickfix'] } })
-      assert.ok(Array.isArray(actions) && actions.length, 'Fixable diagnostic returned no code actions')
+      const actions = await client.request('textDocument/codeAction', { textDocument: { uri }, range: diagnostic.range, context: { diagnostics } })
+      assert.ok(Array.isArray(actions) && actions.length, `Fixable diagnostic returned no code actions: ${JSON.stringify(diagnostics)}`)
       let action = actions.find(item => !item.disabled && fixture.actionTitle.test(item.title))
       assert.ok(action, `Missing expected quick fix: ${JSON.stringify(actions)}`)
       if (!action.edit && capabilities.codeActionProvider.resolveProvider) action = await client.request('codeAction/resolve', action)

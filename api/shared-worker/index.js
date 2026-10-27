@@ -286,10 +286,11 @@ async function initializeContextWindow () {
   if (!contextWindow.ready) {
     const index = contextWindow.index
     contextWindow.ready = new Promise((resolve, reject) => {
+      // Allow the hidden WebView the same startup window as the VM context.
       const timeout = setTimeout(() => {
         channel.removeEventListener('message', onMessage)
         reject(new Error(`SharedWorker context window ${index} did not become ready`))
-      }, 10_000)
+      }, 60_000)
 
       function onMessage (event) {
         if (event.data?.ready === index) {

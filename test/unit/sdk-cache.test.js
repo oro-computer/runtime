@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
-for (const scenario of ['readonly', 'retention', 'descendants', 'recovery']) {
+for (const scenario of ['readonly', 'retention', 'readiness', 'descendants', 'recovery']) {
   test(`managed Linux SDK cache: ${scenario}`, { skip: process.platform !== 'linux', timeout: 90000 }, () => {
     const result = spawnSync('python3', ['test/fixtures/sdk-cache/regression.py', scenario], {
       cwd: root, encoding: 'utf8', timeout: 85000

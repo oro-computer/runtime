@@ -21,7 +21,7 @@ This catalog is generated from JavaScript calls to ipc.request(), ipc.send(), ip
 .PP
 1 IPC call sites still use route expressions that could not be reduced to static strings. Review those locations before treating this catalog as complete for private dynamic dispatch.
 .IP \(bu 2
-send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L591)
+send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L624)
 .PP
 Domains: ai, application, asn1, background, bluetooth, cdp, child_process, cookies, dbus, diagnostics, dns, documentAccess, extension, fs, geolocation, haptics, hci, hid, internal, ipfs, iroh, mcp, mime, networkStatus, notification, os, otp, permissions, platform, process, protocol, queuedResponse, runtime, secureStorage, semver, serviceWorker, sqlite, stderr, stdout, tar, tcp, timers, tls, udp, usb, window, xpc, zlib
 .SS ai
@@ -761,7 +761,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1096)
+Exposed by: oro:internal/init (api/internal/init.js#L1129)
 .TP
 \fBfs.copyFile\fR
 Transports: request, send, sendSync
@@ -1678,7 +1678,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1097)
+Exposed by: oro:internal/init (api/internal/init.js#L1130)
 .TP
 \fBos.cpus\fR
 Transports: sendSync
@@ -1758,7 +1758,7 @@ Transports: send, sendSync
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L858); oro:internal/init (api/internal/init.js#L1226)
+Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L891); oro:internal/init (api/internal/init.js#L1259)
 .TP
 \fBplatform.openExternal\fR
 Transports: request
@@ -1825,7 +1825,7 @@ Binary semantics: binary response body
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L936); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L937)
+Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L969); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L970)
 .SS runtime
 .TP
 \fBruntime.platform\fR

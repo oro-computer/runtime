@@ -48,7 +48,7 @@ async function swiftModel (options, project) {
     else {
       const host = process.platform === 'linux' ? 'linux' : 'win'
       if (identity.platform !== host) throw new Error('Cross-platform Swift modules require an exported compilation database')
-      const executable = resolveProgram('swiftc', project.env)
+      const executable = resolveProgram('swiftc', project.env, { preserveSymlinks: true })
       const info = JSON.parse(await execute(executable, ['-print-target-info'], { env: project.env, timeout: 30000 }))
       const expectedArch = { x64: 'x86_64', ia32: 'x86' }[process.arch] || process.arch
       if (identity.arch !== expectedArch) throw new Error('Cross-architecture Swift modules require an exported compilation database')
@@ -72,8 +72,8 @@ async function swiftModel (options, project) {
       flags.push('-import-objc-header', filename)
     }
     const extra = words(setting(project.config, 'tooling.swift.compiler_flags'))
-    if (extra.some(flag => /^(?:-o|-emit-(?:executable|library|object)|-c|-sdk|-target|-module-name|-emit-module-path)(?:=|$)/.test(flag) || flag.startsWith('@'))) {
-      throw new Error('Swift editor compiler_flags cannot override target, SDK, module identity, output or compilation mode; use the dedicated tooling.swift settings')
+    if (extra.some(flag => /^(?:-o|-emit-(?:executable|library|object)|-c|-sdk|-target|-module-name|-emit-module-path|-index-store-path)(?:=|$)/.test(flag) || flag.startsWith('@'))) {
+      throw new Error('Swift editor compiler_flags cannot override target, SDK, module identity, index, output or compilation mode; use the dedicated tooling.swift settings')
     }
     flags.push(...extra)
     inputs.push(...sources)
@@ -84,7 +84,10 @@ async function swiftModel (options, project) {
   model.artifacts = [model.compileCommands, ...sources, ...(toolchain ? [toolchain.executable] : [])]
   if (!database) {
     model.moduleFile = path.join(model.generation, 'Modules', `${moduleName}.swiftmodule`)
-    model.artifacts.push(model.moduleFile)
+    model.indexStorePath = path.join(model.generation, 'IndexStore')
+    model.indexDatabasePath = path.join(model.generation, 'IndexDatabase')
+    model.artifacts.push(model.moduleFile, model.indexStorePath)
+    flags.push('-index-store-path', model.indexStorePath)
     entries = sources.map(file => ({ file, directory: project.root, arguments: [toolchain.executable, ...flags, ...sources] }))
     if (options.prepare && !options.inspect) {
       markGeneration(model)
@@ -92,9 +95,10 @@ async function swiftModel (options, project) {
       await execute(toolchain.executable, [...flags, '-emit-module', '-emit-module-path', model.moduleFile, '-module-cache-path', path.join(model.generation, 'ModuleCache'), ...sources], { cwd: project.root, env: project.env, log: true })
     }
     if (!fs.existsSync(model.moduleFile)) model.missingArtifacts.push(model.moduleFile)
+    if (!fs.existsSync(model.indexStorePath)) model.missingArtifacts.push(model.indexStorePath)
   }
   model.commands = entries
-  model.preparation = database ? 'External build system owns dependency and module preparation.' : 'Emits a Swift analysis module only; no executable linking, signing, installation or package downloads.'
+  model.preparation = database ? 'External build system owns dependency and module preparation.' : 'Emits a Swift analysis module and reference index; no executable linking, signing, installation or package downloads.'
   if (options.inspect) return model
   markGeneration(model)
   write(model.compileCommands, entries)

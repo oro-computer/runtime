@@ -268,7 +268,6 @@ if [ "$platform" == "ios" ] || [ "$platform" == "ios-simulator" ]; then
   cflags+=("-iframeworkwithsysroot /System/Library/Frameworks")
   cflags+=("-isysroot $ios_sdk_path/")
   cflags+=("-F $ios_sdk_path/System/Library/Frameworks/")
-  cflags+=("-fembed-bitcode")
 fi
 
 export CFLAGS="${cflags[@]}"

@@ -7,6 +7,14 @@ Oro exports compilation models for Kotlin Android, C-family native sources,
 TypeScript/JavaScript and Swift. Models are separate from the backend so other
 editors and servers can consume them.
 
+C/C++ language-server support on Windows is deferred to a future release. All
+C-family selections (including Objective-C and Objective-C++) report an unsupported
+error before resolving a server or preparing a model, including configured server
+overrides and `adapter = "stdio"`. Windows runtime builds, npm installation,
+TypeScript/JavaScript editing and `oroc tooling cpp` model export remain available.
+Use a Linux or macOS host for Oro C/C++ editor integration. The VS Code client
+leaves C-family files to other providers on Windows.
+
 ## Language programs and project configuration
 
 `--language` is required. There is no default language, and the wrapper does not
@@ -256,6 +264,16 @@ the exported model itself if it needs these declarations.
 
 ### Swift
 
+The Oro `sourcekit` adapter requires SourceKit-LSP from Swift 6.0 or later
+(Xcode 16 or later on macOS), together with the matching compiler and SDK.
+Swift 5.10 lacks the compilation database selection options, rename and formatting
+support required by this adapter. Startup and `tooling doctor` check the selected
+server before preparing or inspecting its model and report its executable path
+when it is unsupported. Select the intended Xcode with `DEVELOPER_DIR`, or set
+`language_server.swift.command` to a compatible SourceKit-LSP executable.
+Standalone `oroc tooling swift` export and the generic `stdio` adapter retain
+their own toolchain requirements.
+
 For a declared Swift module, specify its original files and installed dependency
 search paths. No application source is copied:
 
@@ -274,10 +292,11 @@ deployment_target = "15.0"
 ```
 
 Oro discovers the actual compiler, SDK path and target triple. `--prepare` invokes
-`swiftc -emit-module` into the editor generation, without linking an executable,
-signing, installation or package downloads. The model exports `moduleFile`,
-`compileCommands`, `toolchain` and `originalSources`. Dependency modules and
-frameworks must already be prepared for that target. Compiler errors retain the
+`swiftc -emit-module` and reference index data into the editor generation, without
+linking an executable, signing, installation or package downloads. The model
+exports `moduleFile`, `compileCommands`, `indexStorePath`, `indexDatabasePath`,
+`toolchain` and `originalSources`. Dependency modules and frameworks must already
+be prepared for that target. Compiler errors retain the
 original paths and report incompatible or missing modules.
 
 For an Xcode/custom build, `tooling.swift.compilation_database` imports its
@@ -291,9 +310,11 @@ from `.xcodeproj` itself. For SwiftPM, use SourceKit-LSP's package model directl
 adapter = "stdio"
 ```
 
-The `sourcekit` adapter selects its exported compilation database through LSP
-initialization options. A project's `.sourcekit-lsp/config.json` can override
-SourceKit-LSP initialization settings; remove conflicting build-system/search-path
+The `sourcekit` adapter selects its exported compilation database with a
+workspace-relative search path, passed through command-line and LSP initialization
+options, and selects the prepared reference index. A project's
+`.sourcekit-lsp/config.json` can override SourceKit-LSP initialization settings;
+remove conflicting build-system/search-path
 settings when using the Oro adapter.
 
 ### Doctor and freshness
@@ -686,9 +707,19 @@ uses real JVM classfiles to verify metadata limits and checks missing-SDK recove
 Set `ORO_LANGUAGE_TEST_OLD_JAVA_HOME` to an installed JDK below 21 to exercise Java
 rejection; CI also recognizes `JAVA_HOME_17_X64`. Retain results for each installed backend and OS; exporting a model does not
 establish diagnostics, navigation or editing behavior. The lifecycle workflow
-runs on Linux, macOS and Windows with Node 22 and 24. The npm release workflow
+runs on Linux, macOS and Windows with Node 22 and 24. A separate native preflight
+uses real clangd on Linux and real clangd/SourceKit-LSP on both macOS
+architectures before the release SDK builds. It requires a compiler setting to
+be loaded, observes and clears unsaved diagnostics, and applies and checks
+references, rename, formatting and a compiler fix-it without an Oro SDK.
+Windows path coverage includes short filesystem names and filename casing.
+Windows C-family backend integration is excluded while support is deferred;
+platform-independent support checks and Windows path regressions remain required.
+The npm release workflow
 sets `ORO_REQUIRE_EDITOR_QUALIFICATION=1` and runs real LSP checks against the
 installed package before uploading it. Missing required backends fail that gate.
+Windows runs both configured and inferred TypeScript checks, along with the npm
+installation and native consumer build checks.
 Apple runners additionally qualify Objective-C, Objective-C++ and Swift. The
 Android SDK package qualifies Kotlin against Gradle and kotlin-language-server.
 Unsupported backend features are recorded explicitly and are not counted as passes.
@@ -756,8 +787,8 @@ there is no implicit last-entry-wins rule. `:CocList services` shows which clien
 | fwcd | kotlin-language-server 1.3.13, compiler 2.1.0, JDK 21+ | Real Android fixture, including invalid application sources, variants and offline reuse |
 | kotlin-lsp | Backend with the upstream JSON workspace importer | Exporter checked; backend acceptance required for each distribution |
 | typescript | TypeScript 5+, typescript-language-server; CI pins 5.9.3 and 6.0.2 | Configured and inferred projects; original-file editing |
-| clangd | Installed native clangd; CI pins 19.1.2 on x64 and uses native packages on ARM64 | C/C++, plus Objective-C families on Apple runners |
-| sourcekit | SourceKit-LSP and matching installed Swift/Xcode toolchain | Swift on Apple runners; external databases retain their build-system prerequisites |
+| clangd | Installed native clangd; CI pins 19.1.2 on x64 and uses native packages on ARM64 | C/C++ on Linux/macOS, plus Objective-C families on Apple runners; Windows support deferred |
+| sourcekit | SourceKit-LSP from Swift 6.0+ (Xcode 16+ on macOS) and matching compiler/SDK | Swift on Apple runners; external databases retain their build-system prerequisites |
 
 The generic qualification script also accepts `c`, `objc`, `objcpp` and `swift`.
 It introduces an unsaved error, observes and clears diagnostics, checks hover and

@@ -123,7 +123,7 @@ test('protected keys require per-operation authentication across legacy and Keys
   assert.equal(result.status, 0, result.stderr)
 })
 
-test('document-start handshake restores ownership on page-show without granting child frames IPC', () => {
+test('document-start handshake restores ownership and authenticates same-origin child frame IPC', () => {
   const native = readFileSync(new URL('../../src/runtime/window/window.kt', import.meta.url), 'utf8')
   const marker = 'bridgeScript = WebViewCompat.addDocumentStartJavaScript(this, """'
   const start = native.indexOf(marker)
@@ -131,27 +131,62 @@ test('document-start handshake restores ownership on page-show without granting 
   assert.ok(start > 0 && end > start)
   const script = native.slice(start + marker.length, end).replaceAll('$bridgeNonce', 'public-fixture-nonce')
   const messages = []
-  const listeners = new Map()
-  class XMLHttpRequest {
-    open () {}
-    setRequestHeader () {}
+  const prompts = []
+  const origin = 'https://computer.oro.runtime.tests'
+  function createRealm (top, frameOrigin = origin) {
+    const listeners = new Map()
+    class XMLHttpRequest {
+      headers = new Map()
+      open (method, url, async) { this.url = url; this.async = async }
+      setRequestHeader (name, value) { this.headers.set(name, value) }
+    }
+    const context = vm.createContext({
+      crypto: { getRandomValues (bytes) { bytes.fill(42); return bytes } },
+      __oroNativeBridge: { postMessage: value => messages.push(value) },
+      prompt: (message, value) => {
+        assert.equal(top, undefined, 'sandboxed child frames must map bodies through the top-level prompt')
+        prompts.push({ message, value })
+        return 'true'
+      },
+      location: { href: `${frameOrigin}/oro/vm/world.html`, origin: frameOrigin },
+      XMLHttpRequest,
+      URL,
+      TextEncoder,
+      btoa,
+      addEventListener: (name, callback) => listeners.set(name, callback)
+    })
+    if (top) context.top = top
+    else vm.runInContext('globalThis.top = globalThis', context)
+    vm.runInContext(script, context)
+    return { context, listeners, XMLHttpRequest }
   }
-  const context = vm.createContext({
-    crypto: { getRandomValues (bytes) { bytes.fill(42); return bytes } },
-    __oroNativeBridge: { postMessage: value => messages.push(value) },
-    prompt: () => 'true',
-    XMLHttpRequest,
-    URL,
-    addEventListener: (name, callback) => listeners.set(name, callback)
-  })
-  vm.runInContext('globalThis.top = globalThis', context)
-  vm.runInContext(script, context)
+  const { context, listeners } = createRealm()
   assert.match(messages[0], /^oro:document:[a-f0-9]{32}$/)
   listeners.get('pageshow')()
   assert.equal(messages[1], messages[0], 'restoring a document announces its own retained token')
-  vm.runInContext('globalThis.top = {}', context)
-  vm.runInContext(script, context)
+
+  const child = createRealm(context)
   assert.equal(messages.length, 2, 'child frames cannot announce a top-level document')
+  assert.equal(child.context.__oroNativeDocumentToken, undefined)
+  assert.equal(child.listeners.has('pageshow'), false)
+  const request = new child.XMLHttpRequest()
+  request.open('GET', 'ipc://platform.primordials?runtime-frame-type=nested', false)
+  assert.equal(request.async, false)
+  assert.equal(request.headers.get('X-Oro-Bridge-Token'), 'public-fixture-nonce')
+  child.context.external.postMessage('ipc://platform.event?runtime-frame-type=nested')
+  assert.equal(messages.at(-1), 'ipc://platform.event?runtime-frame-type=nested')
+  child.context.external.postMessage('ipc://buffer.map?seq=child', new Uint8Array([1, 2]))
+  assert.equal(prompts.at(-1).message, 'oro:ipc:public-fixture-nonce')
+  assert.deepEqual(JSON.parse(prompts.at(-1).value), { message: 'ipc://buffer.map?seq=child', bytes: 'AQI=' })
+  const resource = new child.XMLHttpRequest()
+  resource.open('GET', `${origin}/data.json`, true)
+  assert.equal(resource.headers.size, 0, 'resource requests do not disclose the IPC token')
+
+  for (const foreign of [createRealm(context, 'https://foreign.example'), createRealm({})]) {
+    assert.equal(foreign.context.external, undefined, 'foreign or inaccessible ancestors do not supply a bridge')
+    assert.equal(foreign.context.__oroNativeBridgeToken, undefined)
+    assert.equal(foreign.context.__oroNativeDocumentToken, undefined)
+  }
 })
 
 test('headless WebViews never enable credential provider or Autofill UI', {

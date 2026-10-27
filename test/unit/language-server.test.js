@@ -144,6 +144,10 @@ test('language families select installed defaults without Android setup', () => 
     assert.equal(settings.adapter, 'typescript')
   }
   for (const language of ['c', 'cpp', 'c++', 'objc', 'objcpp', 'objective-c++']) {
+    if (process.platform === 'win32') {
+      assert.throws(() => serverSettings({}, language, root), /support on Windows is deferred/)
+      continue
+    }
     const settings = serverSettings({}, language, root)
     assert.equal(settings.command, 'clangd')
     assert.deepEqual(settings.args, [])
@@ -336,8 +340,13 @@ test('doctor reports missing tools and inspects models without preparing them', 
   }
   const report = await doctor({ language: 'cpp', sdk: project.root }, project, producers)
   assert.equal(report.ok, false)
-  assert.equal(inspected, true)
   assert.equal(existsSync(path.join(project.root, 'out with spaces')), false)
+  if (process.platform === 'win32') {
+    assert.equal(inspected, false)
+    assert.match(report.checks.find(check => check.name === 'cpp').message, /support on Windows is deferred/)
+    return
+  }
+  assert.equal(inspected, true)
   assert.match(report.checks.find(check => check.name === 'cpp.server').message, /Install it/)
   assert.equal(report.checks.find(check => check.name === 'cpp.model').status, 'warning')
 })
@@ -362,16 +371,20 @@ test('server overrides preserve argument identity and use the Oro project root',
     language_server_objc_command: './tools/apple server',
     language_server_objc_args: '["--compile-commands-dir=output with spaces", "", "$(literal)"]'
   }
-  const settings = serverSettings(config, 'objc', root)
-  assert.equal(settings.command, path.join(root, 'tools/apple server'))
-  assert.deepEqual(settings.args, ['--compile-commands-dir=output with spaces', '', '$(literal)'])
-  assert.equal(serverSettings(config, 'objcpp', root).command, 'clangd-custom')
-  assert.equal(serverSettings(config, 'objc', root, 'override').command, 'override')
+  if (process.platform === 'win32') {
+    assert.throws(() => serverSettings(config, 'objc', root, 'override'), /support on Windows is deferred/)
+  } else {
+    const settings = serverSettings(config, 'objc', root)
+    assert.equal(settings.command, path.join(root, 'tools/apple server'))
+    assert.deepEqual(settings.args, ['--compile-commands-dir=output with spaces', '', '$(literal)'])
+    assert.equal(serverSettings(config, 'objcpp', root).command, 'clangd-custom')
+    assert.equal(serverSettings(config, 'objc', root, 'override').command, 'override')
+  }
   assert.throws(() => serverSettings({}, 'custom', root), /No default server/)
   assert.equal(serverSettings({ language_server_custom_command: 'my-server' }, 'custom', root).adapter, 'stdio')
-  assert.throws(() => serverSettings({ language_server_cpp_args: '--shell text' }, 'cpp', root), /array/)
-  assert.throws(() => serverSettings({ language_server_cpp_args: '[1]' }, 'cpp', root), /strings/)
-  assert.throws(() => serverSettings({ language_server_cpp_unknown: 'value' }, 'cpp', root), /Unknown/)
+  assert.throws(() => serverSettings({ language_server_typescript_args: '--shell text' }, 'typescript', root), /array/)
+  assert.throws(() => serverSettings({ language_server_typescript_args: '[1]' }, 'typescript', root), /strings/)
+  assert.throws(() => serverSettings({ language_server_typescript_unknown: 'value' }, 'typescript', root), /Unknown/)
 })
 
 test('LSP framing handles UTF-8 and arbitrary transport fragmentation', async () => {

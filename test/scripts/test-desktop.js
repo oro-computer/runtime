@@ -464,6 +464,7 @@ function runStrictPass ({
 
   const env = {
     ...baseEnv,
+    ORO_DEBUG_LIFECYCLE: '1',
     ORO_LIFECYCLE_TEST_STRICT: '1'
   }
 

@@ -261,7 +261,7 @@ export class DatabaseRequestQueue extends EventTarget {
    * @param {?DatabaseRequestQueueConflictResolutionCallback} [conflictResolutionCallback]
    * @return {Promise}
    */
-  async push (request, conflictResolutionCallback = null) {
+  push (request, conflictResolutionCallback = null) {
     const promises = this.#promises
     const queue = this.#queue
 
@@ -359,7 +359,11 @@ export class DatabaseRequestQueue extends EventTarget {
           reject,
           cleanup
         )
-        conflictResolutionCallback(event, conflict)
+        try {
+          Promise.resolve(conflictResolutionCallback(event, conflict)).catch(error => conflict.reject(error))
+        } catch (error) {
+          conflict.reject(error)
+        }
       }
 
       function onblocked (event) {
@@ -368,7 +372,11 @@ export class DatabaseRequestQueue extends EventTarget {
           reject,
           cleanup
         )
-        conflictResolutionCallback(event, conflict)
+        try {
+          Promise.resolve(conflictResolutionCallback(event, conflict)).catch(error => conflict.reject(error))
+        } catch (error) {
+          conflict.reject(error)
+        }
       }
     })
 
@@ -376,9 +384,7 @@ export class DatabaseRequestQueue extends EventTarget {
     promise.then(() => {
       const event = new DatabaseRequestQueueEvent('resolve', request)
       this.dispatchEvent(event)
-    })
-
-    promise.catch((error) => {
+    }, (error) => {
       const event = new DatabaseRequestQueueErrorEvent('error', request, {
         error
       })
@@ -386,8 +392,9 @@ export class DatabaseRequestQueue extends EventTarget {
       this.dispatchEvent(event)
     })
 
-    // await in tail for call stack inclusion
-    return await promise
+    // Return the observed promise so pending requests stay handled if a
+    // sibling transaction rejects or commit() throws.
+    return promise
   }
 
   /**
@@ -413,7 +420,7 @@ export class DatabaseRequestQueue extends EventTarget {
     const pending = []
 
     for (let i = offset; i < backlog; ++i) {
-      const promise = this.promises[i]
+      const promise = this.#promises[i]
       if (promise instanceof Promise) {
         pending.push(promise)
       }
@@ -846,12 +853,7 @@ export class Database extends EventTarget {
     }
 
     for (const store of stores) {
-      let existing = null
-      try {
-        existing = await this.#queue.push(store.get(key))
-      } catch (err) {
-        globalThis.reportError(err)
-      }
+      const existing = await this.#queue.push(store.get(key))
 
       if (existing) {
         pending.push(

@@ -230,7 +230,7 @@ namespace oro::runtime::native {
       throw StateError ("EBUSY");
     Statement count (database, "SELECT COUNT(*) FROM push_journal_archives");
     count.step ();
-    if (sqlite3_column_int64 (count.value, 0) >= maximumArchives)
+    if (sqlite3_column_int64 (count.value, 0) >= static_cast<sqlite3_int64> (maximumArchives))
       throw StateError ("ENOSPC");
     const auto next = nonce ();
     Statement save (database,

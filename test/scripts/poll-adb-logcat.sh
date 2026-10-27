@@ -108,8 +108,8 @@ while read -r line; do
 
   if [[ "$line" =~ [DEIW][[:space:]]Console[[:space:]]*: ]]; then
     line="$(echo "$line" | sed 's/.*[DEIW] Console *: *//')"
-  elif [[ "$line" =~ chromium:.*\[INFO:CONSOLE:[0-9]+\] ]]; then
-    line="$(echo "$line" | sed 's/.*\[INFO:CONSOLE:[0-9]*\] "//; s/", source: .*//')"
+  elif [[ "$line" =~ chromium:.*\[INFO:CONSOLE(:[0-9]+|\([0-9]+\))\] ]]; then
+    line="$(echo "$line" | sed -E 's/.*\[INFO:CONSOLE(:[0-9]+|\([0-9]+\))\] "//; s/", source: .*//')"
   else
     continue
   fi

@@ -95,6 +95,8 @@ namespace oro::runtime::app {
       Atomic<bool> isStarted = false;
       Atomic<bool> isStopped = false;
       Atomic<bool> isPaused = false;
+      Mutex lifecycleMutex;
+      Atomic<uint64_t> lifecycleRevision = 0;
       // Deduplicate rapid lifecycle emits (ms since steady clock epoch)
       Atomic<uint64_t> lastPauseEmitMs = 0;
       Atomic<uint64_t> lastResumeEmitMs = 0;

@@ -309,7 +309,6 @@ if (( TARGET_OS_IPHONE )) || (( TARGET_IPHONE_SIMULATOR )); then
   cflags+=("-iframeworkwithsysroot /System/Library/Frameworks")
   cflags+=("-isysroot $ios_sdk_path/")
   cflags+=("-F $ios_sdk_path/System/Library/Frameworks/")
-  cflags+=("-fembed-bitcode")
 fi
 
 if (( !TARGET_OS_ANDROID && !TARGET_ANDROID_EMULATOR )); then

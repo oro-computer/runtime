@@ -1,11 +1,12 @@
 // Real Gradle/LSP qualification. Run only after the packaged oroc toolchain is available.
 import assert from 'node:assert/strict'
 import { LspClient, qualifyEditing, editingCapabilities } from './lsp-client.js'
-import { appendFileSync, copyFileSync, cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, cpSync, existsSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execute } from '../../src/cli/tooling/process.cjs'
+import { createQualificationDirectory } from '../../bin/qualification-directory.js'
 
 const oroc = process.env.ORO_LANGUAGE_TEST_OROC || 'oroc'
 const fixture = fileURLToPath(new URL('../fixtures/language-server', import.meta.url))
@@ -63,7 +64,7 @@ async function qualifyLsp (root, variant, explicitRoot, environment = process.en
 }
 
 for (const output of ['build', 'custom output/android artifacts']) {
-  const root = mkdtempSync(path.join(tmpdir(), 'oro-language-acceptance-'))
+  const root = createQualificationDirectory('oro-language-acceptance-')
   cpSync(fixture, root, { recursive: true })
   const configuration = path.join(root, 'oro.toml')
   writeFileSync(configuration, readFileSync(configuration, 'utf8').replace('output = "build"', `output = "${output}"`))
@@ -108,7 +109,7 @@ for (const output of ['build', 'custom output/android artifacts']) {
     // the installed SDK or any application. Libraries remain shared and read-only.
     const sdk = previous.sdk || process.env.ORO_HOME
     assert.ok(sdk, 'Runtime upgrade qualification requires ORO_HOME')
-    const upgraded = mkdtempSync(path.join(tmpdir(), 'oro-editor-upgraded-sdk-'))
+    const upgraded = createQualificationDirectory('oro-editor-upgraded-sdk-')
     for (const name of readdirSync(sdk)) {
       const source = path.join(sdk, name)
       const destination = path.join(upgraded, name)

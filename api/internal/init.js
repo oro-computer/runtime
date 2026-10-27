@@ -366,6 +366,39 @@ class RuntimeWorker extends GlobalWorker {
 
     const __args = { ...globalThis.__args, ...options?.args, client: {} }
     const preload = `
+    Object.defineProperty(globalThis, '__oroNativeBridgeToken', {
+      value: ${JSON.stringify(globalThis.__oroNativeBridgeToken ?? null)}
+    })
+
+    // Install the Android worker transport before importing any runtime module.
+    // HTTPS workers cannot make synchronous requests to the ipc: scheme.
+    if (globalThis.__oroNativeBridgeToken) {
+      const open = XMLHttpRequest.prototype.open
+      const setHeader = XMLHttpRequest.prototype.setRequestHeader
+      const URLConstructor = URL
+      const ipcOrigin = ${JSON.stringify(new URL('../', import.meta.url).origin)}
+      XMLHttpRequest.prototype.open = function (method, url, ...args) {
+        const destination = new URLConstructor(String(url), location.href)
+        // Application module URLs use the same HTTPS asset route as their worker.
+        if (destination.protocol === 'oro:' && destination.host === new URLConstructor(ipcOrigin).host &&
+            !destination.username && !destination.password) {
+          const resource = new URLConstructor(ipcOrigin)
+          resource.pathname = destination.pathname
+          resource.search = destination.search
+          resource.hash = destination.hash
+          return open.call(this, method, resource.href, ...args)
+        }
+        if (destination.protocol !== 'ipc:') {
+          return open.call(this, method, url, ...args)
+        }
+        const endpoint = new URLConstructor('/__oro_ipc__/' + destination.hostname, ipcOrigin)
+        endpoint.search = destination.search
+        const result = open.call(this, method, endpoint.href, ...args)
+        setHeader.call(this, 'X-Oro-Bridge-Token', globalThis.__oroNativeBridgeToken)
+        return result
+      }
+    }
+
     Object.defineProperty(globalThis, '__args', {
       configurable: false,
       enumerable: false,

@@ -11,7 +11,7 @@ const { kotlinLaunch, preflightKotlin } = require('./kotlin.cjs')
 const { serve } = require('./session.cjs')
 const { locked, lease, retain, markGeneration } = require('./cache.cjs')
 const { write } = require('./model.cjs')
-const { serverSettings, resolveProgram, stdioLaunch } = require('./servers.cjs')
+const { serverSettings, resolveProgram, preflightSourceKit, stdioLaunch } = require('./servers.cjs')
 const { nativeModel } = require('./native.cjs')
 const { typescriptModel } = require('./typescript.cjs')
 const { swiftModel } = require('./swift.cjs')
@@ -28,7 +28,9 @@ Kotlin server launches prepare SDK/resource classes automatically, without compi
 Otherwise language-server discovers oro.toml from the editor's initialize workspace roots.
 Language selection is required. Run one wrapper process per language or language family.
 Requires Node.js 22+ and the selected server on PATH. Configure [language_server.<language>] command and args in oro.toml.
+C-family language servers are unavailable on Windows in this release; TypeScript editing and tooling cpp model export remain available.
 Kotlin Android preparation additionally requires Gradle, Android SDK and a compatible JDK.
+The Oro Swift adapter requires SourceKit-LSP from Swift 6.0+ (Xcode 16+ on macOS).
 See docs/LANGUAGE_SERVER.md for editor setup and the model format.
 `
 
@@ -280,6 +282,7 @@ async function run (options, client) {
     const override = options.server || (options.language === 'kotlin' ? project.env.ORO_KOTLIN_LANGUAGE_SERVER : undefined)
     options.backend = serverSettings(project.config, options.language, project.root, override)
     options.backend.command = resolveProgram(options.backend.command, project.env)
+    if (options.backend.adapter === 'sourcekit') await preflightSourceKit(options.backend.command, project.env)
     if (options.backend.adapter === 'stdio') {
       if (options.prepare || options.refresh || options.offline) throw new Error('--prepare, --refresh and --offline require an Oro model adapter; stdio delegates discovery to the backend')
       return stdioLaunch(project, options.backend)

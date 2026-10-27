@@ -62,10 +62,10 @@ jobs:
           node-version: 24
       - name: Install Linux core prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang pkg-config libsodium-dev libsqlite3-dev libglib2.0-dev libmbedtls-dev dbus-daemon libgtk-3-dev libsecret-1-0 gnome-keyring xvfb systemd
+        run: sudo apt-get update && sudo apt-get install -y clang pkg-config libsodium-dev libsqlite3-dev libuv1-dev libglib2.0-dev libmbedtls-dev dbus-daemon libgtk-3-dev libsecret-1-0 gnome-keyring xvfb systemd
       - name: Install macOS core prerequisites
         if: runner.os == 'macOS'
-        run: brew install libsodium sqlite pkg-config
+        run: brew install libsodium sqlite libuv pkg-config
       - name: Compile and execute shared native behavior
         shell: bash
         env:
@@ -75,7 +75,7 @@ jobs:
           export ORO_TEST_SODIUM_INCLUDE
           ORO_TEST_SODIUM_LIBRARY="$(pkg-config --variable=libdir libsodium)/libsodium.a"
           export ORO_TEST_SODIUM_LIBRARY
-          node --test test/unit/native-support.test.js test/unit/native-records.test.js test/unit/native-key-backend.test.js test/unit/native-execution.test.js test/unit/native-callbacks.test.js test/unit/native-children.test.js test/unit/native-unicode.test.js test/unit/native-push-journal.test.js
+          node --test test/unit/native-support.test.js test/unit/native-records.test.js test/unit/native-key-backend.test.js test/unit/native-execution.test.js test/unit/native-callbacks.test.js test/unit/native-children.test.js test/unit/native-unicode.test.js test/unit/native-push-journal.test.js test/unit/llm-route-metrics.test.js test/unit/lifecycle-dispatch.test.js test/unit/conduit-lifecycle.test.js test/unit/apple-scheme-task-threading.test.js
       - name: Compile and execute Linux desktop transports
         if: runner.os == 'Linux'
         shell: bash
@@ -89,7 +89,7 @@ jobs:
           export ORO_TEST_SODIUM_LIBRARY
           ORO_TEST_MBEDCRYPTO_LIBRARY="$(c++ -print-file-name=libmbedcrypto.a)"
           export ORO_TEST_MBEDCRYPTO_LIBRARY
-          node --test test/unit/native-desktop.test.js test/unit/native-web-push.test.js test/unit/native-linux-build.test.js test/unit/native-credentials.test.js
+          node --test test/unit/native-desktop.test.js test/unit/native-web-push.test.js test/unit/native-linux-build.test.js test/unit/native-credentials.test.js test/unit/linux-loop-pause.test.js
   linux-sdk:
     name: Linux source SDK retention and release packing
     runs-on: ubuntu-24.04
@@ -150,4 +150,4 @@ jobs:
           export ORO_TEST_SODIUM_INCLUDE
           ORO_TEST_SODIUM_LIBRARY="$(cygpath -w "$(pkg-config --variable=libdir libsodium)/libsodium.a")"
           export ORO_TEST_SODIUM_LIBRARY
-          node --test test/unit/native-support.test.js test/unit/native-records.test.js test/unit/native-key-backend.test.js test/unit/native-execution.test.js test/unit/native-callbacks.test.js test/unit/native-children.test.js test/unit/native-unicode.test.js test/unit/native-push-journal.test.js
+          node --test test/unit/native-support.test.js test/unit/native-records.test.js test/unit/native-key-backend.test.js test/unit/native-execution.test.js test/unit/native-callbacks.test.js test/unit/native-children.test.js test/unit/native-unicode.test.js test/unit/native-push-journal.test.js test/unit/llm-route-metrics.test.js test/unit/lifecycle-dispatch.test.js

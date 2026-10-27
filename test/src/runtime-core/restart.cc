@@ -198,6 +198,21 @@ namespace oro::Tests {
     });
 
   #if ORO_RUNTIME_PLATFORM_LINUX && !ORO_RUNTIME_PLATFORM_ANDROID
+    t.test("Loop: pending async wakeups cannot restart a stopped loop", [](auto t) {
+      using runtime::loop::Loop;
+      Loop loop(Loop::Options { .dedicatedThread = false });
+      t.assert(loop.start(), "loop starts before pending work");
+      bool delivered = false;
+      t.assert(loop.dispatch([&]() { delivered = true; }), "work is accepted before stop");
+      t.assert(loop.stop(), "loop stops with pending work");
+      uv_async_send(&loop.uv.async);
+      loop.uv.run(UV_RUN_NOWAIT);
+      t.assert(loop.stopped(), "final async poll preserves the stopped state");
+      t.assert(!delivered, "pending work does not run after stop");
+      t.assert(loop.shutdown(), "stopped loop shuts down");
+      t.assert(!delivered, "shutdown does not run retained work");
+    });
+
     t.test("Loop: GTK pumping cannot execute paused work", [](auto t) {
       using runtime::loop::Loop;
       Loop loop;

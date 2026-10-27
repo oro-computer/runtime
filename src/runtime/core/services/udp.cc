@@ -1,5 +1,4 @@
 #include "../../http.hh"
-#include <future>
 #include "../../core.hh"
 #include "udp.hh"
 
@@ -882,23 +881,13 @@ namespace oro::runtime::core::services {
       return false;
     }
 
-  #if ORO_RUNTIME_PLATFORM_LINUX
-    // Non-blocking on Linux to avoid deadlocks with GTK-driven loop pumping.
-    this->loop.dispatch([this]() {
+    if (this->loop.isOnLoopThread()) {
+      this->manager.pauseOnLoopThread();
+      return true;
+    }
+    return this->loop.dispatch([this]() {
       this->manager.pauseOnLoopThread();
     });
-    return true;
-  #else
-    // Pause all sockets on the loop thread and wait for the operation
-    auto done = std::make_shared<std::promise<void>>();
-    auto fut = done->get_future();
-    this->loop.dispatch([=, this]() {
-      this->manager.pauseOnLoopThread();
-      done->set_value();
-    });
-    fut.wait();
-    return true;
-  #endif
   }
 
   void UDP::capabilities (const String& seq, const Callback callback) {

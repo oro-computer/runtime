@@ -29,7 +29,8 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       const file = tmpFilePath('config-pause')
       await write(file, 'initial')
 
-      const watcher = new fs.Watcher(file)
+      const watcher = new fs.Watcher(file, { start: false })
+      await watcher.start()
       const firstChange = new Promise((resolve, reject) => {
         const to = setTimeout(
           () => reject(new Error('timeout waiting for first change')),
@@ -72,7 +73,8 @@ if (process.env.ORO_LIFECYCLE_TEST_STRICT) {
       await pausedWrite
       await sleep(200)
 
-      const watcher2 = new fs.Watcher(file)
+      const watcher2 = new fs.Watcher(file, { start: false })
+      await watcher2.start()
       const secondChange = new Promise((resolve, reject) => {
         const to = setTimeout(
           () => reject(new Error('timeout waiting for second change')),

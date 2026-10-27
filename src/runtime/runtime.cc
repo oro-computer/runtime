@@ -31,6 +31,9 @@ namespace oro::runtime {
       this->destroy();
     }
 #if ORO_RUNTIME_PLATFORM_LINUX
+    if (this->pendingPause) {
+      this->pendingPause->store(false, std::memory_order_release);
+    }
     if (this->pauseThread.joinable()) {
       this->pauseThread.join();
     }
@@ -53,6 +56,9 @@ namespace oro::runtime {
     #endif
 
 #if ORO_RUNTIME_PLATFORM_LINUX
+    if (this->pendingPause) {
+      this->pendingPause->store(false, std::memory_order_release);
+    }
     if (this->pauseThread.joinable()) {
       this->pauseThread.join();
     }
@@ -81,6 +87,9 @@ namespace oro::runtime {
 
   bool Runtime::resume () {
 #if ORO_RUNTIME_PLATFORM_LINUX
+    if (this->pendingPause) {
+      this->pendingPause->store(false, std::memory_order_release);
+    }
     if (this->pauseThread.joinable()) {
       this->pauseThread.join();
     }
@@ -100,6 +109,11 @@ namespace oro::runtime {
   }
 
   bool Runtime::pause () {
+    // Service shutdown waits for loop work, so it cannot run on a paused loop.
+    if (this->loop.paused()) {
+      return true;
+    }
+
   #if ORO_RUNTIME_PLATFORM_DESKTOP
     const bool alwaysRunning = (
       this->userConfig.contains("lifecycle_desktop_always_running")
@@ -120,13 +134,23 @@ namespace oro::runtime {
   #endif
   #if ORO_RUNTIME_PLATFORM_LINUX
     // On Linux desktop when pausing is enabled, offload stop to avoid GTK deadlocks.
+    if (this->pendingPause) {
+      this->pendingPause->store(false, std::memory_order_release);
+    }
     if (this->pauseThread.joinable()) {
       this->pauseThread.join();
     }
-    this->pauseThread = std::thread([this]() {
+    const auto pending = std::make_shared<Atomic<bool>>(true);
+    this->pendingPause = pending;
+    this->pauseThread = std::thread([this, pending]() {
       const bool ok = this->services.stop();
       (void)ok;
-      this->dispatcher.dispatch([this]() {
+      this->dispatcher.dispatch([this, pending]() {
+        // Restore and shutdown invalidate queued pauses before joining the
+        // worker. Check the owned token before accessing the runtime itself.
+        if (!pending->exchange(false, std::memory_order_acq_rel)) {
+          return;
+        }
       #if !ORO_RUNTIME_PLATFORM_ANDROID
         const bool paused = this->loop.pause();
         #if defined(DEBUG)
