@@ -26,6 +26,6 @@ export function installSmokePackages ({ project, prefix, tarballs, globalInstall
   fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ private: true, scripts, allowScripts }))
   npm([
     'install', ...(globalInstall ? ['--global', `--allow-scripts=${platformSource}`] : []), '--prefix', prefix,
-    '--no-package-lock', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts=false', '--foreground-scripts', ...tarballs
+    '--offline', '--no-package-lock', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts=false', '--foreground-scripts', ...tarballs
   ], project)
 }

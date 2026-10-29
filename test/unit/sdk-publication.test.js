@@ -1,9 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createNpmFixtureEnvironment, NPM_FIXTURE_TIMEOUT } from '../scripts/npm-fixture.js'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
+const sdkPackTimeout = 3 * NPM_FIXTURE_TIMEOUT + 60000
 test('stable SDK publication pins complete generations across concurrent activation, source edits and discarded build paths', {
   skip: process.platform !== 'linux', timeout: 60000
 }, () => {
@@ -134,7 +139,7 @@ print('stable-recursive-sdk-copy-pinned-concurrent-generations-history-config-an
 })
 
 test('Linux relink cleans owned staging and CI packs all three release packages without the source manager', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: sdkPackTimeout + 10000
 }, () => {
   const program = String.raw`
 import pathlib,tempfile,subprocess,os,json,shutil
@@ -186,7 +191,7 @@ pathlib.Path(os.environ['ORO_TEST_RESULT']).write_text(json.dumps(vars(a)))
 ''')
 env={**os.environ,'ORO_TEST_FAIL_BUILD':'0','PREFIX':str(root/'global'),'ORO_LOCAL_SDK_HOME':str(root/'.local/sdk'),'NO_ANDROID':'1','NO_IOS':'1','ORO_TEST_LIVE':str(live),'ORO_TEST_RESULT':str(root/'result.json'),'PATH':str(root/'commands')+os.pathsep+os.environ['PATH']}
 env.pop('ORO_NPM_STAGING_HOME',None)
-result=subprocess.run(['bash',str(root/'bin/publish-npm-modules.sh'),'--link'],cwd=root,env=env,capture_output=True,text=True,timeout=20000)
+result=subprocess.run(['bash',str(root/'bin/publish-npm-modules.sh'),'--link'],cwd=root,env=env,capture_output=True,text=True,timeout=30)
 assert result.returncode==0,result.stdout+result.stderr
 record=json.loads((root/'result.json').read_text());assert record['stable_home']==str(root/'.local/sdk')
 assert not pathlib.Path(record['sdk']).parents[2].exists(), 'owned completed staging was retained'
@@ -209,9 +214,9 @@ release=root/'build/npm/release';output=root/'tarballs';output.mkdir()
 for directory in ['bin','src','include','uv','lib/x86_64-desktop','objects/x86_64-desktop']:(release/directory).mkdir(parents=True,exist_ok=True)
 write('build/npm/release/bin/oroc','#!/bin/sh\nprintf "0.1.8 (deadbeef)\\n"\n',True)
 for directory in ['src','include','uv','lib/x86_64-desktop','objects/x86_64-desktop']:write('build/npm/release/'+directory+'/public','public release payload')
-release_env={**env,'npm_config_cache':str(root/'npm-cache'),'ORO_NPM_STAGING_HOME':str(release),'ORO_LOCAL_SDK_HOME':str(root/'release-must-not-use-sdk-cache')}
-for selection in ['--only-platforms','--only-top-level']:
- result=subprocess.run(['bash',str(root/'bin/publish-npm-modules.sh'),selection,'--no-rebuild','--no-remove-oro-home','--dry-run','--pack-destination',str(output)],cwd=root,env=release_env,capture_output=True,text=True,timeout=20000)
+release_env={**env,'ORO_NPM_STAGING_HOME':str(release),'ORO_LOCAL_SDK_HOME':str(root/'release-must-not-use-sdk-cache')}
+for selection,count in [('--only-platforms',1),('--only-top-level',2)]:
+ result=subprocess.run(['bash',str(root/'bin/publish-npm-modules.sh'),selection,'--no-rebuild','--no-remove-oro-home','--dry-run','--pack-destination',str(output)],cwd=root,env=release_env,capture_output=True,text=True,timeout=count*float(env['ORO_NPM_FIXTURE_TIMEOUT_SECONDS']))
  assert result.returncode==0,result.stdout+result.stderr
  assert 'Verified npm package size:' in result.stdout,result.stdout+result.stderr
 assert not pathlib.Path(release_env['ORO_LOCAL_SDK_HOME']).exists()
@@ -224,7 +229,13 @@ for archive in archives:
   metadata=json.load(packed.extractfile('package/package.json'));assert metadata['version']=='0.1.8'
 print('relink-private-staging-keeps-old-command-and-publishes-complete-pair-passed')
 `
-  const result = spawnSync('python3', ['-c', program], { cwd: root, encoding: 'utf8', timeout: 25000 })
-  assert.equal(result.status, 0, result.stdout + result.stderr)
+  const environment = createNpmFixtureEnvironment(mkdtempSync(path.join(tmpdir(), 'oro sdk npm settings ')))
+  environment.ORO_NPM_FIXTURE_TIMEOUT_SECONDS = String(NPM_FIXTURE_TIMEOUT / 1000)
+  const result = spawnSync('python3', ['-c', program], { cwd: root, env: environment, encoding: 'utf8', timeout: sdkPackTimeout })
+  const diagnostic = `SDK publication fixture via python3 in ${root}; timeout=${sdkPackTimeout}ms; ` +
+    `status=${result.status}; signal=${result.signal}; error=${result.error?.message || 'none'}\n` +
+    `stdout:\n${result.stdout || ''}\nstderr:\n${result.stderr || ''}`
+  assert.equal(result.error, undefined, diagnostic)
+  assert.equal(result.status, 0, diagnostic)
   assert.match(result.stdout, /relink-private-staging-keeps-old-command-and-publishes-complete-pair-passed/)
 })

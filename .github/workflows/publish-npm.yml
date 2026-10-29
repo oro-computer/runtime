@@ -193,7 +193,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Check qualification and npm lifecycle before native packaging
-        run: node --test test/unit/editor-test-tools.test.js test/unit/qualification-paths.test.js test/unit/native-language-launch.test.js test/unit/npm-smoke-scripts.test.js test/unit/language-server-session.test.js test/unit/language-server-editing.test.js
+        run: node --test test/unit/editor-test-tools.test.js test/unit/qualification-paths.test.js test/unit/native-language-launch.test.js test/unit/npm-fixture.test.js test/unit/npm-smoke-scripts.test.js test/unit/language-server-session.test.js test/unit/language-server-editing.test.js
 
       - name: Select Swift 6 toolchain on macOS 14
         if: matrix.os == 'macos-14'
@@ -473,6 +473,13 @@ jobs:
         with:
           name: npm-pack-${{ inputs.version }}-top-level
           path: ${{ runner.temp }}/npm-smoke-packs
+
+      - name: Restore Java for Android editor qualification
+        if: ${{ !inputs.reuse_release_artifacts && matrix.build_android }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
 
       - name: Smoke install exact package family on native runner
         shell: bash

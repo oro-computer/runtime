@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Lifecycle, cancellation, scope, cache, and workspace import
-        run: node --test test/unit/editor-test-tools.test.js test/unit/qualification-paths.test.js test/unit/native-language-launch.test.js test/unit/npm-smoke-scripts.test.js test/unit/language-server-session.test.js test/unit/language-server-editing.test.js test/unit/language-server-vscode.test.js
+        run: node --test test/unit/editor-test-tools.test.js test/unit/qualification-paths.test.js test/unit/native-language-launch.test.js test/unit/npm-fixture.test.js test/unit/npm-smoke-scripts.test.js test/unit/language-server-session.test.js test/unit/language-server-editing.test.js test/unit/language-server-vscode.test.js
       - name: Install pinned VS Code API types
         run: npm ci --ignore-scripts --prefix editors/vscode
       - name: Check the standard VS Code language-client interfaces

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { NPM_PACKAGE_SIZE_LIMIT, verifyNpmPackageSize, verifyNpmPackSizes } from '../../bin/verify-npm-package-size.js'
+import { createNpmFixtureEnvironment, NPM_FIXTURE_TIMEOUT } from '../scripts/npm-fixture.js'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const helper = path.join(root, 'bin/verify-npm-package-size.js')
@@ -132,18 +133,20 @@ test('real npm prepack output cannot corrupt size validation and failed hooks st
     `], {
       cwd: directory,
       encoding: 'utf8',
-      timeout: 30000,
+      timeout: NPM_FIXTURE_TIMEOUT,
       env: {
-        ...process.env,
+        ...createNpmFixtureEnvironment(directory),
         NODE_COMMAND: shellPath(process.execPath),
         SOURCE_ROOT: shellPath(root),
         PACK_DIRECTORY: shellPath(destination),
-        ORO_NPM_HOOK_MARKER: marker,
-        npm_config_cache: path.join(directory, 'npm-cache')
+        ORO_NPM_HOOK_MARKER: marker
       }
     })
-    assert.ifError(result.error)
-    assert.equal(result.status, exitCode, result.stdout + result.stderr)
+    const diagnostic = `npm pack via _pack_or_link in ${directory}; timeout=${NPM_FIXTURE_TIMEOUT}ms; ` +
+      `status=${result.status}; signal=${result.signal}; error=${result.error?.message || 'none'}\n` +
+      `stdout:\n${result.stdout || ''}\nstderr:\n${result.stderr || ''}`
+    assert.equal(result.error, undefined, diagnostic)
+    assert.equal(result.status, exitCode, diagnostic)
     assert.equal(readFileSync(marker, 'utf8'), 'executed', 'prepack must run')
     const archives = readdirSync(destination)
     if (exitCode === 0) {

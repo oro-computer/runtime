@@ -6,6 +6,22 @@ a patch release.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-29
+
+### Build and release
+
+- Install exact npm tarballs offline during local and global package smoke checks
+  so optional platform dependencies do not trigger registry lookups before
+  publication.
+- Restore Java 21 before Android editor qualification in standalone npm packaging
+  runs while retaining Java 17 for native Android builds.
+- Isolate npm test fixtures from inherited npm configuration, registry credentials
+  and Node.js startup options. Use private user/global configuration files and
+  caches with offline package operations.
+- Add bounded npm fixture timeouts and detailed subprocess failure diagnostics,
+  expand local/global package-family checks, and include fixture-isolation
+  regression coverage in npm packaging and language-server workflows.
+
 ## [0.2.0] - 2026-10-27
 
 ### Added

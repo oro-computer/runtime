@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runInNewContext } from 'node:vm'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..', '..')
@@ -480,6 +481,37 @@ test('npm publish workflow uses exact tarballs, OIDC, and the signed source', ()
     1,
     'only the protected publication job should contain a registry publish command'
   )
+})
+
+test('Android npm builds retain Java 17 and qualify the installed editor with Java 21', () => {
+  const workflow = readFile('.github/workflows/publish-npm.yml').replace(/\r\n/g, '\n')
+  const job = workflow.split('\n  platform-packages:\n')[1].split('\n  top-level-packages:\n')[0]
+  const steps = job.split(/^ {6}- name: /m).slice(1)
+  for (const reuse of [false, true]) {
+    for (const android of [false, true]) {
+      let java
+      let smokeChecked = false
+      for (const step of steps) {
+        const name = step.split('\n')[0]
+        if (!step.includes('uses: actions/setup-java@') && name !== 'Build and pack platform package (Unix)' && name !== 'Smoke install exact package family on native runner') continue
+        const condition = step.match(/^ {8}if: (.+)$/m)?.[1]
+        if (condition && !runInNewContext(condition.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), {
+          inputs: { reuse_release_artifacts: reuse },
+          matrix: { build_android: android },
+          runner: { os: 'Linux' }
+        })) continue
+        if (step.includes('uses: actions/setup-java@')) {
+          java = Number(step.match(/java-version: ['"]?(\d+)/)?.[1])
+        } else if (name === 'Build and pack platform package (Unix)' && android) {
+          assert.equal(java, 17, 'Native Android source builds must retain their selected JDK')
+        } else if (name === 'Smoke install exact package family on native runner') {
+          assert.equal(java, android ? 21 : undefined, `Editor qualification JDK for Android=${android}, artifact reuse=${reuse}`)
+          smokeChecked = true
+        }
+      }
+      assert.ok(smokeChecked, 'The npm package consumer must still be qualified')
+    }
+  }
 })
 
 test('npm package family consistently uses the @oro-computer organization scope', () => {
