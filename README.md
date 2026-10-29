@@ -13,6 +13,34 @@ your first window to building, packaging, and updating your app.
 
 [Website](https://oro.computer/runtime) · [API reference](api/README.md) · [Examples](examples) · [Contributing](CONTRIBUTING.md)
 
+## Project status
+
+**Oro Runtime v0.2.1 is available** on [npm](https://www.npmjs.com/package/@oro-computer/runtime)
+and as [release archives](https://github.com/oro-computer/runtime/releases/tag/v0.2.1).
+The project is in active development in the `0.x` series: incompatible public API
+changes require a minor release, while compatible fixes use a patch release.
+See the [changelog](CHANGELOG.md) when upgrading.
+
+Recent work includes:
+
+- **Native platform services.** Backend discovery through `oro:platform`,
+  authentication-bound keys, password-provider selection, foreground and deferred
+  native work, UnifiedPush, and launcher integration on Android and Linux.
+- **Android declarative workflows.** Bundled HTTPS read, checkpoint, and notification
+  workflows without application native sources. These workflows and historical
+  protected-import executors currently have Android backends only; they do not run
+  arbitrary background JavaScript.
+- **Developer tooling and distribution.** Project-aware language-server integration,
+  a VS Code client, read-only SDK support, and expanded package installation and
+  consumer-build checks. Version 0.2.1 hardens offline npm package verification and
+  Android editor qualification.
+
+Feature availability varies by platform. Use `oro:platform` and each feature's
+support/status probes before offering native operations. The
+[native platform inventory](docs/NATIVE_PLATFORM_PARITY.md) distinguishes implemented,
+missing, and restricted backends; [runtime limitations](docs/LIMITATIONS.md) cover
+TLS, USB/HID/Bluetooth, AI, and device-validation gaps.
+
 ## Why Oro?
 
 - **Web interfaces, native capabilities.** Work with windows, files, networking, secure
@@ -28,16 +56,15 @@ your first window to building, packaging, and updating your app.
 
 ## Get started
 
-> **Release status:** the first runtime release is in preparation. The npm packages currently
-> contain bootstrap reservations, not installable runtime binaries. Use a [source build](#build-from-source)
-> until `v0.1.0` is available.
-
-Once `v0.1.0` is published, install the CLI with **Node.js 22 or newer**:
+Install the CLI with **Node.js 22 or newer**:
 
 ```sh
-npm install --global @oro-computer/runtime@0.1.0
+npm install --global @oro-computer/runtime
 oroc --version
 ```
+
+Installing from npm selects the matching native package for your host. For a specific
+release, append its version, for example `@oro-computer/runtime@0.2.1`.
 
 With `oroc` installed, create and launch your first app:
 
@@ -76,7 +103,7 @@ The runtime ships TypeScript declarations for editor completion and type checkin
 
 ## Platforms
 
-The npm launcher selects the package for your development machine automatically.
+Published packages cover the following development hosts and bundled SDK targets:
 
 | Development host | Architectures | Additional SDK artifacts |
 | ---------------- | ------------- | ------------------------ |
@@ -88,7 +115,17 @@ Target mobile builds with `oroc build --platform=android .` or
 `oroc build --platform=ios .` using the appropriate host and SDKs. Platform APIs and device
 support vary; see [current capabilities and limitations](docs/LIMITATIONS.md).
 
-## Automation and agents
+CI covers desktop hosts, Android Emulator, and iOS Simulator flows. Simulator and
+emulator coverage does not establish physical-device or hardware-service support.
+
+## Editors, automation, and agents
+
+Oro provides a [language-server wrapper](docs/LANGUAGE_SERVER.md) for JavaScript/
+TypeScript, Android Kotlin, C/C++/Objective-C, and Swift, plus a
+[VS Code client](editors/vscode). Use the directory containing `oro.toml` as the
+editor's project root and install the language-server backends you need separately.
+Windows C-family language-server integration remains unavailable; JavaScript/
+TypeScript editing and native compilation-model export are supported there.
 
 Connect an MCP client to your app workspace to search runtime documentation, inspect
 configuration, and invoke build and run tools:
@@ -139,7 +176,11 @@ that target. Read the [source-build guide](docs/BUILD_ENVIRONMENT.md) for platfo
 | [Configuration](api/CONFIG.md)                                   | `oro.toml` settings and their behavior                        |
 | [Examples](examples)                                             | Applications and focused integrations                         |
 | [Architecture](docs/RUNTIME_ARCHITECTURE.md)                     | How the WebView, IPC bridge, and native services fit together |
+| [Native platform support](docs/NATIVE_PLATFORM_PARITY.md)        | Backend availability, runtime probes, and qualification scope |
+| [Declarative workflows](docs/DECLARATIVE_WORKFLOWS.md)           | Android background reads, checkpoints, and notifications      |
 | [Android native integration](docs/ANDROID_NATIVE_INTEGRATION.md) | Back handling, periodic work, maintenance and encrypted push  |
+| [Linux native integration](docs/LINUX_NATIVE_INTEGRATION.md)     | Native execution, scheduling, push, and desktop integration   |
+| [Language servers](docs/LANGUAGE_SERVER.md)                      | Editor setup, compilation models, and backend requirements    |
 | [Changelog](CHANGELOG.md)                                        | Release notes and compatibility changes                       |
 
 Questions or a reproducible bug? Start with [Support](SUPPORT.md).
