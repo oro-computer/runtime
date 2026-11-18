@@ -32,6 +32,21 @@ using oro::runtime::webview::hasPinsForHost;
 #include <CommonCrypto/CommonDigest.h>
 
 @implementation ORONavigationDelegate
+#if ORO_RUNTIME_PLATFORM_MACOS
+- (void) webView: (WKWebView*) webview didStartProvisionalNavigation: (WKNavigation*) navigation {
+  if (self.navigator) self.navigator->bridge.setUSBDocument("");
+}
+
+- (void) webView: (WKWebView*) webview didCommitNavigation: (WKNavigation*) navigation {
+  const char* href = webview.URL.absoluteString.UTF8String;
+  if (self.navigator) self.navigator->bridge.setUSBDocument(href ? href : "");
+}
+
+- (void) webViewWebContentProcessDidTerminate: (WKWebView*) webview {
+  if (self.navigator) self.navigator->bridge.setUSBDocument("");
+}
+#endif
+
 - (void) webView: (WKWebView*) webview
   didFailNavigation: (WKNavigation*) navigation
           withError: (NSError*) error {
@@ -397,9 +412,22 @@ namespace oro::runtime::webview {
     );
   #elif ORO_RUNTIME_PLATFORM_WINDOWS
     EventRegistrationToken token;
+    webview->add_ContentLoading(
+      Microsoft::WRL::Callback<ICoreWebView2ContentLoadingEventHandler>(
+        [this](ICoreWebView2* view, ICoreWebView2ContentLoadingEventArgs* args) -> HRESULT {
+          PWSTR source = nullptr;
+          BOOL failed = TRUE;
+          args->get_IsErrorPage(&failed);
+          view->get_Source(&source);
+          bridge.setUSBDocument(!failed && source ? convertWStringToString(source) : "");
+          CoTaskMemFree(source);
+          return S_OK;
+        }
+      ).Get(), &token);
     webview->add_NavigationStarting(
       Microsoft::WRL::Callback<ICoreWebView2NavigationStartingEventHandler>(
         [=, this](ICoreWebView2* webview, ICoreWebView2NavigationStartingEventArgs* args) {
+          this->bridge.setUSBDocument("");
           PWSTR source;
           PWSTR uri;
 

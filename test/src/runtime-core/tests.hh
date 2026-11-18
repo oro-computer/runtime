@@ -87,6 +87,7 @@ namespace oro::Tests {
   void process (Harness&);
   void state_manager (Harness&);
   void string (Harness&);
+  void usb (Harness&);
   void version (Harness&);
   void restart (Harness&);
   void tar (Harness&);

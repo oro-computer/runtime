@@ -449,7 +449,12 @@ function runStrictPass ({
   try {
     rm(strictWorkdir, { recursive: true, force: true })
   } catch {}
-  cp(sourceWorkdir, strictWorkdir, { recursive: true })
+  // The strict configuration is embedded in the executable during the native build.
+  const previousBuild = path.join(sourceWorkdir, 'build')
+  cp(sourceWorkdir, strictWorkdir, {
+    recursive: true,
+    filter: source => source !== previousBuild
+  })
   forEachConfigFile(strictWorkdir, filename => retainExtensionSources(filename, sourceWorkdir))
 
   const appendLifecycleFlag = (iniPath) => {

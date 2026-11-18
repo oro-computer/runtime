@@ -111,15 +111,15 @@ function parseUsbId (value, label) {
 
 function buildRequestOptions (options) {
   if (options.acceptAllDevices) {
-    return { acceptAllDevices: true }
+    return { filters: [] }
   }
 
   const vendorId = parseUsbId(options.vendorId, 'Vendor ID')
   const productId = parseUsbId(options.productId, 'Product ID')
 
-  if (vendorId == null && productId == null) {
+  if (vendorId == null) {
     throw new TypeError(
-      'Specify a vendor or product ID, or enable "Accept all devices".'
+      'Specify a vendor ID, or enable "Accept all devices".'
     )
   }
 
@@ -128,6 +128,27 @@ function buildRequestOptions (options) {
   if (productId != null) filter.productId = productId
 
   return { filters: [filter] }
+}
+
+function loopbackPairs (device) {
+  const configs = device.configuration ? [device.configuration] : device.configurations
+  const pairs = []
+  for (const config of configs) {
+    for (const iface of config.interfaces) {
+      for (const alt of iface.alternates) {
+        if (alt.interfaceClass !== 255 || iface.claimed) continue
+        for (const type of ['bulk', 'interrupt']) {
+          const endpoints = alt.endpoints.filter(ep => ep.type === type)
+          const inputs = endpoints.filter(ep => ep.direction === 'in')
+          const outputs = endpoints.filter(ep => ep.direction === 'out')
+          if (inputs.length === 1 && outputs.length === 1) {
+            pairs.push({ config, iface, alt, input: inputs[0], output: outputs[0] })
+          }
+        }
+      }
+    }
+  }
+  return pairs
 }
 
 function permissionLabel (permission) {
@@ -146,7 +167,7 @@ function permissionVariant (permission) {
 
 function requestSummary (options) {
   if (options.acceptAllDevices) {
-    return 'acceptAllDevices: true'
+    return 'filters: []'
   }
   const parts = []
   if (options.vendorId) parts.push(`vendorId=${options.vendorId}`)
@@ -368,6 +389,61 @@ function WebUSBControlCenter () {
     },
     [appendLog, markDevicePending]
   )
+
+  async function readDeviceDescriptor (device) {
+    markDevicePending(device.deviceId, 'descriptor')
+    try {
+      const result = await device.controlTransferIn({
+        requestType: 'standard', recipient: 'device', request: 6, value: 0x0100, index: 0
+      }, 18)
+      if (result.status !== 'ok') throw new Error(result.status)
+      if (result.data?.byteLength !== 18 || result.data.getUint8(0) !== 18 || result.data.getUint8(1) !== 1) {
+        throw new Error('Expected an 18-byte USB device descriptor')
+      }
+      const bytes = Array.from(new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength))
+      appendLog(`Device descriptor: ${bytes.map(byte => byte.toString(16).padStart(2, '0')).join(' ')}`)
+      for (const config of device.configurations) {
+        for (const iface of config.interfaces) {
+          for (const alt of iface.alternates) {
+            const endpoints = alt.endpoints.map(ep => `${ep.direction} ${ep.endpointNumber} (${ep.type}, ${ep.packetSize} bytes)`)
+            appendLog(`Configuration ${config.configurationValue}, interface ${iface.interfaceNumber}, alternate ${alt.alternateSetting}: ${endpoints.join(', ') || 'no endpoints'}`)
+          }
+        }
+      }
+    } catch (error) {
+      setStatus({ variant: 'danger', title: 'Descriptor read failed', message: formatError(error) })
+    } finally {
+      markDevicePending(device.deviceId, null)
+    }
+  }
+
+  async function verifyLoopback (device, { config, iface, alt, input, output }) {
+    markDevicePending(device.deviceId, 'loopback')
+    try {
+      if (!device.configuration) await device.selectConfiguration(config.configurationValue)
+      await device.claimInterface(iface.interfaceNumber)
+      try {
+        if (iface.alternate.alternateSetting !== alt.alternateSetting) {
+          await device.selectAlternateInterface(iface.interfaceNumber, alt.alternateSetting)
+        }
+        const payload = Uint8Array.of(0x4f, 0x72, 0x6f, 0x21).slice(0, Math.min(input.packetSize, output.packetSize))
+        const sent = await device.transferOut(output.endpointNumber, payload)
+        if (sent.status !== 'ok' || sent.bytesWritten !== payload.length) throw new Error('USB write was incomplete')
+        const received = await device.transferIn(input.endpointNumber, payload.length)
+        if (received.status !== 'ok' || received.data?.byteLength !== payload.length ||
+            !payload.every((byte, index) => received.data.getUint8(index) === byte)) {
+          throw new Error('Returned bytes did not match the loopback probe')
+        }
+        appendLog(`Verified ${payload.length} echoed bytes on ${output.type} OUT ${output.endpointNumber} and IN ${input.endpointNumber}.`)
+      } finally {
+        await device.releaseInterface(iface.interfaceNumber)
+      }
+    } catch (error) {
+      setStatus({ variant: 'danger', title: 'Loopback failed', message: formatError(error) })
+    } finally {
+      markDevicePending(device.deviceId, null)
+    }
+  }
 
   const handleCloseDevice = useCallback(
     async (device) => {
@@ -652,7 +728,7 @@ function WebUSBControlCenter () {
     {
       title: 'WebUSB Control Center',
       description:
-        'Enumerate authorized devices, customise chooser flows, and drive control transfers with the Socket WebUSB bridge.'
+        'Enumerate authorized devices, customise chooser flows, and drive control transfers with the Oro WebUSB API.'
     },
     h(
       ExampleStack,
@@ -919,6 +995,21 @@ function WebUSBControlCenter () {
                             },
                             pendingAction === 'open' ? 'Opening…' : 'Open'
                           ),
+                          h(Button, {
+                            type: 'button',
+                            size: 'sm',
+                            disabled: !device.opened || pendingAction,
+                            onClick: () => readDeviceDescriptor(device)
+                          }, 'Read descriptor and list endpoints'),
+                          device.opened && loopbackPairs(device).map(pair =>
+                            h(Button, {
+                              key: [pair.config.configurationValue, pair.iface.interfaceNumber, pair.alt.alternateSetting, pair.output.endpointNumber].join('-'),
+                              type: 'button',
+                              size: 'sm',
+                              disabled: !!pendingAction,
+                              onClick: () => verifyLoopback(device, pair)
+                            }, `Echo fixture: send ${pair.output.type} loopback on interface ${pair.iface.interfaceNumber}, alternate ${pair.alt.alternateSetting}, OUT ${pair.output.endpointNumber} / IN ${pair.input.endpointNumber}`)
+                          ),
                           h(
                             Button,
                             {
@@ -1008,7 +1099,7 @@ function WebUSBControlCenter () {
             {
               title: 'Pending chooser',
               description: useCustomChooser
-                ? 'When requestDevice needs a manual selection, the runtime fires usb.chooserequest. Use the controls below to pick a device.'
+                ? 'When every matching device is already approved, Oro can use the application chooser. Use the controls below to pick a device.'
                 : 'Custom chooser disabled. The runtime overlay handles selection automatically.'
             },
             chooser && chooser.devices.length

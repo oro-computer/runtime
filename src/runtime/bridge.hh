@@ -45,6 +45,16 @@ namespace oro::runtime::bridge {
       const core::services::Notifications::NotificationResponseObserver notificationResponseObserver;
       const core::services::Notifications::NotificationPresentedObserver notificationPresentedObserver;
 
+      // A nonzero ID belongs to one committed application document.
+      Atomic<uint64_t> usbDocument = 0;
+      void setUSBDocument (const String& url);
+      uint64_t usbDocumentForToken (const String& token);
+
+    private:
+      Mutex usbDocumentMutex;
+      String usbDocumentToken;
+
+    public:
       DispatchHandler dispatchHandler = nullptr;
       bool dispatchRouterCallbacksWithBridge = false;
 #if ORO_RUNTIME_PLATFORM_LINUX

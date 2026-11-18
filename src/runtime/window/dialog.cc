@@ -198,6 +198,56 @@ namespace oro::runtime::window {
   #endif
   }
 
+  int Dialog::chooseUSB (const Vector<String>& labels) {
+    if (labels.empty()) return -1;
+#if ORO_RUNTIME_PLATFORM_LINUX
+    auto dialog = gtk_dialog_new_with_buttons("Allow access to a USB device", GTK_WINDOW(window->window),
+      GTK_DIALOG_MODAL, "Cancel", GTK_RESPONSE_CANCEL, "Allow", GTK_RESPONSE_ACCEPT, nullptr);
+    auto choices = gtk_combo_box_text_new();
+    for (const auto& label : labels) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(choices), label.c_str());
+    gtk_combo_box_set_active(GTK_COMBO_BOX(choices), 0);
+    gtk_container_add(GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), choices);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+    gtk_widget_show_all(dialog);
+    const auto response = gtk_dialog_run(GTK_DIALOG(dialog));
+    const int index = gtk_combo_box_get_active(GTK_COMBO_BOX(choices));
+    gtk_widget_destroy(dialog);
+    return response == GTK_RESPONSE_ACCEPT ? index : -1;
+#elif ORO_RUNTIME_PLATFORM_MACOS
+    auto alert = [NSAlert new];
+    alert.messageText = @"Allow access to a USB device";
+    auto choices = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 320, 26) pullsDown:NO];
+    for (const auto& label : labels) {
+      [choices.menu addItemWithTitle:[NSString stringWithUTF8String:label.c_str()] action:nil keyEquivalent:@""];
+    }
+    [choices selectItemAtIndex:0];
+    alert.accessoryView = choices;
+    [alert addButtonWithTitle:@"Cancel"];
+    [alert addButtonWithTitle:@"Allow"];
+    const int index = [alert runModal] == NSAlertSecondButtonReturn ? static_cast<int>(choices.indexOfSelectedItem) : -1;
+#if !__has_feature(objc_arc)
+    [alert release];
+    [choices release];
+#endif
+    return index;
+#elif ORO_RUNTIME_PLATFORM_WINDOWS
+    auto menu = CreatePopupMenu();
+    if (!menu) return -1;
+    AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, L"Allow access to a USB device");
+    for (size_t i = 0; i < labels.size(); ++i) {
+      const auto label = string::convertStringToWString(labels[i]);
+      AppendMenuW(menu, MF_STRING, i + 1, label.c_str());
+    }
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    const int selected = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, cursor.x, cursor.y, 0, window->window, nullptr);
+    DestroyMenu(menu);
+    return selected - 1;
+#else
+    return -1;
+#endif
+  }
+
   bool Dialog::showSaveFilePicker (
     const FileSystemPickerOptions& options,
     const ShowCallback callback

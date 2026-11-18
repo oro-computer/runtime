@@ -1600,36 +1600,31 @@ export async function write (command, value, buffer, options) {
       resolve(Result.from(null, new AbortError(signal), command))
     }
 
-    request.onreadystatechange = () => {
-      if (aborted) {
-        return
+    request.onload = () => {
+      if (aborted) return
+      resolved = true
+      clearTimeout(timeout)
+
+      const response = getRequestResponse(request, options)
+      const headers = request.getAllResponseHeaders()
+      const result = trackDescriptorTransport(command, params, Result.from(response, null, command, headers), false)
+
+      if (debug.enabled) {
+        debug.log('ipc.write: (resolved)', command)
       }
 
-      if (request.readyState === globalThis.XMLHttpRequest.DONE) {
-        resolved = true
-        clearTimeout(timeout)
-
-        const response = getRequestResponse(request, options)
-        const headers = request.getAllResponseHeaders()
-        const result = trackDescriptorTransport(command, params, Result.from(response, null, command, headers), false)
-
-        if (debug.enabled) {
-          debug.log('ipc.write: (resolved)', command)
-        }
-
-        if (signal && onAbort) {
-          try {
-            signal.removeEventListener('abort', onAbort)
-          } catch {}
-          onAbort = null
-        }
-        return resolve(result)
+      if (signal && onAbort) {
+        try {
+          signal.removeEventListener('abort', onAbort)
+        } catch {}
+        onAbort = null
       }
+      return resolve(result)
     }
 
     request.onerror = () => {
       const headers = request.getAllResponseHeaders()
-      const err = new Error(getRequestResponseText(request) || '')
+      const err = new errors.NetworkError(getRequestResponseText(request) || `IPC transport failed for ${command}`)
       resolved = true
       clearTimeout(timeout)
       if (signal && onAbort) {
@@ -1783,51 +1778,46 @@ export async function request (command, value, options = null) {
       resolve(Result.from(null, new AbortError(signal), command))
     }
 
-    request.onreadystatechange = () => {
-      if (aborted) {
-        return
+    request.onload = () => {
+      if (aborted) return
+      resolved = true
+      clearTimeout(timeout)
+
+      const response = getRequestResponse(request, options)
+      const headers = request.getAllResponseHeaders()
+      const result = trackDescriptorTransport(command, params, Result.from(response, null, command, headers), false)
+
+      if (debug.enabled) {
+        debug.log('ipc.request: (resolved)', command)
       }
 
-      if (request.readyState === globalThis.XMLHttpRequest.DONE) {
-        resolved = true
-        clearTimeout(timeout)
+      if (options?.cache === true) {
+        cache[command] = result
+      }
 
-        const response = getRequestResponse(request, options)
-        const headers = request.getAllResponseHeaders()
-        const result = trackDescriptorTransport(command, params, Result.from(response, null, command, headers), false)
-
-        if (debug.enabled) {
-          debug.log('ipc.request: (resolved)', command)
-        }
-
-        if (options?.cache === true) {
-          cache[command] = result
-        }
-
-        if (command.startsWith('fs.') && isFileSystemBookmark({ params })) {
-          if (!result.err) {
-            const id = result.data?.id ?? result.data?.fd
-            const name = getFileSystemBookmarkName({ params })
-            if (id && name) {
-              bookmarks.temporary.set(name, id)
-            }
+      if (command.startsWith('fs.') && isFileSystemBookmark({ params })) {
+        if (!result.err) {
+          const id = result.data?.id ?? result.data?.fd
+          const name = getFileSystemBookmarkName({ params })
+          if (id && name) {
+            bookmarks.temporary.set(name, id)
           }
         }
-
-        if (signal && onAbort) {
-          try {
-            signal.removeEventListener('abort', onAbort)
-          } catch {}
-          onAbort = null
-        }
-
-        return resolve(result)
       }
+
+      if (signal && onAbort) {
+        try {
+          signal.removeEventListener('abort', onAbort)
+        } catch {}
+        onAbort = null
+      }
+
+      return resolve(result)
     }
 
     request.onerror = () => {
       const headers = request.getAllResponseHeaders()
-      const err = new Error(getRequestResponseText(request))
+      const err = new errors.NetworkError(getRequestResponseText(request) || `IPC transport failed for ${command}`)
       resolved = true
       clearTimeout(timeout)
       if (signal && onAbort) {

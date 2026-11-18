@@ -31,6 +31,18 @@ The current state of the permission status.
 \fBonchange()\fR
 Level 0 event target 'change' event listener accessor
 .TP
+\fBconstructor(state)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIstate\fR (string; required) @param {import('./usb\-web.js').USBDevice[]} devices @param {object} [options]
+.TP
+\fBdevices()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIreadonly import('./usb\-web.js').USBDevice[]\fR
+.TP
 \fBquery(descriptor, options)\fR
 Query for a permission status. The Android\-only `local\-network` permission reports access to LAN hosts. On Android versions or app targets below API 37 it is already granted.
 \fBParameters:\fR

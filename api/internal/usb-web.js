@@ -1,9 +1,52 @@
 /* global EventTarget, CustomEvent, DOMException */
-// WebUSB scaffold
+// WebUSB renderer API
 // Spec reference: https://wicg.github.io/webusb/
 
-import ipc, { maybeMakeError, write as ipcWrite } from '../ipc.js'
+import ipc, { maybeMakeError } from '../ipc.js'
 import { Buffer } from '../buffer.js'
+import os from '../os.js'
+
+// Only the committed application document receives this token from its WebView.
+async function usbDocument () {
+  let source
+  try {
+    source = globalThis.top || globalThis
+    if (source.__oroUSBDocument) return source.__oroUSBDocument
+  } catch {
+    throw new DOMException('USB requires the application origin', 'SecurityError')
+  }
+  await new Promise((resolve, reject) => {
+    const ready = () => {
+      if (!source.__oroUSBDocument) return
+      clearTimeout(timer)
+      source.removeEventListener('oro-usb-document', ready)
+      resolve()
+    }
+    const timer = setTimeout(() => {
+      source.removeEventListener('oro-usb-document', ready)
+      reject(new DOMException('USB is unavailable in this document', 'SecurityError'))
+    }, 3000)
+    source.addEventListener('oro-usb-document', ready)
+    ready()
+  })
+  return source.__oroUSBDocument
+}
+
+async function requestUSB (route, params) {
+  return ipc.request(route, { ...params, usbDocument: await usbDocument() })
+}
+
+async function writeUSB (route, params, data) {
+  return ipc.write(route, { ...params, usbDocument: await usbDocument() }, data)
+}
+
+function usbError (value, caller) {
+  const name = value.type ?? value.name
+  if (['SecurityError', 'InvalidStateError', 'NotFoundError', 'NotAllowedError', 'NotSupportedError', 'NetworkError', 'DataError', 'OperationError', 'AbortError'].includes(name)) {
+    return new DOMException(value.message, name)
+  }
+  return maybeMakeError(value, caller)
+}
 
 const TRANSFER_STATUS_OK = 'ok'
 
@@ -21,7 +64,7 @@ const RECIPIENT_MAP = {
 }
 
 const MAX_CONTROL_TRANSFER_LENGTH = 0xffff
-const MAX_BULK_TRANSFER_LENGTH = 0x7fffffff
+const MAX_BULK_TRANSFER_LENGTH = 16 * 1024 * 1024
 
 const clampByte = (value, label) => {
   const n = Number(value)
@@ -69,10 +112,10 @@ const toUSBSetup = (setup, direction) => {
   if (
     !('requestType' in setup) ||
     !('recipient' in setup) ||
-    !('request' in setup)
+    !('request' in setup) || !('value' in setup) || !('index' in setup)
   ) {
     throw new TypeError(
-      'setup must include requestType, recipient, and request'
+      'setup must include requestType, recipient, request, value, and index'
     )
   }
   const requestType = String(setup.requestType).toLowerCase()
@@ -126,7 +169,8 @@ const bufferSourceToUint8Array = (value, label = 'data') => {
 }
 
 const base64ToDataView = (encoded) => {
-  if (typeof encoded !== 'string' || encoded.length === 0) return null
+  if (typeof encoded !== 'string') return null
+  if (encoded.length === 0) return new DataView(new ArrayBuffer(0))
   try {
     let bytes
     if (typeof Buffer === 'function') {
@@ -149,6 +193,7 @@ const base64ToDataView = (encoded) => {
 }
 
 class USBInTransferResult {
+  /** @param {USBTransferStatus} status @param {DataView|null} [dataView] */
   constructor (status, dataView) {
     this.status = status
     this.data = dataView ?? null
@@ -156,6 +201,7 @@ class USBInTransferResult {
 }
 
 class USBOutTransferResult {
+  /** @param {USBTransferStatus} status @param {number} [bytesWritten] */
   constructor (status, bytesWritten) {
     this.status = status
     this.bytesWritten = bytesWritten >>> 0
@@ -164,8 +210,9 @@ class USBOutTransferResult {
 
 class USBConnectionEvent extends Event {
   constructor (type, init) {
-    super(type)
-    this.device = init?.device ?? null
+    super(type, init)
+    if (!(init?.device instanceof USBDevice)) throw new TypeError('A USBDevice is required')
+    this.device = init.device
   }
 }
 
@@ -205,171 +252,371 @@ const normalizeFilters = (filters) => {
         'filters.protocolCode'
       )
     }
-    if (!Object.keys(normalized).length) {
-      throw new TypeError(
-        'Each filter must specify vendorId/productId or class code constraints'
-      )
+    if ('serialNumber' in filter) normalized.serialNumber = String(filter.serialNumber)
+    if (('productId' in normalized && !('vendorId' in normalized)) ||
+        ('subclassCode' in normalized && !('classCode' in normalized)) ||
+        ('protocolCode' in normalized && !('subclassCode' in normalized))) {
+      throw new TypeError('Invalid USB filter dependency')
     }
     return normalized
   })
 }
 
 const normalizeRequestDeviceOptionsForIPC = (options) => {
-  const normalized = { acceptAllDevices: !!options.acceptAllDevices }
-  if (!normalized.acceptAllDevices) {
-    if (!Array.isArray(options.filters) || options.filters.length === 0) {
-      throw new TypeError(
-        'Either filters must be non-empty or acceptAllDevices must be true'
-      )
-    }
+  if (!options || (!Array.isArray(options.filters) && !options.acceptAllDevices)) {
+    throw new TypeError('USB device filters are required')
   }
-  normalized.filters = normalizeFilters(options.filters)
-  return normalized
+  if (options.exclusionFilters !== undefined && !Array.isArray(options.exclusionFilters)) {
+    throw new TypeError('exclusionFilters must be an array')
+  }
+  return {
+    acceptAllDevices: !!options.acceptAllDevices,
+    filters: normalizeFilters(options.filters),
+    exclusionFilters: normalizeFilters(options.exclusionFilters)
+  }
 }
 
+/** Select granted devices for a USB permission descriptor.
+ * @param {USBDevice[]} devices
+ * @param {USBDeviceRequestOptions} options
+ * @returns {USBDevice[]}
+ */
+export function filterUSBDevices (devices, options) {
+  const { filters, exclusionFilters } = normalizeRequestDeviceOptionsForIPC({ filters: [], ...options })
+  const matches = (device, filter) => {
+    if (filter.vendorId !== undefined && filter.vendorId !== device.vendorId) return false
+    if (filter.productId !== undefined && filter.productId !== device.productId) return false
+    if (filter.serialNumber !== undefined && filter.serialNumber !== device.serialNumber) return false
+    if (filter.classCode === undefined) return true
+    const matchesClass = (cls, sub, protocol) => cls === filter.classCode &&
+      (filter.subclassCode === undefined || filter.subclassCode === sub) &&
+      (filter.protocolCode === undefined || filter.protocolCode === protocol)
+    return matchesClass(device.deviceClass, device.deviceSubclass, device.deviceProtocol) ||
+      device.configurations.some(config => config.interfaces.some(iface => iface.alternates.some(alt =>
+        matchesClass(alt.interfaceClass, alt.interfaceSubclass, alt.interfaceProtocol))))
+  }
+  return devices.filter(device => (!filters.length || filters.some(f => matches(device, f))) &&
+    !exclusionFilters.some(f => matches(device, f)))
+}
+
+function usbPolicyAllowsDocument () {
+  const policy = globalThis.document?.permissionsPolicy ?? globalThis.document?.featurePolicy
+  return (policy?.features && !policy.features().includes('usb')) || policy?.allowsFeature?.('usb') !== false
+}
+
+/** @typedef {{vendorId?: number, productId?: number, classCode?: number, subclassCode?: number, protocolCode?: number, serialNumber?: string}} USBDeviceFilter */
+/** @typedef {{filters?: USBDeviceFilter[], exclusionFilters?: USBDeviceFilter[], acceptAllDevices?: boolean}} USBDeviceRequestOptions */
+/** @typedef {{requestType: 'standard'|'class'|'vendor', recipient: 'device'|'interface'|'endpoint'|'other', request: number, value: number, index: number}} USBControlTransferParameters */
+
+/** @typedef {{endpointNumber: number, direction: 'in'|'out', type: 'bulk'|'interrupt'|'isochronous', packetSize: number}} USBEndpointDescriptor */
+/** @typedef {{configurationValue: number, interfaceNumber: number, alternateSetting: number, classCode: number, subclassCode?: number, protocolCode?: number, interfaceName?: string, endpoints?: USBEndpointDescriptor[]}} USBAlternateDescriptor */
+/** @typedef {{deviceId: string, vendorId?: number, productId?: number, classCode?: number, subclassCode?: number, protocolCode?: number, productName?: string, manufacturerName?: string, serialNumber?: string, opened?: boolean, claimedInterfaces?: {interfaceNumber: number, alternateSetting: number}[], authorized?: boolean, usbVersion?: number, deviceVersion?: number, configurationValue?: number, configurations?: number[], configurationNames?: Record<string, string>, interfaces?: USBAlternateDescriptor[]}} USBDeviceDescriptor */
+/** @typedef {'ok'|'stall'|'babble'} USBTransferStatus */
+
+/** Describes an endpoint on an alternate interface. */
+class USBEndpoint {
+  /** @param {USBAlternateInterface} alternate @param {number} endpointNumber @param {'in'|'out'} direction */
+  constructor (alternate, endpointNumber, direction) {
+    const record = alternate._endpoints.find(ep => ep.endpointNumber === endpointNumber && ep.direction === direction)
+    if (!record) throw new RangeError('Unknown USB endpoint')
+    this.endpointNumber = record.endpointNumber
+    this.direction = record.direction
+    this.type = record.type
+    this.packetSize = record.packetSize
+    Object.freeze(this)
+  }
+}
+
+/** Describes the endpoints and class of one interface setting. */
+class USBAlternateInterface {
+  /** @param {USBInterface} iface @param {number} alternateSetting */
+  constructor (iface, alternateSetting) {
+    const record = iface._records.find(item => item.alternateSetting === alternateSetting)
+    if (!record) throw new RangeError('Unknown USB alternate setting')
+    this.alternateSetting = alternateSetting
+    this.interfaceClass = record.classCode
+    this.interfaceSubclass = record.subclassCode
+    this.interfaceProtocol = record.protocolCode
+    this.interfaceName = record.interfaceName || null
+    this._endpoints = record.endpoints || []
+    this.endpoints = Object.freeze(this._endpoints.map(ep => new USBEndpoint(this, ep.endpointNumber, ep.direction)))
+    Object.freeze(this)
+  }
+}
+
+/** Describes a claimable USB interface and its alternate settings. */
+class USBInterface {
+  /** @param {USBConfiguration} configuration @param {number} interfaceNumber */
+  constructor (configuration, interfaceNumber) {
+    this._device = configuration._device
+    this._configurationValue = configuration.configurationValue
+    this._records = configuration._records.filter(item => item.interfaceNumber === interfaceNumber)
+    if (!this._records.length) throw new RangeError('Unknown USB interface')
+    this.interfaceNumber = interfaceNumber
+    this.alternates = Object.freeze(this._records.map(item => new USBAlternateInterface(this, item.alternateSetting)))
+    Object.freeze(this)
+  }
+
+  /** @returns {boolean} */
+  get claimed () {
+    return this._device.configuration?.configurationValue === this._configurationValue &&
+      this._device._claims.has(this.interfaceNumber)
+  }
+
+  /** @returns {USBAlternateInterface} */
+  get alternate () {
+    const setting = this.claimed ? this._device._claims.get(this.interfaceNumber) : 0
+    return this.alternates.find(alt => alt.alternateSetting === setting) ?? this.alternates[0]
+  }
+}
+
+/** Describes one selectable USB configuration. */
+class USBConfiguration {
+  /** @param {USBDevice} device @param {number} configurationValue */
+  constructor (device, configurationValue) {
+    if (!device._values.includes(configurationValue)) throw new RangeError('Unknown USB configuration')
+    this._device = device
+    this.configurationValue = configurationValue
+    this.configurationName = device._configurationNames[configurationValue] || null
+    this._records = device._interfaces.filter(item => item.configurationValue === configurationValue)
+    const numbers = new Set(this._records.map(item => item.interfaceNumber))
+    this.interfaces = Object.freeze(Array.from(numbers, number => new USBInterface(this, number)))
+    Object.freeze(this)
+  }
+}
+
+class USBIsochronousInTransferPacket extends USBInTransferResult {}
+class USBIsochronousOutTransferPacket extends USBOutTransferResult {}
+class USBIsochronousInTransferResult {
+  /** @param {USBIsochronousInTransferPacket[]} packets @param {DataView|null} [data] */
+  constructor (packets, data = null) {
+    this.packets = Object.freeze(packets)
+    this.data = data
+  }
+}
+class USBIsochronousOutTransferResult {
+  /** @param {USBIsochronousOutTransferPacket[]} packets */
+  constructor (packets) { this.packets = Object.freeze(packets) }
+}
+
+const packetSizes = (lengths) => {
+  const packets = Array.from(lengths, value => validateTransferLength(value, MAX_BULK_TRANSFER_LENGTH, 'packet length', { allowZero: true }))
+  if (!packets.length || packets.length > 1024) throw new RangeError('Expected 1 to 1024 USB packets')
+  ensurePayloadWithin(packets.reduce((sum, length) => sum + length, 0), MAX_BULK_TRANSFER_LENGTH, 'packets')
+  return packets
+}
+
+const disconnectedDevices = new WeakSet()
+
 class USBDevice extends EventTarget {
+  /** @param {USBDeviceDescriptor} descriptor */
   constructor (descriptor) {
     super()
     this._applyDescriptor(descriptor)
   }
 
-  _applyDescriptor (descriptor = {}) {
+  /** @param {USBDeviceDescriptor} descriptor */
+  _applyDescriptor (descriptor) {
     this.deviceId = String(descriptor.deviceId ?? '')
     this.vendorId = descriptor.vendorId >>> 0
     this.productId = descriptor.productId >>> 0
     this.deviceClass = descriptor.classCode >>> 0
     this.deviceSubclass = descriptor.subclassCode >>> 0
     this.deviceProtocol = descriptor.protocolCode >>> 0
-    this.productName =
-      typeof descriptor.productName === 'string' ? descriptor.productName : null
-    this.manufacturerName =
-      typeof descriptor.manufacturerName === 'string'
-        ? descriptor.manufacturerName
-        : null
-    this.serialNumber =
-      typeof descriptor.serialNumber === 'string'
-        ? descriptor.serialNumber
-        : null
-    this.opened = !!descriptor.opened
+    this.productName = descriptor.productName || null
+    this.manufacturerName = descriptor.manufacturerName || null
+    this.serialNumber = descriptor.serialNumber || null
     this._authorized = !!descriptor.authorized
-    this.configurations = Array.isArray(descriptor.interfaces)
-      ? descriptor.interfaces.map((iface) => ({
-        interfaceNumber: iface.interfaceNumber >>> 0,
-        alternateSetting: iface.alternateSetting >>> 0,
-        interfaceClass: iface.classCode >>> 0,
-        interfaceSubclass: iface.subclassCode >>> 0,
-        interfaceProtocol: iface.protocolCode >>> 0
-      }))
-      : []
+    /** @type {Map<number, number>} */
+    this._claims ??= new Map()
+    if (descriptor.opened === false || descriptor.claimedInterfaces) {
+      this._claims.clear()
+      for (const claim of descriptor.claimedInterfaces ?? []) {
+        this._claims.set(claim.interfaceNumber, claim.alternateSetting)
+      }
+    }
+    /** @type {boolean} */
+    this.opened = descriptor.opened ?? this.opened ?? false
+    const major = version => ((version >>> 12) & 15) * 10 + ((version >>> 8) & 15)
+    if (descriptor.usbVersion || this.usbVersionMajor === undefined) {
+      this.usbVersionMajor = major(descriptor.usbVersion)
+      this.usbVersionMinor = (descriptor.usbVersion >>> 4) & 15
+      this.usbVersionSubminor = descriptor.usbVersion & 15
+    }
+    this.deviceVersionMajor = major(descriptor.deviceVersion)
+    this.deviceVersionMinor = (descriptor.deviceVersion >>> 4) & 15
+    this.deviceVersionSubminor = descriptor.deviceVersion & 15
+    this._configurationNames = descriptor.configurationNames ?? {}
+    this._values = descriptor.configurations ?? []
+    this._interfaces = descriptor.interfaces ?? []
+    // Keep descriptor object identity while a connected device is enumerated again.
+    if (!this.configurations?.length) {
+      this.configurations = Object.freeze(this._values.map(value => new USBConfiguration(this, value)))
+    }
+    if (!this.opened || descriptor.opened !== undefined || this._configurationValue === undefined) {
+      this._configurationValue = descriptor.configurationValue ?? 0
+    }
+  }
+
+  /** @returns {USBConfiguration|null} */
+  get configuration () {
+    return this.configurations.find(config => config.configurationValue === this._configurationValue) ?? null
+  }
+
+  get #connectedId () {
+    if (disconnectedDevices.has(this)) throw new DOMException('USB device disconnected', 'NotFoundError')
+    return this.deviceId
   }
 
   async open () {
     if (this.opened) return
-    const res = await ipc.request('usb.device.open', {
-      deviceId: this.deviceId
+    const res = await requestUSB('usb.device.open', {
+      deviceId: this.#connectedId
     })
-    if (res?.err) throw maybeMakeError(res.err, USBDevice.prototype.open)
+    if (res?.err) throw usbError(res.err, USBDevice.prototype.open)
+    this._configurationValue = res.data?.configurationValue ?? this._configurationValue
+    if (res.data?.usbVersion) {
+      const version = res.data.usbVersion
+      this.usbVersionMajor = (version >>> 12) * 10 + ((version >>> 8) & 15)
+      this.usbVersionMinor = (version >>> 4) & 15
+      this.usbVersionSubminor = version & 15
+    }
     this.opened = true
   }
 
   async close () {
     if (!this.opened) return
-    const res = await ipc.request('usb.device.close', {
-      deviceId: this.deviceId
+    const res = await requestUSB('usb.device.close', {
+      deviceId: this.#connectedId
     })
-    if (res?.err) throw maybeMakeError(res.err, USBDevice.prototype.close)
+    if (res?.err) throw usbError(res.err, USBDevice.prototype.close)
+    this._claims.clear()
     this.opened = false
   }
 
   async forget () {
-    const res = await ipc.request('usb.forgetDevice', {
+    const res = await requestUSB('usb.forgetDevice', {
       deviceId: this.deviceId
     })
-    if (res?.err) throw maybeMakeError(res.err, USBDevice.prototype.forget)
+    if (res?.err) throw usbError(res.err, USBDevice.prototype.forget)
     this._authorized = false
+    this._claims.clear()
     this.opened = false
   }
 
+  /**
+   * @param {number} configurationValue
+   */
   async selectConfiguration (configurationValue) {
-    const res = await ipc.request('usb.device.selectConfiguration', {
-      deviceId: this.deviceId,
-      configurationValue: Number(configurationValue) || 0
+    configurationValue = clampByte(configurationValue, 'configurationValue')
+    const res = await requestUSB('usb.device.selectConfiguration', {
+      deviceId: this.#connectedId,
+      configurationValue
     })
     if (res?.err) {
-      throw maybeMakeError(res.err, USBDevice.prototype.selectConfiguration)
+      for (const number of res.err.releasedInterfaces ?? []) this._claims.delete(number)
+      throw usbError(res.err, USBDevice.prototype.selectConfiguration)
     }
+    if (this._configurationValue !== configurationValue) this._claims.clear()
+    this._configurationValue = configurationValue
   }
 
+  /**
+   * @param {number} interfaceNumber
+   */
   async claimInterface (interfaceNumber) {
-    const res = await ipc.request('usb.device.claimInterface', {
-      deviceId: this.deviceId,
-      interfaceNumber: Number(interfaceNumber) || 0
+    interfaceNumber = clampByte(interfaceNumber, 'interfaceNumber')
+    const res = await requestUSB('usb.device.claimInterface', {
+      deviceId: this.#connectedId,
+      interfaceNumber
     })
     if (res?.err) {
-      throw maybeMakeError(res.err, USBDevice.prototype.claimInterface)
+      throw usbError(res.err, USBDevice.prototype.claimInterface)
     }
+    if (!this._claims.has(interfaceNumber)) this._claims.set(interfaceNumber, 0)
   }
 
+  /**
+   * @param {number} interfaceNumber
+   */
   async releaseInterface (interfaceNumber) {
-    const res = await ipc.request('usb.device.releaseInterface', {
-      deviceId: this.deviceId,
-      interfaceNumber: Number(interfaceNumber) || 0
+    interfaceNumber = clampByte(interfaceNumber, 'interfaceNumber')
+    const res = await requestUSB('usb.device.releaseInterface', {
+      deviceId: this.#connectedId,
+      interfaceNumber
     })
     if (res?.err) {
-      throw maybeMakeError(res.err, USBDevice.prototype.releaseInterface)
+      throw usbError(res.err, USBDevice.prototype.releaseInterface)
     }
+    this._claims.delete(interfaceNumber)
   }
 
+  /**
+   * @param {number} interfaceNumber
+   * @param {number} alternateSetting
+   */
   async selectAlternateInterface (interfaceNumber, alternateSetting) {
-    const res = await ipc.request('usb.device.selectAlternateInterface', {
-      deviceId: this.deviceId,
-      interfaceNumber: Number(interfaceNumber) || 0,
-      alternateSetting: Number(alternateSetting) || 0
+    interfaceNumber = clampByte(interfaceNumber, 'interfaceNumber')
+    alternateSetting = clampByte(alternateSetting, 'alternateSetting')
+    const res = await requestUSB('usb.device.selectAlternateInterface', {
+      deviceId: this.#connectedId,
+      interfaceNumber,
+      alternateSetting
     })
     if (res?.err) {
-      throw maybeMakeError(
+      throw usbError(
         res.err,
         USBDevice.prototype.selectAlternateInterface
       )
     }
+    this._claims.set(interfaceNumber, alternateSetting)
   }
 
+  /**
+   * @param {USBControlTransferParameters} setup
+   * @param {number} length
+   */
   async controlTransferIn (setup, length) {
     const normalizedSetup = toUSBSetup(setup, 'in')
     const requestLength = validateTransferLength(
       length,
       MAX_CONTROL_TRANSFER_LENGTH,
-      'length'
+      'length',
+      { allowZero: true }
     )
-    const res = await ipc.request('usb.transfer.controlIn', {
-      deviceId: this.deviceId,
+    const res = await requestUSB('usb.transfer.controlIn', {
+      deviceId: this.#connectedId,
       setup: JSON.stringify(normalizedSetup),
       length: requestLength
     })
     if (res?.err) {
-      throw maybeMakeError(res.err, USBDevice.prototype.controlTransferIn)
+      throw usbError(res.err, USBDevice.prototype.controlTransferIn)
     }
-    const payload = res?.data?.data ? base64ToDataView(res.data.data) : null
+    const payload = base64ToDataView(res?.data?.data)
     return new USBInTransferResult(
       res?.data?.status ?? TRANSFER_STATUS_OK,
       payload
     )
   }
 
+  /**
+   * @param {USBControlTransferParameters} setup
+   * @param {BufferSource} [data]
+   */
   async controlTransferOut (setup, data) {
     const normalizedSetup = toUSBSetup(setup, 'out')
     const payload = bufferSourceToUint8Array(data, 'data')
     ensurePayloadWithin(payload.length, MAX_CONTROL_TRANSFER_LENGTH, 'data')
-    const res = await ipcWrite(
+    const res = await writeUSB(
       'usb.transfer.controlOut',
       {
-        deviceId: this.deviceId,
+        deviceId: this.#connectedId,
         setup: JSON.stringify(normalizedSetup)
       },
       payload
     )
     if (res?.err) {
-      throw maybeMakeError(res.err, USBDevice.prototype.controlTransferOut)
+      throw usbError(res.err, USBDevice.prototype.controlTransferOut)
     }
     return new USBOutTransferResult(
       res?.data?.status ?? TRANSFER_STATUS_OK,
@@ -377,67 +624,110 @@ class USBDevice extends EventTarget {
     )
   }
 
+  /**
+   * @param {number} endpointNumber
+   * @param {number} length
+   */
   async transferIn (endpointNumber, length) {
     const requestLength = validateTransferLength(
       length,
       MAX_BULK_TRANSFER_LENGTH,
-      'length'
+      'length',
+      { allowZero: true }
     )
-    const res = await ipc.request('usb.transfer.in', {
-      deviceId: this.deviceId,
+    const res = await requestUSB('usb.transfer.in', {
+      deviceId: this.#connectedId,
       endpointNumber: Number(endpointNumber) || 0,
       length: requestLength
     })
-    if (res?.err) throw maybeMakeError(res.err, USBDevice.prototype.transferIn)
-    const payload = res?.data?.data ? base64ToDataView(res.data.data) : null
+    if (res?.err) throw usbError(res.err, USBDevice.prototype.transferIn)
+    const payload = base64ToDataView(res?.data?.data)
     return new USBInTransferResult(
       res?.data?.status ?? TRANSFER_STATUS_OK,
       payload
     )
   }
 
+  /**
+   * @param {number} endpointNumber
+   * @param {BufferSource} data
+   */
   async transferOut (endpointNumber, data) {
     const payload = bufferSourceToUint8Array(data, 'data')
     ensurePayloadWithin(payload.length, MAX_BULK_TRANSFER_LENGTH, 'data')
-    const res = await ipcWrite(
+    const res = await writeUSB(
       'usb.transfer.out',
       {
-        deviceId: this.deviceId,
+        deviceId: this.#connectedId,
         endpointNumber: Number(endpointNumber) || 0
       },
       payload
     )
-    if (res?.err) throw maybeMakeError(res.err, USBDevice.prototype.transferOut)
+    if (res?.err) throw usbError(res.err, USBDevice.prototype.transferOut)
     return new USBOutTransferResult(
       res?.data?.status ?? TRANSFER_STATUS_OK,
       res?.data?.transferred ?? payload.length
     )
   }
 
+  /** @param {number} endpointNumber @param {number[]} packetLengths */
+  async isochronousTransferIn (endpointNumber, packetLengths) {
+    const lengths = packetSizes(packetLengths)
+    const res = await requestUSB('usb.transfer.isochronousIn', {
+      deviceId: this.#connectedId, endpointNumber, packetLengths: JSON.stringify(lengths)
+    })
+    if (res.err) throw usbError(res.err)
+    const data = base64ToDataView(res.data.data)
+    let offset = 0
+    const packets = res.data.packets.map((packet, index) => {
+      const view = packet.status === 'ok' ? new DataView(data.buffer, data.byteOffset + offset, packet.transferred) : null
+      offset += lengths[index]
+      return new USBIsochronousInTransferPacket(packet.status, view)
+    })
+    return new USBIsochronousInTransferResult(packets, data)
+  }
+
+  /** @param {number} endpointNumber @param {BufferSource} data @param {number[]} packetLengths */
+  async isochronousTransferOut (endpointNumber, data, packetLengths) {
+    const lengths = packetSizes(packetLengths)
+    const payload = bufferSourceToUint8Array(data)
+    if (payload.length !== lengths.reduce((sum, length) => sum + length, 0)) throw new RangeError('Packet lengths must match the payload')
+    const res = await writeUSB('usb.transfer.isochronousOut', {
+      deviceId: this.#connectedId, endpointNumber, packetLengths: JSON.stringify(lengths)
+    }, payload)
+    if (res.err) throw usbError(res.err)
+    return new USBIsochronousOutTransferResult(res.data.packets.map(packet => new USBIsochronousOutTransferPacket(packet.status, packet.transferred)))
+  }
+
+  /**
+   * @param {'in'|'out'} direction
+   * @param {number} endpointNumber
+   */
   async clearHalt (direction, endpointNumber) {
     const dir = String(direction).toLowerCase()
     if (dir !== 'in' && dir !== 'out') {
       throw new TypeError("direction must be either 'in' or 'out'")
     }
-    const res = await ipc.request('usb.transfer.clearHalt', {
-      deviceId: this.deviceId,
+    const res = await requestUSB('usb.transfer.clearHalt', {
+      deviceId: this.#connectedId,
       direction: dir,
       endpointNumber: Number(endpointNumber) || 0
     })
-    if (res?.err) throw maybeMakeError(res.err, USBDevice.prototype.clearHalt)
+    if (res?.err) throw usbError(res.err, USBDevice.prototype.clearHalt)
   }
 
   async reset () {
-    const res = await ipc.request('usb.device.reset', {
-      deviceId: this.deviceId
+    const res = await requestUSB('usb.device.reset', {
+      deviceId: this.#connectedId
     })
-    if (res?.err) throw maybeMakeError(res.err, USBDevice.prototype.reset)
+    if (res?.err) throw usbError(res.err, USBDevice.prototype.reset)
   }
 }
 
 class NavigatorUSB extends EventTarget {
   constructor () {
     super()
+    /** @type {Map<string, USBDevice>} */
     this._deviceCache = new Map()
     this._onNativeConnect = (event) => {
       try {
@@ -463,7 +753,10 @@ class NavigatorUSB extends EventTarget {
           device = this._createDevice({ deviceId: String(deviceId) })
         }
         if (!device) return
+        disconnectedDevices.add(device)
+        device._claims.clear()
         device.opened = false
+        this._deviceCache.delete(String(deviceId))
         this.dispatchEvent(new USBConnectionEvent('disconnect', { device }))
       } catch (err) {
         console.error(err)
@@ -479,6 +772,31 @@ class NavigatorUSB extends EventTarget {
     }
   }
 
+  addEventListener (type, listener, options) {
+    super.addEventListener(type, listener, options)
+    if ((type === 'connect' || type === 'disconnect') && !this._watching) {
+      this._watching = true
+      requestUSB('usb.watch').then(result => {
+        if (result.err) this._watching = false
+      }, () => { this._watching = false })
+    }
+  }
+
+  get onconnect () { return this._connectHandler ?? null }
+  set onconnect (handler) {
+    if (this._connectHandler) this.removeEventListener('connect', this._connectHandler)
+    this._connectHandler = typeof handler === 'function' ? handler : null
+    if (this._connectHandler) this.addEventListener('connect', this._connectHandler)
+  }
+
+  get ondisconnect () { return this._disconnectHandler ?? null }
+  set ondisconnect (handler) {
+    if (this._disconnectHandler) this.removeEventListener('disconnect', this._disconnectHandler)
+    this._disconnectHandler = typeof handler === 'function' ? handler : null
+    if (this._disconnectHandler) this.addEventListener('disconnect', this._disconnectHandler)
+  }
+
+  /** @param {USBDeviceDescriptor} descriptor @returns {USBDevice|null} */
   _createDevice (descriptor) {
     if (!descriptor || typeof descriptor !== 'object') return null
     const id = String(descriptor.deviceId ?? '')
@@ -487,15 +805,16 @@ class NavigatorUSB extends EventTarget {
       device._applyDescriptor(descriptor)
       return device
     }
-    device = new USBDevice(descriptor, this)
+    device = new USBDevice(descriptor)
     this._deviceCache.set(id, device)
     return device
   }
 
+  /** @returns {Promise<USBDevice[]>} */
   async getDevices () {
-    const res = await ipc.request('usb.getDevices', {})
+    const res = await requestUSB('usb.getDevices', {})
     if (res?.err) {
-      throw maybeMakeError(res.err, NavigatorUSB.prototype.getDevices)
+      throw usbError(res.err, NavigatorUSB.prototype.getDevices)
     }
     const list = Array.isArray(res?.data?.devices) ? res.data.devices : []
     return list
@@ -503,14 +822,19 @@ class NavigatorUSB extends EventTarget {
       .filter(Boolean)
   }
 
+  /** @param {USBDeviceRequestOptions} options @returns {Promise<USBDevice>} */
   async requestDevice (options = {}) {
     const normalized = normalizeRequestDeviceOptionsForIPC(options)
+    if (!globalThis.document || !hasUSBActivation() ||
+        !usbPolicyAllowsDocument()) {
+      throw new DOMException('USB device selection requires an active user gesture in an allowed window', 'SecurityError')
+    }
     const serializedOptions = JSON.stringify(normalized)
-    const res = await ipc.request('usb.requestDevice', {
+    const res = await requestUSB('usb.requestDevice', {
       options: serializedOptions
     })
     if (res?.err) {
-      throw maybeMakeError(res.err, NavigatorUSB.prototype.requestDevice)
+      throw usbError(res.err, NavigatorUSB.prototype.requestDevice)
     }
 
     if (res?.data?.device) {
@@ -534,9 +858,9 @@ class NavigatorUSB extends EventTarget {
   }
 
   async cancelRequest () {
-    const res = await ipc.request('usb.cancelRequest')
+    const res = await requestUSB('usb.cancelRequest')
     if (res?.err) {
-      throw maybeMakeError(res.err, NavigatorUSB.prototype.cancelRequest)
+      throw usbError(res.err, NavigatorUSB.prototype.cancelRequest)
     }
   }
 
@@ -593,12 +917,14 @@ class NavigatorUSB extends EventTarget {
           'Selected device must be one of the provided candidates'
         )
       }
+      resolved = true
+      detail.handled = true
       try {
-        const res = await ipc.request('usb.chooseDevice', {
+        const res = await requestUSB('usb.chooseDevice', {
           deviceId: match.deviceId
         })
         if (res?.err) {
-          throw maybeMakeError(res.err, NavigatorUSB.prototype.requestDevice)
+          throw usbError(res.err, NavigatorUSB.prototype.requestDevice)
         }
         const descriptor = res?.data?.device
         if (!descriptor) {
@@ -619,15 +945,17 @@ class NavigatorUSB extends EventTarget {
 
     detail.cancel = async () => {
       ensurePending()
+      resolved = true
+      detail.handled = true
       try {
-        const res = await ipc.request('usb.cancelRequest')
+        const res = await requestUSB('usb.cancelRequest')
         if (res?.err) {
-          throw maybeMakeError(res.err, NavigatorUSB.prototype.requestDevice)
+          throw usbError(res.err, NavigatorUSB.prototype.requestDevice)
         }
         resolved = true
         detail.handled = true
         rejectPromise(
-          new DOMException('User cancelled device selection', 'AbortError')
+          new DOMException('No USB device selected', 'NotFoundError')
         )
       } catch (err) {
         resolved = true
@@ -800,30 +1128,68 @@ const ensureChooserOverlay = () => {
 }
 
 let navigatorUSBInstance = null
+let lastActivation = -Infinity
 
-export const installNavigatorUSB = () => {
-  if (typeof navigator === 'undefined') return
+function recordUSBActivation (event) {
+  if (event.isTrusted && (event.type !== 'keydown' || event.key !== 'Escape')) {
+    lastActivation = performance.now()
+  }
+}
+
+function hasUSBActivation () {
+  return navigator.userActivation?.isActive ?? (performance.now() - lastActivation < 5000)
+}
+
+/** Install the WebUSB API for this supported execution context.
+ * @returns {NavigatorUSB|undefined}
+ */
+export function installNavigatorUSB () {
+  if (typeof navigator === 'undefined' || globalThis.isSharedWorkerScope || os.platform() === 'ios') return
+  if (globalThis.isSecureContext === false &&
+      !(globalThis.location?.protocol === 'oro:' && globalThis.__oroUSBDocument)) return
+  if (!usbPolicyAllowsDocument()) return
   if (navigatorUSBInstance) return navigatorUSBInstance
 
+  if (globalThis.document && !navigator.userActivation) {
+    for (const event of ['click', 'keydown']) document.addEventListener(event, recordUSBActivation, true)
+  }
   navigatorUSBInstance = new NavigatorUSB()
+  if (typeof document === 'undefined') Object.defineProperty(navigatorUSBInstance, 'requestDevice', { value: undefined })
+  const constructors = { USB: NavigatorUSB, USBDevice, USBConfiguration, USBInterface, USBAlternateInterface, USBEndpoint, USBConnectionEvent, USBInTransferResult, USBOutTransferResult, USBIsochronousInTransferResult, USBIsochronousOutTransferResult, USBIsochronousInTransferPacket, USBIsochronousOutTransferPacket }
+  for (const [name, constructor] of Object.entries(constructors)) {
+    if (!globalThis[name]) Object.defineProperty(globalThis, name, { configurable: true, value: constructor })
+  }
   try {
     Object.defineProperty(navigator, 'usb', {
       configurable: true,
       enumerable: true,
       value: navigatorUSBInstance
     })
-  } catch {}
+  } catch {
+    navigatorUSBInstance = navigator.usb
+  }
 
   return navigatorUSBInstance
 }
 
 try {
   installNavigatorUSB()
+  if (!navigatorUSBInstance && globalThis.location?.protocol === 'oro:' && os.platform() !== 'ios') {
+    globalThis.addEventListener('oro-usb-document', installNavigatorUSB, { once: true })
+  }
 } catch {}
 
 export {
   NavigatorUSB,
   USBDevice,
+  USBConfiguration,
+  USBInterface,
+  USBAlternateInterface,
+  USBEndpoint,
+  USBIsochronousInTransferResult,
+  USBIsochronousOutTransferResult,
+  USBIsochronousInTransferPacket,
+  USBIsochronousOutTransferPacket,
   USBInTransferResult,
   USBOutTransferResult,
   USBConnectionEvent

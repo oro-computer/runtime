@@ -2412,14 +2412,13 @@ namespace oro::runtime::webview {
         );
       }
 
-      // Close streams
       if (this->platformResponseOutput != nullptr) {
         g_output_stream_close(this->platformResponseOutput, nullptr, nullptr);
         g_object_unref(this->platformResponseOutput);
         this->platformResponseOutput = nullptr;
       }
       if (this->platformResponseStream != nullptr) {
-        g_input_stream_close(this->platformResponseStream, nullptr, nullptr);
+        // WebKit reads this stream asynchronously after receiving the response.
         g_object_unref(this->platformResponseStream);
         this->platformResponseStream = nullptr;
       }

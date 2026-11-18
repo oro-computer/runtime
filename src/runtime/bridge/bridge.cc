@@ -129,11 +129,47 @@ export * from '{{url}}'
     // Bluetooth removed; no-op handlers previously attached here.
   }
 
+  void Bridge::setUSBDocument (const String& url) {
+    const URL location(url);
+    uint64_t document = 0;
+    String token;
+    if (core::services::USB::allowsOrigin(location, userConfig)) {
+      Vector<uint8_t> secret(16);
+      if (uv_random(nullptr, nullptr, secret.data(), secret.size(), 0, nullptr) == 0) {
+        token = bytes::encodeHexString(secret);
+        document = rand64();
+      }
+    }
+    uint64_t previous;
+    {
+      Lock lock(usbDocumentMutex);
+      previous = usbDocument.exchange(document);
+      usbDocumentToken = token;
+    }
+    if (previous) getRuntime()->services.usb.disconnectClient(previous);
+    if (!document) return;
+    // The WebView evaluates in the main frame. Check the live origin again at delivery.
+    const JSON::Object payload = JSON::Object::Entries{
+      {"scheme", location.scheme + ":"}, {"host", string::toLowerCase(location.hostname)}, {"token", token}
+    };
+    evaluateJavaScript(R"JS((function (args) {
+      if (location.protocol !== args.scheme || location.hostname !== args.host || location.port) return
+      Object.defineProperty(globalThis, '__oroUSBDocument', { configurable: true, value: args.token })
+      globalThis.dispatchEvent(new Event('oro-usb-document'))
+    })( )JS" + payload.str() + ")");
+  }
+
+  uint64_t Bridge::usbDocumentForToken (const String& token) {
+    Lock lock(usbDocumentMutex);
+    return !token.empty() && token == usbDocumentToken ? usbDocument.load() : 0;
+  }
+
   Bridge::~Bridge () {
     this->schemeHandlers.close();
 
     auto app = App::sharedApplication();
     if (app) {
+      if (const auto document = usbDocument.exchange(0)) app->runtime.services.usb.disconnectClient(document);
       auto &svc = app->runtime.services.bluetooth;
       {
         Lock lock(this->bluetoothMutex);

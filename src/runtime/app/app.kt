@@ -433,6 +433,15 @@ open class AppActivity : WindowManagerActivity() {
     return this.platform
   }
 
+  fun enumerateUSB (): String = oro.runtime.usb.USBPlatform.enumerate(this)
+
+  fun requestUSBPermission (requestId: Long, deviceIds: Array<String>) {
+    oro.runtime.usb.USBPlatform.requestPermission(this, requestId, deviceIds)
+  }
+
+  fun openUSBFileDescriptor (deviceId: String): Int =
+    oro.runtime.usb.USBPlatform.openFileDescriptor(this, deviceId)
+
   fun checkPermission (permission: String): Boolean {
     val status = ContextCompat.checkSelfPermission(this.applicationContext, permission)
     return status == PackageManager.PERMISSION_GRANTED

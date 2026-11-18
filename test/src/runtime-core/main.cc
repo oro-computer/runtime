@@ -16,6 +16,7 @@ static bool initialize (oapi_context_t* context, const void *data) {
     t.run(oro::Tests::process);
     t.run(oro::Tests::state_manager);
     t.run(oro::Tests::string);
+    t.run(oro::Tests::usb);
     t.run(oro::Tests::version);
     t.run(oro::Tests::restart);
     t.run(oro::Tests::tar);

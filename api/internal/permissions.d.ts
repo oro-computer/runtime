@@ -36,6 +36,8 @@ declare const _default: any;
 export default _default;
 export type PermissionDescriptor = {
     name: string;
+    filters?: import("./usb-web.js").USBDeviceFilter[];
+    exclusionFilters?: import("./usb-web.js").USBDeviceFilter[];
 };
 /**
  * A container that provides the state of an object and an event handler

@@ -574,6 +574,7 @@ open class Window (val fragment: WindowFragment) {
   external fun onEvaluateJavascriptResult (index: Int, token: String, result: String): Unit
 
   @Throws(Exception::class)
+  external fun setUSBDocument (index: Int, url: String)
   external fun getPendingNavigationLocation (index: Int): String
 
   @Throws(Exception::class)

@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-feature android:name="android.hardware.usb.accessory" android:required="true" />
+  <application android:label="Oro USB Echo" android:allowBackup="false">
+    <activity android:name=".EchoActivity" android:exported="true" android:launchMode="singleTop">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
+      </intent-filter>
+      <meta-data android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
+                 android:resource="@xml/accessory_filter" />
+    </activity>
+  </application>
+</manifest>

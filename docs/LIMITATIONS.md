@@ -38,12 +38,13 @@ See also:
 
 ## USB / HID / Bluetooth
 
-- WebUSB desktop support targets macOS, Windows, and Linux through the native
-  libusb backend.
-- Android WebUSB currently supports enumeration and permission flow through the
-  foreground USB service, but transfer/configuration methods still return
-  `NotSupportedError`.
-- iOS WebUSB remains unavailable.
+- WebUSB targets Linux, macOS, Windows and USB-host Android devices. Hardware
+  acceptance for the native pickers, descriptor handling, and control, bulk,
+  interrupt and isochronous I/O requires compatible peripherals on each OS.
+  One-second discovery polling can miss very short attachment changes.
+- Android WebUSB grants are attachment-scoped. Serial numbers may be hidden
+  until the user grants Android USB permission.
+- Generic WebUSB remains unavailable on iOS and iPadOS.
 - WebHID is not complete on Android, and iOS/iPadOS remains unsupported because
   the platform does not expose a public generic HID API.
 - Web Bluetooth still has parity gaps on Windows and Android, and platform

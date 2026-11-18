@@ -18,7 +18,7 @@
 #if ORO_RUNTIME_PLATFORM_LINUX
 #include "../native/desktop_back.hh"
 #endif
-#include "../core/services/usb.hh"
+#include "usb_routes.hh"
 #include "../core/services/bluetooth.hh"
 #include "../core/services/dbus.hh"
 #include "../core/services/mcp.hh"
@@ -5212,15 +5212,42 @@ static void mapIPCRoutes (Router *router) {
     );
   });
 
-  router->map("usb.getDevices", [](auto message, auto router, auto reply) {
+  const auto usbRoute = [](auto handler) {
+    return [handler](const Message message, Router* router, Router::ReplyCallback reply) {
+      auto& bridge = router->bridge;
+      const auto document = bridge.usbDocumentForToken(message.get("usbDocument"));
+      if (!document || !router->bridge.getRuntime()->hasPermission("usb")) {
+        return reply(Result::Err { message, JSON::Object::Entries {
+          {"type", "SecurityError"}, {"message", "USB requires an application window with USB permission"}
+        }});
+      }
+      const core::services::USB::Request caller{message.seq, document, bridge.index};
+      const auto owner = bridge.weak_from_this();
+      handler(message, router, [owner, document, message, reply](Result result) {
+        const auto bridge = owner.lock();
+        if (!bridge) return;
+        if (bridge->usbDocument.load() != document) {
+          return reply(Result::Err{message, JSON::Object::Entries{{"name", "AbortError"}, {"message", "USB document changed"}}});
+        }
+        reply(result);
+      }, caller);
+    };
+  };
+
+  router->map("usb.watch", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
+    router->bridge.getRuntime()->services.usb.watch(caller,
+      [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); });
+  }));
+
+  router->map("usb.getDevices", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto& svc = router->bridge.getRuntime()->services.usb;
     svc.getDevices(
-      message.seq,
+      caller,
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.requestDevice", [](auto message, auto router, auto reply) {
+  router->map("usb.requestDevice", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"options"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
 
@@ -5266,223 +5293,212 @@ static void mapIPCRoutes (Router *router) {
 
     auto& svc = router->bridge.getRuntime()->services.usb;
     svc.requestDevice(
-      message.seq,
+      caller,
       optionsJSON,
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.chooseDevice", [](auto message, auto router, auto reply) {
+  router->map("usb.chooseDevice", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     core::services::USB::DeviceSelection selection;
     selection.deviceId = message.get("deviceId");
     router->bridge.getRuntime()->services.usb.chooseDevice(
-      message.seq,
+      caller,
       selection,
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.cancelRequest", [](auto message, auto router, auto reply) {
+  router->map("usb.cancelRequest", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     router->bridge.getRuntime()->services.usb.cancelRequest(
-      message.seq,
+      caller,
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.forgetDevice", [](auto message, auto router, auto reply) {
+  router->map("usb.forgetDevice", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     router->bridge.getRuntime()->services.usb.forgetDevice(
-      message.seq,
+      caller,
       message.get("deviceId"),
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.device.open", [](auto message, auto router, auto reply) {
+  router->map("usb.device.open", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     router->bridge.getRuntime()->services.usb.open(
-      message.seq,
+      caller,
       message.get("deviceId"),
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.device.close", [](auto message, auto router, auto reply) {
+  router->map("usb.device.close", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     router->bridge.getRuntime()->services.usb.close(
-      message.seq,
+      caller,
       message.get("deviceId"),
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.device.selectConfiguration", [](auto message, auto router, auto reply) {
+  router->map("usb.device.selectConfiguration", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId", "configurationValue"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     uint32_t configurationValue = 0;
-    REQUIRE_AND_GET_MESSAGE_VALUE(configurationValue, "configurationValue", std::stoul);
+    if (!readUSBUnsigned(message, "configurationValue", 255, configurationValue)) return reply(invalidUSBArgument(message, "Invalid configurationValue"));
     router->bridge.getRuntime()->services.usb.selectConfiguration(
-      message.seq,
+      caller,
       message.get("deviceId"),
       static_cast<uint8_t>(configurationValue & 0xFFu),
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.device.claimInterface", [](auto message, auto router, auto reply) {
+  router->map("usb.device.claimInterface", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId", "interfaceNumber"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     uint32_t interfaceNumber = 0;
-    REQUIRE_AND_GET_MESSAGE_VALUE(interfaceNumber, "interfaceNumber", std::stoul);
+    if (!readUSBUnsigned(message, "interfaceNumber", 255, interfaceNumber)) return reply(invalidUSBArgument(message, "Invalid interfaceNumber"));
     router->bridge.getRuntime()->services.usb.claimInterface(
-      message.seq,
+      caller,
       message.get("deviceId"),
       static_cast<uint8_t>(interfaceNumber & 0xFFu),
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.device.releaseInterface", [](auto message, auto router, auto reply) {
+  router->map("usb.device.releaseInterface", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId", "interfaceNumber"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     uint32_t interfaceNumber = 0;
-    REQUIRE_AND_GET_MESSAGE_VALUE(interfaceNumber, "interfaceNumber", std::stoul);
+    if (!readUSBUnsigned(message, "interfaceNumber", 255, interfaceNumber)) return reply(invalidUSBArgument(message, "Invalid interfaceNumber"));
     router->bridge.getRuntime()->services.usb.releaseInterface(
-      message.seq,
+      caller,
       message.get("deviceId"),
       static_cast<uint8_t>(interfaceNumber & 0xFFu),
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.device.selectAlternateInterface", [](auto message, auto router, auto reply) {
+  router->map("usb.device.selectAlternateInterface", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId", "interfaceNumber", "alternateSetting"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     uint32_t interfaceNumber = 0;
     uint32_t alternateSetting = 0;
-    REQUIRE_AND_GET_MESSAGE_VALUE(interfaceNumber, "interfaceNumber", std::stoul);
-    REQUIRE_AND_GET_MESSAGE_VALUE(alternateSetting, "alternateSetting", std::stoul);
+    if (!readUSBUnsigned(message, "interfaceNumber", 255, interfaceNumber)) return reply(invalidUSBArgument(message, "Invalid interfaceNumber"));
+    if (!readUSBUnsigned(message, "alternateSetting", 255, alternateSetting)) return reply(invalidUSBArgument(message, "Invalid alternateSetting"));
     router->bridge.getRuntime()->services.usb.selectAlternateInterface(
-      message.seq,
+      caller,
       message.get("deviceId"),
       static_cast<uint8_t>(interfaceNumber & 0xFFu),
       static_cast<uint8_t>(alternateSetting & 0xFFu),
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.device.reset", [](auto message, auto router, auto reply) {
+  router->map("usb.device.reset", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     router->bridge.getRuntime()->services.usb.reset(
-      message.seq,
+      caller,
       message.get("deviceId"),
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.transfer.controlIn", [](auto message, auto router, auto reply) {
-    auto err = validateMessageParameters(message, {"deviceId", "setup", "length"});
-    if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
-    uint32_t length = 0;
-    REQUIRE_AND_GET_MESSAGE_VALUE(length, "length", std::stoul);
-    router->bridge.getRuntime()->services.usb.controlTransferIn(
-      message.seq,
-      message.get("deviceId"),
-      JSON::Raw(message.get("setup")),
-      length,
-      [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
-    );
-  });
+  router->map("usb.transfer.controlIn", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
+    dispatchUSBControlTransfer(router->bridge.getRuntime()->services.usb, caller, message, true, reply);
+  }));
 
-  router->map("usb.transfer.controlOut", [](auto message, auto router, auto reply) {
-    auto err = validateMessageParameters(message, {"deviceId", "setup"});
-    if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
-    auto* data = reinterpret_cast<unsigned char*>(message.buffer.data());
-    size_t size = message.buffer.size();
-    bytes::Buffer payload(size);
-    if (data && size > 0) {
-      memcpy(payload.data(), data, size);
-    }
-    router->bridge.getRuntime()->services.usb.controlTransferOut(
-      message.seq,
-      message.get("deviceId"),
-      JSON::Raw(message.get("setup")),
-      payload,
-      [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
-    );
-  });
+  router->map("usb.transfer.controlOut", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
+    dispatchUSBControlTransfer(router->bridge.getRuntime()->services.usb, caller, message, false, reply);
+  }));
 
-  router->map("usb.transfer.in", [](auto message, auto router, auto reply) {
+  router->map("usb.transfer.in", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId", "endpointNumber", "length"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     uint32_t endpointNumber = 0;
     uint32_t length = 0;
-    REQUIRE_AND_GET_MESSAGE_VALUE(endpointNumber, "endpointNumber", std::stoul);
-    REQUIRE_AND_GET_MESSAGE_VALUE(length, "length", std::stoul);
+    if (!readUSBUnsigned(message, "endpointNumber", 15, endpointNumber)) return reply(invalidUSBArgument(message, "Invalid endpointNumber"));
+    if (!readUSBUnsigned(message, "length", 16 * 1024 * 1024, length)) return reply(invalidUSBArgument(message, "Invalid transfer length"));
     router->bridge.getRuntime()->services.usb.transferIn(
-      message.seq,
+      caller,
       message.get("deviceId"),
       static_cast<uint8_t>(endpointNumber & 0xFFu),
       length,
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.transfer.out", [](auto message, auto router, auto reply) {
+  router->map("usb.transfer.out", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId", "endpointNumber"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     uint32_t endpointNumber = 0;
-    REQUIRE_AND_GET_MESSAGE_VALUE(endpointNumber, "endpointNumber", std::stoul);
-    auto* data = reinterpret_cast<unsigned char*>(message.buffer.data());
-    size_t size = message.buffer.size();
-    bytes::Buffer payload(size);
-    if (data && size > 0) {
-      memcpy(payload.data(), data, size);
-    }
+    if (!readUSBUnsigned(message, "endpointNumber", 15, endpointNumber)) return reply(invalidUSBArgument(message, "Invalid endpointNumber"));
+    if (message.buffer.size() > 16 * 1024 * 1024) return reply(invalidUSBArgument(message, "USB transfer exceeds 16 MiB"));
     router->bridge.getRuntime()->services.usb.transferOut(
-      message.seq,
+      caller,
       message.get("deviceId"),
       static_cast<uint8_t>(endpointNumber & 0xFFu),
-      payload,
+      message.buffer,
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
 
-  router->map("usb.transfer.clearHalt", [](auto message, auto router, auto reply) {
+  router->map("usb.transfer.clearHalt", usbRoute([](auto message, auto router, auto reply, const auto& caller) {
     auto err = validateMessageParameters(message, {"deviceId", "endpointNumber", "direction"});
     if (err.type != JSON::Type::Null) return reply(Result::Err { message, err });
     uint32_t endpointNumber = 0;
-    REQUIRE_AND_GET_MESSAGE_VALUE(endpointNumber, "endpointNumber", std::stoul);
+    if (!readUSBUnsigned(message, "endpointNumber", 15, endpointNumber)) return reply(invalidUSBArgument(message, "Invalid endpointNumber"));
     const auto direction = message.get("direction");
-    bool directionIn = false;
-    if (direction == "in") {
-      directionIn = true;
-    } else if (direction == "out") {
-      directionIn = false;
-    } else {
-      JSON::Object json = JSON::Object::Entries {{
-        {"err", JSON::Object::Entries {{
-          {"type", "TypeError"},
-          {"message", "direction must be 'in' or 'out'"}
-        }}}
-      }};
-      return reply(Result::Err { message, json });
-    }
+    if (direction != "in" && direction != "out") return reply(invalidUSBArgument(message, "Invalid USB endpoint direction"));
 
     router->bridge.getRuntime()->services.usb.clearHalt(
-      message.seq,
+      caller,
       message.get("deviceId"),
       static_cast<uint8_t>(endpointNumber & 0xFFu),
-      directionIn,
+      direction == "in",
       [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); }
     );
-  });
+  }));
+
+  const auto usbIsochronous = [usbRoute](bool input) {
+    return usbRoute([input](auto message, auto router, auto reply, const auto& caller) {
+      uint32_t endpoint = 0;
+      if (message.get("deviceId").empty() || !readUSBUnsigned(message, "endpointNumber", 15, endpoint) ||
+          !endpoint || message.buffer.size() > 16 * 1024 * 1024) {
+        return reply(invalidUSBArgument(message, "Invalid isochronous endpoint or payload"));
+      }
+      Vector<uint32_t> lengths;
+      try {
+        const JSON::Any parsed = JSON::parse(message.get("packetLengths"));
+        if (parsed.type != JSON::Type::Array || parsed.as<JSON::Array>().size() > 1024) {
+          return reply(invalidUSBArgument(message, "Invalid USB packet list"));
+        }
+        for (const auto& item : parsed.as<JSON::Array>()) {
+          if (item.type != JSON::Type::Number) return reply(invalidUSBArgument(message, "Invalid USB packet length"));
+          const auto length = item.template as<JSON::Number>().value();
+          if (!(length >= 0 && length <= 16 * 1024 * 1024 && length == std::floor(length))) {
+            return reply(invalidUSBArgument(message, "Invalid USB packet length"));
+          }
+          lengths.push_back(static_cast<uint32_t>(length));
+        }
+      } catch (...) {
+        return reply(invalidUSBArgument(message, "Invalid USB packet list"));
+      }
+      router->bridge.getRuntime()->services.usb.isochronous(caller, message.get("deviceId"), endpoint, input, lengths, message.buffer,
+        [reply, message](auto seq, auto json, auto queued) { reply(Result{seq, message, json, queued}); });
+    });
+  };
+  router->map("usb.transfer.isochronousIn", usbIsochronous(true));
+  router->map("usb.transfer.isochronousOut", usbIsochronous(false));
 
   router->map("broadcast_channel.subscribe", [](auto message, auto router, auto reply) {
     auto err = validateMessageParameters(message, {

@@ -1,5 +1,8 @@
 package oro.runtime.usb
 
+import android.app.Activity
+import android.app.AlertDialog
+import android.os.ParcelFileDescriptor
 import android.content.Context
 import android.content.BroadcastReceiver
 import android.content.Intent
@@ -24,7 +27,11 @@ object USBPlatform {
     val manager = appContext.getSystemService(Context.USB_SERVICE) as UsbManager
     val array = JSONArray()
     for (device in manager.deviceList.values) {
-      array.put(deviceToJson(device, manager.hasPermission(device)))
+      try {
+        array.put(deviceToJson(device, manager.hasPermission(device)))
+      } catch (_: SecurityException) {
+        // Android can revoke access to serial descriptors while the device detaches.
+      }
     }
     return array.toString()
   }
@@ -32,11 +39,11 @@ object USBPlatform {
   @JvmStatic
   fun requestPermission (context: Context, requestId: Long, deviceIds: Array<String>) {
     val ids = deviceIds
-      .mapNotNull { it?.trim() }
+      .map { it.trim() }
       .filter { it.isNotEmpty() }
       .toMutableSet()
 
-    if (ids.isEmpty() || ids.size > 16) {
+    if (ids.isEmpty()) {
       synchronized(lock) {
         pendingRequests.remove(requestId)
       }
@@ -54,7 +61,7 @@ object USBPlatform {
       }
     }
     if (!accepted) {
-      for (id in ids) onPermissionResult(requestId, id, false)
+      onPermissionResult(requestId, "", false)
       return
     }
 
@@ -62,15 +69,41 @@ object USBPlatform {
     // Enumeration and permission requests never start a service or request alerts.
     handler.post {
       val manager = appContext.getSystemService(Context.USB_SERVICE) as UsbManager
-      for (id in ids.toList()) {
-        val device = manager.deviceList.values.firstOrNull { it.deviceName == id }
-        if (device == null) {
-          notifyPermissionResult(id, false, requestId)
-        } else if (manager.hasPermission(device)) {
-          notifyPermissionResult(id, true, requestId)
-        } else {
-          requestDevicePermission(appContext, manager, device, requestId)
+      val activity = context as? Activity
+      val devices = manager.deviceList.values.filter { ids.contains(it.deviceName) }
+      fun cancel () {
+        if (synchronized(lock) { pendingRequests.remove(requestId) } != null) {
+          onPermissionResult(requestId, "", false)
         }
+      }
+      if (activity == null || activity.isFinishing || activity.isDestroyed || devices.isEmpty()) {
+        cancel()
+        return@post
+      }
+      val labels = devices.map { "%s (%04x:%04x)".format(it.productName ?: "", it.vendorId, it.productId) }
+      try {
+        var selected = false
+        val dialog = AlertDialog.Builder(activity)
+          .setTitle("Allow access to a USB device")
+          .setItems(labels.toTypedArray()) { _, index ->
+            selected = true
+            val device = devices[index]
+            synchronized(lock) { pendingRequests[requestId] = mutableSetOf(device.deviceName) }
+            if (manager.hasPermission(device)) notifyPermissionResult(device.deviceName, true, requestId)
+            else requestDevicePermission(appContext, manager, device, requestId)
+          }
+          .setNegativeButton(android.R.string.cancel) { _, _ -> cancel() }
+          .setOnCancelListener { cancel() }
+          .create()
+        val timeout = Runnable { if (dialog.isShowing) dialog.dismiss() else cancel() }
+        dialog.setOnDismissListener {
+          handler.removeCallbacks(timeout)
+          if (!selected) cancel()
+        }
+        dialog.show()
+        handler.postDelayed(timeout, 60_000)
+      } catch (_: RuntimeException) {
+        cancel()
       }
     }
   }
@@ -112,38 +145,25 @@ object USBPlatform {
     }
   }
 
-  internal fun notifyPermissionResult (deviceId: String, granted: Boolean, requestIdOverride: Long? = null) {
-    val normalized = deviceId.trim()
-    if (normalized.isEmpty()) {
-      return
-    }
-
-    val affected = mutableListOf<Pair<Long, Boolean>>()
-    synchronized(lock) {
-      val iterator = pendingRequests.iterator()
-      while (iterator.hasNext()) {
-        val entry = iterator.next()
-        val requestId = entry.key
-        if (requestIdOverride != null && requestId != requestIdOverride) {
-          continue
-        }
-        val pending = entry.value
-        if (pending.remove(normalized)) {
-          affected.add(Pair(requestId, granted))
-          if (pending.isEmpty()) {
-            iterator.remove()
-          }
-        }
-      }
-    }
-
-    for ((requestId, ok) in affected) {
-      onPermissionResult(requestId, normalized, ok)
-    }
+  private fun notifyPermissionResult (deviceId: String, granted: Boolean, requestId: Long) {
+    val pending = synchronized(lock) { pendingRequests.remove(requestId) } ?: return
+    onPermissionResult(requestId, deviceId, granted && pending.contains(deviceId))
   }
 
   @JvmStatic
   external fun onPermissionResult (requestId: Long, deviceId: String, granted: Boolean)
+
+  fun openFileDescriptor (context: Context, id: String): Int {
+    val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+    val device = manager.deviceList[id] ?: return -1
+    if (!manager.hasPermission(device)) return -1
+    val connection = manager.openDevice(device) ?: return -1
+    return try {
+      ParcelFileDescriptor.fromFd(connection.fileDescriptor).detachFd()
+    } finally {
+      connection.close()
+    }
+  }
 
   private fun deviceToJson (device: UsbDevice, hasPermission: Boolean): JSONObject {
     val obj = JSONObject()
@@ -156,17 +176,37 @@ object USBPlatform {
     obj.put("protocolCode", device.deviceProtocol)
     obj.put("authorized", hasPermission)
 
+    obj.put("productName", device.productName ?: "")
+    obj.put("manufacturerName", device.manufacturerName ?: "")
+    obj.put("serialNumber", if (hasPermission) device.serialNumber ?: "" else "")
+    val version = device.version.split('.')
+    obj.put("deviceVersion", ((version.firstOrNull()?.toIntOrNull(16) ?: 0) shl 8) or
+      (version.getOrNull(1)?.toIntOrNull(16) ?: 0))
+    val configurationNames = JSONObject()
+    val configurations = JSONArray()
     val interfaces = JSONArray()
-    for (index in 0 until device.interfaceCount) {
-      val iface = device.getInterface(index) ?: continue
-      val entry = JSONObject()
-      entry.put("interfaceNumber", iface.id)
-      entry.put("alternateSetting", iface.alternateSetting)
-      entry.put("classCode", iface.interfaceClass)
-      entry.put("subclassCode", iface.interfaceSubclass)
-      entry.put("protocolCode", iface.interfaceProtocol)
-      interfaces.put(entry)
+    for (index in 0 until device.configurationCount) {
+      val config = device.getConfiguration(index)
+      configurations.put(config.id)
+      configurationNames.put(config.id.toString(), config.name ?: "")
+      for (i in 0 until config.interfaceCount) {
+        val iface = config.getInterface(i)
+        val endpoints = JSONArray()
+        for (e in 0 until iface.endpointCount) {
+          val ep = iface.getEndpoint(e)
+          endpoints.put(JSONObject().put("endpointNumber", ep.endpointNumber)
+            .put("direction", if (ep.direction == 128) "in" else "out")
+            .put("type", arrayOf("control", "isochronous", "bulk", "interrupt")[ep.type])
+            .put("packetSize", ep.maxPacketSize and 2047))
+        }
+        interfaces.put(JSONObject().put("configurationValue", config.id)
+          .put("interfaceName", iface.name ?: "").put("interfaceNumber", iface.id).put("alternateSetting", iface.alternateSetting)
+          .put("classCode", iface.interfaceClass).put("subclassCode", iface.interfaceSubclass)
+          .put("protocolCode", iface.interfaceProtocol).put("endpoints", endpoints))
+      }
     }
+    obj.put("configurationNames", configurationNames)
+    obj.put("configurations", configurations)
     obj.put("interfaces", interfaces)
     return obj
   }

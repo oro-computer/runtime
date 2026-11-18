@@ -4,7 +4,7 @@
 #include "../usb.hh"
 
 namespace oro::runtime::core::services::usb {
-  std::unique_ptr<USB::Backend> makeUSBBackend(USB& service);
+  std::shared_ptr<USB::Backend> makeUSBBackend(USB& service);
 }
 
 #endif

@@ -714,7 +714,7 @@ namespace oro::runtime::core::services {
           };
         } else {
           json = JSON::Object::Entries {
-            {"data", JSON::Object::Entries {{"state", "granted"}}}
+            {"data", JSON::Object::Entries {{"state", "prompt"}}}
           };
         }
         callback(seq, json, QueuedResponse{});

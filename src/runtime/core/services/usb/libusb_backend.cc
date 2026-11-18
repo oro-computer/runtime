@@ -1,4 +1,5 @@
 #include "libusb_backend.hh"
+#include "transport.hh"
 
 #if ORO_RUNTIME_PLATFORM_ANDROID
 
@@ -20,13 +21,16 @@
 
 namespace oro::runtime::core::services::usb {
   class AndroidBackend;
-  static AndroidBackend* g_backend = nullptr;
+  static std::weak_ptr<AndroidBackend> activeBackend;
+  static Mutex activeBackendMutex;
+  static std::atomic<uint64_t> nextPermissionRequestId{1};
 
   namespace {
     JSON::Object makeErrorObject(const char* type, const String& message) {
       return JSON::Object::Entries {{
         {"err", JSON::Object::Entries {{
           {"type", String(type)},
+          {"name", String(type)},
           {"message", message}
         }}}
       }};
@@ -38,37 +42,10 @@ namespace oro::runtime::core::services::usb {
       }};
     }
 
-    JSON::Object descriptorToJson(const USB::Backend::DeviceDescriptor& descriptor) {
-      JSON::Object::Entries json = {
-        {"deviceId", descriptor.deviceId},
-        {"vendorId", static_cast<int64_t>(descriptor.vendorId)},
-        {"productId", static_cast<int64_t>(descriptor.productId)},
-        {"classCode", static_cast<int64_t>(descriptor.classCode)},
-        {"subclassCode", static_cast<int64_t>(descriptor.subclassCode)},
-        {"protocolCode", static_cast<int64_t>(descriptor.protocolCode)},
-        {"authorized", descriptor.authorized}
-      };
 
-      if (!descriptor.interfaces.empty()) {
-        JSON::Array::Entries interfaces;
-        interfaces.reserve(descriptor.interfaces.size());
-        for (const auto& iface : descriptor.interfaces) {
-          interfaces.push_back(JSON::Object::Entries {
-            {"interfaceNumber", static_cast<int64_t>(iface.interfaceNumber)},
-            {"alternateSetting", static_cast<int64_t>(iface.alternateSetting)},
-            {"classCode", static_cast<int64_t>(iface.classCode)},
-            {"subclassCode", static_cast<int64_t>(iface.subclassCode)},
-            {"protocolCode", static_cast<int64_t>(iface.protocolCode)}
-          });
-        }
-        json["interfaces"] = interfaces;
-      }
-
-      return json;
-    }
   }
 
-  class AndroidBackend final : public USB::Backend {
+  class AndroidBackend final : public TransportBackend {
     public:
       using Callback = USB::Callback;
       using EnumerateResult = USB::Backend::EnumerateResult;
@@ -76,18 +53,20 @@ namespace oro::runtime::core::services::usb {
       using InterfaceDescriptor = USB::Backend::InterfaceDescriptor;
 
       explicit AndroidBackend(USB& svc)
-        : service(svc) {
-        g_backend = this;
+        : TransportBackend(svc) {
+        libusb_init_option option{};
+        option.option = LIBUSB_OPTION_NO_DEVICE_DISCOVERY;
+        libusb_init_context(&ctx, &option, 1);
       }
 
-      ~AndroidBackend() override {
-        if (g_backend == this) {
-          g_backend = nullptr;
-        }
+      void disconnectClient (uint64_t client) override {
+        TransportBackend::disconnectClient(client);
+        Lock lock(this->mutex);
+        if (pendingChooser && pendingChooser->client == client) pendingChooser.reset();
       }
 
-      void getDevices(const String& seq, const Callback cb) override {
-        this->enumerateDevices([cb, seq](const EnumerateResult& result) {
+      void getDevices(const USB::Request& seq, const Callback cb) override {
+        this->enumerateDevices([this, cb, seq](const EnumerateResult& result) {
           if (!result.ok) {
             cb(seq, result.error, oro::runtime::QueuedResponse{});
             return;
@@ -96,7 +75,8 @@ namespace oro::runtime::core::services::usb {
           JSON::Array::Entries devices;
           devices.reserve(result.devices.size());
           for (const auto& descriptor : result.devices) {
-            devices.push_back(descriptorToJson(descriptor));
+            if (!descriptor.authorized) continue;
+            devices.push_back(describeDevice(descriptor, seq));
           }
 
           cb(seq, JSON::Object::Entries {{
@@ -105,7 +85,7 @@ namespace oro::runtime::core::services::usb {
         });
       }
 
-      void requestDevice(const String& seq, const USB::RequestDeviceOptions& options, const Callback cb) override {
+      void requestDevice(const USB::Request& seq, const USB::RequestDeviceOptions& options, const Callback cb) override {
         if (!this->service.context.getRuntime()->hasPermission("usb")) {
           cb(seq, makeErrorObject("NotAllowedError", "USB runtime permission disabled"), oro::runtime::QueuedResponse{});
           return;
@@ -127,7 +107,7 @@ namespace oro::runtime::core::services::usb {
           Set<String> seen;
 
           for (const auto& descriptor : result.devices) {
-            bool matches = options.acceptAllDevices;
+            bool matches = options.acceptAllDevices || options.filters.empty();
             if (!options.acceptAllDevices) {
               for (const auto& filter : options.filters) {
                 if (filterMatches(filter, descriptor)) {
@@ -137,7 +117,8 @@ namespace oro::runtime::core::services::usb {
               }
             }
 
-            if (!matches) {
+            if (!matches || std::any_of(options.exclusionFilters.begin(), options.exclusionFilters.end(),
+                  [&](const auto& filter) { return filterMatches(filter, descriptor); })) {
               continue;
             }
 
@@ -153,20 +134,8 @@ namespace oro::runtime::core::services::usb {
             return;
           }
 
-          if (candidates.size() == 1) {
-            auto selected = candidates.front();
-            if (selected.authorized) {
-              this->authorizeDevice(selected.deviceId);
-              JSON::Object::Entries data = {{"device", descriptorToJson(selected)}};
-              cb(seq, JSON::Object::Entries {{"data", data}}, oro::runtime::QueuedResponse{});
-              return;
-            }
-
-            if (this->requestPermissionForDevice(seq, cb, selected)) {
-              return;
-            }
-
-            cb(seq, makeErrorObject("NotAllowedError", "Unable to request USB permission"), oro::runtime::QueuedResponse{});
+          if (std::any_of(candidates.begin(), candidates.end(), [](const auto& device) { return !device.authorized; })) {
+            requestPermissionForDevices(seq, cb, candidates);
             return;
           }
 
@@ -178,6 +147,7 @@ namespace oro::runtime::core::services::usb {
             }
 
             RequestState state;
+            state.client = seq.client;
             state.pending = candidates;
             this->pendingChooser = std::move(state);
           }
@@ -198,63 +168,40 @@ namespace oro::runtime::core::services::usb {
         });
       }
 
-      void forgetDevice(const String& seq, const String& deviceId, const Callback cb) override {
-        {
-          Lock lock(this->mutex);
-          this->authorizedDevices.erase(deviceId);
+      void forgetDevice(const USB::Request& seq, const String& deviceId, const Callback cb) override {
+        enqueue([this, seq, cb, deviceId] {
+          revokeDevice(deviceId);
+          sessions.erase(deviceId);
+          cb(seq, makeOkObject(), {});
+        });
+      }
+
+      int openDevice (const String& deviceId, Session& session) override {
+        auto app = oro::runtime::app::App::sharedApplication();
+        if (!app || !ctx) return LIBUSB_ERROR_NO_DEVICE;
+        auto& android = app->runtime.android;
+        android::JNIEnvironmentAttachment attachment(android.jvm);
+        if (!attachment.env) return LIBUSB_ERROR_OTHER;
+        auto env = attachment.env;
+        const auto cls = env->GetObjectClass(android.activity);
+        const auto method = env->GetMethodID(cls, "openUSBFileDescriptor", "(Ljava/lang/String;)I");
+        const auto id = android::StringWrap(env, deviceId).j_str();
+        session.fd = method ? env->CallIntMethod(android.activity, method, id) : -1;
+        env->DeleteLocalRef(id);
+        env->DeleteLocalRef(cls);
+        if (env->ExceptionCheck()) {
+          env->ExceptionClear();
+          return LIBUSB_ERROR_ACCESS;
         }
-        cb(seq, makeOkObject(), oro::runtime::QueuedResponse{});
-      }
-
-      void open(const String& seq, const String&, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB transfer APIs are not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void close(const String& seq, const String&, const Callback cb) override {
-        cb(seq, makeOkObject(), oro::runtime::QueuedResponse{});
-      }
-
-      void selectConfiguration(const String& seq, const String&, uint8_t, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB configuration selection is not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void claimInterface(const String& seq, const String&, uint8_t, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB interface claims are not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void releaseInterface(const String& seq, const String&, uint8_t, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB interface release is not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void selectAlternateInterface(const String& seq, const String&, uint8_t, uint8_t, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB alternate interface selection is not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void controlTransferIn(const String& seq, const String&, const JSON::Any&, uint32_t, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB controlTransferIn is not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void controlTransferOut(const String& seq, const String&, const JSON::Any&, const bytes::Buffer&, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB controlTransferOut is not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void transferIn(const String& seq, const String&, uint8_t, uint32_t, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB transferIn is not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void transferOut(const String& seq, const String&, uint8_t, const bytes::Buffer&, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB transferOut is not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void clearHalt(const String& seq, const String&, uint8_t, bool, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB clearHalt is not yet available on Android"), oro::runtime::QueuedResponse{});
-      }
-
-      void reset(const String& seq, const String&, const Callback cb) override {
-        cb(seq, makeErrorObject("NotSupportedError", "USB reset is not yet available on Android"), oro::runtime::QueuedResponse{});
+        if (session.fd < 0) return LIBUSB_ERROR_ACCESS;
+        return libusb_wrap_sys_device(ctx, session.fd, &session.handle);
       }
 
       void enumerateDevices(Function<void(const EnumerateResult&)> completion) override {
+        enqueue([this, completion] { enumerateOnWorker(completion); });
+      }
+
+      void enumerateOnWorker (Function<void(const EnumerateResult&)> completion) {
         auto app = oro::runtime::app::App::sharedApplication();
         if (!app) {
           completion(EnumerateResult{
@@ -274,7 +221,7 @@ namespace oro::runtime::core::services::usb {
           return;
         }
 
-        jclass cls = attachment.env->FindClass("oro/runtime/usb/USBPlatform");
+        jclass cls = attachment.env->GetObjectClass(android.activity);
         if (!cls) {
           attachment.printException();
           completion(EnumerateResult{
@@ -284,10 +231,10 @@ namespace oro::runtime::core::services::usb {
           return;
         }
 
-        jmethodID enumerate = attachment.env->GetStaticMethodID(
+        jmethodID enumerate = attachment.env->GetMethodID(
           cls,
-          "enumerate",
-          "(Landroid/content/Context;)Ljava/lang/String;"
+          "enumerateUSB",
+          "()Ljava/lang/String;"
         );
 
         if (!enumerate) {
@@ -300,10 +247,9 @@ namespace oro::runtime::core::services::usb {
           return;
         }
 
-        const auto resultString = (jstring) attachment.env->CallStaticObjectMethod(
-          cls,
-          enumerate,
-          android.activity
+        const auto resultString = (jstring) attachment.env->CallObjectMethod(
+          android.activity,
+          enumerate
         );
 
         bool hadException = attachment.hasException();
@@ -347,7 +293,7 @@ namespace oro::runtime::core::services::usb {
               }
               const auto& obj = entry.as<JSON::Object>();
               DeviceDescriptor descriptor;
-              descriptor.deviceId = obj.get("deviceId").str();
+              descriptor.deviceId = obj.get("deviceId").as<JSON::String>().value();
               descriptor.vendorId = static_cast<uint16_t>(obj.get("vendorId").as<JSON::Number>().value());
               descriptor.productId = static_cast<uint16_t>(obj.get("productId").as<JSON::Number>().value());
               descriptor.classCode = static_cast<uint8_t>(obj.get("classCode").as<JSON::Number>().value());
@@ -360,13 +306,22 @@ namespace oro::runtime::core::services::usb {
                 } else if (authorized.type == JSON::Type::Number) {
                   descriptor.authorized = authorized.as<JSON::Number>().value() != 0;
                 } else if (authorized.type == JSON::Type::String) {
-                  const auto str = authorized.str();
+                  const auto str = authorized.as<JSON::String>().value();
                   descriptor.authorized = str == "1" || str == "true" || str == "TRUE";
                 } else {
                   descriptor.authorized = false;
                 }
               } else {
                 descriptor.authorized = false;
+              }
+              descriptor.authorized = descriptor.authorized && isDeviceAuthorized(descriptor.deviceId);
+              descriptor.productName = obj.get("productName").as<JSON::String>().value();
+              descriptor.manufacturerName = obj.get("manufacturerName").as<JSON::String>().value();
+              descriptor.serialNumber = obj.get("serialNumber").as<JSON::String>().value();
+              descriptor.deviceVersion = obj.get("deviceVersion").as<JSON::Number>().value();
+              descriptor.configurationNames = obj.get("configurationNames").as<JSON::Object>();
+              for (const auto& value : obj.get("configurations").as<JSON::Array>()) {
+                descriptor.configurations.push_back(value.as<JSON::Number>().value());
               }
               descriptor.busNumber = 0;
               descriptor.deviceAddress = 0;
@@ -384,11 +339,14 @@ namespace oro::runtime::core::services::usb {
                   iface.classCode = static_cast<uint8_t>(ifaceObj.get("classCode").as<JSON::Number>().value());
                   iface.subclassCode = static_cast<uint8_t>(ifaceObj.get("subclassCode").as<JSON::Number>().value());
                   iface.protocolCode = static_cast<uint8_t>(ifaceObj.get("protocolCode").as<JSON::Number>().value());
+                  iface.configurationValue = ifaceObj.get("configurationValue").as<JSON::Number>().value();
+                  iface.interfaceName = ifaceObj.get("interfaceName").as<JSON::String>().value();
+                  iface.endpoints = ifaceObj.get("endpoints").as<JSON::Array>();
                   descriptor.interfaces.push_back(iface);
                 }
               }
 
-              output.devices.push_back(descriptor);
+              if (!isBlockedUSBDevice(descriptor.vendorId, descriptor.productId)) output.devices.push_back(descriptor);
             }
           }
         } catch (...) {
@@ -396,6 +354,23 @@ namespace oro::runtime::core::services::usb {
           output.error = makeErrorObject("OperationError", "Failed to parse USB enumeration result");
         }
 
+        if (output.ok) {
+          Vector<DeviceDescriptor> added, removed;
+          Map<String, DeviceDescriptor> current;
+          for (const auto& device : output.devices) {
+            current.emplace(device.deviceId, device);
+            if (!knownDevices.contains(device.deviceId)) added.push_back(device);
+          }
+          for (const auto& [id, device] : knownDevices) {
+            if (!current.contains(id) || (device.authorized && !current.at(id).authorized)) {
+              removed.push_back(device);
+              sessions.erase(id);
+              revokeDevice(id);
+            }
+          }
+          knownDevices = std::move(current);
+          emitChanges(std::move(added), std::move(removed));
+        }
         completion(output);
       }
 
@@ -415,11 +390,11 @@ namespace oro::runtime::core::services::usb {
         this->authorizedDevices.erase(deviceId);
       }
 
-      void chooseDevice(const String& seq, const USB::DeviceSelection& selection, const Callback cb) override {
+      void chooseDevice(const USB::Request& seq, const USB::DeviceSelection& selection, const Callback cb) override {
         RequestState request;
         {
           Lock lock(this->mutex);
-          if (!this->pendingChooser.has_value()) {
+          if (!this->pendingChooser || this->pendingChooser->client != seq.client) {
             cb(seq, makeErrorObject("InvalidStateError", "No pending usb.requestDevice"), oro::runtime::QueuedResponse{});
             return;
           }
@@ -436,24 +411,14 @@ namespace oro::runtime::core::services::usb {
           return;
         }
 
-        auto selected = *it;
-        if (selected.authorized) {
-          this->authorizeDevice(selected.deviceId);
-          JSON::Object::Entries data = {{"device", descriptorToJson(selected)}};
-          cb(seq, JSON::Object::Entries {{"data", data}}, oro::runtime::QueuedResponse{});
-          return;
-        }
-
-        if (!this->requestPermissionForDevice(seq, cb, selected)) {
-          cb(seq, makeErrorObject("NotAllowedError", "Unable to request USB permission"), oro::runtime::QueuedResponse{});
-        }
+        requestPermissionForDevices(seq, cb, {*it});
       }
 
-      void cancelRequest(const String& seq, const Callback cb) override {
+      void cancelRequest(const USB::Request& seq, const Callback cb) override {
         RequestState request;
         {
           Lock lock(this->mutex);
-          if (!this->pendingChooser.has_value()) {
+          if (!this->pendingChooser || this->pendingChooser->client != seq.client) {
             cb(seq, makeErrorObject("InvalidStateError", "No pending usb.requestDevice"), oro::runtime::QueuedResponse{});
             return;
           }
@@ -461,7 +426,7 @@ namespace oro::runtime::core::services::usb {
           this->pendingChooser.reset();
         }
 
-        cb(seq, makeErrorObject("AbortError", "USB device request cancelled"), oro::runtime::QueuedResponse{});
+        cb(seq, makeOkObject(), oro::runtime::QueuedResponse{});
       }
 
       void handlePermissionResult(uint64_t requestId, const String& deviceId, bool granted) {
@@ -481,30 +446,47 @@ namespace oro::runtime::core::services::usb {
           return;
         }
 
-        this->service.queue.push([this, pending = std::move(pending), granted]() mutable {
-          if (granted) {
-            this->authorizeDevice(pending.device.deviceId);
-            pending.device.authorized = true;
-            JSON::Object::Entries data = {{"device", descriptorToJson(pending.device)}};
-            pending.callback(pending.seq, JSON::Object::Entries {{"data", data}}, oro::runtime::QueuedResponse{});
-          } else {
-            pending.callback(pending.seq, makeErrorObject("NotAllowedError", "User denied USB permission"), oro::runtime::QueuedResponse{});
+        enqueue([this, pending = std::move(pending), deviceId, granted]() mutable {
+          const auto it = std::find_if(pending.devices.begin(), pending.devices.end(),
+            [&](const auto& device) { return device.deviceId == deviceId; });
+          if (!granted || it == pending.devices.end()) {
+            pending.callback(pending.seq, makeErrorObject("NotFoundError", "No USB device selected"), {});
+            return;
           }
+          auto app = oro::runtime::app::App::sharedApplication();
+          const auto window = app ? app->runtime.windowManager.getWindow(pending.seq.window) : nullptr;
+          if (!window || !window->bridge || window->bridge->usbDocument.load() != pending.seq.client ||
+              !app->runtime.hasPermission("usb")) {
+            pending.callback(pending.seq, makeErrorObject("SecurityError", "USB requester has navigated"), {});
+            return;
+          }
+          authorizeDevice(deviceId);
+          enumerateOnWorker([&, this](const auto& result) {
+            const auto current = std::find_if(result.devices.begin(), result.devices.end(),
+              [&](const auto& device) { return device.deviceId == deviceId && device.authorized; });
+            if (!result.ok || current == result.devices.end()) {
+              revokeDevice(deviceId);
+              pending.callback(pending.seq, makeErrorObject("NotFoundError", "Selected device disconnected"), {});
+              return;
+            }
+            pending.callback(pending.seq, JSON::Object::Entries{{"data", JSON::Object::Entries{{"device", descriptorToJson(*current)}}}}, {});
+          });
         });
       }
 
     private:
       struct RequestState {
+        uint64_t client = 0;
         Vector<DeviceDescriptor> pending;
       };
 
       struct PendingPermission {
-        String seq;
+        USB::Request seq;
         Callback callback;
-        DeviceDescriptor device;
+        Vector<DeviceDescriptor> devices;
       };
 
-      bool requestPermissionForDevice(const String& seq, const Callback& cb, const DeviceDescriptor& descriptor) {
+      bool requestPermissionForDevices(const USB::Request& seq, const Callback& cb, const Vector<DeviceDescriptor>& candidates) {
         auto app = oro::runtime::app::App::sharedApplication();
         if (!app) {
           cb(seq, makeErrorObject("InvalidStateError", "Application unavailable"), oro::runtime::QueuedResponse{});
@@ -518,17 +500,17 @@ namespace oro::runtime::core::services::usb {
           return false;
         }
 
-        jclass cls = attachment.env->FindClass("oro/runtime/usb/USBPlatform");
+        jclass cls = attachment.env->GetObjectClass(android.activity);
         if (!cls) {
           attachment.printException();
           cb(seq, makeErrorObject("OperationError", "USBPlatform class not found"), oro::runtime::QueuedResponse{});
           return false;
         }
 
-        jmethodID requestPermission = attachment.env->GetStaticMethodID(
+        jmethodID requestPermission = attachment.env->GetMethodID(
           cls,
-          "requestPermission",
-          "(Landroid/content/Context;J[Ljava/lang/String;)V"
+          "requestUSBPermission",
+          "(J[Ljava/lang/String;)V"
         );
 
         if (!requestPermission) {
@@ -546,7 +528,7 @@ namespace oro::runtime::core::services::usb {
           return false;
         }
 
-        jobjectArray array = attachment.env->NewObjectArray(1, stringClass, nullptr);
+        jobjectArray array = attachment.env->NewObjectArray(candidates.size(), stringClass, nullptr);
         if (!array) {
           attachment.env->DeleteLocalRef(stringClass);
           attachment.env->DeleteLocalRef(cls);
@@ -554,32 +536,25 @@ namespace oro::runtime::core::services::usb {
           return false;
         }
 
-        jstring deviceIdString = android::StringWrap(attachment.env, descriptor.deviceId).j_str();
-        if (!deviceIdString) {
-          attachment.env->DeleteLocalRef(array);
-          attachment.env->DeleteLocalRef(stringClass);
-          attachment.env->DeleteLocalRef(cls);
-          cb(seq, makeErrorObject("OperationError", "Unable to encode device identifier"), oro::runtime::QueuedResponse{});
-          return false;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+          auto id = android::StringWrap(attachment.env, candidates[i].deviceId).j_str();
+          attachment.env->SetObjectArrayElement(array, i, id);
+          attachment.env->DeleteLocalRef(id);
         }
 
-        attachment.env->SetObjectArrayElement(array, 0, deviceIdString);
-        attachment.env->DeleteLocalRef(deviceIdString);
-
-        uint64_t requestId = this->nextPermissionRequestId.fetch_add(1, std::memory_order_relaxed);
+        uint64_t requestId = nextPermissionRequestId.fetch_add(1, std::memory_order_relaxed);
         {
           Lock lock(this->mutex);
           this->pendingPermissions[requestId] = PendingPermission{
             .seq = seq,
             .callback = cb,
-            .device = descriptor
+            .devices = candidates
           };
         }
 
-        attachment.env->CallStaticVoidMethod(
-          cls,
-          requestPermission,
+        attachment.env->CallVoidMethod(
           android.activity,
+          requestPermission,
           static_cast<jlong>(requestId),
           array
         );
@@ -604,12 +579,11 @@ namespace oro::runtime::core::services::usb {
         return true;
       }
 
-      USB& service;
       mutable Mutex mutex;
       Set<String> authorizedDevices;
+      Map<String, DeviceDescriptor> knownDevices;
       std::optional<RequestState> pendingChooser;
       std::unordered_map<uint64_t, PendingPermission> pendingPermissions;
-      std::atomic<uint64_t> nextPermissionRequestId {1};
   };
 
   extern "C" void ANDROID_EXTERNAL(usb, USBPlatform, onPermissionResult) (
@@ -619,15 +593,20 @@ namespace oro::runtime::core::services::usb {
     jstring deviceIdString,
     jboolean granted
   ) {
-    if (!g_backend) {
+    Lock lock(activeBackendMutex);
+    auto backend = activeBackend.lock();
+    if (!backend) {
       return;
     }
     const String deviceId = android::StringWrap(env, deviceIdString).str();
-    g_backend->handlePermissionResult(static_cast<uint64_t>(requestId), deviceId, granted == JNI_TRUE);
+    backend->handlePermissionResult(static_cast<uint64_t>(requestId), deviceId, granted == JNI_TRUE);
   }
 
-  std::unique_ptr<USB::Backend> makeUSBBackend(USB& service) {
-    return std::make_unique<AndroidBackend>(service);
+  std::shared_ptr<USB::Backend> makeUSBBackend(USB& service) {
+    auto backend = std::make_shared<AndroidBackend>(service);
+    Lock lock(activeBackendMutex);
+    activeBackend = backend;
+    return backend;
   }
 }
 
@@ -657,49 +636,49 @@ namespace oro::runtime::core::services::usb {
       using Callback = USB::Callback;
       using EnumerateResult = USB::Backend::EnumerateResult;
 
-      void getDevices(const String& seq, const Callback cb) override {
+      void getDevices(const USB::Request& seq, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void requestDevice(const String& seq, const USB::RequestDeviceOptions&, const Callback cb) override {
+      void requestDevice(const USB::Request& seq, const USB::RequestDeviceOptions&, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void forgetDevice(const String& seq, const String&, const Callback cb) override {
+      void forgetDevice(const USB::Request& seq, const String&, const Callback cb) override {
         cb(seq, makeOkObject(), oro::runtime::QueuedResponse{});
       }
-      void open(const String& seq, const String&, const Callback cb) override {
+      void open(const USB::Request& seq, const String&, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void close(const String& seq, const String&, const Callback cb) override {
+      void close(const USB::Request& seq, const String&, const Callback cb) override {
         cb(seq, makeOkObject(), oro::runtime::QueuedResponse{});
       }
-      void selectConfiguration(const String& seq, const String&, uint8_t, const Callback cb) override {
+      void selectConfiguration(const USB::Request& seq, const String&, uint8_t, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void claimInterface(const String& seq, const String&, uint8_t, const Callback cb) override {
+      void claimInterface(const USB::Request& seq, const String&, uint8_t, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void releaseInterface(const String& seq, const String&, uint8_t, const Callback cb) override {
+      void releaseInterface(const USB::Request& seq, const String&, uint8_t, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void selectAlternateInterface(const String& seq, const String&, uint8_t, uint8_t, const Callback cb) override {
+      void selectAlternateInterface(const USB::Request& seq, const String&, uint8_t, uint8_t, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void controlTransferIn(const String& seq, const String&, const JSON::Any&, uint32_t, const Callback cb) override {
+      void controlTransferIn(const USB::Request& seq, const String&, const JSON::Any&, uint32_t, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void controlTransferOut(const String& seq, const String&, const JSON::Any&, const bytes::Buffer&, const Callback cb) override {
+      void controlTransferOut(const USB::Request& seq, const String&, const JSON::Any&, const bytes::Buffer&, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void transferIn(const String& seq, const String&, uint8_t, uint32_t, const Callback cb) override {
+      void transferIn(const USB::Request& seq, const String&, uint8_t, uint32_t, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void transferOut(const String& seq, const String&, uint8_t, const bytes::Buffer&, const Callback cb) override {
+      void transferOut(const USB::Request& seq, const String&, uint8_t, const bytes::Buffer&, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void clearHalt(const String& seq, const String&, uint8_t, bool, const Callback cb) override {
+      void clearHalt(const USB::Request& seq, const String&, uint8_t, bool, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void reset(const String& seq, const String&, const Callback cb) override {
+      void reset(const USB::Request& seq, const String&, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
       void enumerateDevices(Function<void(const EnumerateResult&)> completion) override {
@@ -713,16 +692,16 @@ namespace oro::runtime::core::services::usb {
       }
       void revokeDevice(const String&) override {
       }
-      void chooseDevice(const String& seq, const USB::DeviceSelection&, const Callback cb) override {
+      void chooseDevice(const USB::Request& seq, const USB::DeviceSelection&, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
-      void cancelRequest(const String& seq, const Callback cb) override {
+      void cancelRequest(const USB::Request& seq, const Callback cb) override {
         cb(seq, makeUnsupportedError(), oro::runtime::QueuedResponse{});
       }
   };
 
-  std::unique_ptr<USB::Backend> makeUSBBackend(USB&) {
-    return std::make_unique<IOSBackend>();
+  std::shared_ptr<USB::Backend> makeUSBBackend(USB&) {
+    return std::make_shared<IOSBackend>();
   }
 }
 
@@ -731,6 +710,7 @@ namespace oro::runtime::core::services::usb {
 #include "../../../json.hh"
 #include "../../../string.hh"
 #include "../../../bytes.hh"
+#include "../../../native/unicode.hh"
 #include "../../../debug.hh"
 #include "../../../app.hh"
 #include "../../services.hh"
@@ -754,6 +734,7 @@ namespace oro::runtime::core::services::usb {
       JSON::Object json = JSON::Object::Entries {{
         {"err", JSON::Object::Entries {{
           {"type", String(type)},
+          {"name", String(type)},
           {"message", message}
         }}}
       }};
@@ -767,70 +748,42 @@ namespace oro::runtime::core::services::usb {
       return JSON::Object::Entries {{ "data", JSON::Object::Entries {{ "ok", true }} }};
     }
 
+    constexpr const char* endpointTypes[] = {"control", "isochronous", "bulk", "interrupt"};
+
     String makeAddressDeviceId(uint8_t bus, uint8_t address) {
       return String(std::to_string(bus)) + ":" + std::to_string(address);
     }
 
-    String sanitizeDescriptorString(const unsigned char* data, int length) {
-      if (length <= 0) {
-        return {};
-      }
+    struct DescriptorStrings {
+      std::unique_ptr<libusb_device_handle, decltype(&libusb_close)> handle{nullptr, libusb_close};
+      uint16_t language = 0;
 
-      static const char hexDigits[] = "0123456789abcdef";
-      String result;
-      result.reserve(static_cast<size_t>(length));
-
-      bool allPrintable = true;
-      for (int idx = 0; idx < length; ++idx) {
-        const unsigned char ch = data[idx];
-        if (ch < 0x20 || ch > 0x7Eu || ch == ':') {
-          allPrintable = false;
-          break;
+      explicit DescriptorStrings (libusb_device* device) {
+        libusb_device_handle* raw = nullptr;
+        if (libusb_open(device, &raw) != LIBUSB_SUCCESS) return;
+        handle.reset(raw);
+        unsigned char languages[256]{};
+        if (libusb_get_string_descriptor(raw, 0, 0, languages, sizeof(languages)) >= 4) {
+          language = languages[2] | (languages[3] << 8);
         }
       }
 
-      if (allPrintable) {
-        for (int idx = 0; idx < length; ++idx) {
-          const unsigned char ch = data[idx];
-          if (ch == ':') {
-            result.push_back('-');
-          } else {
-            result.push_back(static_cast<char>(ch));
-          }
+      String read (uint8_t index) const {
+        if (!index || !language) return {};
+        unsigned char buffer[256]{};
+        const int length = libusb_get_string_descriptor(handle.get(), index, language, buffer, sizeof(buffer));
+        if (length < 2 || buffer[1] != LIBUSB_DT_STRING || buffer[0] > length || buffer[0] % 2) return {};
+        std::u16string text;
+        for (unsigned i = 2; i < buffer[0]; i += 2) text.push_back(buffer[i] | (buffer[i + 1] << 8));
+        try {
+          return native::nativeUtf8(text);
+        } catch (const std::exception&) {
+          return {};
         }
-        return result;
       }
+    };
 
-      result.reserve(static_cast<size_t>(length) * 2);
-      for (int idx = 0; idx < length; ++idx) {
-        const unsigned char ch = data[idx];
-        result.push_back(hexDigits[(ch >> 4) & 0x0F]);
-        result.push_back(hexDigits[ch & 0x0F]);
-      }
-      return result;
-    }
-
-    String readStringDescriptor(libusb_device* device, uint8_t index) {
-      if (!device || index == 0) {
-        return {};
-      }
-
-      libusb_device_handle* handle = nullptr;
-      const int openResult = libusb_open(device, &handle);
-      if (openResult != LIBUSB_SUCCESS) {
-        return {};
-      }
-
-      unsigned char buffer[255];
-      const int length = libusb_get_string_descriptor_ascii(handle, index, buffer, sizeof(buffer));
-      libusb_close(handle);
-      if (length <= 0) {
-        return {};
-      }
-      return sanitizeDescriptorString(buffer, length);
-    }
-
-    String makeStableDeviceId(libusb_device* device, const libusb_device_descriptor& desc) {
+    String makeStableDeviceId (libusb_device* device, const libusb_device_descriptor& desc, const String& serial) {
       Vector<String> segments;
       segments.reserve(5);
       segments.push_back("usb");
@@ -843,6 +796,7 @@ namespace oro::runtime::core::services::usb {
         for (int idx = 0; idx < portCount; ++idx) {
           portParts.push_back(String(std::to_string(static_cast<unsigned>(ports[idx]))));
         }
+        segments.push_back(std::to_string(libusb_get_bus_number(device)));
         segments.push_back(String("port-") + oro::runtime::string::join(portParts, "."));
       } else {
         const uint8_t bus = libusb_get_bus_number(device);
@@ -857,10 +811,11 @@ namespace oro::runtime::core::services::usb {
       segments.push_back(String("vid") + vendorBuf);
       segments.push_back(String("pid") + productBuf);
 
-      if (const auto serial = readStringDescriptor(device, desc.iSerialNumber); !serial.empty()) {
-        segments.push_back(String("ser") + serial);
+      if (!serial.empty()) {
+        return String("usb:vid") + vendorBuf + ":pid" + productBuf + ":ser" + bytes::encodeHexString(serial);
       }
 
+      segments.push_back(std::to_string(crypto::rand64()));
       return oro::runtime::string::join(segments, ":");
     }
 
@@ -870,45 +825,15 @@ namespace oro::runtime::core::services::usb {
       return makeErrorObject("OperationError", message, code);
     }
 
-    bool parseUint(const JSON::Any& any, uint32_t& out) {
-      try {
-        switch (any.type) {
-          case JSON::Type::Number:
-            out = static_cast<uint32_t>(any.as<JSON::Number>().value());
-            return true;
-          case JSON::Type::String:
-            out = static_cast<uint32_t>(std::stoul(any.str(), nullptr, 0));
-            return true;
-          case JSON::Type::Boolean:
-            out = any.as<JSON::Boolean>().value() ? 1u : 0u;
-            return true;
-          default:
-            break;
-        }
-      } catch (...) {
-      }
-      return false;
-    }
 
-    bool parseUint8(const JSON::Any& any, uint8_t& out) {
-      uint32_t tmp = 0;
-      if (!parseUint(any, tmp)) {
-        return false;
-      }
-      if (tmp > 0xFFu) {
-        return false;
-      }
-      out = static_cast<uint8_t>(tmp & 0xFFu);
-      return true;
-    }
   }
 
-  class LibusbBackend final : public USB::Backend {
+  class LibusbBackend final : public TransportBackend {
     public:
       using Callback = USB::Callback;
 
       explicit LibusbBackend(USB& svc)
-        : service(svc) {
+        : TransportBackend(svc) {
         const int rc = libusb_init(&this->ctx);
         if (rc != 0) {
           this->ctx = nullptr;
@@ -922,9 +847,8 @@ namespace oro::runtime::core::services::usb {
       }
 
       ~LibusbBackend() override {
-        UniqueLock lock(this->mutex);
+        Lock lock(this->mutex);
         for (auto& entry : this->devices) {
-          this->closeUnlocked(entry.second);
           if (entry.second.device) {
             libusb_unref_device(entry.second.device);
             entry.second.device = nullptr;
@@ -932,15 +856,15 @@ namespace oro::runtime::core::services::usb {
         }
         this->devices.clear();
         this->authorizedDevices.clear();
-        lock.unlock();
-
-        if (this->ctx != nullptr) {
-          libusb_exit(this->ctx);
-          this->ctx = nullptr;
-        }
       }
 
-      void getDevices(const String& seq, const Callback cb) override {
+      void disconnectClient (uint64_t client) override {
+        TransportBackend::disconnectClient(client);
+        Lock lock(this->mutex);
+        if (pendingRequest && pendingRequest->client == client) pendingRequest.reset();
+      }
+
+      void getDevices(const USB::Request& seq, const Callback cb) override {
         this->enumerateDevices([this, seq, cb](const EnumerateResult& result) {
           if (!result.ok) {
             cb(seq, result.error, QueuedResponse{});
@@ -953,7 +877,7 @@ namespace oro::runtime::core::services::usb {
             if (!descriptor.authorized) {
               continue;
             }
-            devicesJson.push_back(descriptorToJson(descriptor));
+            devicesJson.push_back(describeDevice(descriptor, seq));
           }
 
           JSON::Object::Entries payload = {
@@ -963,7 +887,7 @@ namespace oro::runtime::core::services::usb {
         });
       }
 
-      void requestDevice(const String& seq, const USB::RequestDeviceOptions& options, const Callback cb) override {
+      void requestDevice(const USB::Request& seq, const USB::RequestDeviceOptions& options, const Callback cb) override {
         if (!this->service.context.getRuntime()->hasPermission("usb")) {
           cb(seq, makeErrorObject("NotAllowedError", "USB runtime permission disabled"), QueuedResponse{});
           return;
@@ -985,7 +909,7 @@ namespace oro::runtime::core::services::usb {
           Set<String> seen;
 
           for (const auto& descriptor : result.devices) {
-            bool matches = options.acceptAllDevices;
+            bool matches = options.acceptAllDevices || options.filters.empty();
             if (!options.acceptAllDevices) {
               for (const auto& filter : options.filters) {
                 if (filterMatches(filter, descriptor)) {
@@ -995,7 +919,8 @@ namespace oro::runtime::core::services::usb {
               }
             }
 
-            if (!matches) {
+            if (!matches || std::any_of(options.exclusionFilters.begin(), options.exclusionFilters.end(),
+                  [&](const auto& filter) { return filterMatches(filter, descriptor); })) {
               continue;
             }
 
@@ -1011,13 +936,8 @@ namespace oro::runtime::core::services::usb {
             return;
           }
 
-          if (candidates.size() == 1) {
-            auto selected = candidates.front();
-            this->authorizeDevice(selected.deviceId);
-            selected.authorized = true;
-
-            JSON::Object::Entries data = {{"device", descriptorToJson(selected)}};
-            cb(seq, JSON::Object::Entries {{"data", data}}, QueuedResponse{});
+          if (std::any_of(candidates.begin(), candidates.end(), [](const auto& device) { return !device.authorized; })) {
+            presentDevices(seq, cb, candidates);
             return;
           }
 
@@ -1029,6 +949,7 @@ namespace oro::runtime::core::services::usb {
             }
 
             RequestState state;
+            state.client = seq.client;
             state.pending = candidates;
             this->pendingRequest = std::move(state);
           }
@@ -1049,13 +970,15 @@ namespace oro::runtime::core::services::usb {
         });
       }
 
-      void forgetDevice(const String& seq, const String& deviceId, const Callback cb) override {
-        this->service.queue.push([this, seq, cb, deviceId]() {
-          bool authorizationChanged = false;
+      void forgetDevice(const USB::Request& seq, const String& deviceId, const Callback cb) override {
+        enqueue([this, seq, cb, deviceId]() {
+          if (!this->setAuthorization(deviceId, false)) {
+            return cb(seq, makeErrorObject("OperationError", "Could not remove the saved USB device permission"), {});
+          }
           {
             Lock lock(this->mutex);
             if (auto it = this->devices.find(deviceId); it != this->devices.end()) {
-              this->closeUnlocked(it->second);
+              sessions.erase(deviceId);
               if (it->second.device) {
                 libusb_unref_device(it->second.device);
                 it->second.device = nullptr;
@@ -1063,368 +986,20 @@ namespace oro::runtime::core::services::usb {
               this->devices.erase(it);
             }
 
-            authorizationChanged = this->authorizedDevices.erase(deviceId) > 0;
             this->knownDescriptors.erase(deviceId);
           }
-          if (authorizationChanged) {
-            this->persistAuthorizedToState();
-          }
           cb(seq, makeOkObject(), QueuedResponse{});
         });
       }
 
-      void open(const String& seq, const String& deviceId, const Callback cb) override {
-        if (!this->service.context.getRuntime()->hasPermission("usb")) {
-          cb(seq, makeErrorObject("NotAllowedError", "USB runtime permission disabled"), QueuedResponse{});
-          return;
-        }
-
-        this->service.queue.push([this, seq, cb, deviceId]() {
-          if (!this->ctx) {
-            cb(seq, makeErrorObject("NotSupportedError", "libusb context unavailable"), QueuedResponse{});
-            return;
-          }
-
-          libusb_device* device = nullptr;
-          {
-            Lock lock(this->mutex);
-            auto it = this->devices.find(deviceId);
-            if (it == this->devices.end()) {
-              cb(seq, makeErrorObject("NotFoundError", String("Unknown device ") + deviceId), QueuedResponse{});
-              return;
-            }
-            if (!this->authorizedDevices.count(deviceId)) {
-              cb(seq, makeErrorObject("SecurityError", String("Device ") + deviceId + " not authorized"), QueuedResponse{});
-              return;
-            }
-            if (it->second.handle != nullptr) {
-              cb(seq, makeOkObject(), QueuedResponse{});
-              return;
-            }
-            device = it->second.device;
-            if (device == nullptr) {
-              cb(seq, makeErrorObject("InvalidStateError", "Device pointer missing"), QueuedResponse{});
-              return;
-            }
-            libusb_ref_device(device);
-          }
-
-          libusb_device_handle* handle = nullptr;
-          const int rc = libusb_open(device, &handle);
-          libusb_unref_device(device);
-          if (rc != 0) {
-            cb(seq, makeLibusbError("libusb_open", rc), QueuedResponse{});
-            return;
-          }
-
-          {
-            Lock lock(this->mutex);
-            auto it = this->devices.find(deviceId);
-            if (it == this->devices.end()) {
-              libusb_close(handle);
-              cb(seq, makeErrorObject("NotFoundError", String("Unknown device ") + deviceId), QueuedResponse{});
-              return;
-            }
-            if (it->second.handle) {
-              libusb_close(handle);
-            } else {
-              it->second.handle = handle;
-            }
-          }
-
-          cb(seq, makeOkObject(), QueuedResponse{});
-        });
-      }
-
-      void close(const String& seq, const String& deviceId, const Callback cb) override {
-        this->service.queue.push([this, seq, cb, deviceId]() {
-          Lock lock(this->mutex);
-          auto it = this->devices.find(deviceId);
-          if (it == this->devices.end()) {
-            cb(seq, makeErrorObject("NotFoundError", String("Unknown device ") + deviceId), QueuedResponse{});
-            return;
-          }
-          this->closeUnlocked(it->second);
-          cb(seq, makeOkObject(), QueuedResponse{});
-        });
-      }
-
-      void selectConfiguration(const String& seq, const String& deviceId, uint8_t configurationValue, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [=, this](libusb_device_handle* handle) {
-          const int rc = libusb_set_configuration(handle, configurationValue);
-          if (rc != 0) {
-            cb(seq, makeLibusbError("libusb_set_configuration", rc), QueuedResponse{});
-          } else {
-            cb(seq, makeOkObject(), QueuedResponse{});
-          }
-        });
-      }
-
-      void claimInterface(const String& seq, const String& deviceId, uint8_t interfaceNumber, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [=, this](libusb_device_handle* handle) {
-          int rc = LIBUSB_SUCCESS;
-        #if defined(__linux__)
-          if (libusb_kernel_driver_active(handle, interfaceNumber) == 1) {
-            rc = libusb_detach_kernel_driver(handle, interfaceNumber);
-            if (rc != LIBUSB_SUCCESS && rc != LIBUSB_ERROR_NOT_FOUND) {
-              cb(seq, makeLibusbError("libusb_detach_kernel_driver", rc), QueuedResponse{});
-              return;
-            }
-          }
-        #endif
-          rc = libusb_claim_interface(handle, interfaceNumber);
-          if (rc != 0) {
-            cb(seq, makeLibusbError("libusb_claim_interface", rc), QueuedResponse{});
-          } else {
-            cb(seq, makeOkObject(), QueuedResponse{});
-          }
-        });
-      }
-
-      void releaseInterface(const String& seq, const String& deviceId, uint8_t interfaceNumber, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [=, this](libusb_device_handle* handle) {
-          const int rc = libusb_release_interface(handle, interfaceNumber);
-          if (rc != 0) {
-            cb(seq, makeLibusbError("libusb_release_interface", rc), QueuedResponse{});
-          } else {
-        #if defined(__linux__)
-            libusb_attach_kernel_driver(handle, interfaceNumber);
-        #endif
-            cb(seq, makeOkObject(), QueuedResponse{});
-          }
-        });
-      }
-
-      void selectAlternateInterface(const String& seq, const String& deviceId, uint8_t interfaceNumber, uint8_t alternateSetting, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [=, this](libusb_device_handle* handle) {
-          const int rc = libusb_set_interface_alt_setting(handle, interfaceNumber, alternateSetting);
-          if (rc != 0) {
-            cb(seq, makeLibusbError("libusb_set_interface_alt_setting", rc), QueuedResponse{});
-          } else {
-            cb(seq, makeOkObject(), QueuedResponse{});
-          }
-        });
-      }
-
-      void controlTransferIn(const String& seq, const String& deviceId, const JSON::Any& setupAny, uint32_t length, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [=, this](libusb_device_handle* handle) {
-          if (length == 0) {
-            cb(seq, makeErrorObject("TypeError", "length must be greater than 0"), QueuedResponse{});
-            return;
-          }
-
-          if (length > 0xFFFFu) {
-            cb(seq, makeErrorObject("TypeError", "length must not exceed 65535 bytes"), QueuedResponse{});
-            return;
-          }
-
-          if (setupAny.type != JSON::Type::Object) {
-            cb(seq, makeErrorObject("TypeError", "setup must be an object"), QueuedResponse{});
-            return;
-          }
-
-          const auto& setup = setupAny.as<JSON::Object>();
-          uint32_t bmRequestType = 0;
-          uint32_t bRequest = 0;
-          uint32_t wValue = 0;
-          uint32_t wIndex = 0;
-          uint32_t timeout = 1000;
-
-          if (!setup.has("bmRequestType") || !parseUint(setup.get("bmRequestType"), bmRequestType)) {
-            cb(seq, makeErrorObject("TypeError", "setup.bmRequestType must be a number"), QueuedResponse{});
-            return;
-          }
-          if (!setup.has("bRequest") || !parseUint(setup.get("bRequest"), bRequest)) {
-            cb(seq, makeErrorObject("TypeError", "setup.bRequest must be a number"), QueuedResponse{});
-            return;
-          }
-          if (setup.has("wValue") && !parseUint(setup.get("wValue"), wValue)) {
-            cb(seq, makeErrorObject("TypeError", "setup.wValue must be a number"), QueuedResponse{});
-            return;
-          }
-          if (setup.has("wIndex") && !parseUint(setup.get("wIndex"), wIndex)) {
-            cb(seq, makeErrorObject("TypeError", "setup.wIndex must be a number"), QueuedResponse{});
-            return;
-          }
-          if (setup.has("timeout") && !parseUint(setup.get("timeout"), timeout)) {
-            cb(seq, makeErrorObject("TypeError", "setup.timeout must be a number"), QueuedResponse{});
-            return;
-          }
-
-          Vector<uint8_t> buffer(static_cast<size_t>(length));
-          const int result = libusb_control_transfer(
-            handle,
-            static_cast<uint8_t>(bmRequestType & 0xFFu),
-            static_cast<uint8_t>(bRequest & 0xFFu),
-            static_cast<uint16_t>(wValue & 0xFFFFu),
-            static_cast<uint16_t>(wIndex & 0xFFFFu),
-            buffer.data(),
-            static_cast<uint16_t>(length),
-            timeout
-          );
-
-          if (result < 0) {
-            cb(seq, makeLibusbError("libusb_control_transfer", result), QueuedResponse{});
-            return;
-          }
-
-          buffer.resize(static_cast<size_t>(result));
-          JSON::Object::Entries data = {
-            {"status", String("ok")},
-            {"transferred", static_cast<uint32_t>(result)},
-            {"data", bytes::base64::encode(buffer)}
-          };
-          cb(seq, JSON::Object::Entries {{"data", data}}, QueuedResponse{});
-        });
-      }
-
-      void controlTransferOut(const String& seq, const String& deviceId, const JSON::Any& setupAny, const bytes::Buffer& payload, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [seq, cb, payload, setupAny](libusb_device_handle* handle) {
-          if (setupAny.type != JSON::Type::Object) {
-            cb(seq, makeErrorObject("TypeError", "setup must be an object"), QueuedResponse{});
-            return;
-          }
-
-          const auto& setup = setupAny.as<JSON::Object>();
-          uint32_t bmRequestType = 0;
-          uint32_t bRequest = 0;
-          uint32_t wValue = 0;
-          uint32_t wIndex = 0;
-          uint32_t timeout = 1000;
-
-          if (!setup.has("bmRequestType") || !parseUint(setup.get("bmRequestType"), bmRequestType)) {
-            cb(seq, makeErrorObject("TypeError", "setup.bmRequestType must be a number"), QueuedResponse{});
-            return;
-          }
-          if (!setup.has("bRequest") || !parseUint(setup.get("bRequest"), bRequest)) {
-            cb(seq, makeErrorObject("TypeError", "setup.bRequest must be a number"), QueuedResponse{});
-            return;
-          }
-          if (setup.has("wValue") && !parseUint(setup.get("wValue"), wValue)) {
-            cb(seq, makeErrorObject("TypeError", "setup.wValue must be a number"), QueuedResponse{});
-            return;
-          }
-          if (setup.has("wIndex") && !parseUint(setup.get("wIndex"), wIndex)) {
-            cb(seq, makeErrorObject("TypeError", "setup.wIndex must be a number"), QueuedResponse{});
-            return;
-          }
-          if (setup.has("timeout") && !parseUint(setup.get("timeout"), timeout)) {
-            cb(seq, makeErrorObject("TypeError", "setup.timeout must be a number"), QueuedResponse{});
-            return;
-          }
-
-          if (payload.size() > 0xFFFFu) {
-            cb(seq, makeErrorObject("TypeError", "data length must not exceed 65535 bytes"), QueuedResponse{});
-            return;
-          }
-
-          const int result = libusb_control_transfer(
-            handle,
-            static_cast<uint8_t>(bmRequestType & 0xFFu),
-            static_cast<uint8_t>(bRequest & 0xFFu),
-            static_cast<uint16_t>(wValue & 0xFFFFu),
-            static_cast<uint16_t>(wIndex & 0xFFFFu),
-            const_cast<unsigned char*>(payload.data()),
-            static_cast<uint16_t>(payload.size()),
-            timeout
-          );
-
-          if (result < 0) {
-            cb(seq, makeLibusbError("libusb_control_transfer", result), QueuedResponse{});
-            return;
-          }
-
-          JSON::Object::Entries data = {
-            {"status", String("ok")},
-            {"transferred", static_cast<uint32_t>(result)}
-          };
-          cb(seq, JSON::Object::Entries {{"data", data}}, QueuedResponse{});
-        });
-      }
-
-      void transferIn(const String& seq, const String& deviceId, uint8_t endpointNumber, uint32_t length, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [=, this](libusb_device_handle* handle) {
-          if (length == 0) {
-            cb(seq, makeErrorObject("TypeError", "length must be greater than 0"), QueuedResponse{});
-            return;
-          }
-
-          const auto maxLength = static_cast<uint32_t>(std::numeric_limits<int>::max());
-          if (length > maxLength) {
-            cb(seq, makeErrorObject(
-              "TypeError",
-              String("length must not exceed ") + std::to_string(static_cast<unsigned long long>(maxLength)) + " bytes"
-            ), QueuedResponse{});
-            return;
-          }
-
-          Vector<uint8_t> buffer(static_cast<size_t>(length));
-          const int result = this->bulkOrInterrupt(handle, static_cast<uint8_t>(endpointNumber | LIBUSB_ENDPOINT_IN), buffer.data(), static_cast<int>(length));
-          if (result < 0) {
-            cb(seq, makeLibusbError("libusb_transfer_in", result), QueuedResponse{});
-            return;
-          }
-
-          buffer.resize(static_cast<size_t>(result));
-          JSON::Object::Entries data = {
-            {"status", String("ok")},
-            {"transferred", static_cast<uint32_t>(result)},
-            {"data", bytes::base64::encode(buffer)}
-          };
-          cb(seq, JSON::Object::Entries {{"data", data}}, QueuedResponse{});
-        });
-      }
-
-      void transferOut(const String& seq, const String& deviceId, uint8_t endpointNumber, const bytes::Buffer& payload, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [this, seq, cb, payload, endpointNumber](libusb_device_handle* handle) {
-          const auto maxLength = static_cast<size_t>(std::numeric_limits<int>::max());
-          if (payload.size() > maxLength) {
-            cb(seq, makeErrorObject(
-              "TypeError",
-              String("data length must not exceed ") + std::to_string(static_cast<unsigned long long>(maxLength)) + " bytes"
-            ), QueuedResponse{});
-            return;
-          }
-
-          const int result = this->bulkOrInterrupt(handle, static_cast<uint8_t>(endpointNumber | LIBUSB_ENDPOINT_OUT), const_cast<unsigned char*>(payload.data()), static_cast<int>(payload.size()));
-          if (result < 0) {
-            cb(seq, makeLibusbError("libusb_transfer_out", result), QueuedResponse{});
-            return;
-          }
-
-          JSON::Object::Entries data = {
-            {"status", String("ok")},
-            {"transferred", static_cast<uint32_t>(result)}
-          };
-          cb(seq, JSON::Object::Entries {{"data", data}}, QueuedResponse{});
-        });
-      }
-
-      void clearHalt(const String& seq, const String& deviceId, uint8_t endpointNumber, bool directionIn, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [=, this](libusb_device_handle* handle) {
-          const uint8_t endpointAddress = static_cast<uint8_t>(endpointNumber | (directionIn ? LIBUSB_ENDPOINT_IN : LIBUSB_ENDPOINT_OUT));
-          const int rc = libusb_clear_halt(handle, endpointAddress);
-          if (rc != 0) {
-            cb(seq, makeLibusbError("libusb_clear_halt", rc), QueuedResponse{});
-          } else {
-            cb(seq, makeOkObject(), QueuedResponse{});
-          }
-        });
-      }
-
-      void reset(const String& seq, const String& deviceId, const Callback cb) override {
-        this->withHandle(seq, deviceId, cb, [=, this](libusb_device_handle* handle) {
-          const int rc = libusb_reset_device(handle);
-          if (rc != 0) {
-            cb(seq, makeLibusbError("libusb_reset_device", rc), QueuedResponse{});
-          } else {
-            cb(seq, makeOkObject(), QueuedResponse{});
-          }
-        });
+      int openDevice (const String& id, Session& session) override {
+        Lock lock(this->mutex);
+        const auto it = devices.find(id);
+        return it == devices.end() ? LIBUSB_ERROR_NO_DEVICE : libusb_open(it->second.device, &session.handle);
       }
 
       void enumerateDevices(Function<void(const EnumerateResult&)> completion) override {
-        this->service.queue.push([this, completion]() {
+        enqueue([this, completion]() {
           EnumerateResult result;
 
           if (!this->ctx) {
@@ -1448,20 +1023,35 @@ namespace oro::runtime::core::services::usb {
           Set<String> seen;
           Vector<DeviceDescriptor> addedDevices;
           Vector<DeviceDescriptor> removedDevices;
-          bool authorizedModified = false;
+
 
           for (ssize_t i = 0; i < count; ++i) {
             auto* dev = list[i];
             if (!dev) continue;
 
+            {
+              Lock lock(mutex);
+              const auto cached = std::find_if(devices.begin(), devices.end(),
+                [dev](const auto& entry) { return entry.second.device == dev; });
+              if (cached != devices.end() && knownDescriptors.contains(cached->first)) {
+                auto& descriptor = knownDescriptors.at(cached->first);
+                descriptor.authorized = authorizedDevices.contains(cached->first);
+                seen.insert(cached->first);
+                descriptors.push_back(descriptor);
+                continue;
+              }
+            }
             libusb_device_descriptor desc{};
             if (libusb_get_device_descriptor(dev, &desc) != 0) {
               continue;
             }
 
+            if (isBlockedUSBDevice(desc.idVendor, desc.idProduct)) continue;
             const uint8_t bus = libusb_get_bus_number(dev);
             const uint8_t address = libusb_get_device_address(dev);
-            const String deviceId = makeStableDeviceId(dev, desc);
+            const DescriptorStrings strings(dev);
+            const String serial = strings.read(desc.iSerialNumber);
+            const String deviceId = makeStableDeviceId(dev, desc, serial);
             seen.insert(deviceId);
 
             DeviceDescriptor descriptor;
@@ -1473,7 +1063,6 @@ namespace oro::runtime::core::services::usb {
             descriptor.classCode = desc.bDeviceClass;
             descriptor.subclassCode = desc.bDeviceSubClass;
             descriptor.protocolCode = desc.bDeviceProtocol;
-            descriptor.opened = false;
             descriptor.authorized = false;
 
             {
@@ -1485,12 +1074,15 @@ namespace oro::runtime::core::services::usb {
                 libusb_ref_device(dev);
                 this->devices.emplace(deviceId, state);
               } else {
+                if (knownDescriptors.contains(deviceId)) removedDevices.push_back(knownDescriptors.at(deviceId));
+                knownDescriptors.erase(deviceId);
+                sessions.erase(deviceId);
+                if (deviceId.find(":ser") == String::npos) authorizedDevices.erase(deviceId);
                 libusb_ref_device(dev);
                 if (it->second.device != nullptr) {
                   libusb_unref_device(it->second.device);
                 }
                 it->second.device = dev;
-                descriptor.opened = (it->second.handle != nullptr);
               }
 
               if (this->authorizedDevices.count(deviceId) > 0) {
@@ -1498,27 +1090,44 @@ namespace oro::runtime::core::services::usb {
               }
             }
 
-            libusb_config_descriptor* config = nullptr;
-            int configResult = libusb_get_active_config_descriptor(dev, &config);
-            if (configResult != LIBUSB_SUCCESS) {
-              configResult = libusb_get_config_descriptor(dev, 0, &config);
+            descriptor.manufacturerName = strings.read(desc.iManufacturer);
+            descriptor.productName = strings.read(desc.iProduct);
+            descriptor.serialNumber = serial;
+            descriptor.usbVersion = desc.bcdUSB;
+            descriptor.deviceVersion = desc.bcdDevice;
+            libusb_config_descriptor* active = nullptr;
+            if (libusb_get_active_config_descriptor(dev, &active) == LIBUSB_SUCCESS) {
+              descriptor.activeConfiguration = active->bConfigurationValue;
+              libusb_free_config_descriptor(active);
             }
-
-            if (config != nullptr) {
-              for (uint8_t ifaceIndex = 0; ifaceIndex < config->bNumInterfaces; ++ifaceIndex) {
-                const auto& iface = config->interface[ifaceIndex];
-                for (int altIndex = 0; altIndex < iface.num_altsetting; ++altIndex) {
-                  const auto& alt = iface.altsetting[altIndex];
-                  USB::Backend::InterfaceDescriptor ifaceDesc;
-                  ifaceDesc.interfaceNumber = alt.bInterfaceNumber;
-                  ifaceDesc.alternateSetting = alt.bAlternateSetting;
-                  ifaceDesc.classCode = alt.bInterfaceClass;
-                  ifaceDesc.subclassCode = alt.bInterfaceSubClass;
-                  ifaceDesc.protocolCode = alt.bInterfaceProtocol;
-                  descriptor.interfaces.push_back(ifaceDesc);
+            for (uint8_t n = 0; n < desc.bNumConfigurations; ++n) {
+              libusb_config_descriptor* raw = nullptr;
+              if (libusb_get_config_descriptor(dev, n, &raw) != LIBUSB_SUCCESS) continue;
+              std::unique_ptr<libusb_config_descriptor, decltype(&libusb_free_config_descriptor)> config(raw, libusb_free_config_descriptor);
+              descriptor.configurations.push_back(config->bConfigurationValue);
+              descriptor.configurationNames.set(std::to_string(config->bConfigurationValue), strings.read(config->iConfiguration));
+              for (int i = 0; i < config->bNumInterfaces; ++i) {
+                const auto& iface = config->interface[i];
+                for (int j = 0; j < iface.num_altsetting; ++j) {
+                  const auto& alt = iface.altsetting[j];
+                  InterfaceDescriptor record;
+                  record.configurationValue = config->bConfigurationValue;
+                  record.interfaceNumber = alt.bInterfaceNumber;
+                  record.alternateSetting = alt.bAlternateSetting;
+                  record.interfaceName = strings.read(alt.iInterface);
+                  record.classCode = alt.bInterfaceClass;
+                  record.subclassCode = alt.bInterfaceSubClass;
+                  record.protocolCode = alt.bInterfaceProtocol;
+                  for (int k = 0; k < alt.bNumEndpoints; ++k) {
+                    const auto& ep = alt.endpoint[k];
+                    record.endpoints.push(JSON::Object::Entries{
+                      {"endpointNumber", ep.bEndpointAddress & 15}, {"direction", ep.bEndpointAddress & 128 ? "in" : "out"},
+                      {"type", endpointTypes[ep.bmAttributes & 3]}, {"packetSize", ep.wMaxPacketSize & 2047}
+                    });
+                  }
+                  descriptor.interfaces.push_back(std::move(record));
                 }
               }
-              libusb_free_config_descriptor(config);
             }
 
             descriptors.push_back(descriptor);
@@ -1546,11 +1155,8 @@ namespace oro::runtime::core::services::usb {
                   desc.deviceId = it->first;
                   removedDevices.push_back(desc);
                 }
-                authorizedModified = authorizedModified || (this->authorizedDevices.erase(it->first) > 0);
-                if (it->second.handle) {
-                  libusb_close(it->second.handle);
-                  it->second.handle = nullptr;
-                }
+                if (it->first.find(":ser") == String::npos) this->authorizedDevices.erase(it->first);
+                sessions.erase(it->first);
                 if (it->second.device) {
                   libusb_unref_device(it->second.device);
                   it->second.device = nullptr;
@@ -1565,40 +1171,15 @@ namespace oro::runtime::core::services::usb {
           result.ok = true;
           result.devices = std::move(descriptors);
 
-          if (authorizedModified) {
-            this->persistAuthorizedToState();
-          }
 
-          if (!addedDevices.empty() || !removedDevices.empty()) {
-            this->service.dispatcher.dispatch([added = std::move(addedDevices), removed = std::move(removedDevices)]() mutable {
-              using oro::runtime::app::App;
-              auto app = App::sharedApplication();
-              if (!app) return;
-              for (const auto& win : app->runtime.windowManager.windows) {
-                if (!win || !win->bridge) continue;
-                for (const auto& descriptor : added) {
-                  JSON::Object evt = JSON::Object::Entries {{"device", LibusbBackend::descriptorToJson(descriptor)}};
-                  win->bridge->emit("usb.deviceconnect", evt.str());
-                }
-                for (const auto& descriptor : removed) {
-                  JSON::Object evt = JSON::Object::Entries {{"device", LibusbBackend::descriptorToJson(descriptor)}};
-                  win->bridge->emit("usb.devicedisconnect", evt.str());
-                }
-              }
-            });
-          }
+          emitChanges(std::move(addedDevices), std::move(removedDevices));
 
           completion(result);
         });
       }
 
       bool authorizeDevice(const String& deviceId) override {
-        {
-          Lock lock(this->mutex);
-          this->authorizedDevices.insert(deviceId);
-        }
-        this->persistAuthorizedToState();
-        return true;
+        return this->setAuthorization(deviceId, true);
       }
 
       bool isDeviceAuthorized(const String& deviceId) const override {
@@ -1607,18 +1188,14 @@ namespace oro::runtime::core::services::usb {
       }
 
       void revokeDevice(const String& deviceId) override {
-        {
-          Lock lock(this->mutex);
-          this->authorizedDevices.erase(deviceId);
-        }
-        this->persistAuthorizedToState();
+        this->setAuthorization(deviceId, false);
       }
 
-      void chooseDevice(const String& seq, const USB::DeviceSelection& selection, const Callback cb) override {
+      void chooseDevice(const USB::Request& seq, const USB::DeviceSelection& selection, const Callback cb) override {
         RequestState request;
         {
           Lock lock(this->mutex);
-          if (!this->pendingRequest.has_value()) {
+          if (!this->pendingRequest || this->pendingRequest->client != seq.client) {
             cb(seq, makeErrorObject("InvalidStateError", "No pending usb.requestDevice"), QueuedResponse{});
             return;
           }
@@ -1635,19 +1212,55 @@ namespace oro::runtime::core::services::usb {
           return;
         }
 
-        auto selected = *it;
-        this->authorizeDevice(selected.deviceId);
-        selected.authorized = true;
-
-        JSON::Object::Entries data = {{"device", descriptorToJson(selected)}};
-        cb(seq, JSON::Object::Entries {{"data", data}}, QueuedResponse{});
+        presentDevices(seq, cb, {*it});
       }
 
-      void cancelRequest(const String& seq, const Callback cb) override {
+      void presentDevices (const Request& seq, const Callback& cb, const Vector<DeviceDescriptor>& candidates) {
+        const auto weak = weak_from_this();
+        this->service.dispatcher.dispatch([weak, seq, cb, candidates] {
+          auto app = oro::runtime::app::App::sharedApplication();
+          const auto window = app ? app->runtime.windowManager.getWindow(seq.window) : nullptr;
+          const auto eligible = [&] {
+            return window && window->bridge && window->bridge->usbDocument.load() == seq.client &&
+              app->runtime.hasPermission("usb");
+          };
+          Vector<String> labels;
+          for (const auto& device : candidates) {
+            char ids[12];
+            std::snprintf(ids, sizeof(ids), "%04x:%04x", device.vendorId, device.productId);
+            labels.push_back(device.productName + " (" + ids + ")");
+          }
+          const int choice = eligible() ? window->dialog.chooseUSB(labels) : -1;
+          if (choice < 0 || static_cast<size_t>(choice) >= candidates.size() || !eligible()) {
+            cb(seq, makeErrorObject("NotFoundError", "No USB device selected"), {});
+            return;
+          }
+          const auto selected = candidates[choice];
+          auto base = weak.lock();
+          if (!base) return cb(seq, makeErrorObject("InvalidStateError", "USB service stopped"), {});
+          auto backend = std::static_pointer_cast<LibusbBackend>(base);
+          backend->enumerateDevices([backend, selected, window, seq, cb](const EnumerateResult& result) {
+            if (!window->bridge || window->bridge->usbDocument.load() != seq.client) {
+              return cb(seq, makeErrorObject("AbortError", "USB document changed"), {});
+            }
+            const auto found = std::find_if(result.devices.begin(), result.devices.end(),
+              [&](const auto& current) { return current.deviceId == selected.deviceId; });
+            if (!result.ok || found == result.devices.end()) return cb(seq, makeErrorObject("NotFoundError", "Selected device disconnected"), {});
+            if (!backend->authorizeDevice(selected.deviceId)) {
+              return cb(seq, makeErrorObject("OperationError", "Could not save the USB device permission"), {});
+            }
+            auto device = *found;
+            device.authorized = true;
+            cb(seq, JSON::Object::Entries{{"data", JSON::Object::Entries{{"device", descriptorToJson(device)}}}}, {});
+          });
+        });
+      }
+
+      void cancelRequest(const USB::Request& seq, const Callback cb) override {
         RequestState request;
         {
           Lock lock(this->mutex);
-          if (!this->pendingRequest.has_value()) {
+          if (!this->pendingRequest || this->pendingRequest->client != seq.client) {
             cb(seq, makeErrorObject("InvalidStateError", "No pending usb.requestDevice"), QueuedResponse{});
             return;
           }
@@ -1655,34 +1268,25 @@ namespace oro::runtime::core::services::usb {
           this->pendingRequest.reset();
         }
 
-        cb(seq, makeErrorObject("AbortError", "USB device request cancelled"), QueuedResponse{});
+        cb(seq, makeOkObject(), QueuedResponse{});
       }
 
     private:
       struct DeviceState {
         libusb_device* device = nullptr;
-        libusb_device_handle* handle = nullptr;
       };
 
       struct RequestState {
+        uint64_t client = 0;
         Vector<DeviceDescriptor> pending;
       };
 
-      USB& service;
-      libusb_context* ctx = nullptr;
       mutable Mutex mutex;
       Map<String, DeviceState> devices;
       Set<String> authorizedDevices;
       Map<String, DeviceDescriptor> knownDescriptors;
       std::optional<RequestState> pendingRequest;
       String stateScope;
-      void closeUnlocked(DeviceState& state) {
-        if (state.handle) {
-          libusb_close(state.handle);
-          state.handle = nullptr;
-        }
-      }
-
       String computeStateScope() const {
         String bundle = "app";
         if (auto* runtime = this->service.context.getRuntime()) {
@@ -1691,28 +1295,36 @@ namespace oro::runtime::core::services::usb {
             bundle = it->second;
           }
         }
-        return String("oro://") + bundle;
+        return String("webusb-grants://") + bundle;
       }
 
-      void persistAuthorizedToState() {
-        if (!this->service.services.state.isReady()) {
-          return;
-        }
-        Vector<String> ids;
-        {
-          Lock lock(this->mutex);
-          ids.reserve(this->authorizedDevices.size());
+      bool setAuthorization (const String& deviceId, bool authorized) {
+        Lock lock(this->mutex);
+        if (this->authorizedDevices.contains(deviceId) == authorized) return true;
+        if (deviceId.find(":ser") != String::npos) {
+          auto& state = this->service.services.state;
+          if (!state.isReady()) return false;
+          Vector<String> ids;
           for (const auto& id : this->authorizedDevices) {
-            ids.push_back(id);
+            if (id != deviceId && id.find(":ser") != String::npos) ids.push_back(id);
+          }
+          if (authorized) ids.push_back(deviceId);
+          std::sort(ids.begin(), ids.end());
+          if (ids.empty()) {
+            if (!state.remove(this->stateScope, "authorizedDevices")) return false;
+          } else if (!state.putString(this->stateScope, "authorizedDevices", oro::runtime::string::join(ids, "\n"))) {
+            return false;
           }
         }
-        if (ids.empty()) {
-          this->service.services.state.remove(this->stateScope, "authorizedDevices");
-          return;
+        if (authorized) {
+          this->authorizedDevices.insert(deviceId);
+        } else {
+          this->authorizedDevices.erase(deviceId);
         }
-        std::sort(ids.begin(), ids.end());
-        const String serialized = oro::runtime::string::join(ids, "\n");
-        this->service.services.state.putString(this->stateScope, "authorizedDevices", serialized);
+        if (auto it = this->knownDescriptors.find(deviceId); it != this->knownDescriptors.end()) {
+          it->second.authorized = authorized;
+        }
+        return true;
       }
 
       void loadAuthorizedFromState() {
@@ -1726,88 +1338,15 @@ namespace oro::runtime::core::services::usb {
         auto entries = oro::runtime::string::split(*stored, "\n");
         Lock lock(this->mutex);
         for (const auto& entry : entries) {
-          if (!entry.empty()) {
+          if (!entry.empty() && entry.find(":ser") != String::npos) {
             this->authorizedDevices.insert(entry);
           }
         }
       }
-
-      template <typename Fn>
-      void withHandle(const String& seq, const String& deviceId, const Callback& cb, Fn&& fn) {
-        this->service.queue.push([this, seq, cb, deviceId, fn = std::forward<Fn>(fn)]() mutable {
-          if (!this->ctx) {
-            cb(seq, makeErrorObject("NotSupportedError", "libusb context unavailable"), QueuedResponse{});
-            return;
-          }
-
-          libusb_device_handle* handle = nullptr;
-          {
-            Lock lock(this->mutex);
-            auto it = this->devices.find(deviceId);
-            if (it == this->devices.end()) {
-              cb(seq, makeErrorObject("NotFoundError", String("Unknown device ") + deviceId), QueuedResponse{});
-              return;
-            }
-            if (!this->authorizedDevices.count(deviceId)) {
-              cb(seq, makeErrorObject("SecurityError", String("Device ") + deviceId + " not authorized"), QueuedResponse{});
-              return;
-            }
-            handle = it->second.handle;
-          }
-
-          if (!handle) {
-            cb(seq, makeErrorObject("InvalidStateError", String("Device ") + deviceId + " not opened"), QueuedResponse{});
-            return;
-          }
-
-          fn(handle);
-        });
-      }
-
-      int bulkOrInterrupt(libusb_device_handle* handle, uint8_t endpoint, unsigned char* data, int length, unsigned int timeout = 5000) {
-        int actual = 0;
-        int rc = libusb_bulk_transfer(handle, endpoint, data, length, &actual, timeout);
-        if (rc == LIBUSB_ERROR_PIPE) {
-          rc = libusb_interrupt_transfer(handle, endpoint, data, length, &actual, timeout);
-        }
-        if (rc != LIBUSB_SUCCESS) {
-          return rc;
-        }
-        return actual;
-      }
-
-      static JSON::Object descriptorToJson(const DeviceDescriptor& descriptor) {
-        JSON::Array::Entries interfacesJson;
-        interfacesJson.reserve(descriptor.interfaces.size());
-        for (const auto& iface : descriptor.interfaces) {
-          interfacesJson.push_back(JSON::Object::Entries {
-            {"interfaceNumber", static_cast<uint32_t>(iface.interfaceNumber)},
-            {"alternateSetting", static_cast<uint32_t>(iface.alternateSetting)},
-            {"classCode", static_cast<uint32_t>(iface.classCode)},
-            {"subclassCode", static_cast<uint32_t>(iface.subclassCode)},
-            {"protocolCode", static_cast<uint32_t>(iface.protocolCode)}
-          });
-        }
-
-        JSON::Object::Entries entries = {
-          {"deviceId", descriptor.deviceId},
-          {"busNumber", static_cast<uint32_t>(descriptor.busNumber)},
-          {"deviceAddress", static_cast<uint32_t>(descriptor.deviceAddress)},
-          {"vendorId", static_cast<uint32_t>(descriptor.vendorId)},
-          {"productId", static_cast<uint32_t>(descriptor.productId)},
-          {"classCode", static_cast<uint32_t>(descriptor.classCode)},
-          {"subclassCode", static_cast<uint32_t>(descriptor.subclassCode)},
-          {"protocolCode", static_cast<uint32_t>(descriptor.protocolCode)},
-          {"opened", descriptor.opened},
-          {"authorized", descriptor.authorized},
-          {"interfaces", interfacesJson}
-        };
-        return JSON::Object(entries);
-      }
     };
 
-  std::unique_ptr<USB::Backend> makeUSBBackend(USB& service) {
-    return std::make_unique<LibusbBackend>(service);
+  std::shared_ptr<USB::Backend> makeUSBBackend(USB& service) {
+    return std::make_shared<LibusbBackend>(service);
   }
 }
 

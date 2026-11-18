@@ -11,9 +11,7 @@ oro:usb is a JavaScript API module exposed by the Oro Runtime.
 .SH REFERENCE
 .TP
 \fBinstallNavigatorUSB()\fR
-Install the WebUSB scaffold on `navigator.usb` for the current global scope.
-.br
-This is the public `oro:usb` entrypoint for the downstream WebUSB surface. It returns the singleton `NavigatorUSB` instance when `navigator` is available, and `undefined` in non\-window contexts.
+Install the WebUSB API for a supported secure application window or worker. Only windows can request a new device grant.
 \fBReturns:\fR
 .br
 \fINavigatorUSB \\| undefined\fR

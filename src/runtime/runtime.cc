@@ -143,7 +143,7 @@ namespace oro::runtime {
     const auto pending = std::make_shared<Atomic<bool>>(true);
     this->pendingPause = pending;
     this->pauseThread = std::thread([this, pending]() {
-      const bool ok = this->services.stop();
+      const bool ok = this->services.pause();
       (void)ok;
       this->dispatcher.dispatch([this, pending]() {
         // Restore and shutdown invalidate queued pauses before joining the
@@ -164,7 +164,7 @@ namespace oro::runtime {
     });
     return true;
   #else
-    if (!this->services.stop()) {
+    if (!this->services.pause()) {
       return false;
     }
 

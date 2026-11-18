@@ -56,6 +56,7 @@ open class Bridge (
   open val schemeHandlers = SchemeHandlers(this)
   open val navigator = Navigator(this)
   open val buffers = mutableMapOf<String, ByteArray>()
+  private var usbDocumentCommitted = false
   private val bufferTimes = mutableMapOf<String, Long>()
 
   fun storeBuffer (sequence: String, bytes: ByteArray): Boolean = synchronized(buffers) {
@@ -285,6 +286,8 @@ open class Bridge (
     url: String,
     favicon: Bitmap?
   ) {
+    usbDocumentCommitted = false
+    this.window.setUSBDocument(index, "")
     this.window.platformDocumentToken = ""
     oro.runtime.app.PlatformOperations.cancelWindow(this.window)
     this.window.activity.presentation.navigation(this.window)
@@ -302,8 +305,21 @@ open class Bridge (
     super.onPageStarted(view, url, favicon)
   }
 
+  private fun commitUSBDocument (view: WebView, url: String) {
+    if (!usbDocumentCommitted && view.url == url) {
+      usbDocumentCommitted = true
+      window.setUSBDocument(index, url)
+    }
+  }
+
+  override fun onPageCommitVisible (view: WebView, url: String) {
+    super.onPageCommitVisible(view, url)
+    commitUSBDocument(view, url)
+  }
+
   override fun onPageFinished (view: WebView, url: String) {
     super.onPageFinished(view, url)
+    commitUSBDocument(view, url)
     // A document load alone does not establish that the runtime bridge initialized.
     view.evaluateJavascript("typeof globalThis.__RUNTIME_INIT_NOW__ === 'number'") { result ->
       if (result == "true" && this.window.userMessageHandler.active && this.window.fragment.hasWebView) {
@@ -323,6 +339,7 @@ open class Bridge (
   }
 
   override fun onRenderProcessGone (view: WebView, detail: RenderProcessGoneDetail): Boolean {
+    this.window.setUSBDocument(index, "")
     this.window.fragment.onRendererGone(view)
     return true
   }

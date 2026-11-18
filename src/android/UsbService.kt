@@ -18,7 +18,6 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import kotlin.jvm.Volatile
-import oro.runtime.usb.USBPlatform
 
 /**
  * Foreground-capable service that owns USB device discovery, permission
@@ -110,14 +109,10 @@ open class UsbService : Service() {
   protected open fun onPermissionGranted(device: UsbDevice) {
     Log.i(TAG, "Permission granted for device: ${device.deviceName}")
     started = startForegroundIfNeeded()
-    USBPlatform.notifyPermissionResult(device.deviceName ?: "", true)
-    // TODO: open UsbDeviceConnection and hand off to USB transport layer.
   }
 
   protected open fun onPermissionDenied(device: UsbDevice) {
     Log.w(TAG, "Permission denied for device: ${device.deviceName}")
-    USBPlatform.notifyPermissionResult(device.deviceName ?: "", false)
-    // TODO: surface denial to runtime so the UI can inform the user.
   }
 
   protected open fun onDeviceAttached(device: UsbDevice) {
@@ -126,7 +121,6 @@ open class UsbService : Service() {
 
   protected open fun onDeviceDetached(device: UsbDevice) {
     Log.i(TAG, "Device detached: ${device.deviceName}")
-    // TODO: close connections and notify runtime.
   }
 
   private fun requestPermissionById(deviceId: String): Boolean {

@@ -751,6 +751,14 @@ extern "C" {
     }
   }
 
+  void ANDROID_EXTERNAL(window, Window, setUSBDocument) (
+    JNIEnv* env, jobject self, jint index, jstring href
+  ) {
+    const auto app = App::sharedApplication();
+    const auto window = app ? app->runtime.windowManager.getWindow(index) : nullptr;
+    if (window && window->bridge) window->bridge->setUSBDocument(android::StringWrap(env, href).str());
+  }
+
   jstring ANDROID_EXTERNAL(window, Window, getPendingNavigationLocation) (
     JNIEnv* env,
     jobject self,

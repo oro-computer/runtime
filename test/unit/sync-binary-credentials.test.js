@@ -200,7 +200,7 @@ test('filesystem IPC retains descriptor transport across sync, async and late ex
       }
       this.response = this.responseText = Buffer.isBuffer(result) ? result : JSON.stringify(result)
       this.readyState = XMLHttpRequest.DONE
-      if (this.async) queueMicrotask(() => this.onreadystatechange?.())
+      if (this.async) queueMicrotask(() => this.onload?.())
     }
 
     getAllResponseHeaders () { return '' }

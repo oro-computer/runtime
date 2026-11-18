@@ -19,7 +19,7 @@ import os from '../os.js'
 const PERMISSION_CHANGE_EVENT = 'permissionchange'
 
 /**
- * @typedef {{ name: string }} PermissionDescriptor
+ * @typedef {{ name: string, filters?: import('./usb-web.js').USBDeviceFilter[], exclusionFilters?: import('./usb-web.js').USBDeviceFilter[] }} PermissionDescriptor
  */
 
 const isAndroid = os.platform() === 'android'
@@ -67,7 +67,8 @@ export const types = Enumeration.from([
   'storage-access',
   'camera',
   'microphone',
-  'local-network'
+  'local-network',
+  'usb'
 ])
 
 /**
@@ -197,6 +198,20 @@ class PermissionStatus extends EventTarget {
   }
 }
 
+/** A USB permission query includes the connected devices matching its filters. */
+class USBPermissionResult extends PermissionStatus {
+  /** @param {string} state @param {import('./usb-web.js').USBDevice[]} devices @param {object} [options] */
+  constructor (state, devices, options) {
+    super('usb', state, options)
+    this.#devices = Object.freeze(devices)
+  }
+
+  #devices
+
+  /** @returns {readonly import('./usb-web.js').USBDevice[]} */
+  get devices () { return this.#devices }
+}
+
 /**
  * Query for a permission status.
  * The Android-only `local-network` permission reports access to LAN hosts.
@@ -237,6 +252,24 @@ export async function query (descriptor, options) {
         "Failed to read the 'name' property from 'PermissionDescriptor': " +
         `The provided value '${name}' is not a valid enum value of type PermissionName.`
     )
+  }
+
+  if (name === 'usb') {
+    const result = await ipc.request('permissions.query', { name }, options)
+    if (result.err) throw result.err
+    const { installNavigatorUSB, filterUSBDevices } = await import('./usb-web.js')
+    const usb = installNavigatorUSB()
+    let state = usb ? result.data.state : 'denied'
+    let devices = []
+    if (state !== 'denied') {
+      try {
+        devices = await usb.getDevices()
+      } catch (error) {
+        if (error.name !== 'SecurityError') throw error
+        state = 'denied'
+      }
+    }
+    return new USBPermissionResult(state, filterUSBDevices(devices, descriptor), options)
   }
 
   if (name === 'local-network' && !isAndroid) {
@@ -343,6 +376,13 @@ export async function request (descriptor, options) {
         "Failed to read the 'name' property from 'PermissionDescriptor': " +
         `The provided value '${name}' is not a valid enum value of type PermissionName.`
     )
+  }
+
+  if (name === 'usb') {
+    const usb = globalThis.navigator?.usb
+    if (typeof usb?.requestDevice !== 'function') return query(descriptor, options)
+    const device = await usb.requestDevice({ filters: [], ...descriptor })
+    return new USBPermissionResult('granted', [device], options)
   }
 
   if (name === 'local-network' && !isAndroid) {

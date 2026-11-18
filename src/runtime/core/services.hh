@@ -101,7 +101,7 @@ namespace oro::runtime::core {
       bool useZlib = false;
     #endif
       bool useBluetooth = true;
-#if ORO_RUNTIME_PLATFORM_ANDROID
+#if ORO_RUNTIME_PLATFORM_IOS
       bool useUSB = false;
 #else
       bool useUSB = true;
@@ -185,7 +185,11 @@ namespace oro::runtime::core {
     Services& operator = (const Services&) = delete;
     Services& operator = (Services&&) = delete;
     bool start ();
+    bool pause ();
     bool stop ();
+
+  private:
+    bool stopServices (bool pausing);
   };
 }
 #endif

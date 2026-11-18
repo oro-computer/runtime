@@ -3,7 +3,7 @@
 oro\-ipc\-routes \- generated catalog of resolved IPC routes
 .SH DESCRIPTION
 .PP
-This guide indexes 392 resolved IPC routes across 48 top\-level domains.
+This guide indexes 397 resolved IPC routes across 48 top\-level domains.
 .PP
 Each route entry lists the transport families used from JavaScript, the public oro:* APIs that expose it, and the source locations that define or consume it.
 .SH HOW TO READ THIS CATALOG
@@ -17,11 +17,11 @@ Exposed by points at the nearest documented API function or method plus the sour
 Binary semantics flags routes that carry raw request or response bytes rather than plain JSON\-like payloads.
 .SH ROUTES
 .PP
-This catalog is generated from JavaScript calls to ipc.request(), ipc.send(), ipc.sendSync(), ipc.write(), and thin wrappers around those primitives. It inventories 392 resolved routes across 48 top\-level domains.
+This catalog is generated from JavaScript calls to ipc.request(), ipc.send(), ipc.sendSync(), ipc.write(), and thin wrappers around those primitives. It inventories 397 resolved routes across 48 top\-level domains.
 .PP
 1 IPC call sites still use route expressions that could not be reduced to static strings. Review those locations before treating this catalog as complete for private dynamic dispatch.
 .IP \(bu 2
-send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L624)
+send oro:internal/init RuntimeWorker.constructor() (api/internal/init.js#L644)
 .PP
 Domains: ai, application, asn1, background, bluetooth, cdp, child_process, cookies, dbus, diagnostics, dns, documentAccess, extension, fs, geolocation, haptics, hci, hid, internal, ipfs, iroh, mcp, mime, networkStatus, notification, os, otp, permissions, platform, process, protocol, queuedResponse, runtime, secureStorage, semver, serviceWorker, sqlite, stderr, stdout, tar, tcp, timers, tls, udp, usb, window, xpc, zlib
 .SS ai
@@ -761,7 +761,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1129)
+Exposed by: oro:internal/init (api/internal/init.js#L1149)
 .TP
 \fBfs.copyFile\fR
 Transports: request, send, sendSync
@@ -1678,7 +1678,7 @@ Transports: request
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L1130)
+Exposed by: oro:internal/init (api/internal/init.js#L1150)
 .TP
 \fBos.cpus\fR
 Transports: sendSync
@@ -1743,14 +1743,14 @@ Transports: request
 .br
 Modules: oro:internal/permissions
 .br
-Exposed by: oro:internal/permissions query() (api/internal/permissions.js#L289)
+Exposed by: oro:internal/permissions query() (api/internal/permissions.js#L258); oro:internal/permissions query() (api/internal/permissions.js#L322)
 .TP
 \fBpermissions.request\fR
 Transports: request, sendSync
 .br
 Modules: oro:internal/geolocation, oro:internal/permissions
 .br
-Exposed by: oro:internal/geolocation getCurrentPosition() (api/internal/geolocation.js#L165); oro:internal/geolocation watchPosition() (api/internal/geolocation.js#L251); oro:internal/permissions request() (api/internal/permissions.js#L417)
+Exposed by: oro:internal/geolocation getCurrentPosition() (api/internal/geolocation.js#L165); oro:internal/geolocation watchPosition() (api/internal/geolocation.js#L251); oro:internal/permissions request() (api/internal/permissions.js#L457)
 .SS platform
 .TP
 \fBplatform.event\fR
@@ -1758,7 +1758,7 @@ Transports: send, sendSync
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L891); oro:internal/init (api/internal/init.js#L1259)
+Exposed by: oro:internal/init (api/internal/init.js#L17); oro:internal/init (api/internal/init.js#L911); oro:internal/init (api/internal/init.js#L1279)
 .TP
 \fBplatform.openExternal\fR
 Transports: request
@@ -1825,7 +1825,7 @@ Binary semantics: binary response body
 .br
 Modules: oro:internal/init
 .br
-Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L969); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L970)
+Exposed by: oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L989); oro:internal/init RuntimeQueuedResponses.dispatchOne() (api/internal/init.js#L990)
 .SS runtime
 .TP
 \fBruntime.platform\fR
@@ -2645,105 +2645,146 @@ Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web (api/internal/usb\-web.js#L623); oro:internal/usb\-web NavigatorUSB.cancelRequest() (api/internal/usb\-web.js#L537)
+Exposed by: oro:internal/usb\-web (api/internal/usb\-web.js#L951); oro:internal/usb\-web NavigatorUSB.cancelRequest() (api/internal/usb\-web.js#L861)
 .TP
 \fBusb.chooseDevice\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web (api/internal/usb\-web.js#L597)
+Exposed by: oro:internal/usb\-web (api/internal/usb\-web.js#L923)
 .TP
 \fBusb.device.claimInterface\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.claimInterface() (api/internal/usb\-web.js#L304)
+Exposed by: oro:internal/usb\-web USBDevice.claimInterface() (api/internal/usb\-web.js#L529)
 .TP
 \fBusb.device.close\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.close() (api/internal/usb\-web.js#L277)
+Exposed by: oro:internal/usb\-web USBDevice.close() (api/internal/usb\-web.js#L489)
 .TP
 \fBusb.device.open\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.open() (api/internal/usb\-web.js#L268)
+Exposed by: oro:internal/usb\-web USBDevice.open() (api/internal/usb\-web.js#L473)
 .TP
 \fBusb.device.releaseInterface\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.releaseInterface() (api/internal/usb\-web.js#L314)
+Exposed by: oro:internal/usb\-web USBDevice.releaseInterface() (api/internal/usb\-web.js#L544)
 .TP
 \fBusb.device.reset\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.reset() (api/internal/usb\-web.js#L431)
+Exposed by: oro:internal/usb\-web USBDevice.reset() (api/internal/usb\-web.js#L720)
 .TP
 \fBusb.device.selectAlternateInterface\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.selectAlternateInterface() (api/internal/usb\-web.js#L324)
+Exposed by: oro:internal/usb\-web USBDevice.selectAlternateInterface() (api/internal/usb\-web.js#L561)
 .TP
 \fBusb.device.selectConfiguration\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.selectConfiguration() (api/internal/usb\-web.js#L294)
+Exposed by: oro:internal/usb\-web USBDevice.selectConfiguration() (api/internal/usb\-web.js#L512)
 .TP
 \fBusb.forgetDevice\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.forget() (api/internal/usb\-web.js#L285)
+Exposed by: oro:internal/usb\-web USBDevice.forget() (api/internal/usb\-web.js#L498)
 .TP
 \fBusb.getDevices\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web NavigatorUSB.getDevices() (api/internal/usb\-web.js#L496)
+Exposed by: oro:internal/usb\-web NavigatorUSB.getDevices() (api/internal/usb\-web.js#L815)
 .TP
 \fBusb.requestDevice\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web NavigatorUSB.requestDevice() (api/internal/usb\-web.js#L509)
+Exposed by: oro:internal/usb\-web NavigatorUSB.requestDevice() (api/internal/usb\-web.js#L833)
 .TP
 \fBusb.transfer.clearHalt\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.clearHalt() (api/internal/usb\-web.js#L422)
+Exposed by: oro:internal/usb\-web USBDevice.clearHalt() (api/internal/usb\-web.js#L711)
 .TP
 \fBusb.transfer.controlIn\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.controlTransferIn() (api/internal/usb\-web.js#L344)
+Exposed by: oro:internal/usb\-web USBDevice.controlTransferIn() (api/internal/usb\-web.js#L587)
+.TP
+\fBusb.transfer.controlOut\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.controlTransferOut() (api/internal/usb\-web.js#L610)
 .TP
 \fBusb.transfer.in\fR
 Transports: request
 .br
 Modules: oro:internal/usb\-web
 .br
-Exposed by: oro:internal/usb\-web USBDevice.transferIn() (api/internal/usb\-web.js#L386)
+Exposed by: oro:internal/usb\-web USBDevice.transferIn() (api/internal/usb\-web.js#L638)
+.TP
+\fBusb.transfer.isochronousIn\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.isochronousTransferIn() (api/internal/usb\-web.js#L676)
+.TP
+\fBusb.transfer.isochronousOut\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.isochronousTransferOut() (api/internal/usb\-web.js#L695)
+.TP
+\fBusb.transfer.out\fR
+Transports: write
+.br
+Binary semantics: binary request body
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web USBDevice.transferOut() (api/internal/usb\-web.js#L658)
+.TP
+\fBusb.watch\fR
+Transports: request
+.br
+Modules: oro:internal/usb\-web
+.br
+Exposed by: oro:internal/usb\-web NavigatorUSB.addEventListener() (api/internal/usb\-web.js#L779)
 .SS window
 .TP
 \fBwindow\fR

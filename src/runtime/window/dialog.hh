@@ -95,6 +95,7 @@ namespace oro::runtime::window {
       bool showOpenFilePicker (const FileSystemPickerOptions&, const ShowCallback);
       bool showDirectoryPicker (const FileSystemPickerOptions&, const ShowCallback);
       bool showFileSystemPicker (const FileSystemPickerOptions&, const ShowCallback);
+      int chooseUSB (const Vector<String>& labels);
       bool share (const ShareOptions&, const ShareCallback);
   };
 }

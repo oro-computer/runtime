@@ -365,7 +365,21 @@ class RuntimeWorker extends GlobalWorker {
     } catch {}
 
     const __args = { ...globalThis.__args, ...options?.args, client: {} }
+    let usbOwner = globalThis
+    try {
+      if (globalThis.top && globalThis.top.location.origin === globalThis.location.origin) usbOwner = globalThis.top
+    } catch {}
     const preload = `
+    Object.defineProperty(globalThis, '__oroUSBDocument', {
+      configurable: true, value: ${JSON.stringify(usbOwner.__oroUSBDocument ?? null)}
+    })
+    globalThis.addEventListener('message', event => {
+      if (typeof event.data?.__oroUSBDocument === 'string') {
+        Object.defineProperty(globalThis, '__oroUSBDocument', { configurable: true, value: event.data.__oroUSBDocument })
+        globalThis.dispatchEvent(new Event('oro-usb-document'))
+        event.stopImmediatePropagation()
+      }
+    })
     Object.defineProperty(globalThis, '__oroNativeBridgeToken', {
       value: ${JSON.stringify(globalThis.__oroNativeBridgeToken ?? null)}
     })
@@ -498,6 +512,12 @@ class RuntimeWorker extends GlobalWorker {
 
     super(objectURL, { ...options, type: 'module' }, ...args)
 
+    if (!usbOwner.__oroUSBDocument) {
+      const worker = new WeakRef(this)
+      usbOwner.addEventListener('oro-usb-document', () => {
+        worker.deref()?.postMessage({ __oroUSBDocument: usbOwner.__oroUSBDocument })
+      }, { once: true })
+    }
     RuntimeWorker.pool.set(id, new WeakRef(this))
 
     this.#id = id
@@ -1138,7 +1158,7 @@ hooks.onReady(async () => {
     errors.ErrnoError.errno = errno
     // Install Web Bluetooth scaffold (navigator.bluetooth)
     await import('./bluetooth-web.js')
-    // Install WebUSB scaffold (navigator.usb)
+    // Install WebUSB (navigator.usb)
     await import('./usb-web.js')
     // Install WebHID scaffold (navigator.hid)
     await import('./hid-web.js')

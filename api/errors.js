@@ -373,8 +373,6 @@ export class NetworkError extends Error {
   constructor (message, ...args) {
     super(message, ...args)
 
-    this.name = 'NetworkError'
-
     if (typeof Error.captureStackTrace === 'function') {
       Error.captureStackTrace(this, NetworkError)
     }

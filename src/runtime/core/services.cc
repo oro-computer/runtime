@@ -142,7 +142,15 @@ namespace oro::runtime::core {
     return true;
   }
 
+  bool Services::pause () {
+    return stopServices(true);
+  }
+
   bool Services::stop () {
+    return stopServices(false);
+  }
+
+  bool Services::stopServices (bool pausing) {
     Lock lock(this->mutex);
     struct NamedService { const char* name; Service* svc; };
     const auto services = Vector<NamedService> {
@@ -218,7 +226,10 @@ namespace oro::runtime::core {
         debug("Services::stop(): stopping %s", entry.name);
       }
     #endif
-      const bool ok = service->stop();
+      // Android's USB consent activity pauses its requester before replying.
+      const bool ok = ORO_RUNTIME_PLATFORM_ANDROID && pausing && service == &this->usb
+        ? this->usb.pause()
+        : service->stop();
     #if defined(DEBUG)
       if (env::has("ORO_DEBUG_LIFECYCLE")) {
         debug("Services::stop(): stopped %s result=%d", entry.name, ok);

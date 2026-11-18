@@ -1,0 +1,16 @@
+[build]
+name = "webusb-endpoints"
+copy = "app"
+
+[meta]
+bundle_identifier = "oro.webusb.endpoints"
+version = "1.0.0"
+title = "Oro WebUSB endpoint checks"
+
+[window]
+index = "index.html"
+width = 760
+height = 530
+
+[permissions]
+allow_usb = true

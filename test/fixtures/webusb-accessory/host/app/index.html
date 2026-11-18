@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Oro WebUSB bulk echo</title>
+    <style>
+      body { font: 1rem system-ui; margin: 2rem; }
+      button { padding: 0.5rem; }
+      pre { white-space: pre-wrap; }
+    </style>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <h1>Pixel bulk echo</h1>
+    <p>Connect an unlocked Pixel with Oro USB Echo installed. Select it to start Android accessory mode.</p>
+    <button id="setup" disabled>Select Pixel</button>
+    <button id="echo" disabled>Run bulk echo</button>
+    <button id="stall" disabled>Check prepared bulk IN stall</button>
+    <pre id="log" role="status" aria-live="polite"></pre>
+  </body>
+</html>

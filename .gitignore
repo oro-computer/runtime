@@ -16,6 +16,8 @@ target/
 *.gradle*
 !/src/cli/push-distributor/*.gradle
 !/src/cli/tooling/*.gradle
+!/test/fixtures/webusb-accessory/android/build.gradle
+!/test/fixtures/webusb-accessory/android/settings.gradle
 compile_flags.txt
 .classpath
 gradle.properties

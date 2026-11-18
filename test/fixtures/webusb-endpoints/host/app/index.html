@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Oro WebUSB endpoint checks</title>
+    <style>
+      body { font: 1rem system-ui; margin: 2rem; }
+      button { padding: 0.5rem; }
+      pre { white-space: pre-wrap; }
+    </style>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <h1>WebUSB endpoint checks</h1>
+    <button id="fixture" disabled>Test endpoint fixture</button>
+    <button id="detach" disabled>Test virtual disconnect</button>
+    <button id="pixel" disabled>Check Pixel descriptors</button>
+    <button id="drive" disabled>Check drive descriptors</button>
+    <pre role="status" aria-live="polite"></pre>
+  </body>
+</html>

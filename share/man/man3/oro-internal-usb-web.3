@@ -10,5 +10,193 @@ import * as module from 'oro:internal/usb\-web'
 oro:internal/usb\-web is a JavaScript API module exposed by the Oro Runtime.
 .SH REFERENCE
 .TP
-\fBinstallNavigatorUSB\fR
-This is an exported `VariableDeclaration` named `installNavigatorUSB`, but it does not yet have a dedicated description in the generated reference.
+\fBconstructor(status)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIstatus\fR (USBTransferStatus; required) @param {DataView|null} [dataView]
+.TP
+\fBconstructor(status)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIstatus\fR (USBTransferStatus; required) @param {number} [bytesWritten]
+.TP
+\fBfilterUSBDevices(devices, options)\fR
+Select granted devices for a USB permission descriptor.
+\fBParameters:\fR
+.br
+\fIdevices\fR (USBDevice[]; required)
+.br
+\fIoptions\fR (USBDeviceRequestOptions; required)
+\fBReturns:\fR
+.br
+\fIUSBDevice[]\fR
+.TP
+\fBconstructor(alternate)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIalternate\fR (USBAlternateInterface; required) @param {number} endpointNumber @param {'in'|'out'} direction
+.TP
+\fBconstructor(iface)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIiface\fR (USBInterface; required) @param {number} alternateSetting
+.TP
+\fBconstructor(configuration)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIconfiguration\fR (USBConfiguration; required) @param {number} interfaceNumber
+.TP
+\fBclaimed()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIboolean\fR
+.TP
+\fBalternate()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIUSBAlternateInterface\fR
+.TP
+\fBconstructor(device)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIdevice\fR (USBDevice; required) @param {number} configurationValue
+.TP
+\fBconstructor(packets)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIpackets\fR (USBIsochronousInTransferPacket[]; required) @param {DataView|null} [data]
+.TP
+\fBconstructor(packets)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIpackets\fR (USBIsochronousOutTransferPacket[]; required)
+.TP
+\fBconstructor(descriptor)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIdescriptor\fR (USBDeviceDescriptor; required)
+.TP
+\fB_applyDescriptor(descriptor)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIdescriptor\fR (USBDeviceDescriptor; required)
+.TP
+\fBconfiguration()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIUSBConfiguration \\| null\fR
+.TP
+\fBselectConfiguration(configurationValue)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIconfigurationValue\fR (number; required)
+.TP
+\fBclaimInterface(interfaceNumber)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIinterfaceNumber\fR (number; required)
+.TP
+\fBreleaseInterface(interfaceNumber)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIinterfaceNumber\fR (number; required)
+.TP
+\fBselectAlternateInterface(interfaceNumber, alternateSetting)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIinterfaceNumber\fR (number; required)
+.br
+\fIalternateSetting\fR (number; required)
+.TP
+\fBcontrolTransferIn(setup, length)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIsetup\fR (USBControlTransferParameters; required)
+.br
+\fIlength\fR (number; required)
+.TP
+\fBcontrolTransferOut(setup, data)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIsetup\fR (USBControlTransferParameters; required)
+.br
+\fIdata\fR (BufferSource; optional)
+.TP
+\fBtransferIn(endpointNumber, length)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIendpointNumber\fR (number; required)
+.br
+\fIlength\fR (number; required)
+.TP
+\fBtransferOut(endpointNumber, data)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIendpointNumber\fR (number; required)
+.br
+\fIdata\fR (BufferSource; required)
+.TP
+\fBisochronousTransferIn(endpointNumber)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIendpointNumber\fR (number; required) @param {number[]} packetLengths
+.TP
+\fBisochronousTransferOut(endpointNumber)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIendpointNumber\fR (number; required) @param {BufferSource} data @param {number[]} packetLengths
+.TP
+\fBclearHalt(direction, endpointNumber)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIdirection\fR (\&'in' \\| 'out'; required)
+.br
+\fIendpointNumber\fR (number; required)
+.TP
+\fB_createDevice(descriptor)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIdescriptor\fR (USBDeviceDescriptor; required) @returns {USBDevice|null}
+.TP
+\fBgetDevices()\fR
+Documented method exposed by this module.
+\fBReturns:\fR
+.br
+\fIPromise<USBDevice[]>\fR
+.TP
+\fBrequestDevice(options)\fR
+Documented method exposed by this module.
+\fBParameters:\fR
+.br
+\fIoptions\fR (USBDeviceRequestOptions; required) @returns {Promise<USBDevice>}
+.TP
+\fBinstallNavigatorUSB()\fR
+Install the WebUSB API for this supported execution context.
+\fBReturns:\fR
+.br
+\fINavigatorUSB \\| undefined\fR

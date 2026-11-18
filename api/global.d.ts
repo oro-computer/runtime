@@ -27,3 +27,17 @@ declare interface Window {
     options?: boolean | AddEventListenerOptions
   ): void
 }
+
+declare interface Navigator {
+  readonly usb?: import('oro:usb').NavigatorUSB
+}
+
+declare interface WorkerNavigator {
+  readonly usb?: Omit<import('oro:usb').NavigatorUSB, 'requestDevice'>
+}
+
+declare interface Permissions {
+  query(
+    descriptor: { name: 'usb' } & Pick<import('oro:usb').USBDeviceRequestOptions, 'filters' | 'exclusionFilters'>
+  ): Promise<PermissionStatus & { readonly devices: readonly import('oro:usb').USBDevice[] }>
+}

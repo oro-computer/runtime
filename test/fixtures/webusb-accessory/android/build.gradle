@@ -1,0 +1,23 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath 'com.android.tools.build:gradle:9.3.2'
+  }
+}
+
+apply plugin: 'com.android.application'
+
+android {
+  namespace 'oro.webusb.echo'
+  compileSdk 37
+  defaultConfig {
+    applicationId 'oro.webusb.echo'
+    minSdk 36
+    targetSdk 37
+    versionCode 1
+    versionName '1.0'
+  }
+}

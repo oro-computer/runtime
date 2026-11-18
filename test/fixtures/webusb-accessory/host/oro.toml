@@ -1,0 +1,16 @@
+[build]
+name = "webusb-bulk-echo"
+copy = "app"
+
+[meta]
+bundle_identifier = "oro.webusb.bulkecho"
+version = "1.0.0"
+title = "Oro WebUSB bulk echo"
+
+[window]
+index = "index.html"
+width = 680
+height = 500
+
+[permissions]
+allow_usb = true

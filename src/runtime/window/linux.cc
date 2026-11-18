@@ -1026,10 +1026,15 @@ namespace oro::runtime::window {
 
     this->bridge->configureWebView(this->webview);
 
-    g_signal_connect(this->webview, "load-changed", G_CALLBACK(+[](WebKitWebView*, WebKitLoadEvent event, gpointer data) {
-      if (event != WEBKIT_LOAD_STARTED) return;
+    g_signal_connect(this->webview, "load-changed", G_CALLBACK(+[](WebKitWebView* view, WebKitLoadEvent event, gpointer data) {
       const auto window = static_cast<Window*>(data);
       if (!window || !window->bridge) return;
+      if (event == WEBKIT_LOAD_COMMITTED) {
+        const auto uri = webkit_web_view_get_uri(view);
+        window->bridge->setUSBDocument(uri ? uri : "");
+      }
+      if (event != WEBKIT_LOAD_STARTED) return;
+      window->bridge->setUSBDocument("");
       window->bridge->nativeDocumentGeneration++;
       window->bridge->nativeDocumentToken.clear();
       native::DesktopBack::reset(*window);
@@ -1041,6 +1046,7 @@ namespace oro::runtime::window {
       WebKitWebView* webview, WebKitWebProcessTerminationReason, gpointer data) {
       const auto window = static_cast<Window*>(data);
       if (!window || !window->bridge || !window->window) return;
+      window->bridge->setUSBDocument("");
       window->bridge->nativeDocumentGeneration++;
       window->bridge->nativeDocumentToken.clear();
       native::DesktopBack::reset(*window);
